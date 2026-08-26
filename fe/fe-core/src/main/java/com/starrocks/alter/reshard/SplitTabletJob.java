@@ -41,11 +41,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
@@ -67,6 +71,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.function.IntSupplier;
 
 /*
  * SplitTabletJob is for tablet splitting.
@@ -115,6 +120,82 @@ public class SplitTabletJob extends TabletReshardJob {
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    /**
+     * Returns complete parent/child families whose query layout is still pinned to the parent.
+     * The caller supplies the tablets in one aggregate-publish batch; incomplete families are
+     * deliberately omitted because synthesizing a parent from only some siblings would lose rows.
+     */
+    public List<ParentTabletPublishInfoPB> collectParentPublishInfos(Set<Long> publishedTabletIds) {
+        List<ParentTabletPublishInfoPB> parentInfos = new ArrayList<>();
+        // Answered from the job's own final field, before touching the table at all. hasLiveSplitJob()
+        // is table-agnostic, so while any table has a live split every aggregate publish in the cluster
+        // walks every live split job -- and a publish for one table must not read, or lock, another
+        // table's metadata to be told the batch has nothing to do with it.
+        if (jobState.isFinalState() || !ownsAnyOf(publishedTabletIds)) {
+            return parentInfos;
+        }
+        // Under the table read lock: PublishVersionDaemon released it before calling
+        // Utils#createSubRequestForAggregatePublish, and reaching the pin map goes through
+        // OlapTable.idToPartition / physicalPartitionIdToPartitionId, which are plain HashMaps that
+        // ADD / DROP / TRUNCATE PARTITION mutates in place under the write lock -- getPhysicalPartition
+        // even iterates them on a miss. Making the pin map concurrent covered the field this ends at;
+        // it did not cover getting there.
+        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.READ)) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+            if (!(table instanceof OlapTable olapTable)) {
+                return parentInfos;
+            }
+            for (ReshardingPhysicalPartition reshardingPartition : reshardingPhysicalPartitions.values()) {
+                PhysicalPartition physicalPartition =
+                        olapTable.getPhysicalPartition(reshardingPartition.getPhysicalPartitionId());
+                if (physicalPartition == null) {
+                    continue;
+                }
+                for (ReshardingMaterializedIndex reshardingIndex :
+                        reshardingPartition.getReshardingIndexes().values()) {
+                    long indexMetaId = reshardingIndex.getMaterializedIndex().getMetaId();
+                    if (!physicalPartition.isQueryableIndexPinned(indexMetaId)) {
+                        continue;
+                    }
+                    for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                        // A SplitTabletJob contains one-old-to-many-new split families and one-old-to-one-new
+                        // IdenticalTablet siblings. Both belong to the pinned old index and therefore both
+                        // need a query-parent metadata page at every ordinary publish version.
+                        if (reshardingTablet.getOldTabletIds().size() == 1
+                                && publishedTabletIds.containsAll(reshardingTablet.getNewTabletIds())) {
+                            ParentTabletPublishInfoPB parentInfo = new ParentTabletPublishInfoPB();
+                            parentInfo.parentTabletId = reshardingTablet.getFirstOldTabletId();
+                            parentInfo.childTabletIds = new ArrayList<>(reshardingTablet.getNewTabletIds());
+                            parentInfos.add(parentInfo);
+                        }
+                    }
+                }
+            }
+        }
+        return parentInfos;
+    }
+
+    /**
+     * Whether any replacement tablet of this job is in the batch. Deliberately looser than the
+     * complete-family test below -- it only has to be exact enough to skip a job the batch cannot
+     * concern, and it reads nothing but {@code reshardingPhysicalPartitions}, which is final and
+     * filled at construction.
+     */
+    private boolean ownsAnyOf(Set<Long> publishedTabletIds) {
+        for (ReshardingPhysicalPartition reshardingPartition : reshardingPhysicalPartitions.values()) {
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPartition.getReshardingIndexes().values()) {
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    for (Long newTabletId : reshardingTablet.getNewTabletIds()) {
+                        if (publishedTabletIds.contains(newTabletId)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     @Override
@@ -364,6 +445,28 @@ public class SplitTabletJob extends TabletReshardJob {
             }
         } catch (AnalysisException e) { // Db is dropped, ignore exception
             LOG.warn("Ignore exception when waiting previous transactions finished. " + this, e);
+        }
+
+        // ORDER BY != PK children inherit complete shared rowsets. Keep queries on the parent layout
+        // until one partition-wide, non-partial UNSHARE transaction has rewritten every sibling.
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        boolean waitingForUnshare = false;
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
+            OlapTable olapTable = lockedTable.get();
+            for (Long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
+                PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition == null || !physicalPartition.isUnsharing()) {
+                    continue;
+                }
+                waitingForUnshare = true;
+                PartitionIdentifier identifier = new PartitionIdentifier(dbId, tableId, physicalPartitionId);
+                if (!compactionMgr.isPartitionCompacting(identifier)) {
+                    compactionMgr.triggerUnshareCompaction(identifier);
+                }
+            }
+        }
+        if (waitingForUnshare) {
+            return;
         }
 
         // 2. Remove old versions of materialized index
@@ -818,21 +921,21 @@ public class SplitTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                    if (MetaUtils.hasSeparateSortKey(olapTable, newIndex.getMetaId())) {
+                        physicalPartition.pinQueryableIndex(
+                                newIndex.getMetaId(), reshardingIndex.getMaterializedIndexId());
+                    }
                     physicalPartition.addMaterializedIndex(newIndex,
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
 
-            // Installing the new materialized indexes changes the partition's tablet layout:
-            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
-            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
-            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
-            // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
-            // tablet/version whose metadata object no longer exists. Bump the table's optimistic
-            // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
-            // the change and re-plans against the new layout. Mirrors MergePartitionJob's bump at its
-            // partition-replace commit point. This runs on both the leader (runRunningJob) and the
-            // replay path (replayCleaningJob), so followers re-plan too.
+            // Installing the new materialized indexes changes the writable layout immediately. For an
+            // ordinary split the queryable layout changes too; ORDER BY != PK instead keeps it pinned
+            // until UNSHARE finishes. Bump the table's optimistic version so any plan racing either
+            // catalog transition is retried against a self-consistent layout. Mirrors
+            // MergePartitionJob's bump at its partition-replace commit point. This runs on both the
+            // leader (runRunningJob) and replay path (replayCleaningJob), so followers re-plan too.
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
         }
     }
@@ -992,6 +1095,13 @@ public class SplitTabletJob extends TabletReshardJob {
         // keeps its PACK grouping (and the WITH_SHARD pin below).
         boolean spreadNewShards = oldIndex != null && oldIndex.getRowCount() == 0;
 
+        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
+        // otherwise the background warehouse (online split) -- unified with the publish path.
+        ComputeResource computeResource = resolveComputeResource(table.getId());
+
+        boolean unpinPlacement = shouldUnpinPlacement(table, oldIndex, newIndex,
+                () -> TabletReshardUtils.computeNodeCount(computeResource));
+
         // LinkedHashMap so the CreateShardInfo list within each (partition, index) RPC
         // payload follows the ReshardingTablet iteration order; the same batch produced
         // by a leader-switch re-run emits a byte-equivalent payload.
@@ -1012,20 +1122,53 @@ public class SplitTabletJob extends TabletReshardJob {
         shardProperties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         shardProperties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
-        // spreadNewShards (computed above) also drops the WITH_SHARD pin here: pre-split splits a
-        // freshly created EMPTY tablet, so there is no warm cache to preserve and the new shards
-        // should spread rather than pin to the source worker. Online split (non-empty source) keeps
-        // the WITH_SHARD pin to reuse the source worker's warm cache.
-        // Schedule the new shards to the triggering load's warehouse when one was set (pre-split),
-        // otherwise the background warehouse (online split) — unified with the publish path.
-        ComputeResource computeResource = resolveComputeResource(table.getId());
+        // unpinPlacement (computed above) drops the WITH_SHARD pin: pre-split splits a freshly
+        // created EMPTY tablet, so there is no warm cache to preserve, and an ORDER BY != PK online
+        // split is about to rewrite every new shard anyway. Any other online split keeps the pin to
+        // reuse the source worker's warm cache. Note this is deliberately NOT spreadNewShards: the
+        // PACK grouping above is orthogonal and stays on for every online split.
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForSplit(
                 newToOldShardId,
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
                 shardProperties, computeResource,
-                spreadNewShards);
+                unpinPlacement);
+    }
+
+    /**
+     * Whether this split's new shards should drop the {@code WITH_SHARD} pin to the source worker.
+     *
+     * <p>The pin exists to reuse the source worker's warm cache, which is the right trade for an
+     * ordinary online split: the children start out sharing the parent's segments and read them
+     * locally. Two cases have no warm cache worth keeping.
+     *
+     * <p>Pre-split (empty source) is the established one. The other is an ORDER BY != PK split: the
+     * children cannot range-filter the shared segments cheaply, so the split drags a full UNSHARE
+     * rewrite behind it, and pinning lands that whole rewrite on the source worker -- one node's
+     * compaction concurrency while the rest of the cluster idles. Worse, it is self-sustaining: each
+     * generation re-pins to its parent, so a range index that begins life as a single tablet stays on
+     * one node no matter how many tablets it grows to.
+     *
+     * <p>Unpin only while the index is still too small to spread on its own. Once it holds at least
+     * two shards per compute node, inheriting the parent's worker already spreads the children, and
+     * the pin earns its keep on the (by then much larger) rewrite.
+     */
+    @VisibleForTesting
+    static boolean shouldUnpinPlacement(OlapTable table, MaterializedIndex oldIndex,
+                                        MaterializedIndex newIndex, IntSupplier computeNodeCount) {
+        if (oldIndex == null) {
+            return false;
+        }
+        if (oldIndex.getRowCount() == 0) {
+            return true;
+        }
+        // Resolved last and only if the two schema tests pass. TabletReshardUtils#computeNodeCount
+        // throws when the warehouse cannot be resolved, and an ordinary split must not be aborted by a
+        // placement heuristic it never consults.
+        return MetaUtils.hasSeparateSortKey(table, newIndex.getMetaId())
+                && table.isFileBundling()
+                && oldIndex.getTablets().size() < 2 * computeNodeCount.getAsInt();
     }
 
     @VisibleForTesting

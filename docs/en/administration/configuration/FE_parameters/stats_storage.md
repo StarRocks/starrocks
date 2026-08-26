@@ -599,6 +599,33 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of new tablets that an old tablet can be split into.
 - Introduced in: v4.1.0
 
+### `tablet_reshard_orderby_max_split_count`
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of new tablets one source tablet may be split into when the split drags a full UNSHARE rewrite behind it, that is, on a range-distributed PRIMARY KEY table whose `ORDER BY` key differs from its primary key. Such a split cannot range-filter the parent's shared segments, so every child is rewritten wholesale and a wide fan-out multiplies that read amplification. Further clamped by `tablet_reshard_max_split_count`. Values less than or equal to `1` disable this extra clamp.
+- Introduced in: -
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of source tablets one split job may **split** when the split drags a full UNSHARE rewrite behind it. The largest tablets are chosen first. Note that this bounds the split fan-out, not the rewrite itself: every untouched sibling still becomes an identical tablet in the replacement index, and the UNSHARE compaction is partition-wide, so those are rewritten as well. Values less than or equal to `0` mean the compute-node count of the warehouse.
+- Introduced in: -
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- Default: 180
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The quiet period after the previous tablet reshard job on a table finishes, before automatic splitting may trigger again, for tables whose split drags a full UNSHARE rewrite behind it. It gives size-tiered compaction a window to drain the small files that accumulated while the partition's compaction slot was held. Values less than or equal to `0` disable the wait. Note that the interval can only be enforced while the previous job is still retained, that is, up to `tablet_reshard_history_job_keep_max_ms`.
+- Introduced in: -
+
 ### `tablet_reshard_min_split_size`
 
 - Default: 2147483648 (2 GB)
