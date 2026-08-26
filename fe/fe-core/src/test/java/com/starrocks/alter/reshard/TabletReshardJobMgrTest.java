@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -27,6 +28,7 @@ import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.thrift.TTabletReshardJobsItem;
@@ -1161,6 +1163,22 @@ public class TabletReshardJobMgrTest {
             // So does unpinning: with the parent view gone there is nothing left to serve from it.
             Assertions.assertTrue(physicalPartition.finishUnshare());
             Assertions.assertTrue(jobMgr.collectParentPublishInfos(new HashSet<>(childTabletIds)).isEmpty());
+
+            // hasLiveSplitJob() is table-agnostic, so a publish for an unrelated table walks this job
+            // too. It must be turned away from the job's own state, without reading -- or locking --
+            // a table that has nothing to do with the batch.
+            AtomicInteger tableLookups = new AtomicInteger();
+            new MockUp<LocalMetastore>() {
+                @Mock
+                public Table getTable(Long dbId, Long tableId) {
+                    tableLookups.incrementAndGet();
+                    return reshardTable;
+                }
+            };
+            Assertions.assertTrue(jobMgr.collectParentPublishInfos(Set.of(990001L, 990002L)).isEmpty(),
+                    "a batch holding none of this job's tablets owes no parent page");
+            Assertions.assertEquals(0, tableLookups.get(),
+                    "an unrelated batch must be answered without touching the table");
         } finally {
             physicalPartition.finishUnshare();
         }

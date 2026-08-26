@@ -41,6 +41,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -128,40 +129,73 @@ public class SplitTabletJob extends TabletReshardJob {
      */
     public List<ParentTabletPublishInfoPB> collectParentPublishInfos(Set<Long> publishedTabletIds) {
         List<ParentTabletPublishInfoPB> parentInfos = new ArrayList<>();
-        if (jobState.isFinalState()) {
+        // Answered from the job's own final field, before touching the table at all. hasLiveSplitJob()
+        // is table-agnostic, so while any table has a live split every aggregate publish in the cluster
+        // walks every live split job -- and a publish for one table must not read, or lock, another
+        // table's metadata to be told the batch has nothing to do with it.
+        if (jobState.isFinalState() || !ownsAnyOf(publishedTabletIds)) {
             return parentInfos;
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
-        if (!(table instanceof OlapTable olapTable)) {
-            return parentInfos;
-        }
-        for (ReshardingPhysicalPartition reshardingPartition : reshardingPhysicalPartitions.values()) {
-            PhysicalPartition physicalPartition =
-                    olapTable.getPhysicalPartition(reshardingPartition.getPhysicalPartitionId());
-            if (physicalPartition == null) {
-                continue;
+        // Under the table read lock: PublishVersionDaemon released it before calling
+        // Utils#createSubRequestForAggregatePublish, and reaching the pin map goes through
+        // OlapTable.idToPartition / physicalPartitionIdToPartitionId, which are plain HashMaps that
+        // ADD / DROP / TRUNCATE PARTITION mutates in place under the write lock -- getPhysicalPartition
+        // even iterates them on a miss. Making the pin map concurrent covered the field this ends at;
+        // it did not cover getting there.
+        try (AutoCloseableLock ignored = new AutoCloseableLock(dbId, tableId, LockType.READ)) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+            if (!(table instanceof OlapTable olapTable)) {
+                return parentInfos;
             }
-            for (ReshardingMaterializedIndex reshardingIndex :
-                    reshardingPartition.getReshardingIndexes().values()) {
-                long indexMetaId = reshardingIndex.getMaterializedIndex().getMetaId();
-                if (!physicalPartition.isQueryableIndexPinned(indexMetaId)) {
+            for (ReshardingPhysicalPartition reshardingPartition : reshardingPhysicalPartitions.values()) {
+                PhysicalPartition physicalPartition =
+                        olapTable.getPhysicalPartition(reshardingPartition.getPhysicalPartitionId());
+                if (physicalPartition == null) {
                     continue;
                 }
-                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
-                    // A SplitTabletJob contains one-old-to-many-new split families and one-old-to-one-new
-                    // IdenticalTablet siblings. Both belong to the pinned old index and therefore both
-                    // need a query-parent metadata page at every ordinary publish version.
-                    if (reshardingTablet.getOldTabletIds().size() == 1
-                            && publishedTabletIds.containsAll(reshardingTablet.getNewTabletIds())) {
-                        ParentTabletPublishInfoPB parentInfo = new ParentTabletPublishInfoPB();
-                        parentInfo.parentTabletId = reshardingTablet.getFirstOldTabletId();
-                        parentInfo.childTabletIds = new ArrayList<>(reshardingTablet.getNewTabletIds());
-                        parentInfos.add(parentInfo);
+                for (ReshardingMaterializedIndex reshardingIndex :
+                        reshardingPartition.getReshardingIndexes().values()) {
+                    long indexMetaId = reshardingIndex.getMaterializedIndex().getMetaId();
+                    if (!physicalPartition.isQueryableIndexPinned(indexMetaId)) {
+                        continue;
+                    }
+                    for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                        // A SplitTabletJob contains one-old-to-many-new split families and one-old-to-one-new
+                        // IdenticalTablet siblings. Both belong to the pinned old index and therefore both
+                        // need a query-parent metadata page at every ordinary publish version.
+                        if (reshardingTablet.getOldTabletIds().size() == 1
+                                && publishedTabletIds.containsAll(reshardingTablet.getNewTabletIds())) {
+                            ParentTabletPublishInfoPB parentInfo = new ParentTabletPublishInfoPB();
+                            parentInfo.parentTabletId = reshardingTablet.getFirstOldTabletId();
+                            parentInfo.childTabletIds = new ArrayList<>(reshardingTablet.getNewTabletIds());
+                            parentInfos.add(parentInfo);
+                        }
                     }
                 }
             }
         }
         return parentInfos;
+    }
+
+    /**
+     * Whether any replacement tablet of this job is in the batch. Deliberately looser than the
+     * complete-family test below -- it only has to be exact enough to skip a job the batch cannot
+     * concern, and it reads nothing but {@code reshardingPhysicalPartitions}, which is final and
+     * filled at construction.
+     */
+    private boolean ownsAnyOf(Set<Long> publishedTabletIds) {
+        for (ReshardingPhysicalPartition reshardingPartition : reshardingPhysicalPartitions.values()) {
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPartition.getReshardingIndexes().values()) {
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    for (Long newTabletId : reshardingTablet.getNewTabletIds()) {
+                        if (publishedTabletIds.contains(newTabletId)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     @Override
