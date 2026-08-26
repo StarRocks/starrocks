@@ -100,7 +100,9 @@ private:
 // scheme-specific behavior in StarRocks instead of configuring a second client.
 class PaimonFileSystem final : public paimon::FileSystem {
 public:
-    PaimonFileSystem(FileSystem* file_system, const DataCacheOptions& datacache_options)
+    // `FileSystem` must be qualified inside this class: the injected-class-name of the
+    // base paimon::FileSystem shadows the starrocks::FileSystem forward declaration.
+    PaimonFileSystem(starrocks::FileSystem* file_system, const DataCacheOptions& datacache_options)
             : _file_system(file_system),
               _datacache_options(datacache_options),
               _stats(std::make_shared<PaimonFileSystemStats>()) {}
@@ -123,7 +125,7 @@ public:
     PaimonFileSystemStats::Snapshot get_stats() const { return _stats->snapshot(); }
 
 private:
-    FileSystem* _file_system;
+    starrocks::FileSystem* _file_system;
     DataCacheOptions _datacache_options;
     std::shared_ptr<PaimonFileSystemStats> _stats;
 };

@@ -18,6 +18,8 @@
 #include "exprs/expr.h"
 
 namespace starrocks {
+class SlotDescriptor;
+
 class PaimonEvaluator {
 public:
     PaimonEvaluator(const std::vector<SlotDescriptor*>& slots);

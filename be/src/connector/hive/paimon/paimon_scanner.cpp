@@ -370,7 +370,7 @@ Status PaimonScanner::_fill_dst_chunk(ChunkPtr* chunk) {
     _app_stats.late_materialize_skip_rows += _chunk_start_idx - row_count;
 
     {
-        SCOPED_RAW_TIMER(&_app_stats.cast_chunk_ns);
+        SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
         for (size_t i = 0; i < materialized_columns.size(); ++i) {
             SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
             if (slot_desc == nullptr) {
@@ -378,7 +378,7 @@ Status PaimonScanner::_fill_dst_chunk(ChunkPtr* chunk) {
             }
             ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, _read_chunk.get()));
             column = ColumnHelper::unfold_const_column(slot_desc->type(), row_count, column);
-            (*chunk)->get_column_by_slot_id(slot_desc->id())->swap_column(*column);
+            (*chunk)->get_column_by_slot_id(slot_desc->id()) = std::move(column);
         }
     }
     return Status::OK();
