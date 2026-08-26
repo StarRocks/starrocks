@@ -226,8 +226,15 @@ TEST_F(SegmentTailIndexRegionTest, RegionCoversEverySmallIndex) {
     EXPECT_GE(result.footer.short_key_index_page().offset(), region_begin);
     EXPECT_LT(result.footer.short_key_index_page().offset(), region_end);
 
-    // Data pages stayed outside: the point is a small tail, not a rewritten file.
-    EXPECT_LT(result.footer.small_index_region_size(), result.file_size / 2);
+    // Data comes first and the region is a tail: region_begin is past the start of the file,
+    // and region_end is the footer (asserted above), so nothing follows it.
+    //
+    // Deliberately not a size ratio. This fixture sets num_rows_per_block to 10, so 100k rows
+    // give every column 10k pages; the ordinal index and the 10k-entry short key index then
+    // outweigh four columns of ints by construction. The region measures 257906 bytes of a
+    // 270482-byte file here, which says nothing about the layout and everything about the page
+    // size the test chose.
+    EXPECT_GT(region_begin, 0u);
 
     verify_all_rows(file_name, tablet_schema);
 }

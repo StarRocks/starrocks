@@ -58,10 +58,10 @@ CONF_mInt32(default_num_rows_per_column_file_block, "1024");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
-// Write-time gate for the segment "small index region" layout. When true, a horizontally
-// written segment (one column group covering all columns) emits every column's ordinal index
-// and page zone map as one contiguous run immediately before the short key index and the
-// footer, instead of interleaving each column's indexes after that column's data pages. Both
+// Write-time gate for the segment "small index region" layout. When true, a segment emits every
+// column's ordinal index and page zone map as one contiguous run immediately before the short
+// key index and the footer, instead of interleaving each column's indexes after that column's
+// data pages. Both
 // layouts are readable by any binary -- indexes are always located through absolute
 // PagePointers -- so this can be flipped at any time and mixed within a tablet.
 //
@@ -69,8 +69,12 @@ CONF_Int32(data_page_size, "65536");
 // every accessed column, and the page zone map of every predicate column, before it can read
 // any data. In the legacy layout those live at N scattered offsets, so they cost N serial
 // round trips to remote storage, each pulling a whole cache block. Gathered at the tail they
-// cost one. Vertical compaction and partial-update rewrites call finalize_columns() once per
-// column group and so cannot form a tail region; they keep the legacy layout regardless.
+// cost one.
+//
+// Every write path that ends in finalize_footer() produces the region, vertical compaction and
+// partial-update rewrites included: a vertical writer calls finalize_columns() once per column
+// group, and the deferred index writers accumulate across groups so that an early group's
+// indexes still land at the tail rather than under a later group's data pages.
 CONF_mBool(enable_segment_tail_index_region, "false");
 
 // Read-time gate for the matching prefetch. When true, opening a segment whose footer carries
