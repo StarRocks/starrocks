@@ -1199,6 +1199,11 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
     ASSIGN_OR_RETURN(auto pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
     std::vector<uint64_t> old_rowids(pk_column->size());
     RETURN_IF_ERROR(index.get(*pk_column, &old_rowids));
+    // Same restriction as the non-SST path: a cross-published child must not resolve a sibling's key,
+    // whose location can name a rowset the split pruned away (get_column_values would fail the publish
+    // on it), and must not record either verdict for that row -- the loser branch below writes into
+    // this child's delvec, which the parent view ORs.
+    RowsetUpdateState::mask_unowned_rowids(current.owned, &old_rowids);
     // Fast path: If no existing rows found for any PK, all new rows win by default
     bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
     if (!non_old_value) {
@@ -1238,7 +1243,9 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // STEP 3: Compare condition values and generate deletion vectors
         // For each PK conflict, compare old vs new condition values to decide winner
         for (int j = 0; j < old_column->size(); ++j) {
-            if (num_default > 0 && idxes[j] == 0) {
+            if (!current.owned.empty() && current.owned[j] == 0) {
+                // A sibling's row: neither this child's new row to delete nor its old row to displace.
+            } else if (num_default > 0 && idxes[j] == 0) {
                 // EDGE CASE: Index 0 indicates default value (no old row actually exists for this PK)
                 // WHY: plan_read_by_rssid uses index 0 as sentinel for PKs with no old values
                 // ACTION: Skip comparison, new row wins by default
@@ -1393,9 +1400,19 @@ static Status process_single_chunk_update_with_condition_no_sst(
     }
     std::vector<uint64_t> old_rowids(chunk_size);
     RETURN_IF_ERROR(index.get(*result->pk_column, &old_rowids));
-    // Fast path: no PKs in this chunk collide with the index → every new row wins.
+    // A cross-published child is handed its siblings' rows as well, and a sibling's key resolves --
+    // against the sstables this child inherited from the parent -- to a location that can name a
+    // rowset the split pruned away, which would fail get_column_values below on an unknown rssid.
+    // Blanking those answers keeps them out of the read; the walk below then skips the row outright,
+    // so it is neither upserted (claiming a key outside this child's range) nor appended to this
+    // child's delvec, which the parent view ORs -- a sibling's verdict would erase a row its owner
+    // had just decided to keep. Nothing is renumbered: chunk-local j stays segment rowid
+    // physical_rowid_offset + j for every row, owned or not.
+    RowsetUpdateState::mask_unowned_rowids(current.owned, &old_rowids);
+    // Fast path: no PKs in this chunk collide with the index → every new row wins. Only when this
+    // chunk is entirely ours; with a mask the walk below is what decides, one row at a time.
     bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int64_t id) { return -1 == id; });
-    if (non_old_value) {
+    if (non_old_value && current.owned.empty()) {
         result->winner_ranges.emplace_back(0u, static_cast<uint32_t>(chunk_size));
         return Status::OK();
     }
@@ -1431,7 +1448,15 @@ static Status process_single_chunk_update_with_condition_no_sst(
     uint32_t run_begin = 0;
     uint32_t run_step = 0;
     for (size_t j = 0; j < old_column->size(); ++j) {
-        if (num_default > 0 && idxes[j] == 0) {
+        if (!current.owned.empty() && current.owned[j] == 0) {
+            // A sibling's row: neither verdict is this child's to record. Close the run so the
+            // winners on either side of it stay contiguous.
+            if (run_step > 0) {
+                result->winner_ranges.emplace_back(run_begin, run_begin + run_step);
+            }
+            run_begin = static_cast<uint32_t>(j + 1);
+            run_step = 0;
+        } else if (num_default > 0 && idxes[j] == 0) {
             // plan_read_by_rssid uses idx 0 as sentinel for "no old row"; new row wins by default.
             run_step++;
         } else {
@@ -1695,7 +1720,7 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
 Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
                                                         std::vector<SegmentPKIteratorPtr>& pk_iters,
                                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
-                                                        bool need_lock) {
+                                                        bool need_lock, std::vector<Filter>* owned_per_segment) {
     rss_rowids_per_segment->resize(pk_iters.size());
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
@@ -1706,7 +1731,8 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
-        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment));
+        st.update(
+                index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment, owned_per_segment));
     }));
     return st;
 }

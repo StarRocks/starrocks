@@ -425,9 +425,20 @@ Status Rowset::set_segment_tablet_range(size_t segment_idx, const std::optional<
         }
         return Status::OK();
     }
-    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) &&
-        _metadata->segment_metas(segment_idx).shared() && shared_segment_range.has_value()) {
-        segment_options->tablet_range = *shared_segment_range;
+    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) && shared_segment_range.has_value()) {
+        // A segment needs the range when it can hold rows this tablet does not own. `shared` says so
+        // directly: the split handed that segment to every child. A rowset carrying its OWN range says
+        // so too, and it is not the same set -- convert_txn_log_for_splitting stamps this tablet's range
+        // onto a cross-published op_write, and the segment a row-mode partial update rewrites out of one
+        // is private to this tablet (MetaFileBuilder clears `shared`, because the file really is not
+        // shared) while still holding every row of the source segment, the siblings' rows included.
+        // Without this a reader would serve those rows. A rowset this tablet wrote itself carries no
+        // range of its own and is in range by construction, so it stays unclipped and pays nothing.
+        const bool may_hold_rows_of_other_tablets =
+                _metadata->segment_metas(segment_idx).shared() || _metadata->has_range();
+        if (may_hold_rows_of_other_tablets) {
+            segment_options->tablet_range = *shared_segment_range;
+        }
     }
     return Status::OK();
 }

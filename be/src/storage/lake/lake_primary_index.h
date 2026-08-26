@@ -134,9 +134,16 @@ public:
     // Used by column mode partial update to build the update-row-to-source-row mapping.
     // To learn each segment's physical rowid base (range_start), call
     // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
+    // |owned_per_segment|: if non-null, receives each segment's ownership mask -- the concatenation of
+    // its chunks' SegmentPKChunkRef::owned, one byte per entry of rss_rowids_per_segment[i]. A segment
+    // whose chunks carried no mask (no CrossPublishRowSelector, i.e. every publish but a SPLIT child's
+    // cross publish) leaves its entry empty, which every consumer reads as "own every row". Callers
+    // that would ACT on a missing key -- inserting the row, allocating an id for it -- need this: the
+    // rss_rowid alone cannot tell "no old row" from "a sibling's row".
     Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
                                          std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
-                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment);
+                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                         std::vector<Filter>* owned_per_segment = nullptr);
 
     // This function will be called when parallel upsert happens.
     // The process flow of parallel upsert is:

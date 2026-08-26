@@ -29,21 +29,24 @@ namespace starrocks::lake {
 // Decides, row by row, which rows of a cross-published rowset this tablet actually owns.
 //
 // A SPLIT cross publish hands every child the parent's whole op_write payload and leaves each side to
-// work out which rows are its own. Today the tablet range answers that on the read path:
+// work out which rows are its own. The tablet range already answers that whenever it can:
 // SegmentIterator::_apply_tablet_range turns it into a rowid interval, and _lookup_ordinal resolves
 // the bounds exactly -- the short key index only brackets the search, which then binary-searches the
-// actual rows and compares per column. So a child reading a shared segment sees precisely its own
-// rows, and this selector has nothing to add.
+// actual rows and compares per column. So a child reading a shared segment, on the read path or
+// through get_each_segment_iterator on the publish path, sees precisely its own rows.
 //
 // That holds only while the range and the physical order live in the same key space. A primary-key
 // tablet ordered by a separate sort key has its rows scattered through the segment, no rowid interval
 // describes them, and Rowset::set_segment_tablet_range withholds the range outright -- at which point
-// the child reads every row and nothing narrows it.
+// the iterator emits every row and a consumer that assumes otherwise silently takes a sibling's.
 //
-// No such tablet exists yet: CreateTableAnalyzer requires a range-distributed primary-key table to
-// declare ORDER BY equal to its key columns, and OPTIMIZE -- the only clause that rewrites a sort key
-// -- is rejected on range-distributed tables. This is the row-level answer that relaxation needs,
-// built ahead of it rather than a fix for a live defect. #77653 stages the rest.
+// This selector is the answer for exactly that case, and the two mechanisms are complementary rather
+// than redundant: where the range narrows, the mask it produces is all ones and costs nothing; where
+// the range is withheld, the mask is the only thing that knows. No such tablet exists yet --
+// CreateTableAnalyzer requires a range-distributed primary-key table to declare ORDER BY equal to its
+// key columns, and OPTIMIZE, the only clause that rewrites a sort key, is rejected on range-distributed
+// tables -- so this is built ahead of that relaxation rather than as a fix for a live defect. #77653
+// stages the rest of the consumers.
 //
 // What the shape of the answer buys, and why it is a mask rather than a filtered chunk: the chunk
 // keeps its rows and their positions, so SegmentPKChunkRef's "chunk[i] is physical rowid

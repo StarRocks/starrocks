@@ -1234,6 +1234,284 @@ TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_indexes_only_the_rows_this_
     EXPECT_EQ(kOwnedRows, read_rows(tablet_id, 3));
 }
 
+// Build a 3-column chunk (c0=key, c1=value_of(key), __op=UPSERT) for keys [0, n). Unlike
+// make_op_chunk's uniform shift, the value is chosen per key, so one chunk can carry rows that win
+// their condition comparison next to rows that lose it.
+static ChunkPtr make_upsert_chunk(int n, int (*value_of)(int), const Chunk::SlotHashMap& slot_cid_map) {
+    std::vector<int> keys(n), vals(n);
+    std::vector<uint8_t> ops(n);
+    for (int i = 0; i < n; i++) {
+        keys[i] = i;
+        vals[i] = value_of(i);
+        ops[i] = TOpType::UPSERT;
+    }
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int8Column::create();
+    c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+    c2->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+    return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2)}, slot_cid_map);
+}
+
+// Stage the two things CrossPublishRowSelector::create_if_needed keys on that live in tablet metadata:
+// the order-preserving big-endian PK encoding range distribution requires (create_sst_seek_range_from
+// rejects anything else, and the selector declines to build without it), and the range itself. The
+// bound inclusivity is not a choice -- TabletRangeHelper::validate_tablet_range accepts [lower, upper)
+// and nothing else.
+static void set_int_tablet_range(TabletMetadata* metadata, int lower_inclusive, int upper_exclusive) {
+    metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    auto append_int_bound = [](auto* bound, int value) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
+        VariantTuple tuple;
+        tuple.append(variant);
+        tuple.to_proto(bound);
+    };
+    auto* range_pb = metadata->mutable_range();
+    append_int_bound(range_pb->mutable_lower_bound(), lower_inclusive);
+    range_pb->set_lower_bound_included(true);
+    append_int_bound(range_pb->mutable_upper_bound(), upper_exclusive);
+    range_pb->set_upper_bound_included(false);
+}
+
+// A condition update decides each row from an index lookup, so a cross published SPLIT child has to
+// restrict that lookup the way #78045 restricted the plain upsert. A sibling's key still resolves --
+// against the sstables this child inherited from the parent -- so the comparison "succeeds" and its
+// winner displaces the old row from the ancestor rowset, while the new row that replaces it sits
+// outside this child's range and is invisible to its reads. The key is then gone from this child
+// altogether, which is what the row count below measures.
+//
+// Staged like test_cross_publish_indexes_only_the_rows_this_child_owns, with one deliberate
+// difference: the baseline write is LOCAL (not shared, so neither selected at publish nor clipped at
+// read), which is what puts the SIBLINGS' keys in this child's index. Without them every sibling
+// lookup would simply miss and there would be nothing left to get wrong.
+//
+// The range covers the MIDDLE of the key space on purpose: a sibling's row sits on either side of the
+// owned block, so the verdict walk has to close a winner run at both edges, and every rowid it records
+// -- the winners' index entries, the losers' delvec -- has to stay the row's position in the SEGMENT
+// rather than its position among the rows this child kept. A child owning a prefix would pass either
+// way.
+TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_compares_only_owned_rows) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    // No token below pk_index_parallel_execution_min_rows, so the winners reach the index through the
+    // serial branch: index.upsert() over each winner range of the unfiltered chunk.
+    ConfigResetGuard<bool> serial(&config::enable_pk_index_parallel_execution, false);
+
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+    const int kOwnedRows = kOwnedUpper - kOwnedLower;
+    set_int_tablet_range(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_txn = [&](const ChunkPtr& chunk, const std::string& merge_condition) {
+        int64_t txn_id = next_id();
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id())
+                .set_slot_descriptors(&_slot_pointers)
+                .set_profile(&_dummy_runtime_profile);
+        if (!merge_condition.empty()) {
+            builder.set_merge_condition(merge_condition);
+        }
+        ASSIGN_OR_ABORT(auto delta_writer, builder.build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+    // What convert_txn_log_for_splitting leaves behind: the segments stay the parent's and every child
+    // publishes the same ones, so each has to select its own rows out of them.
+    //
+    // Deliberately NOT the rowset range it also stamps. Without one the publish-time Rowset has no
+    // range at all (it is built from the txn log, so its _tablet_metadata is null and the tablet range
+    // cannot be reached), the iterator is never narrowed, and the selector's verdict is what decides --
+    // which is the code under test. A tablet whose ORDER BY differs from its PK reaches the same state
+    // for real, because Rowset::set_segment_tablet_range withholds the range there, but no path can
+    // build one yet.
+    auto make_txn_log_cross_published = [&](int64_t txn_id) {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        // The non-SST condition merge is the path under test; prebuilt ssts would route the publish
+        // into _do_update_with_condition_parallel instead.
+        ASSERT_EQ(0, shared_log->op_write().ssts_size());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+    };
+    // Rows arrive from several rowsets in no particular order, and a key appearing twice is itself a
+    // failure mode (a delvec entry landing on the wrong row leaves both copies alive), so collect
+    // rather than stream-compare.
+    auto read_key_to_value = [&](int64_t version) {
+        ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+        std::map<int, int> key_to_value;
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            auto row = chunk->get(i);
+            EXPECT_TRUE(key_to_value.emplace(row[0].get_int32(), row[1].get_int32()).second)
+                    << "key " << row[0].get_int32() << " read twice";
+        }
+        return key_to_value;
+    };
+
+    // v2: a local write puts every key -- this child's and its siblings' -- in the index.
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_txn(make_op_chunk(n, 0, true, _slot_cid_map), "")).status());
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    // v3: cross publish a condition update whose every new value beats the old one (c1 = key + 100
+    // against key), so every row this child compares wins and displaces its old row.
+    auto condition_txn = write_txn(make_op_chunk(n, /*value_shift=*/100, true, _slot_cid_map), "c1");
+    make_txn_log_cross_published(condition_txn);
+    ASSERT_OK(publish_single_version(tablet_id, 3, condition_txn).status());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    // Only the owned keys' old rows may be displaced. Comparing every row displaces all n instead,
+    // and the winners that replace the siblings' keys are unreadable from here -- those keys vanish.
+    EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(n, read_rows(tablet_id, 3));
+    auto after_condition = read_key_to_value(3);
+    EXPECT_EQ(static_cast<size_t>(n), after_condition.size());
+    for (int key = 0; key < n; key++) {
+        const bool owned = key >= kOwnedLower && key < kOwnedUpper;
+        auto it = after_condition.find(key);
+        ASSERT_NE(after_condition.end(), it) << "key " << key << " lost";
+        EXPECT_EQ(owned ? key + 100 : key, it->second) << "key " << key;
+    }
+
+    // v4 pins the rowids the winners were indexed AT: a delete of every key is clipped to this child's
+    // range, so it erases exactly the owned keys -- which the index must have placed at their real
+    // positions in v3's segment. A rowid taken from the row's position among the owned rows instead
+    // erases other rows and leaves some of the owned ones alive.
+    ASSERT_OK(publish_single_version(tablet_id, 4, write_txn(make_op_chunk(n, 0, false, _slot_cid_map), "")).status());
+    auto after_delete = read_key_to_value(4);
+    EXPECT_EQ(static_cast<size_t>(n - kOwnedRows), after_delete.size());
+    for (int key = 0; key < n; key++) {
+        const bool owned = key >= kOwnedLower && key < kOwnedUpper;
+        EXPECT_EQ(owned ? 0u : 1u, after_delete.count(key)) << "key " << key;
+    }
+}
+
+// The other half of the same mapping: a row that LOSES its comparison is appended to this child's
+// delvec, and the parent view ORs the children's delvecs, so a verdict reached for a sibling's row
+// erases a row its owner had just decided to keep. The verdict alternates by key here, which also
+// pins the delvec entries to the losers' real rowids -- an entry that names the row's position among
+// the owned rows instead deletes an unrelated row and leaves the loser visible next to the old row
+// that beat it.
+//
+// Runs the parallel compare + parallel upsert branch (the serial one is covered above).
+TEST_P(LakePrimaryKeyPublishTest, test_cross_publish_condition_update_delvecs_losers_at_real_rowids) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    // The token is created only once the rowset has at least pk_index_parallel_execution_min_rows
+    // rows, so lower the bar to reach that path with a chunk this small.
+    ConfigResetGuard<bool> parallel(&config::enable_pk_index_parallel_execution, true);
+    ConfigResetGuard<int64_t> min_rows(&config::pk_index_parallel_execution_min_rows, 1);
+
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+    set_int_tablet_range(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_txn = [&](const ChunkPtr& chunk, const std::string& merge_condition) {
+        int64_t txn_id = next_id();
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id())
+                .set_slot_descriptors(&_slot_pointers)
+                .set_profile(&_dummy_runtime_profile);
+        if (!merge_condition.empty()) {
+            builder.set_merge_condition(merge_condition);
+        }
+        ASSIGN_OR_ABORT(auto delta_writer, builder.build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    // v2: local write of every key at c1 = key, siblings included.
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_txn(make_op_chunk(n, 0, true, _slot_cid_map), "")).status());
+    ASSERT_EQ(n, read_rows(tablet_id, 2));
+
+    // v3: cross publish a condition update where the verdict alternates -- an even key's new value
+    // beats the old one, an odd key's loses to it.
+    auto value_of = [](int key) { return key % 2 == 0 ? key + 100 : key - 100; };
+    auto condition_txn = write_txn(make_upsert_chunk(n, value_of, _slot_cid_map), "c1");
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, condition_txn));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        ASSERT_EQ(0, shared_log->op_write().ssts_size());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 3, condition_txn).status());
+
+    int expected_dels = 0;
+    for (int key = kOwnedLower; key < kOwnedUpper; key++) {
+        if (key % 2 == 0) {
+            expected_dels++;
+        }
+    }
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    // Only an owned winner may displace an old row. Comparing every row makes every even key a
+    // winner, and the ones outside the range take their old row with them into invisibility.
+    EXPECT_EQ(expected_dels, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(n, read_rows(tablet_id, 3));
+
+    ASSIGN_OR_ABORT(auto chunk, read(tablet_id, 3));
+    std::map<int, int> key_to_value;
+    for (size_t i = 0; i < chunk->num_rows(); i++) {
+        auto row = chunk->get(i);
+        EXPECT_TRUE(key_to_value.emplace(row[0].get_int32(), row[1].get_int32()).second)
+                << "key " << row[0].get_int32() << " read twice";
+    }
+    EXPECT_EQ(static_cast<size_t>(n), key_to_value.size());
+    for (int key = 0; key < n; key++) {
+        const bool owned = key >= kOwnedLower && key < kOwnedUpper;
+        // An owned winner shows its new value; an owned loser and every sibling keep the old row.
+        const int expected = (owned && key % 2 == 0) ? value_of(key) : key;
+        auto it = key_to_value.find(key);
+        ASSERT_NE(key_to_value.end(), it) << "key " << key << " lost";
+        EXPECT_EQ(expected, it->second) << "key " << key;
+    }
+}
+
 // Spill path regression (kevincai review on #75366): when a single op-aware merge task emits more than one
 // upsert chunk (merged upsert rows > config::vector_chunk_size), write_one_merged_chunk must not corrupt
 // the reused merge chunk's schema. The old clone_empty_with_schema + remove_column_by_index shared then
