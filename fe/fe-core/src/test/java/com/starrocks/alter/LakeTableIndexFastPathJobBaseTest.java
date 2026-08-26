@@ -21,6 +21,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.WALApplier;
@@ -326,7 +327,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
         when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
@@ -365,7 +366,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
@@ -448,7 +449,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
         when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
@@ -465,6 +466,50 @@ public class LakeTableIndexFastPathJobBaseTest {
             // useAggregatePublish (last arg) must be true for a file-bundling table.
             utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
                     any(), any(), any(), eq(true)), times(1));
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testLakePublishVersionWithSkip_IgnoresLegacyTabletSnapshot() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "commitVersionMap", Map.of(100L, 5L));
+        Tablet oldTablet = new LakeTablet(101L);
+        // A persisted job created before generation-aware snapshots can retain
+        // a superseded tablet ID. FORCE recovery must rebuild from current
+        // latest partition metadata rather than publishing this legacy value.
+        setField(job, "partitionToTablets", Map.of(100L, List.of(oldTablet.getId())));
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(false);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        MaterializedIndex oldIndex = mock(MaterializedIndex.class);
+        when(oldIndex.getTablets()).thenReturn(List.of(oldTablet));
+        Tablet latestTablet = new LakeTablet(201L);
+        MaterializedIndex latestIndex = mock(MaterializedIndex.class);
+        when(latestIndex.getTablets()).thenReturn(List.of(latestTablet));
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(oldIndex, latestIndex));
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(latestIndex));
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean())).thenReturn(true);
+
+            assertTrue(job.lakePublishVersionWithSkip("force skip"));
+
+            ArgumentCaptor<Map<Long, List<Tablet>>> tabletsCaptor = ArgumentCaptor.forClass(Map.class);
+            utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(), any(),
+                    tabletsCaptor.capture(), any(), eq(false)), times(1));
+            Map<Long, List<Tablet>> tabletsByPartition = tabletsCaptor.getValue();
+            assertEquals(List.of(latestTablet), tabletsByPartition.get(100L));
+            assertEquals(201L, tabletsByPartition.get(100L).get(0).getId());
         }
     }
 
@@ -1430,9 +1475,9 @@ public class LakeTableIndexFastPathJobBaseTest {
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
-        // lakePublishVersion now iterates all visible MV indices on the
-        // partition to publish base + rollup/sync-MV tablets together.
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        // lakePublishVersion iterates every latest visible logical index on
+        // the partition to publish base + rollup/sync-MV tablets together.
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
@@ -1457,6 +1502,105 @@ public class LakeTableIndexFastPathJobBaseTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    public void testLakePublishVersion_NonBundledExcludesRetainedGenerations() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "watershedTxnId", 7L);
+        setField(job, "commitVersionMap", Map.of(100L, 5L));
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(false);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        Tablet oldTablet = new LakeTablet(101L);
+        MaterializedIndex oldIndex = mock(MaterializedIndex.class);
+        when(oldIndex.getTablets()).thenReturn(List.of(oldTablet));
+        Tablet latestBaseTablet = new LakeTablet(201L);
+        MaterializedIndex latestBaseIndex = mock(MaterializedIndex.class);
+        when(latestBaseIndex.getTablets()).thenReturn(List.of(latestBaseTablet));
+        Tablet latestRollupTablet = new LakeTablet(202L);
+        MaterializedIndex latestRollupIndex = mock(MaterializedIndex.class);
+        when(latestRollupIndex.getTablets()).thenReturn(List.of(latestRollupTablet));
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(oldIndex, latestBaseIndex, latestRollupIndex));
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(latestBaseIndex, latestRollupIndex));
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+                    .thenAnswer(invocation -> null);
+
+            assertTrue(job.lakePublishVersion());
+
+            ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
+            utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
+                    eq(false)), times(2));
+            List<List<Tablet>> published = tabletsCaptor.getAllValues();
+            assertEquals(List.of(List.of(latestBaseTablet), List.of(latestRollupTablet)), published);
+            assertEquals(201L, published.get(0).get(0).getId());
+            assertEquals(202L, published.get(1).get(0).getId());
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testLakePublishVersion_FileBundlingUsesLatestGenerationPerLogicalIndex() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "commitVersionMap", Map.of(100L, 5L));
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        when(table.isFileBundling()).thenReturn(true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        Tablet oldTablet = new LakeTablet(101L);
+        MaterializedIndex oldIndex = mock(MaterializedIndex.class);
+        when(oldIndex.getTablets()).thenReturn(List.of(oldTablet));
+        Tablet latestBaseTablet = new LakeTablet(201L);
+        MaterializedIndex latestBaseIndex = mock(MaterializedIndex.class);
+        when(latestBaseIndex.getTablets()).thenReturn(List.of(latestBaseTablet));
+        Tablet latestRollupTablet = new LakeTablet(202L);
+        MaterializedIndex latestRollupIndex = mock(MaterializedIndex.class);
+        when(latestRollupIndex.getTablets()).thenReturn(List.of(latestRollupTablet));
+        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(oldIndex, latestBaseIndex, latestRollupIndex));
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(latestBaseIndex, latestRollupIndex));
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = mock(GlobalStateMgr.class);
+        LocalMetastore lm = mock(LocalMetastore.class);
+        when(lm.getDb(anyLong())).thenReturn(db);
+        when(lm.getTable(anyLong(), anyLong())).thenReturn(table);
+        when(gsm.getLocalMetastore()).thenReturn(lm);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+                    .thenAnswer(invocation -> null);
+
+            assertTrue(job.lakePublishVersion());
+
+            ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
+            utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
+                    eq(true)), times(1));
+            List<Tablet> published = tabletsCaptor.getValue();
+            assertEquals(List.of(latestBaseTablet, latestRollupTablet), published);
+            assertEquals(201L, published.get(0).getId());
+            assertEquals(202L, published.get(1).getId());
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+                    never());
+        }
+    }
+
+    @Test
     public void testLakePublishVersion_UtilsThrowsReturnsFalse() throws Exception {
         LakeTableAddIndexJob job = newJob();
         Map<Long, Long> commit = new HashMap<>();
@@ -1469,7 +1613,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         PhysicalPartition pp = mock(PhysicalPartition.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(new ArrayList<>());
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
@@ -1516,7 +1660,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         List<MaterializedIndex> indices = new ArrayList<>();
         indices.add(idx1);
         indices.add(idx2);
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)).thenReturn(indices);
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)).thenReturn(indices);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = mock(GlobalStateMgr.class);
@@ -1567,7 +1711,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         MaterializedIndex idxA = mock(MaterializedIndex.class);
         when(idxA.getTablets()).thenReturn(Collections.singletonList(tA));
         PhysicalPartition ppA = mock(PhysicalPartition.class);
-        when(ppA.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(ppA.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idxA));
         when(table.getPhysicalPartition(100L)).thenReturn(ppA);
 
@@ -1575,7 +1719,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         MaterializedIndex idxB = mock(MaterializedIndex.class);
         when(idxB.getTablets()).thenReturn(Collections.singletonList(tB));
         PhysicalPartition ppB = mock(PhysicalPartition.class);
-        when(ppB.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(ppB.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idxB));
         when(table.getPhysicalPartition(101L)).thenReturn(ppB);
 
@@ -1619,7 +1763,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         Tablet t1 = mock(Tablet.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(Collections.singletonList(t1));
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
@@ -1654,7 +1798,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         Tablet t1 = mock(Tablet.class);
         MaterializedIndex idx = mock(MaterializedIndex.class);
         when(idx.getTablets()).thenReturn(Collections.singletonList(t1));
-        when(pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+        when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 

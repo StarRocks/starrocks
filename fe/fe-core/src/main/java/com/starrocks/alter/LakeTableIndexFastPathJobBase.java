@@ -390,16 +390,16 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     return false;
                 }
                 long commitVersion = e.getValue();
-                // dispatchAllTasks() iterates pp.getAllMaterializedIndices(VISIBLE)
-                // so every base + rollup + sync-MV tablet has an in-flight alter
-                // task. Publish must mirror that set or non-base indexes get left
-                // on stale visible versions while FE/base advance, eventually
-                // causing read/planning inconsistencies on those indexes. For a
-                // file-bundling table all of the partition's tablets must land in
-                // ONE aggregate publish: BE truncate-overwrites the bundle, so a
-                // per-index aggregate call would drop earlier indexes' tablets.
+                // Task dispatch and publish both iterate every latest visible
+                // logical index, so base + rollup + sync-MV tablets advance
+                // together without republishing retained physical generations.
+                // For a file-bundling table all latest index tablets in the
+                // partition must land in ONE aggregate publish: BE
+                // truncate-overwrites the bundle, so a per-index aggregate call
+                // would drop earlier indexes' tablets.
                 List<Tablet> tablets = new ArrayList<>();
-                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (MaterializedIndex idx : pp.getLatestMaterializedIndices(
+                        MaterializedIndex.IndexExtState.VISIBLE)) {
                     if (useAggregatePublish) {
                         tablets.addAll(idx.getTablets());
                     } else {
@@ -527,9 +527,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     /**
      * No-op publish for the CANCEL ALTER TABLE ... FORCE escape hatch. Sends a
      * publish_version RPC with {@code TxnInfoPB.no_op_publish=true} at the
-     * alter's reserved commitVersion for every tablet the job published over
-     * ({@code getAllMaterializedIndices(VISIBLE)} per partition in
-     * {@code commitVersionMap}). BE short-circuits the txn-log apply path and
+     * alter's reserved commitVersion for every latest logical index tablet in
+     * {@code commitVersionMap}. BE short-circuits the txn-log apply path and
      * writes V-1 content tagged as version V, so the partition version chain
      * advances past the cancelled alter without including any of its changes.
      *
@@ -567,7 +566,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     continue;
                 }
                 List<Tablet> tablets = new ArrayList<>();
-                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (MaterializedIndex idx : pp.getLatestMaterializedIndices(
+                        MaterializedIndex.IndexExtState.VISIBLE)) {
                     tablets.addAll(idx.getTablets());
                 }
                 tabletsByPartition.put(ppId, tablets);
