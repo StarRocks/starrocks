@@ -30,7 +30,6 @@
 #include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
@@ -502,15 +501,10 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
-        const bool skip_indexless_cloud_native_noop =
-                _has_no_op_apply && _metadata->enable_persistent_index() &&
-                _metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE &&
-                _metadata->sstable_meta().sstables().empty() &&
-                LakePersistentIndex::need_rebuild_counts(*_metadata, _metadata->sstable_meta(), uint64_t{0}).first > 0;
-        // Local persistent index still needs a loaded index to update its version on a no-op.
-        // Cloud-native no-op publication normally retains the existing behavior, except that an
-        // indexless tablet with real rebuild work stays indexless until the next real writer.
-        if (_index_entry == nullptr && !skip_indexless_cloud_native_noop &&
+        // local persistent index will update index version, so we need to load first
+        // still need prepare primary index even when this iteration produced no
+        // rowset changes (legacy "empty compaction" or admin no-op publish)
+        if (_index_entry == nullptr &&
             (_has_no_op_apply || (_metadata->enable_persistent_index() &&
                                   _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
             // get lock to avoid gc

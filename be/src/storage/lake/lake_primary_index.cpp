@@ -50,13 +50,9 @@ std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current) {
 }
 
 Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
-                                   const MetaFileBuilder* builder, std::optional<uint64_t> rebuild_rss_rowid_point,
-                                   bool force_serial_full_rebuild) {
+                                   const MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_lock);
-    if (rebuild_rss_rowid_point.has_value() && _loaded) {
-        unload_without_lock();
-    }
     if (_loaded && !need_rebuild()) {
         return _status;
     }
@@ -66,8 +62,7 @@ Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetada
     // _do_lake_load may need tablet id to fetch tablet schema/encoding type.
     // Set it before loading to avoid using the default value (0).
     _tablet_id = metadata->id();
-    _status = _do_lake_load(tablet_mgr, metadata, base_version, builder, rebuild_rss_rowid_point,
-                            force_serial_full_rebuild);
+    _status = _do_lake_load(tablet_mgr, metadata, base_version, builder);
     TEST_SYNC_POINT_CALLBACK("lake_index_load.1", &_status);
     if (_status.ok()) {
         // update data version when memory index or persistent index load finish.
@@ -87,9 +82,7 @@ bool LakePrimaryIndex::is_load(int64_t base_version) {
 }
 
 Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                       int64_t base_version, const MetaFileBuilder* builder,
-                                       std::optional<uint64_t> rebuild_rss_rowid_point,
-                                       bool force_serial_full_rebuild) {
+                                       int64_t base_version, const MetaFileBuilder* builder) {
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -107,8 +100,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     RETURN_IF_ERROR(lake_persistent_index->init(metadata));
-    return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder,
-                                                        rebuild_rss_rowid_point, force_serial_full_rebuild);
+    return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
 }
 
 Status LakePrimaryIndex::apply_opcompaction(const TabletMetadataPtr& metadata,

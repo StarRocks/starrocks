@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <algorithm>
-
 #include "base/phmap/btree.h"
 #include "common/thread/threadpool.h"
 #include "storage/lake/types_fwd.h"
@@ -84,11 +82,6 @@ public:
     void clear();
 
     const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
-
-    void advance_max_rss_rowid(uint64_t value) {
-        DCHECK(empty());
-        _max_rss_rowid = std::max(_max_rss_rowid, value);
-    }
 
     bool empty() const { return _map.size() == 0; }
 

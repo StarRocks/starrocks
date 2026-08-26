@@ -170,8 +170,7 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard,
-        std::optional<uint64_t> rebuild_rss_rowid_point, bool force_serial_full_rebuild) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -183,13 +182,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
         guard = index.fetch_guard();
     }
-    const auto& effective_sstable_meta = builder->tablet_meta()->sstable_meta();
-    force_serial_full_rebuild =
-            force_serial_full_rebuild ||
-            (effective_sstable_meta.sstables().empty() &&
-             LakePersistentIndex::need_rebuild_counts(*metadata, effective_sstable_meta, uint64_t{0}).first > 0);
-    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder, rebuild_rss_rowid_point,
-                                force_serial_full_rebuild);
+    Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         if (st.is_already_exist()) {
@@ -245,8 +238,7 @@ DEFINE_FAIL_POINT(skip_lake_pk_index_flush);
 DEFINE_FAIL_POINT(fail_lake_pk_index_flush);
 
 StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata,
-                                                             int64_t generation_version,
-                                                             std::optional<uint64_t> rebuild_rss_rowid_point) {
+                                                             int64_t generation_version) {
     // Test-only escape hatch: reshard unit tests build hand-crafted metadata with no real
     // in-memory PK memtable, so there is nothing to flush; skip the (index-loading) flush so
     // they exercise the metadata merge/split logic without materializing a real index.
@@ -273,9 +265,8 @@ StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadat
     MetaFileBuilder builder(tablet, mutable_metadata);
 
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
-    ASSIGN_OR_RETURN(auto* index_entry,
-                     prepare_primary_index(metadata, &builder, base_version,
-                                           /*new_version=*/base_version, write_guard, rebuild_rss_rowid_point));
+    ASSIGN_OR_RETURN(auto* index_entry, prepare_primary_index(metadata, &builder, base_version,
+                                                              /*new_version=*/base_version, write_guard));
 
     // Default = failure cleanup: match PrimaryKeyTxnLogApplier::handle_failure
     // ordering exactly — unload the index first (while the write_guard is
