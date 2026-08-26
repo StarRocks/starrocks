@@ -24,6 +24,7 @@ import com.starrocks.type.VarcharType;
 
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.zone.ZoneOffsetTransition;
 import java.time.zone.ZoneRules;
@@ -62,14 +63,23 @@ public final class ConvertTzStatisticUtils {
      * the whole input range. Around a DST transition the mapping is not monotonic in wall-clock space,
      * e.g. UTC 00:30 and 01:30 both map to Europe/Berlin 02:30 on 2024-10-27 while 00:59 maps to 02:59,
      * so converting only the endpoints would under-range the result.
+     *
+     * {@code LocalDateTime.atZone} also skips spring-forward gaps and picks one offset in fall-back
+     * overlaps, so an instant interval built from the endpoints can miss the transition entirely.
+     * If either endpoint is skipped or ambiguous in {@code fromTz}, keep the widened range.
      */
     public static boolean hasTimezoneOffsetDrift(double minValue, double maxValue,
                                                  ConstantOperator fromTz, ConstantOperator toTz) {
         try {
             ZoneId from = ZoneId.of(fromTz.getVarchar());
             ZoneId to = ZoneId.of(toTz.getVarchar());
-            Instant minInstant = Utils.getDatetimeFromLong((long) minValue).atZone(from).toInstant();
-            Instant maxInstant = Utils.getDatetimeFromLong((long) maxValue).atZone(from).toInstant();
+            LocalDateTime minLocal = Utils.getDatetimeFromLong((long) minValue);
+            LocalDateTime maxLocal = Utils.getDatetimeFromLong((long) maxValue);
+            if (isSkippedOrAmbiguous(from, minLocal) || isSkippedOrAmbiguous(from, maxLocal)) {
+                return true;
+            }
+            Instant minInstant = minLocal.atZone(from).toInstant();
+            Instant maxInstant = maxLocal.atZone(from).toInstant();
             Instant start = minInstant.isAfter(maxInstant) ? maxInstant : minInstant;
             Instant end = minInstant.isAfter(maxInstant) ? minInstant : maxInstant;
             return hasOffsetTransition(from, start, end) || hasOffsetTransition(to, start, end);
@@ -77,6 +87,10 @@ public final class ConvertTzStatisticUtils {
             // Invalid zone id or out-of-range temporal value: keep the widened range.
             return true;
         }
+    }
+
+    private static boolean isSkippedOrAmbiguous(ZoneId zone, LocalDateTime localDateTime) {
+        return zone.getRules().getValidOffsets(localDateTime).size() != 1;
     }
 
     private static boolean hasOffsetTransition(ZoneId zone, Instant start, Instant end) {

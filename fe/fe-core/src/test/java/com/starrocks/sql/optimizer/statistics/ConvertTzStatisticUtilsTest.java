@@ -85,6 +85,29 @@ public class ConvertTzStatisticUtilsTest {
     }
 
     @Test
+    public void testHasTimezoneOffsetDriftTrueWhenEndpointInSpringForwardGap() {
+        // America/New_York springs forward 2024-03-10 02:00 -> 03:00. 02:30 is skipped; atZone
+        // normalizes it to after the transition, so an instant-only check would miss the gap.
+        final double min = getLongFromDateTime(LocalDateTime.of(2024, 3, 10, 2, 30, 0));
+        final double max = getLongFromDateTime(LocalDateTime.of(2024, 3, 10, 3, 15, 0));
+
+        Assertions.assertTrue(ConvertTzStatisticUtils.hasTimezoneOffsetDrift(
+                min, max, ConstantOperator.createVarchar("America/New_York"),
+                ConstantOperator.createVarchar("UTC")));
+    }
+
+    @Test
+    public void testHasTimezoneOffsetDriftTrueWhenEndpointInFallBackOverlap() {
+        // America/New_York falls back 2024-11-03 02:00 -> 01:00. 01:30 is ambiguous.
+        final double min = getLongFromDateTime(LocalDateTime.of(2024, 11, 3, 1, 15, 0));
+        final double max = getLongFromDateTime(LocalDateTime.of(2024, 11, 3, 1, 45, 0));
+
+        Assertions.assertTrue(ConvertTzStatisticUtils.hasTimezoneOffsetDrift(
+                min, max, ConstantOperator.createVarchar("America/New_York"),
+                ConstantOperator.createVarchar("UTC")));
+    }
+
+    @Test
     public void testHasTimezoneOffsetDriftTrueForInvalidZone() {
         final double min = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 0, 0));
         final double max = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 12, 0, 0));
