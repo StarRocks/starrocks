@@ -1058,6 +1058,19 @@ public class ExpressionStatisticCalculator {
             ColumnStatistic fromTzStat = inputs.get(1);
             ColumnStatistic toTzStat = inputs.get(2);
 
+            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
+            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
+            // Invalid constant zones are not folded when the datetime is a column, but the BE
+            // returns NULL for every row (convert_tz_prepare sets is_valid=false).
+            if ((fromTz.isPresent() && !ConvertTzStatisticUtils.isValidTimeZone(fromTz.get()))
+                    || (toTz.isPresent() && !ConvertTzStatisticUtils.isValidTimeZone(toTz.get()))) {
+                return ColumnStatistic.builder()
+                        .setNullsFraction(1.0)
+                        .setAverageRowSize(callOperator.getType().getTypeSize())
+                        .setDistinctValuesCount(0)
+                        .build();
+            }
+
             final double nullsFraction = 1.0
                     - (1.0 - childStat.getNullsFraction())
                     * (1.0 - fromTzStat.getNullsFraction())
@@ -1072,8 +1085,6 @@ public class ExpressionStatisticCalculator {
             double minValue = childStat.getMinValue() - ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
             double maxValue = childStat.getMaxValue() + ConvertTzStatisticUtils.MAX_TIMEZONE_OFFSET_SECONDS;
 
-            Optional<ConstantOperator> fromTz = toConstantOperator(callOperator.getChild(1));
-            Optional<ConstantOperator> toTz = toConstantOperator(callOperator.getChild(2));
             if (fromTz.isPresent() && toTz.isPresent()
                     && !childStat.hasNaNValue() && !childStat.isInfiniteRange()
                     && !ConvertTzStatisticUtils.hasTimezoneOffsetDrift(childStat.getMinValue(), childStat.getMaxValue(),

@@ -89,6 +89,15 @@ public final class ConvertTzStatisticUtils {
         }
     }
 
+    public static boolean isValidTimeZone(ConstantOperator tz) {
+        try {
+            ZoneId.of(tz.getVarchar());
+            return true;
+        } catch (DateTimeException e) {
+            return false;
+        }
+    }
+
     private static boolean isSkippedOrAmbiguous(ZoneId zone, LocalDateTime localDateTime) {
         return zone.getRules().getValidOffsets(localDateTime).size() != 1;
     }

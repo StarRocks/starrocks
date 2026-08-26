@@ -63,6 +63,13 @@ public class ConvertTzStatisticUtilsTest {
         Assertions.assertTrue(converted.isEmpty());
     }
 
+    @Test
+    public void testIsValidTimeZone() {
+        Assertions.assertTrue(ConvertTzStatisticUtils.isValidTimeZone(ConstantOperator.createVarchar("UTC")));
+        Assertions.assertTrue(ConvertTzStatisticUtils.isValidTimeZone(ConstantOperator.createVarchar("America/New_York")));
+        Assertions.assertFalse(ConvertTzStatisticUtils.isValidTimeZone(ConstantOperator.createVarchar("Not/AZone")));
+    }
+
     // ---------- hasTimezoneOffsetDrift ----------
 
     @Test

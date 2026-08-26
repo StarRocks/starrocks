@@ -2733,7 +2733,7 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
-    public void testConvertTzFallsBackToWidenedRangeWhenTimezoneInvalid() {
+    public void testConvertTzIsAllNullWhenConstantTimezoneInvalid() {
         final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
         final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
 
@@ -2756,9 +2756,8 @@ public class ExpressionStatisticsCalculatorTest {
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
 
-        // Invalid zone: cannot evaluate samples; range must still cover the input domain.
-        Assertions.assertTrue(actual.getMinValue() <= minValue);
-        Assertions.assertTrue(actual.getMaxValue() >= maxValue);
+        Assertions.assertEquals(1.0, actual.getNullsFraction(), 0.001);
+        Assertions.assertEquals(0, actual.getDistinctValuesCount(), 0.001);
         Assertions.assertNull(actual.getHistogram());
     }
 
