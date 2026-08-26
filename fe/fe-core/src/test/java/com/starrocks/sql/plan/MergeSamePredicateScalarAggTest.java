@@ -37,11 +37,17 @@ public class MergeSamePredicateScalarAggTest extends TPCDSPlanTestBase {
     @BeforeEach
     public void setUp() {
         connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(true);
+        // Runs PlanValidator.validateAfterRule after every rule that changed the tree. It defaults to false, so
+        // the five checkers in sql/optimizer/validate (input dependencies, column reuse, CTE uniqueness, types)
+        // never run in CI - and they assert mechanically exactly what a rule that rebuilds a join chain and
+        // rewrites column refs can get wrong.
+        connectContext.getSessionVariable().setEnableOptimizerRuleDebug(true);
     }
 
     @AfterEach
     public void tearDown() {
         connectContext.getSessionVariable().setEnableMergeSamePredicateScalarAgg(true);
+        connectContext.getSessionVariable().setEnableOptimizerRuleDebug(false);
     }
 
     private static int countOccurrences(String text, String pattern) {
@@ -239,6 +245,37 @@ public class MergeSamePredicateScalarAggTest extends TPCDSPlanTestBase {
         Assertions.assertEquals(1, scanCount(sql, "t0"));
         Assertions.assertEquals(1, scanCount(sql, "t1"));
         Assertions.assertEquals(1, scanCount(sql, "t2"));
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // metadata-only fast paths: merging changes the aggregate set, and both TF_REWRITE_SIMPLE_AGG rules are
+    // all-or-nothing on it. A merge must never trade a plan that reads no column data for one that does.
+    // ------------------------------------------------------------------------------------------------
+
+    @Test
+    public void testMetaScanKeptWhenMergedAggSetStillQualifies() throws Exception {
+        // min and max are both answerable from zone maps, so the merged branch must still reach MetaScan
+        String sql = "select (select max(v1) from t0) a, (select min(v2) from t0) b";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "MetaScan"));
+        Assertions.assertEquals(0, countOccurrences(plan, "TABLE: t0"));
+    }
+
+    @Test
+    public void testMetaScanNotTradedForAnExtraColumnRead() throws Exception {
+        // max(v1) alone is a zone-map lookup; avg(v2) is not. Merging them would read v1 in full for nothing,
+        // so this pair must stay apart.
+        String sql = "select (select max(v1) from t0) a, (select avg(v2) from t0) b";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "MetaScan"));
+    }
+
+    @Test
+    public void testCountStarRidesAlongOnAScanThatHappensAnyway() throws Exception {
+        // count(*) reads no column, so folding it into a branch that must scan v2 regardless costs nothing
+        // and saves a scan - losing the MetaScan here is the right trade.
+        String sql = "select (select count(*) from t0) a, (select avg(v2) from t0) b";
+        Assertions.assertEquals(1, scanCount(sql, "t0"));
     }
 
     @Test

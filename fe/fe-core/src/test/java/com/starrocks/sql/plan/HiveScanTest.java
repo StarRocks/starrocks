@@ -162,6 +162,29 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testRewriteSimpleAggToHdfsScanWithSeveralCounts() throws Exception {
+        // check() used to accept any number of count aggregations while buildAggScanOperator() asserted exactly
+        // one, so these died in transform() with an IllegalArgumentException instead of just not being rewritten.
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
+        try {
+            // two distinct count aggregations: not rewritten, and crucially not an exception either
+            for (String sql : new String[] {
+                    "select count(*), count(1) from lineitem_par",
+                    "select count(*), count(1) from iceberg0.partitioned_db.t1",
+                    "select count(*), count(1) from lineitem_par where l_shipdate = '1998-01-01'",
+            }) {
+                String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
+            }
+            // two identical count(*) collapse onto one output slot, so this one is a single aggregation and
+            // still gets the rewrite
+            assertContains(getFragmentPlan("select count(*), count(*) from lineitem_par"), "___count___");
+        } finally {
+            connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+        }
+    }
+
+    @Test
     public void testIcebergRewriteSimpleAggToHdfsScan() throws Exception {
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
         // positive cases.

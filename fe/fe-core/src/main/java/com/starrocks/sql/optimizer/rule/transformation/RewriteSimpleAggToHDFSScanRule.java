@@ -238,7 +238,11 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         }
 
         // not applicable if there is no aggregation functions, like `distinct x`.
-        if (aggregationOperator.getAggregations().isEmpty()) {
+        // buildAggScanOperator() below can only rewrite a single count, and asserts as much with a
+        // Preconditions.checkArgument. That assertion is about the *input* shape, not about anything this rule
+        // established, so it has to be a bail-out here: `select count(*), count(1) from hive_tbl` otherwise
+        // passes check() with two aggregations and dies in transform() with an IllegalArgumentException.
+        if (aggregationOperator.getAggregations().size() != 1) {
             return false;
         }
 

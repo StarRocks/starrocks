@@ -16,9 +16,13 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -31,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -45,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -70,10 +76,19 @@ import java.util.Set;
  * </pre>
  *
  * <p>This is the conservative half of "conditional aggregate merging": because every merged branch carries the
- * <b>same</b> predicate, the surviving scan's predicate is byte-for-byte what each branch had before, so partition
- * pruning, zone maps, late materialization and the meta-scan fast path all behave exactly as they did. No
+ * <b>same</b> predicate, the surviving scan's predicate is byte-for-byte what each branch had before, so everything
+ * driven by the predicate - partition pruning, zone maps, late materialization - behaves exactly as it did. No
  * disjunction is produced and no {@code if()} wrapping is needed, which is what separates this rule from the
  * (much riskier) OR-merging variant.
+ *
+ * <p>What merging <b>does</b> change is the <i>aggregate set</i>, and the two metadata-only rewrites
+ * ({@link RewriteSimpleAggToMetaScanRule}, {@link RewriteSimpleAggToHDFSScanRule}) are all-or-nothing on it: OLAP
+ * needs every aggregate to be min/max/count, the lake path needs a single count, and both match on an
+ * {@code Agg / Project / Scan} spine. So two things are load-bearing here and neither is cosmetic: the merged
+ * branch re-emits the projection normalization inlined away (see {@link #identityProjectOver}), and a branch that
+ * can be answered from metadata on its own is never folded into a group that cannot (see
+ * {@link #hasMetadataOnlyFastPath}). Trading a zero-data plan for a full column read is a loss no matter how many
+ * scans it saves.
  *
  * <p>TPC-DS q09 is the motivating case: its 15 uncorrelated scalar subqueries carry only 5 distinct predicates
  * (each {@code ss_quantity BETWEEN a AND b} is shared by a count and two avgs), so the table is scanned 5 times
@@ -91,6 +106,15 @@ import java.util.Set;
  */
 public class MergeSamePredicateScalarAggRule extends TransformationRule {
     private static final int MIN_MERGE_BRANCHES = 2;
+
+    /** Aggregate functions {@link RewriteSimpleAggToMetaScanRule} can answer from segment metadata. */
+    private static final Set<String> META_SCAN_FUNCTIONS = Set.of(
+            FunctionSet.MIN, FunctionSet.MAX, FunctionSet.COUNT,
+            FunctionSet.COLUMN_SIZE, FunctionSet.COLUMN_COMPRESSED_SIZE);
+
+    /** Scan types {@link RewriteSimpleAggToHDFSScanRule} supports. */
+    private static final Set<OperatorType> HDFS_META_SCAN_TYPES = Set.of(
+            OperatorType.LOGICAL_HIVE_SCAN, OperatorType.LOGICAL_ICEBERG_SCAN, OperatorType.LOGICAL_FILE_SCAN);
 
     public MergeSamePredicateScalarAggRule() {
         super(RuleType.TF_MERGE_SAME_PREDICATE_SCALAR_AGG,
@@ -129,18 +153,32 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             if (branches.get(i) == null || taken[i]) {
                 continue;
             }
+            Branch leader = branches.get(i);
             List<Integer> group = Lists.newArrayList(i);
             taken[i] = true;
+            List<CallOperator> groupAggs = new ArrayList<>(leader.aggregations.values());
+            boolean groupHasFastPath = hasMetadataOnlyFastPath(groupAggs, leader, context);
             for (int j = i + 1; j < branches.size(); j++) {
                 if (branches.get(j) == null || taken[j]) {
                     continue;
                 }
-                Map<ColumnRefOperator, ScalarOperator> rename = matchAgainstLeader(branches.get(i), branches.get(j));
-                if (rename != null) {
-                    group.add(j);
-                    taken[j] = true;
-                    renames.put(j, rename);
+                Branch other = branches.get(j);
+                Map<ColumnRefOperator, ScalarOperator> rename = matchAgainstLeader(leader, other);
+                if (rename == null) {
+                    continue;
                 }
+                List<CallOperator> combined = new ArrayList<>(groupAggs);
+                combined.addAll(other.aggregations.values());
+                boolean combinedHasFastPath = hasMetadataOnlyFastPath(combined, leader, context);
+                if (!combinedHasFastPath
+                        && wouldReadMoreData(groupAggs, groupHasFastPath, other, rename, context)) {
+                    continue;
+                }
+                group.add(j);
+                taken[j] = true;
+                renames.put(j, rename);
+                groupAggs = combined;
+                groupHasFastPath = combinedHasFastPath;
             }
             if (group.size() >= MIN_MERGE_BRANCHES) {
                 groups.add(group);
@@ -164,6 +202,16 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             }
         }
         if (dropped.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // The interleaved projections are recreated above the *whole* rebuilt chain. Every branch is a scalar
+        // aggregation and therefore exactly one row, so as long as at most one chain input is something else the
+        // row count is the same at every level and hoisting costs nothing. With two or more multi-row inputs an
+        // expression that used to be evaluated on |A| rows is evaluated on |A|x|B| - same values, but an unbounded
+        // amount of extra work. A pass-through projection is free to hoist either way, so only a projection that
+        // actually computes something forces us to give up the merge.
+        if (hoistedProjectionComputes(chain.projects) && countMultiRowInputs(branches) >= 2) {
             return Collections.emptyList();
         }
 
@@ -207,6 +255,17 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             }
         }
         return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(topProjectMap), newChain));
+    }
+
+    /** Whether any projection that would be hoisted evaluates an expression rather than passing a column through. */
+    private static boolean hoistedProjectionComputes(List<LogicalProjectOperator> projects) {
+        return projects.stream().anyMatch(project -> project.getColumnRefMap().values().stream()
+                .anyMatch(value -> !(value instanceof ColumnRefOperator)));
+    }
+
+    /** Chain inputs that are not scalar-aggregation branches, and so are not known to produce exactly one row. */
+    private static long countMultiRowInputs(List<Branch> branches) {
+        return branches.stream().filter(Objects::isNull).count();
     }
 
     private static List<ColumnRefOperator> outputColumnsOf(OptExpression expr) {
@@ -266,6 +325,12 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
         LogicalJoinOperator join = (LogicalJoinOperator) op;
         return (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin())
                 && join.getOnPredicate() == null
+                // An inner join reached through ON-clause pushdown keeps its ON predicate in
+                // originalOnPredicate, which is what MV rewrite uses to tell an ON predicate from a WHERE
+                // predicate (#21178). Dropping an input re-parents the surviving edges onto a different left
+                // subtree, so refuse the edge outright rather than reasoning about whether that still compares
+                // equal downstream.
+                && join.getOriginalOnPredicate() == null
                 && join.getSkewColumn() == null;
     }
 
@@ -353,6 +418,18 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) op;
         if (!agg.getGroupingKeys().isEmpty() || agg.getType() != AggType.GLOBAL || agg.isSplit()
                 || agg.getAggregations().isEmpty()) {
+            return null;
+        }
+        // The merged aggregation is rebuilt with builder().withOperator(leader.agg), so every other branch's
+        // per-relation aggregation state would be silently discarded. These are all at their defaults at this
+        // phase - assert that rather than depending on the schedule staying that way. Note localLimit is a
+        // separate field with its own DEFAULT_LIMIT sentinel that Operator.hasLimit() does not look at, and
+        // distinctColumnDataSkew comes from a user skew hint.
+        if (!CollectionUtils.isEmpty(agg.getPartitionByColumns())
+                || agg.getLocalLimit() != Operator.DEFAULT_LIMIT
+                || agg.getDistinctColumnDataSkew() != null
+                || agg.isTopNLocalAgg()
+                || agg.getAggTopnSortInfo() != null) {
             return null;
         }
 
@@ -478,6 +555,17 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
                     && (vector == null || !vector.isEnableUseANN())
                     && !olap.isFromSplitOR();
         }
+        if (scan instanceof LogicalIcebergScanOperator) {
+            LogicalIcebergScanOperator iceberg = (LogicalIcebergScanOperator) scan;
+            // Merge-on-read / equality-delete state is per-relation, and IcebergTableMORParams has no equals()
+            // to compare two with. It is still at its default here only because this rule is scheduled before
+            // IcebergEqualityDeleteRewriteRule; fail closed on it instead of encoding that ordering as an
+            // unwritten assumption.
+            return !iceberg.isFromEqDeleteRewriteRule()
+                    && iceberg.getDeleteSchemas().isEmpty()
+                    && iceberg.getTableFullMORParams().isEmpty()
+                    && IcebergMORParams.EMPTY.equals(iceberg.getMORParam());
+        }
         return true;
     }
 
@@ -489,6 +577,93 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             // the base implementation throws for scan types without connector-side pruning (OLAP, JDBC, schema, ...)
             return null;
         }
+    }
+
+    /**
+     * Whether folding {@code other} into the group would make the merged branch read column data that the two of
+     * them do not already read apart. Only asked when the merged aggregate set has lost its metadata-only fast
+     * path, and only then does the answer differ from "no".
+     *
+     * <p>Losing the fast path is not by itself a reason to refuse: a {@code count(*)} branch reads no columns, so
+     * folding it into a branch that has to scan a column anyway costs nothing and saves a scan. It <b>is</b> a
+     * reason when the fast side reads a column the rest does not - {@code max(a)} beside {@code avg(b)} would turn
+     * a zone-map lookup on {@code a} into a full read of it - and when both sides were metadata-only, because the
+     * merged scan still has one column picked for it by {@link PruneScanColumnRule} where before it read nothing.
+     */
+    private static boolean wouldReadMoreData(List<CallOperator> groupAggs, boolean groupHasFastPath, Branch other,
+                                             Map<ColumnRefOperator, ScalarOperator> rename,
+                                             OptimizerContext context) {
+        boolean otherHasFastPath = hasMetadataOnlyFastPath(other.aggregations.values(), other, context);
+        if (!groupHasFastPath && !otherHasFastPath) {
+            return false;
+        }
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rename);
+        ColumnRefSet otherColumns = new ColumnRefSet();
+        other.aggregations.values().forEach(
+                call -> otherColumns.union(Utils.extractColumnRef(rewriter.rewrite(call))));
+        ColumnRefSet groupColumns = new ColumnRefSet();
+        groupAggs.forEach(call -> groupColumns.union(Utils.extractColumnRef(call)));
+
+        // what the merged branch will read, and what the two sides read while they stay apart
+        ColumnRefSet merged = new ColumnRefSet();
+        merged.union(groupColumns);
+        merged.union(otherColumns);
+        ColumnRefSet apart = new ColumnRefSet();
+        if (!groupHasFastPath) {
+            apart.union(groupColumns);
+        }
+        if (!otherHasFastPath) {
+            apart.union(otherColumns);
+        }
+        // an aggregation needing no column at all still gets one column picked for the scan
+        return merged.isEmpty() ? apart.isEmpty() : !apart.containsAll(merged);
+    }
+
+    /**
+     * Whether {@code aggs} over {@code branch}'s scan could still be answered without reading data, i.e. whether
+     * {@code TF_REWRITE_SIMPLE_AGG} can still fire on it later. This mirrors the *necessary* conditions of
+     * {@link RewriteSimpleAggToMetaScanRule#check} and {@link RewriteSimpleAggToHDFSScanRule#check} - it is
+     * deliberately an over-approximation of "has a fast path", because over-approximating only costs us a merge
+     * while under-approximating costs the user a full column scan.
+     *
+     * <p>Both rules are all-or-nothing on the aggregate set, which is exactly what merging changes: OLAP needs
+     * every aggregate to be min/max/count, and the lake path needs a single count. The predicate matters too, and
+     * differently on each side: the OLAP rule refuses any scan predicate, while the lake rule only refuses a
+     * predicate touching a non-partition column - which is why TPC-DS q09, whose branches all filter on
+     * {@code ss_quantity}, has no fast path to protect and still merges 15 scans down to 5.
+     */
+    private static boolean hasMetadataOnlyFastPath(Collection<CallOperator> aggs, Branch branch,
+                                                   OptimizerContext context) {
+        if (aggs.stream().anyMatch(CallOperator::isDistinct)) {
+            return false;
+        }
+        Table table = branch.scan.getTable();
+        if (table.isOlapOrCloudNativeTable()) {
+            if (!context.getSessionVariable().isEnableRewriteSimpleAggToMetaScan()
+                    || !(table instanceof OlapTable)
+                    || ((OlapTable) table).getKeysType() != KeysType.DUP_KEYS
+                    // the OLAP rule bails on any scan predicate, and by then this branch's filter has been
+                    // pushed down onto the scan
+                    || branch.predicate != null) {
+                return false;
+            }
+            return aggs.stream().allMatch(call -> META_SCAN_FUNCTIONS.contains(call.getFnName()));
+        }
+        if (!HDFS_META_SCAN_TYPES.contains(branch.scan.getOpType())) {
+            return false;
+        }
+        if (!context.getSessionVariable().isEnableRewriteSimpleAggToHdfsScan() || aggs.size() != 1) {
+            return false;
+        }
+        CallOperator only = aggs.iterator().next();
+        if (!FunctionSet.COUNT.equals(only.getFnName()) || !only.getUsedColumns().isEmpty()) {
+            return false;
+        }
+        // the lake rule rejects a predicate on any non-partition column
+        Set<String> partitionColumns = branch.scan.getPartitionColumns();
+        return branch.predicate == null
+                || Utils.extractColumnRef(branch.predicate).stream()
+                .allMatch(ref -> partitionColumns.contains(ref.getName()));
     }
 
     // ------------------------------------------------------------------------------------------------------
@@ -522,15 +697,21 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> rename = new HashMap<>();
         Map<Column, ColumnRefOperator> leaderColumns = leader.scan.getColumnMetaToColRefMap();
-        // The keyed lookup works across Table instances because Column.equals/hashCode are value-based (name +
-        // type), not identity - external connectors do rebuild the Column objects per resolution. The name-keyed
-        // map is a fallback for connectors whose Column carries extra state that breaks that equality.
-        Map<String, ColumnRefOperator> leaderColumnsByName = new HashMap<>();
-        leaderColumns.forEach((column, ref) -> leaderColumnsByName.put(column.getName().toLowerCase(), ref));
+        // The keyed lookup works across Table instances because Column.equals is value-based, not identity -
+        // external connectors do rebuild the Column objects per resolution. The name-keyed map is a fallback for
+        // the case where Column.hashCode (case-sensitive) disagrees with Column.equalsIgnoreComment (which
+        // compares names with equalsIgnoreCase), so the keyed lookup misses a column it would happily accept. It
+        // must still go through equalsIgnoreComment: matching on the name alone would skip the type / nullability
+        // / key-ness / default-value checks that Column.equals performs.
+        Map<String, Column> leaderColumnsByName = new HashMap<>();
+        leaderColumns.keySet().forEach(column -> leaderColumnsByName.put(column.getName().toLowerCase(), column));
         for (Map.Entry<ColumnRefOperator, Column> entry : other.scan.getColRefToColumnMetaMap().entrySet()) {
             ColumnRefOperator leaderRef = leaderColumns.get(entry.getValue());
             if (leaderRef == null) {
-                leaderRef = leaderColumnsByName.get(entry.getValue().getName().toLowerCase());
+                Column leaderColumn = leaderColumnsByName.get(entry.getValue().getName().toLowerCase());
+                if (leaderColumn != null && leaderColumn.equalsIgnoreComment(entry.getValue())) {
+                    leaderRef = leaderColumns.get(leaderColumn);
+                }
             }
             if (leaderRef == null || !leaderRef.getType().equals(entry.getKey().getType())) {
                 return null;
@@ -623,8 +804,19 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
         if (current == null) {
             return null;
         }
+        LogicalScanOperator mergedScan = (LogicalScanOperator) current.getOp();
         if (leader.predicate != null) {
             current = OptExpression.create(new LogicalFilterOperator(leader.predicate), current);
+        }
+        // Re-emit the projection that normalization inlined away. It is not cosmetic: both metadata-only
+        // rewrites match on Agg/Project/Scan (RewriteSimpleAggToMetaScanRule's pattern literally is
+        // LOGICAL_AGGR -> LOGICAL_PROJECT -> LOGICAL_OLAP_SCAN, and only
+        // RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT is registered in the rule set), so a merged branch
+        // emitted as a bare Agg/Scan can never reach them - which silently turns two zone-map-only MetaScans
+        // into one real data scan even when the merged aggregate set is still fully metadata-answerable.
+        OptExpression projected = identityProjectOver(current, aggregations, mergedScan);
+        if (projected != null) {
+            current = projected;
         }
         LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder()
                 .withOperator(leader.agg)
@@ -636,6 +828,32 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             return current;
         }
         return OptExpression.create(new LogicalProjectOperator(outputMap), current);
+    }
+
+    /**
+     * A pass-through projection carrying exactly the columns the merged aggregation reads, so the merged branch has
+     * the same {@code Agg / Project / Scan} spine an unmerged branch has. For a pure {@code count(*)} group there is
+     * no aggregate argument at all, so fall back to the scan's own output columns - mirroring what
+     * {@link PruneScanColumnRule} keeps for that case. Returns null when there is nothing to project.
+     */
+    private static OptExpression identityProjectOver(OptExpression child,
+                                                     Map<ColumnRefOperator, CallOperator> aggregations,
+                                                     LogicalScanOperator scan) {
+        Map<ColumnRefOperator, ScalarOperator> identity = new LinkedHashMap<>();
+        for (CallOperator call : aggregations.values()) {
+            for (ScalarOperator arg : call.getChildren()) {
+                if (arg instanceof ColumnRefOperator) {
+                    identity.put((ColumnRefOperator) arg, arg);
+                }
+            }
+        }
+        if (identity.isEmpty()) {
+            scan.getColRefToColumnMetaMap().keySet().forEach(ref -> identity.put(ref, ref));
+        }
+        if (identity.isEmpty()) {
+            return null;
+        }
+        return OptExpression.create(new LogicalProjectOperator(identity), child);
     }
 
     /**

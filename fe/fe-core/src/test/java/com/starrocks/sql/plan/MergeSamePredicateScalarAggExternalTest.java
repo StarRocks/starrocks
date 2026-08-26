@@ -138,4 +138,27 @@ public class MergeSamePredicateScalarAggExternalTest extends ConnectorPlanTestBa
         Assertions.assertEquals(1, hiveScanCount(sql));
         Assertions.assertEquals(1, scanCount(sql));
     }
+
+    @Test
+    public void testHiveTwoCountBranchesNotMerged() throws Exception {
+        // Each count(*) can be answered from manifest metadata on its own, and RewriteSimpleAggToHDFSScanRule
+        // only rewrites a single count. Merging them would give up two zero-data plans for one real scan, so the
+        // pair must stay apart - and must not blow up in that rule's Preconditions on the way.
+        String sql = "select (select count(*) from " + HIVE_TBL + ") c1, (select count(1) from " + HIVE_TBL + ") c2";
+        Assertions.assertEquals(2, hiveScanCount(sql));
+    }
+
+    @Test
+    public void testHiveCountRidesAlongOnAScanThatHappensAnyway() throws Exception {
+        // count(*) reads no column, so folding it into the sum branch costs nothing and saves a scan
+        String sql = "select (select count(*) from " + HIVE_TBL + ") c,"
+                + " (select sum(l_quantity) from " + HIVE_TBL + ") s";
+        Assertions.assertEquals(1, hiveScanCount(sql));
+    }
+
+    @Test
+    public void testIcebergTwoCountBranchesNotMerged() throws Exception {
+        String sql = "select (select count(*) from " + TBL + ") c1, (select count(1) from " + TBL + ") c2";
+        Assertions.assertEquals(2, scanCount(sql));
+    }
 }
