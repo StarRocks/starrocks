@@ -826,10 +826,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     /**
      * Drops the statistics that are keyed by name, which is everything reachable without loading the table.
      * Leaving them behind would hand a broken table's leftovers to a table later recreated under the same
-     * name, and its analyze job would start collecting again on the new table's behalf. The remainder of
-     * {@link StatisticUtils#dropStatisticsAfterDropTable} is keyed by the table UUID, which embeds the uuid
-     * iceberg keeps in the very metadata that is missing here: those entries cannot be reached, and a
-     * recreated table gets a different uuid, so they are never taken for the new table's statistics.
+     * name, and its analyze job would start collecting again on the new table's behalf. The collected rows go
+     * with the metadata that describes them: {@link AnalyzeMgr#clearStatisticFromExternalDroppedTable} finds
+     * leftovers by walking the basic stats metadata, so dropping that metadata alone would strand the rows it
+     * points at for good.
+     * What stays behind is keyed by the table UUID, which embeds the uuid iceberg keeps in the very metadata
+     * that is missing here: the analyze status history and the in-memory column statistics. A recreated table
+     * gets a different uuid, so neither is ever taken for the new table's statistics.
      */
     private void dropNameKeyedStatistics(String dbName, String tableName) {
         IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
@@ -840,7 +843,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
-        analyzeMgr.removeExternalBasicStatsMeta(catalogName, dbName, tableName);
+        analyzeMgr.dropExternalBasicStatsMetaAndData(catalogName, dbName, tableName);
+        analyzeMgr.dropExternalHistogramStatsMetaAndData(catalogName, dbName, tableName);
         analyzeMgr.dropAnalyzeJob(catalogName, dbName, tableName);
     }
 

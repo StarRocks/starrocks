@@ -126,6 +126,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TIcebergColumnStats;
@@ -1024,6 +1025,16 @@ public class IcebergMetadataTest extends TableTestBase {
             public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
                 walApplier.apply(meta);
             }
+
+            @Mock
+            public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+
+            @Mock
+            public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
         };
 
         AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
@@ -1033,6 +1044,8 @@ public class IcebergMetadataTest extends TableTestBase {
                 StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN));
         analyzeMgr.addExternalBasicStatsMeta(new ExternalBasicStatsMeta(CATALOG_NAME, dbName, tableName,
                 Lists.newArrayList(), StatsConstants.AnalyzeType.FULL, LocalDateTime.MIN, Maps.newHashMap()));
+        analyzeMgr.addExternalHistogramStatsMeta(new ExternalHistogramStatsMeta(CATALOG_NAME, dbName, tableName,
+                "c1", StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.MIN, Maps.newHashMap()));
 
         new Expectations(icebergHiveCatalog) {
             {
@@ -1058,6 +1071,9 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertTrue(analyzeMgr.getExternalBasicStatsMetaMap().keySet().stream()
                         .noneMatch(key -> tableName.equals(key.getTableName())),
                 "the basic stats meta of the dropped table should be gone");
+        Assertions.assertTrue(analyzeMgr.getExternalHistogramStatsMetaMap().keySet().stream()
+                        .noneMatch(key -> tableName.equals(key.getTableKey().getTableName())),
+                "the histogram stats meta of the dropped table should be gone");
     }
 
     @Test
