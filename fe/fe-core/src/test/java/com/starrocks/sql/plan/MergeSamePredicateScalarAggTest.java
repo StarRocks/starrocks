@@ -290,6 +290,19 @@ public class MergeSamePredicateScalarAggTest extends TPCDSPlanTestBase {
     }
 
     @Test
+    public void testPassThroughProjectionHoistedOverAMultiRowInput() throws Exception {
+        // Project(scalar branches) CROSS JOIN t1. Whether an interleaved projection may be hoisted above the whole
+        // rebuilt chain turns on position AND on whether it computes anything: a pass-through projection costs the
+        // same wherever it runs, so a multi-row input attached above it must not block the merge. Pins the
+        // discrimination - a guard that only counted multi-row inputs would refuse this.
+        String sql = "select * from (select (select count(*) from t0) + 1 c,"
+                + " (select sum(v2) from t0) + 2 s) x, t1";
+        String plan = getFragmentPlan(sql);
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: t0"));
+        Assertions.assertEquals(1, countOccurrences(plan, "TABLE: t1"));
+    }
+
+    @Test
     public void testChainCollapsesToSingleInputDropsJoin() throws Exception {
         // when every input of the chain merges into one branch there is no edge left, so the join disappears
         String sql = "select * from (select count(v1) c1 from t0) a, (select count(v1) c2 from t0) b";

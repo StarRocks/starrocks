@@ -213,13 +213,14 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             return Collections.emptyList();
         }
 
-        // The interleaved projections are recreated above the *whole* rebuilt chain. Every branch is a scalar
-        // aggregation and therefore exactly one row, so as long as at most one chain input is something else the
-        // row count is the same at every level and hoisting costs nothing. With two or more multi-row inputs an
-        // expression that used to be evaluated on |A| rows is evaluated on |A|x|B| - same values, but an unbounded
-        // amount of extra work. A pass-through projection is free to hoist either way, so only a projection that
-        // actually computes something forces us to give up the merge.
-        if (hoistedProjectionComputes(chain.projects) && countMultiRowInputs(branches) >= 2) {
+        // The interleaved projections are recreated above the *whole* rebuilt chain, so a projection that computes
+        // something ends up evaluated once per final joined row instead of once per row at its original depth.
+        // Same values either way, but an unbounded amount of extra work. What decides it is *position*, not how
+        // many multi-row inputs the chain has: every branch is a scalar aggregation and therefore exactly one row,
+        // so hoisting is free exactly when every input attached above the projection is one of those branches.
+        // One multi-row input is enough to make it expensive if it was attached above the projection - the shape
+        // Project(scalar branches) CROSS JOIN large_relation being the case in point.
+        if (hoistWouldMultiplyEvaluations(chain, branches)) {
             return Collections.emptyList();
         }
 
@@ -245,7 +246,7 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             newInputs.add(child);
         }
 
-        Map<ColumnRefOperator, ScalarOperator> topProjectMap = composeProjects(chain.projects);
+        Map<ColumnRefOperator, ScalarOperator> topProjectMap = composeProjects(chain.projectOperators());
         OptExpression newChain = buildJoinChain(newInputs, newJoins);
         if (topProjectMap == null) {
             return Lists.newArrayList(newChain);
@@ -265,15 +266,25 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
         return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(topProjectMap), newChain));
     }
 
-    /** Whether any projection that would be hoisted evaluates an expression rather than passing a column through. */
-    private static boolean hoistedProjectionComputes(List<LogicalProjectOperator> projects) {
-        return projects.stream().anyMatch(project -> project.getColumnRefMap().values().stream()
-                .anyMatch(value -> !(value instanceof ColumnRefOperator)));
-    }
-
-    /** Chain inputs that are not scalar-aggregation branches, and so are not known to produce exactly one row. */
-    private static long countMultiRowInputs(List<Branch> branches) {
-        return branches.stream().filter(Objects::isNull).count();
+    /**
+     * Whether hoisting the interleaved projections would make any of them evaluate more often than it does now.
+     * A projection is safe to hoist when every chain input attached above it is a scalar-aggregation branch, since
+     * those produce exactly one row each and so leave the row count unchanged all the way to the top. A null entry
+     * in {@code branches} is any other input - a real relation, a Values node, an unmatched subtree - and is not
+     * known to be a single row, so it is treated as multiplying.
+     */
+    private static boolean hoistWouldMultiplyEvaluations(ChainInfo chain, List<Branch> branches) {
+        for (InterleavedProject entry : chain.projects) {
+            if (!entry.computes()) {
+                continue;
+            }
+            for (int i = entry.inputsBelow; i < branches.size(); i++) {
+                if (branches.get(i) == null) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static List<ColumnRefOperator> outputColumnsOf(OptExpression expr) {
@@ -297,7 +308,32 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
         // copying one edge's hint onto all of them could force a large residual relation to be broadcast.
         private final List<LogicalJoinOperator> joins = new ArrayList<>();
         // LogicalProjectOperators interleaved in the left spine, shallowest first
-        private final List<LogicalProjectOperator> projects = new ArrayList<>();
+        private final List<InterleavedProject> projects = new ArrayList<>();
+
+        private List<LogicalProjectOperator> projectOperators() {
+            List<LogicalProjectOperator> operators = new ArrayList<>(projects.size());
+            projects.forEach(entry -> operators.add(entry.project));
+            return operators;
+        }
+    }
+
+    /**
+     * A projection found on the left spine, together with how many chain inputs sit below it. Inputs at an index
+     * at or above {@code inputsBelow} were attached <b>above</b> this projection, which is what decides whether
+     * hoisting it to the top of the rebuilt chain changes how many times it is evaluated.
+     */
+    private static class InterleavedProject {
+        private final LogicalProjectOperator project;
+        private int inputsBelow;
+
+        private InterleavedProject(LogicalProjectOperator project) {
+            this.project = project;
+        }
+
+        /** A projection that only forwards column refs costs the same wherever it is evaluated. */
+        private boolean computes() {
+            return project.getColumnRefMap().values().stream().anyMatch(value -> !(value instanceof ColumnRefOperator));
+        }
     }
 
     private boolean collectChain(OptExpression node, ChainInfo chain) {
@@ -311,8 +347,14 @@ public class MergeSamePredicateScalarAggRule extends TransformationRule {
             if (project.getColumnRefMap().values().stream().anyMatch(Utils::hasNonDeterministicFunc)) {
                 return false;
             }
-            chain.projects.add(project);
-            return collectChain(node.inputAt(0), chain);
+            InterleavedProject entry = new InterleavedProject(project);
+            chain.projects.add(entry);
+            if (!collectChain(node.inputAt(0), chain)) {
+                return false;
+            }
+            // everything collected by the call above sits below this projection
+            entry.inputsBelow = chain.inputs.size();
+            return true;
         }
         if (isChainJoin(op)) {
             if (!collectChain(node.inputAt(0), chain)) {
