@@ -92,6 +92,7 @@ public class ArrowFlightSqlSessionManager {
         try {
             ctx.setConnectionId(connectScheduler.getNextConnectionId());
         } catch (ConnectScheduler.ConnectionIdExhaustedException e) {
+            ctx.kill(true, "failed to allocate connection ID");
             throw CallStatus.RESOURCE_EXHAUSTED
                     .withDescription("failed to allocate connection ID: " + e.getMessage())
                     .withCause(e)
@@ -103,6 +104,7 @@ public class ArrowFlightSqlSessionManager {
         if (!isSuccessAndErrorMsg.first) {
             String errorMsg = isSuccessAndErrorMsg.second;
             ctx.getState().setError(errorMsg);
+            ctx.kill(true, "failed to register connection: " + errorMsg);
             throw CallStatus.RESOURCE_EXHAUSTED
                     .withDescription("failed to register connection: " + errorMsg)
                     .toRuntimeException();
