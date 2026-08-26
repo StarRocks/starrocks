@@ -2113,7 +2113,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
                 _cross_column_stream->set_coalesce_options(options);
             }
             iter_opts.read_file = _cross_column_stream.get();
-            iter_opts.is_io_coalesce = true;
+            // is_io_coalesce deliberately stays false: its only consumers are the EOF-time
+            // release() calls in ScalarColumnIterator, and those would clear the WHOLE shared
+            // stream the moment the first column of the segment finishes -- throwing away the
+            // other columns' still-unread (possibly prefetched) buffers. The stream's lifetime is
+            // owned by this iterator and ends at close().
             _io_coalesce_column_index.emplace_back(cid);
         } else if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
                    _segment->lake_tablet_manager() != nullptr) {
