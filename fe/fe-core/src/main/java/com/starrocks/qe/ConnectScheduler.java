@@ -68,7 +68,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public class ConnectScheduler {
     private static final Logger LOG = LogManager.getLogger(ConnectScheduler.class);
     private final AtomicInteger maxConnections;
-    private final AtomicInteger numberConnection;
     private final ConnectionIdGenerator connectionIdGenerator;
 
     // mysql connectContext/ http connectContext/ arrowFlight connectContext all stored in connectionMap
@@ -80,7 +79,6 @@ public class ConnectScheduler {
 
     public ConnectScheduler(int maxConnections) {
         this.maxConnections = new AtomicInteger(maxConnections);
-        numberConnection = new AtomicInteger(0);
         connectionIdGenerator = new ConnectionIdGenerator();
         // Use a thread to check whether connection is timeout. Because
         // 1. If use a scheduler, the task maybe a huge number when query is messy.
@@ -132,15 +130,19 @@ public class ConnectScheduler {
     public Pair<Boolean, String> registerConnection(ConnectContext ctx) {
         try {
             connStatsLock.lock();
-            if (numberConnection.get() >= maxConnections.get()) {
+            ConnectContext existing = connectionMap.get((long) ctx.getConnectionId());
+            if (existing != null) {
+                return handleExistingConnection(ctx, existing);
+            }
+
+            if (connectionMap.size() >= maxConnections.get()) {
                 return new Pair<>(false, "Reach cluster-wide connection limit, qe_max_connection=" + maxConnections +
                         ", connectionMap.size=" + connectionMap.size() +
                         ", node=" + ctx.getGlobalStateMgr().getNodeMgr().getSelfNode());
             }
             // Check user
-            connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
             AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
-            int currentConn = currentConnAtomic.get();
+            int currentConn = currentConnAtomic == null ? 0 : currentConnAtomic.get();
             long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getQualifiedUser());
             if (currentConn >= currentUserMaxConn) {
                 String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() + ") connection limit, " +
@@ -152,9 +154,12 @@ public class ConnectScheduler {
                         ctx.getConnectionId(), connCountByUser);
                 return new Pair<>(false, userErrMsg);
             }
-            numberConnection.incrementAndGet();
-            currentConnAtomic.incrementAndGet();
-            connectionMap.put((long) ctx.getConnectionId(), ctx);
+
+            existing = connectionMap.putIfAbsent((long) ctx.getConnectionId(), ctx);
+            if (existing != null) {
+                return handleExistingConnection(ctx, existing);
+            }
+            connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), ignored -> new AtomicInteger()).incrementAndGet();
 
             if (ctx.isArrowFlightSql()) {
                 ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
@@ -165,6 +170,15 @@ public class ConnectScheduler {
         } finally {
             connStatsLock.unlock();
         }
+    }
+
+    private Pair<Boolean, String> handleExistingConnection(ConnectContext ctx, ConnectContext existing) {
+        if (existing == ctx) {
+            return Pair.create(true, null);
+        }
+        String message = "Connection ID " + ctx.getConnectionId() + " is already in use";
+        LOG.warn("{}. existingUser={}, newUser={}", message, existing.getQualifiedUser(), ctx.getQualifiedUser());
+        return Pair.create(false, message);
     }
 
     public Pair<Boolean, String> onUserChanged(ConnectContext ctx, String oldQualifiedUser, String newQualifiedUser) {
@@ -231,7 +245,6 @@ public class ConnectScheduler {
             // happens to own the same id.
             removed = connectionMap.remove((long) ctx.getConnectionId(), ctx);
             if (removed) {
-                numberConnection.decrementAndGet();
                 AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
                 if (conns != null) {
                     if (conns.decrementAndGet() <= 0) {
@@ -279,7 +292,7 @@ public class ConnectScheduler {
     }
 
     public int getConnectionNum() {
-        return numberConnection.get();
+        return connectionMap.size();
     }
 
     public Map<String, AtomicInteger> getUserConnectionMap() {
