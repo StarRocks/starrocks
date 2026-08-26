@@ -913,8 +913,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         String missingMetadata = "File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json";
 
-        // The table metadata is gone from object storage. CachingIcebergCatalog wraps the failure into a
-        // StarRocksConnectorException, so the iceberg NotFoundException only shows up in the cause chain.
+        // CachingIcebergCatalog wraps the load failure, so NotFoundException only shows up as a cause.
         new Expectations(icebergHiveCatalog) {
             {
                 icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
@@ -922,8 +921,7 @@ public class IcebergMetadataTest extends TableTestBase {
                         new NotFoundException(missingMetadata));
                 minTimes = 1;
 
-                // Even though the statement asks for FORCE, the fallback never purges: the files that belong
-                // to the table cannot be listed without its metadata.
+                // FORCE was asked for, but the fallback never purges: the table's files are unknown.
                 icebergHiveCatalog.dropTable((ConnectContext) any, "iceberg_db", "table1", false);
                 result = true;
                 times = 1;
@@ -941,7 +939,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
 
-        // With the table cache disabled the raw iceberg NotFoundException reaches IcebergMetadata.
+        // Without the caching catalog the raw NotFoundException reaches IcebergMetadata.
         new Expectations(icebergHiveCatalog) {
             {
                 icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
@@ -965,8 +963,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
 
-        // Not a missing file but an unreadable one (permission / connectivity). The table pointer may still be
-        // valid, so dropping the catalog entry would orphan the data: the error must keep propagating.
+        // Unreadable, not missing: the metadata may be intact, so dropping the entry would orphan the data.
         new Expectations(icebergHiveCatalog) {
             {
                 icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
@@ -1082,9 +1079,8 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), null);
 
-        // getTable() also analyzes the table properties, which loads the tables a foreign key constraint
-        // refers to. Here the table being dropped is healthy and one of those referenced tables is the one
-        // whose metadata is gone: dropping this table's catalog entry would throw away a working table.
+        // The table being dropped is healthy; the missing file belongs to a table its foreign key
+        // constraint refers to, which getTable() loads too.
         new Expectations(icebergHiveCatalog) {
             {
                 icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");

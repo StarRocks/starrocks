@@ -767,11 +767,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
                 throw e;
             }
-            // The metadata file the catalog points at is gone, so the table can no longer be loaded and
-            // would stay in the metastore forever. Iceberg itself tolerates this on drop: HiveCatalog#dropTable
-            // skips the purge when the metadata cannot be read and still removes the catalog entry. Do the same
-            // here instead of requiring a loadable table to drop one. The purge is never requested on this path:
-            // without the metadata there is no way to tell which data files belong to this table.
+            // Iceberg tolerates this on drop: HiveCatalog#dropTable still removes the catalog entry when the
+            // metadata cannot be read. Never purge here, the table's files are unknown without its metadata.
             LOG.warn("Metadata of iceberg table {}.{} is missing, only dropping the catalog entry",
                     stmt.getDbName(), stmt.getTableName(), e);
             icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), false);
@@ -797,22 +794,19 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     /**
-     * Whether the failure was caused by a metadata file that no longer exists in the storage. Iceberg raises
-     * {@link NotFoundException} only for a file that is really absent, so an unreadable file (permission or
-     * connectivity failure) is not reported as missing. That distinction matters: the metadata of such a table
-     * may still be intact, and dropping the catalog entry would leave its data files orphaned.
-     * The exception is inspected through the whole cause chain because {@link CachingIcebergCatalog#getTable}
-     * wraps load failures into a {@link StarRocksConnectorException}.
+     * Iceberg raises {@link NotFoundException} only for a file that is really absent, so an unreadable one
+     * (permission, connectivity) keeps propagating: that table's metadata may be intact and dropping its entry
+     * would orphan the data. The cause chain is walked because {@link CachingIcebergCatalog#getTable} wraps
+     * load failures into a {@link StarRocksConnectorException}.
      */
     private static boolean isMetadataFileMissing(Throwable throwable) {
         return Throwables.getCausalChain(throwable).stream().anyMatch(t -> t instanceof NotFoundException);
     }
 
     /**
-     * Whether it is this table's own metadata that cannot be found. {@link #getTable} does more than load the
-     * table: it also analyzes the table properties, and a foreign key constraint makes it load the referenced
-     * tables through {@link PropertyAnalyzer#analyzeForeignKeyConstraint}. A missing file reported by one of
-     * those must not be read as this table being broken, or a healthy table would lose its catalog entry.
+     * {@link #getTable} also analyzes the table properties, which loads the tables a foreign key constraint
+     * refers to ({@link PropertyAnalyzer#analyzeForeignKeyConstraint}). Confirm the missing file is this
+     * table's own, or a healthy table would lose its catalog entry over a broken neighbour.
      */
     private boolean isTableMetadataMissing(String dbName, String tableName) {
         try {
@@ -824,15 +818,11 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     /**
-     * Drops the statistics that are keyed by name, which is everything reachable without loading the table.
-     * Leaving them behind would hand a broken table's leftovers to a table later recreated under the same
-     * name, and its analyze job would start collecting again on the new table's behalf. The collected rows go
-     * with the metadata that describes them: {@link AnalyzeMgr#clearStatisticFromExternalDroppedTable} finds
-     * leftovers by walking the basic stats metadata, so dropping that metadata alone would strand the rows it
-     * points at for good.
-     * What stays behind is keyed by the table UUID, which embeds the uuid iceberg keeps in the very metadata
-     * that is missing here: the analyze status history and the in-memory column statistics. A recreated table
-     * gets a different uuid, so neither is ever taken for the new table's statistics.
+     * Drops what is reachable by name, so that a table recreated under this name does not inherit a broken
+     * table's leftovers. Data goes with the metadata describing it:
+     * {@link AnalyzeMgr#clearStatisticFromExternalDroppedTable} finds leftovers through the basic stats
+     * metadata, so dropping that alone would strand the rows for good. The rest is keyed by the table UUID,
+     * unreachable without the missing metadata and never mistaken for a recreated table's own statistics.
      */
     private void dropNameKeyedStatistics(String dbName, String tableName) {
         IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
