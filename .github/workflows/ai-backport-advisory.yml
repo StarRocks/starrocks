@@ -78,7 +78,8 @@ jobs:
     # gates on ([BugFix]/[Enhancement]/[Doc]/[UT]) — not just [BugFix], so every PR that CAN
     # be backported gets the advisory comment. The compute decides the CD backport lines
     # (incl the CD-exclusive calendar line branch-26.2). base==main + guards exclude
-    # branch/backport/cherry-pick.
+    # branch/backport/cherry-pick and sync PRs (head "<branch>-sync-pr-N": the backport
+    # decision belongs to the source PR, not the automerged sync copy).
     if: >
       github.repository == 'CelerData/celerdata-enterprise' &&
       github.base_ref == 'main' &&
@@ -90,7 +91,8 @@ jobs:
         startsWith(github.event.pull_request.title, '[UT]')
       ) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
+      !contains(github.event.pull_request.title, 'backport') &&
+      !contains(github.head_ref, '-sync-pr-')
     continue-on-error: true
     env:
       PR_NUMBER: ${{ github.event.number }}
