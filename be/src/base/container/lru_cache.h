@@ -160,11 +160,10 @@ public:
     // longer needed.
     //
     // When the inserted entry is no longer needed, the key and
-    // value will be passed to "deleter". If cleanup is non-null,
-    // detached entries are added to it instead of invoking their deleters inline.
+    // value will be passed to "deleter".
     virtual Handle* insert(const CacheKey& key, void* value, size_t value_size,
                            void (*deleter)(const CacheKey& key, void* value),
-                           CachePriority priority = CachePriority::NORMAL, CacheCleanup* cleanup = nullptr) = 0;
+                           CachePriority priority = CachePriority::NORMAL) = 0;
 
     // If the cache has no mapping for "key", returns NULL.
     //
@@ -176,8 +175,7 @@ public:
     // Release a mapping returned by a previous Lookup().
     // REQUIRES: handle must not have been released yet.
     // REQUIRES: handle must have been returned by a method on *this.
-    // If cleanup is non-null, a deleter triggered by this release is deferred to it.
-    virtual void release(Handle* handle, CacheCleanup* cleanup = nullptr) = 0;
+    virtual void release(Handle* handle) = 0;
 
     // Refresh the recency of an existing cache entry without taking or
     // releasing a handle, so callers can update LRU order without triggering
@@ -356,10 +354,13 @@ public:
     explicit ShardedLRUCache(size_t capacity);
     ~ShardedLRUCache() override = default;
     Handle* insert(const CacheKey& key, void* value, size_t value_size,
-                   void (*deleter)(const CacheKey& key, void* value), CachePriority priority = CachePriority::NORMAL,
-                   CacheCleanup* cleanup = nullptr) override;
+                   void (*deleter)(const CacheKey& key, void* value),
+                   CachePriority priority = CachePriority::NORMAL) override;
+    Handle* insert(const CacheKey& key, void* value, size_t value_size,
+                   void (*deleter)(const CacheKey& key, void* value), CachePriority priority, CacheCleanup* cleanup);
     Handle* lookup(const CacheKey& key) override;
-    void release(Handle* handle, CacheCleanup* cleanup = nullptr) override;
+    void release(Handle* handle) override;
+    void release(Handle* handle, CacheCleanup* cleanup);
     void touch(const CacheKey& key) override;
     void erase(const CacheKey& key) override;
     void* value(Handle* handle) override;

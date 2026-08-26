@@ -22,11 +22,11 @@
 #include "gutil/macros.h"
 
 namespace starrocks {
-class Cache;
 class CacheCleanup;
 class CacheKey;
 class DelVector;
 class Segment;
+class ShardedLRUCache;
 class TabletSchema;
 class TabletMetadataPB;
 class TxnLogPB;
@@ -100,7 +100,7 @@ private:
 
     void insert(std::string_view key, CacheValue* ptr, size_t size, CacheCleanup* cleanup = nullptr);
 
-    std::unique_ptr<Cache> _cache;
+    std::unique_ptr<ShardedLRUCache> _cache;
 
     std::shared_mutex _mutex;
 };

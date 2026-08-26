@@ -495,6 +495,11 @@ bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
 }
 
 Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t value_size,
+                                       void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+    return insert(key, value, value_size, deleter, priority, nullptr);
+}
+
+Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t value_size,
                                        void (*deleter)(const CacheKey& key, void* value), CachePriority priority,
                                        CacheCleanup* cleanup) {
     const uint32_t hash = _hash_slice(key);
@@ -504,6 +509,10 @@ Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t 
 Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
     const uint32_t hash = _hash_slice(key);
     return _shards[_shard(hash)].lookup(key, hash);
+}
+
+void ShardedLRUCache::release(Handle* handle) {
+    release(handle, nullptr);
 }
 
 void ShardedLRUCache::release(Handle* handle, CacheCleanup* cleanup) {

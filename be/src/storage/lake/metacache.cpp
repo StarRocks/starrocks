@@ -100,7 +100,7 @@ static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capac
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
 #endif
 
-Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capacity)) {}
+Metacache::Metacache(int64_t cache_capacity) : _cache(std::make_unique<ShardedLRUCache>(cache_capacity)) {}
 
 Metacache::~Metacache() = default;
 
