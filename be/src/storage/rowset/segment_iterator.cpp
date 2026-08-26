@@ -2386,10 +2386,10 @@ Status SegmentIterator::_apply_inverted_index() {
     // ---------------------------------------------------------
     if (!erased_preds.empty()) {
         erase_column_pred_from_pred_tree(_opts.pred_tree, erased_preds);
-        const auto& new_cid_to_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
 
         for (const auto& cid : erased_pred_col_ids) {
-            if (!new_cid_to_predicates.contains(cid)) {
+            // contains_column walks OR subtrees, which the immediate map hides; such a predicate still reads the column
+            if (!_opts.pred_tree.contains_column(cid)) {
                 // predicate for pred->column_id() has been total erased by
                 // inverted index filtering.These columns may can be pruned.
                 _prune_cols_candidate_by_inverted_index.insert(cid);
