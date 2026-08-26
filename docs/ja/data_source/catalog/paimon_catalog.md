@@ -49,6 +49,11 @@ Paimon catalog はデータのクエリにのみ使用できます。Paimon cata
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` はv4.2以降、ネイティブリーダーで読み取られるsplit（Append-Onlyテーブル、およびPrimary KeyテーブルのCompaction済みデータ）でのみサポートされています。Compaction前のPrimary Keyデータから`VARIANT`を読み取るにはJNIリーダーが必要であり、現時点ではまだサポートされていません。該当するクエリはプランニング時にエラーとして拒否されます。
+:::
 
 ## 統合準備
 
