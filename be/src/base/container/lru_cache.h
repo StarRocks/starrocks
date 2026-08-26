@@ -35,12 +35,16 @@ public:
     CacheCleanup& operator=(CacheCleanup&&) = delete;
 
     void cleanup();
-    bool empty() const { return _handles.empty(); }
+    bool empty() const { return _head == nullptr; }
 
 private:
     friend class LRUCache;
 
-    std::vector<LRUHandle*> _handles;
+    void add(LRUHandle* handle);
+
+    // Reuse detached handles as an intrusive queue to avoid allocations.
+    LRUHandle* _head = nullptr;
+    LRUHandle* _tail = nullptr;
 };
 
 // Create a new cache with a fixed size capacity.  This implementation

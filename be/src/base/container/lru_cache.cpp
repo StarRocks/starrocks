@@ -17,10 +17,22 @@ CacheCleanup::~CacheCleanup() {
 }
 
 void CacheCleanup::cleanup() {
-    for (auto* handle : _handles) {
+    while (_head != nullptr) {
+        auto* handle = _head;
+        _head = handle->next_hash;
         handle->free();
     }
-    _handles.clear();
+    _tail = nullptr;
+}
+
+void CacheCleanup::add(LRUHandle* handle) {
+    handle->next_hash = nullptr;
+    if (_tail == nullptr) {
+        _head = handle;
+    } else {
+        _tail->next_hash = handle;
+    }
+    _tail = handle;
 }
 
 uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
@@ -282,7 +294,7 @@ void LRUCache::release(Cache::Handle* handle, CacheCleanup* cleanup) {
     // free handle out of mutex
     if (last_ref) {
         if (cleanup != nullptr) {
-            cleanup->_handles.push_back(e);
+            cleanup->add(e);
         } else {
             e->free();
         }
@@ -385,7 +397,9 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     // we free the entries here outside of mutex for
     // performance reasons
     if (cleanup != nullptr) {
-        cleanup->_handles.insert(cleanup->_handles.end(), last_ref_list.begin(), last_ref_list.end());
+        for (auto* entry : last_ref_list) {
+            cleanup->add(entry);
+        }
     } else {
         for (auto* entry : last_ref_list) {
             entry->free();

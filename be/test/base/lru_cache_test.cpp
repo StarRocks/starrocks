@@ -423,14 +423,19 @@ TEST_F(CacheTest, InsertDefersDeleterUntilCleanup) {
     auto* handle = cache->insert(EncodeKey(&encoded, keys[1]), EncodeValue(2000), 1, &CacheTest::Deleter,
                                  CachePriority::NORMAL, &cleanup);
     cache->release(handle, &cleanup);
+    encoded.clear();
+    handle = cache->insert(EncodeKey(&encoded, keys[2]), EncodeValue(3000), 1, &CacheTest::Deleter,
+                           CachePriority::NORMAL, &cleanup);
+    cache->release(handle, &cleanup);
 
     ASSERT_TRUE(_deleted_keys.empty());
     ASSERT_EQ(-1, lookup_cache(cache.get(), keys[0]));
-    ASSERT_EQ(2000, lookup_cache(cache.get(), keys[1]));
+    ASSERT_EQ(-1, lookup_cache(cache.get(), keys[1]));
+    ASSERT_EQ(3000, lookup_cache(cache.get(), keys[2]));
 
     cleanup.cleanup();
-    ASSERT_EQ(std::vector<int>({keys[0]}), _deleted_keys);
-    ASSERT_EQ(std::vector<int>({1000}), _deleted_values);
+    ASSERT_EQ(std::vector<int>({keys[0], keys[1]}), _deleted_keys);
+    ASSERT_EQ(std::vector<int>({1000, 2000}), _deleted_values);
 }
 
 TEST_F(CacheTest, ReleaseDefersDeleterUntilCleanup) {
