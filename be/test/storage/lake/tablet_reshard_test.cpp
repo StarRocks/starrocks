@@ -2631,8 +2631,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11935_falls_back_then_dml_is_exact) {
     const bool old_primary_key_recover = config::enable_primary_key_recover;
+    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     config::enable_primary_key_recover = true;
-    DeferOp restore_primary_key_recover([&] { config::enable_primary_key_recover = old_primary_key_recover; });
+    config::enable_pk_index_parallel_compaction = false;
+    DeferOp restore_config([&] {
+        config::enable_primary_key_recover = old_primary_key_recover;
+        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
+    });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
     DeferOp restore_flush_failpoints([&] {
@@ -2671,17 +2676,32 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11935_falls_back_then_dml
     _update_manager->unload_and_remove_primary_index(target_id);
     ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(target_id, fixture.new_version, /*upsert_key=*/1,
                                                                    /*upsert_value=*/111, /*delete_key=*/60));
-    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
-    EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{0, 200}, {1, 111}}), rows);
     const std::vector<std::string> keys = {raw_int_primary_key(0), raw_int_primary_key(1), raw_int_primary_key(60)};
-    ASSIGN_OR_ABORT(auto values, load_index_values(after_dml, target_id, keys));
-    ASSERT_EQ(3, values.size());
-    EXPECT_NE(IndexValue(NullIndexValue), values[0]);
-    EXPECT_NE(IndexValue(NullIndexValue), values[1]);
-    EXPECT_EQ(IndexValue(NullIndexValue), values[2]);
+    auto expect_issue11935_oracle = [&](const TabletMetadataPtr& metadata) {
+        ASSIGN_OR_ABORT(auto rows, read_two_column_rows(metadata));
+        EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{0, 200}, {1, 111}}), rows);
+        ASSIGN_OR_ABORT(auto values, load_index_values(metadata, target_id, keys));
+        ASSERT_EQ(3, values.size());
+        EXPECT_NE(IndexValue(NullIndexValue), values[0]);
+        EXPECT_NE(IndexValue(NullIndexValue), values[1]);
+        EXPECT_EQ(IndexValue(NullIndexValue), values[2]);
+    };
+    expect_issue11935_oracle(after_dml);
+
+    ASSIGN_OR_ABORT(auto compacted, compact_tablet(target_id, after_dml->version(), /*force_base=*/true));
+    EXPECT_EQ(after_dml->version() + 1, compacted->version());
+    ASSERT_GT(compacted->rowsets_size(), 0);
+    expect_issue11935_oracle(compacted);
+
+    _update_manager->unload_and_remove_primary_index(target_id);
+    ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(target_id, compacted->version()));
+    expect_issue11935_oracle(reopened);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml_is_exact) {
+    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
+    config::enable_pk_index_parallel_compaction = false;
+    DeferOp restore_parallel_compaction([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
     DeferOp restore_flush_failpoints([&] {
@@ -2738,6 +2758,17 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml
         ASSERT_EQ(2, values.size());
         EXPECT_NE(IndexValue(NullIndexValue), values[0]);
         EXPECT_EQ(IndexValue(NullIndexValue), values[1]);
+
+        ASSIGN_OR_ABORT(auto compacted,
+                        compact_tablet(fixture.merged_tablet, after_dml->version(), /*force_base=*/true));
+        EXPECT_EQ(after_dml->version() + 1, compacted->version());
+        ASSERT_GT(compacted->rowsets_size(), 0);
+        expect_lifecycle_oracle(compacted, {{10, 1010}}, {20});
+
+        _update_manager->unload_and_remove_primary_index(fixture.merged_tablet);
+        ASSIGN_OR_ABORT(auto reopened,
+                        _tablet_manager->get_tablet_metadata(fixture.merged_tablet, compacted->version()));
+        expect_lifecycle_oracle(reopened, {{10, 1010}}, {20});
     }
 }
 
@@ -2981,6 +3012,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
         _update_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(target_id, after_second_upsert->version()));
         expect_lifecycle_oracle(reopened, expected_rows, {60});
+
+        ASSIGN_OR_ABORT(auto compacted, compact_tablet(target_id, reopened->version(), /*force_base=*/true));
+        EXPECT_EQ(reopened->version() + 1, compacted->version());
+        ASSERT_GT(compacted->rowsets_size(), 0);
+        expect_lifecycle_oracle(compacted, expected_rows, {60});
+
+        _update_manager->unload_and_remove_primary_index(target_id);
+        ASSIGN_OR_ABORT(auto reopened_compacted, _tablet_manager->get_tablet_metadata(target_id, compacted->version()));
+        expect_lifecycle_oracle(reopened_compacted, expected_rows, {60});
     }
 }
 
