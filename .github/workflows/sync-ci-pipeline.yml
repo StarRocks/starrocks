@@ -245,15 +245,15 @@ jobs:
   build:
     runs-on: [self-hosted, sync-normal]
     needs: [thirdparty-info]
-    # celerdata-first: on main, ci-pipeline builds sync PRs like normal PRs, so
-    # this compile-check (SKIP_OSS, no artifact) is redundant -- skip it on main
-    # and keep it only for release branches, where ci-pipeline-branch has no
-    # build job and this remains the load-bearing BUILD check.
+    # celerdata-first: on main ci-pipeline builds sync PRs, so this compile-check
+    # (SKIP_OSS, no artifact) is skipped there; it still runs on release branches.
     if: needs.thirdparty-info.result == 'success' && github.base_ref != 'main'
-    # On main the authoritative BUILD is ci-pipeline.yml's `BUILD`. Give this
-    # (skipped) job a distinct check name there so it can never satisfy or race
-    # with main's required `BUILD` context; on release it stays `BUILD`.
-    name: ${{ github.base_ref == 'main' && 'BUILD (sync; main uses ci-pipeline)' || 'BUILD' }}
+    # Static, distinct name so this check never collides with ci-pipeline.yml's
+    # `BUILD` context on main. `BUILD` is no longer a required check on release
+    # branches, so this no longer needs to be named `BUILD`; and a `${{ }}`
+    # job-name expression is NOT evaluated for a skipped job's check run (it
+    # renders the raw template), so a conditional name cannot be used.
+    name: Sync Build
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
