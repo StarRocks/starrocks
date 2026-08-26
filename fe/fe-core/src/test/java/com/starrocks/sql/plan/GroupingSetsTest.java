@@ -334,6 +334,34 @@ public class GroupingSetsTest extends PlanTestBase {
     }
 
     @Test
+    public void testPushDownGroupingSetUnsupportedFn() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // SUPPORT_AGGREGATE_FUNCTIONS is a whitelist of functions that can be recombined across
+            // rollup levels. Widening it (as AVG/COUNT did) must not turn it into an allow-everything:
+            // a function outside the list still has to fall back to REPEAT over the raw rows.
+            String unsupportedFn = "select t1b, t1c, t1d, stddev(t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            assertContains(getFragmentPlan(unsupportedFn), "  1:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 3 lines [[], [2], [2, 3], [2, 3, 4]]\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // DISTINCT is excluded for every whitelisted function too: count(distinct x) cannot be
+            // recombined by re-summing partial counts, since the same value may repeat across the
+            // finer groups being rolled up.
+            String distinctCount = "select t1b, t1c, t1d, count(distinct t1g) " +
+                    "   from test_all_type group by rollup(t1b, t1c, t1d)";
+            assertContains(getFragmentPlan(distinctCount), "  1:REPEAT_NODE\n" +
+                    "  |  repeat: repeat 3 lines [[], [2], [2, 3], [2, 3, 4]]\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
     public void testPushDownGroupingSetAvgDecimal() throws Exception {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
         try {

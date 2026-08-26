@@ -1,0 +1,131 @@
+-- name: test_grouping_sets_pushdown
+-- PushDownAggregateGroupingSetsRule (cbo_push_down_groupingset, ON by default) pre-aggregates to the
+-- finest grain and expands the small result for coarser rollup levels, instead of running REPEAT over
+-- the raw rows. MAX/MIN/SUM are self-recombining so re-applying the same function is trivially correct;
+-- AVG and COUNT are not, and are rewritten (avg -> sum/count with a final divide, count -> re-summed
+-- partial counts). Those rewrites can produce a wrong VALUE while still producing a plausible PLAN, so
+-- this case is a differential oracle on rows: same query with the rule off vs on must return identical
+-- result sets. Plan-shape assertions for the same queries live in GroupingSetsTest.java.
+drop table if exists gs_pushdown_src;
+CREATE TABLE `gs_pushdown_src` (
+    `k1` varchar(20),
+    `k2` varchar(20),
+    `k3` varchar(20),
+    `v_big` bigint,
+    `v_int` int,
+    `v_dec` decimal(27,9),
+    `v_dbl` double,
+    `v_bool` boolean
+) DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES ( "replication_num" = "1");
+
+-- Rows are shaped to break a naive rewrite:
+--  * groups (a,x,*) hold 3 rows while (a,y,*) holds 1, so re-averaging the per-group averages at the
+--    coarser level gives a different answer than averaging the underlying rows.
+--  * group (b,y,q) has v_big entirely NULL, so its partial sum is NULL and its partial count is 0;
+--    the coarser level must still fold that in as "contributes nothing", not as NULL or as a zero mean.
+--  * genuine NULL group keys collide with the NULLs REPEAT pads the rolled-up columns with.
+INSERT INTO gs_pushdown_src VALUES
+ ('a','x','p',  10,  1,  1.500000000,  1.5, 1)
+,('a','x','p',  20,  2,  2.500000000,  2.5, 0)
+,('a','x','q',  30,  3,  3.500000000,  3.5, 1)
+,('a','y','p',   7,  7,  7.250000000,  7.25, 1)
+,('b','x','p', 100, 10, 10.125000000, 10.125, 0)
+,('b','y','q',NULL,NULL,NULL,NULL,NULL)
+,('b','y','q',NULL,  5,  5.000000000,  5.0, 1)
+,('c',NULL,'p', 40,  4,  4.750000000,  4.75, 0)
+,('c',NULL,NULL,50,  5,  5.250000000,  5.25, 1)
+,(NULL,'x','p', 60,  6,  6.125000000,  6.125, 0)
+,(NULL,NULL,NULL,70, 7,  7.875000000,  7.875, 1);
+
+-- ---------------------------------------------------------------------------
+-- 1. AVG / COUNT / mixed aggregates over ROLLUP.
+--    v_dbl is rounded because the rewrite changes the summation order of a double accumulator; a real
+--    logic error moves the value far more than 6 decimal places, so this does not weaken the check.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_1 properties("replication_num"="1") as
+select k1, k2, k3,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, round(avg(v_dbl), 6) a_dbl, avg(v_bool) a_bool,
+       grouping(k1) g1, grouping_id(k1, k2) gid
+from gs_pushdown_src group by rollup(k1, k2, k3);
+set cbo_push_down_groupingset = true;
+create table gs_res_on_1 properties("replication_num"="1") as
+select k1, k2, k3,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, round(avg(v_dbl), 6) a_dbl, avg(v_bool) a_bool,
+       grouping(k1) g1, grouping_id(k1, k2) gid
+from gs_pushdown_src group by rollup(k1, k2, k3);
+select (select count(*) from gs_res_off_1) - (select count(*) from gs_res_on_1) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_1) except (select * from gs_res_on_1)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_1) except (select * from gs_res_off_1)) d) only_on;
+
+-- ---------------------------------------------------------------------------
+-- 2. CUBE, and HAVING on a COUNT output. HAVING on COUNT is expected to push down (a re-summed count
+--    is already the final value); HAVING on AVG must NOT push down (the pre-divide sum/count columns
+--    are not the real value yet) - either way the rows must match the rule-off baseline.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_2 properties("replication_num"="1") as
+select k1, k2, k3, count(v_big) c, avg(v_big) a
+from gs_pushdown_src group by cube(k1, k2, k3) having count(v_big) > 1;
+set cbo_push_down_groupingset = true;
+create table gs_res_on_2 properties("replication_num"="1") as
+select k1, k2, k3, count(v_big) c, avg(v_big) a
+from gs_pushdown_src group by cube(k1, k2, k3) having count(v_big) > 1;
+select (select count(*) from gs_res_off_2) - (select count(*) from gs_res_on_2) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_2) except (select * from gs_res_on_2)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_2) except (select * from gs_res_off_2)) d) only_on;
+
+-- ---------------------------------------------------------------------------
+-- 3. AVG under a filter on grouping() applied above the rollup - the exact shape that regressed twice
+--    before (#49928 lost the repeat predicate, #58831 copied the having predicate without remapping).
+--    The rule fires here, so this exercises predicate remapping across the CTE/union split with an
+--    aggregate that no longer exists as a CTE output column.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_3 properties("replication_num"="1") as
+select * from (
+  select grouping(k1, k2) aa, k1, k2, k3, avg(v_big) a, count(v_big) c
+  from gs_pushdown_src group by rollup(k1, k2, k3)
+) t where aa = 1;
+set cbo_push_down_groupingset = true;
+create table gs_res_on_3 properties("replication_num"="1") as
+select * from (
+  select grouping(k1, k2) aa, k1, k2, k3, avg(v_big) a, count(v_big) c
+  from gs_pushdown_src group by rollup(k1, k2, k3)
+) t where aa = 1;
+select (select count(*) from gs_res_off_3) - (select count(*) from gs_res_on_3) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_3) except (select * from gs_res_on_3)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_3) except (select * from gs_res_off_3)) d) only_on;
+
+-- ---------------------------------------------------------------------------
+-- 4. HAVING directly on an AVG output. check() refuses to push down here; the rows must still match
+--    the baseline, and this pins the guard so that relaxing it later cannot silently change results.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_4 properties("replication_num"="1") as
+select k1, k2, k3, avg(v_big) a
+from gs_pushdown_src group by rollup(k1, k2, k3) having avg(v_big) > 20;
+set cbo_push_down_groupingset = true;
+create table gs_res_on_4 properties("replication_num"="1") as
+select k1, k2, k3, avg(v_big) a
+from gs_pushdown_src group by rollup(k1, k2, k3) having avg(v_big) > 20;
+select (select count(*) from gs_res_off_4) - (select count(*) from gs_res_on_4) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_4) except (select * from gs_res_on_4)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_4) except (select * from gs_res_off_4)) d) only_on;
+
+set cbo_push_down_groupingset = true;
+drop table gs_res_off_1;
+drop table gs_res_on_1;
+drop table gs_res_off_2;
+drop table gs_res_on_2;
+drop table gs_res_off_3;
+drop table gs_res_on_3;
+drop table gs_res_off_4;
+drop table gs_res_on_4;
+drop table gs_pushdown_src;

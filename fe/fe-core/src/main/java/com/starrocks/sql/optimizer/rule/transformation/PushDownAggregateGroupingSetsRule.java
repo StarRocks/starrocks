@@ -193,11 +193,15 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             ScalarOperator arg = call.getChild(0);
             Type argType = arg.getType();
 
-            // AVG accumulates BOOLEAN/integer inputs as a double internally (see AvgDoubleLTGuard in the
-            // BE), not as the argument's native type; decomposing via the native-typed SUM (e.g. plain
-            // BIGINT sum) would overflow in cases the original avg wouldn't, so sum over a double-cast
-            // argument instead to keep the same accumulator width. Float/decimal args already have a
-            // SUM overload with matching (or wider, for decimal) accumulation, so they're summed as-is.
+            // AVG accumulates integer inputs as a double internally (see AvgDoubleLTGuard in the BE), not
+            // as the argument's native type; decomposing via the native-typed SUM (e.g. plain BIGINT sum)
+            // would overflow in cases the original avg wouldn't, so sum over a double-cast argument
+            // instead to keep the same accumulator width. Float/decimal args already have a SUM overload
+            // with matching (or wider, for decimal) accumulation, so they're summed as-is.
+            //
+            // Note isFixedPointType() is TINYINT..LARGEINT and excludes BOOLEAN, so avg(bool) is summed
+            // as-is through sum(BOOLEAN) -> BIGINT. That is deliberate: 0/1 inputs cannot overflow a
+            // BIGINT accumulator, so the cast would only add plan noise.
             ScalarOperator sumArg = argType.isFixedPointType() ? new CastOperator(FloatType.DOUBLE, arg, true) : arg;
 
             Function sumFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {sumArg.getType()},
@@ -435,16 +439,21 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         List<List<Long>> groupingIds = repeat.getGroupingIds().stream()
                 .map(s -> s.subList(0, subGroups)).collect(Collectors.toList());
 
-        ScalarOperator predicate = null;
+        // NOTE: keep the repeat predicate and the aggregate (HAVING) predicate in separate variables.
+        // Sharing one variable makes the repeat predicate leak onto the aggregate whenever the aggregate
+        // has no HAVING of its own; that happens to be idempotent today only because the leaked predicate
+        // references grouping columns whose values the re-aggregation does not change.
+        ScalarOperator repeatPredicate = null;
         if (null != repeat.getPredicate()) {
             Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap(outputs);
             nullRefs.forEach(c -> replaceMap.put(c, ConstantOperator.createNull(c.getType())));
 
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMap);
-            predicate = rewriter.rewrite(repeat.getPredicate());
+            repeatPredicate = rewriter.rewrite(repeat.getPredicate());
 
             ScalarOperatorRewriter r = new ScalarOperatorRewriter();
-            predicate = r.rewrite(predicate, List.of(new FoldConstantsRule(), new SimplifiedPredicateRule()));
+            repeatPredicate =
+                    r.rewrite(repeatPredicate, List.of(new FoldConstantsRule(), new SimplifiedPredicateRule()));
         }
 
         LogicalRepeatOperator newRepeat = LogicalRepeatOperator.builder()
@@ -452,7 +461,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 .setRepeatColumnRefList(repeatRefs)
                 .setGroupingIds(groupingIds)
                 .setHasPushDown(true)
-                .setPredicate(predicate)
+                .setPredicate(repeatPredicate)
                 .build();
 
         // aggregate; avg(x)'s sum/count must be re-summed (never re-averaged) to stay correct across
@@ -494,6 +503,13 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 // level must re-SUM the finer levels' partial counts, not re-COUNT them (which would
                 // count the number of partial-count rows instead of summing their values). Reuse the
                 // same rollup-function mapping already used by the MV-rewrite path and by pdagg.
+                //
+                // That mapping lives in UNSAFE_REWRITE_ROLLUP_FUNCTION_MAP, whose contract is
+                // `count(col) = coalesce(sum(col), 0)` - the MV path needs the coalesce because it may
+                // roll up over an empty match. Here the coalesce is provably unnecessary: the value
+                // being re-summed is a count produced by the CTE, so it is never NULL, and an
+                // aggregation group always holds at least one row - therefore this sum() can never
+                // return NULL. Do not drop that reasoning when touching this branch.
                 String rollupFnName = AggregateFunctionRollupUtils.getRollupFunctionName(v, false);
                 String fnName = rollupFnName != null ? rollupFnName : v.getFnName();
 
@@ -507,6 +523,15 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                             k.getType(), v.getType());
                 }
 
+                // The rolled-up call keeps the original aggregation's output type, which only holds while
+                // every rollup mapping is type-preserving over its own output (count->sum is: sum(BIGINT)
+                // is BIGINT). Other entries in the mapping are not - bitmap_agg->bitmap_union and
+                // array_agg_distinct->array_unique_agg both change the type - so fail loudly here rather
+                // than silently emitting a CallOperator whose declared type contradicts its function.
+                Preconditions.checkState(aggFunc.getReturnType().matchesType(k.getType()),
+                        "rollup function %s returns %s but the aggregation output column is %s",
+                        fnName, aggFunc.getReturnType(), k.getType());
+
                 aggregations.put(x,
                         new CallOperator(fnName, k.getType(), Lists.newArrayList(outputs.get(k)), aggFunc));
                 outputs.put(k, x);
@@ -516,17 +541,18 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         List<ColumnRefOperator> groupings = aggregate.getGroupingKeys().stream()
                 .filter(c -> !nullRefs.contains(c)).map(outputs::get).collect(Collectors.toList());
 
+        ScalarOperator havingPredicate = null;
         if (null != aggregate.getPredicate()) {
             Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap(outputs);
             nullRefs.forEach(c -> replaceMap.put(c, ConstantOperator.createNull(c.getType())));
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMap);
-            predicate = rewriter.rewrite(aggregate.getPredicate());
+            havingPredicate = rewriter.rewrite(aggregate.getPredicate());
         }
         LogicalAggregationOperator newAggregate = LogicalAggregationOperator.builder()
                 .setAggregations(aggregations)
                 .setGroupingKeys(groupings)
                 .setType(AggType.GLOBAL)
-                .setPredicate(predicate)
+                .setPredicate(havingPredicate)
                 .setPartitionByColumns(groupings)
                 .build();
 

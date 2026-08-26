@@ -1,0 +1,162 @@
+-- name: test_grouping_sets_pushdown
+drop table if exists gs_pushdown_src;
+-- result:
+-- !result
+CREATE TABLE `gs_pushdown_src` (
+    `k1` varchar(20),
+    `k2` varchar(20),
+    `k3` varchar(20),
+    `v_big` bigint,
+    `v_int` int,
+    `v_dec` decimal(27,9),
+    `v_dbl` double,
+    `v_bool` boolean
+) DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES ( "replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO gs_pushdown_src VALUES
+ ('a','x','p',  10,  1,  1.500000000,  1.5, 1)
+,('a','x','p',  20,  2,  2.500000000,  2.5, 0)
+,('a','x','q',  30,  3,  3.500000000,  3.5, 1)
+,('a','y','p',   7,  7,  7.250000000,  7.25, 1)
+,('b','x','p', 100, 10, 10.125000000, 10.125, 0)
+,('b','y','q',NULL,NULL,NULL,NULL,NULL)
+,('b','y','q',NULL,  5,  5.000000000,  5.0, 1)
+,('c',NULL,'p', 40,  4,  4.750000000,  4.75, 0)
+,('c',NULL,NULL,50,  5,  5.250000000,  5.25, 1)
+,(NULL,'x','p', 60,  6,  6.125000000,  6.125, 0)
+,(NULL,NULL,NULL,70, 7,  7.875000000,  7.875, 1);
+-- result:
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_res_off_1 properties("replication_num"="1") as
+select k1, k2, k3,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, round(avg(v_dbl), 6) a_dbl, avg(v_bool) a_bool,
+       grouping(k1) g1, grouping_id(k1, k2) gid
+from gs_pushdown_src group by rollup(k1, k2, k3);
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+create table gs_res_on_1 properties("replication_num"="1") as
+select k1, k2, k3,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, round(avg(v_dbl), 6) a_dbl, avg(v_bool) a_bool,
+       grouping(k1) g1, grouping_id(k1, k2) gid
+from gs_pushdown_src group by rollup(k1, k2, k3);
+-- result:
+-- !result
+select (select count(*) from gs_res_off_1) - (select count(*) from gs_res_on_1) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_1) except (select * from gs_res_on_1)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_1) except (select * from gs_res_off_1)) d) only_on;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_res_off_2 properties("replication_num"="1") as
+select k1, k2, k3, count(v_big) c, avg(v_big) a
+from gs_pushdown_src group by cube(k1, k2, k3) having count(v_big) > 1;
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+create table gs_res_on_2 properties("replication_num"="1") as
+select k1, k2, k3, count(v_big) c, avg(v_big) a
+from gs_pushdown_src group by cube(k1, k2, k3) having count(v_big) > 1;
+-- result:
+-- !result
+select (select count(*) from gs_res_off_2) - (select count(*) from gs_res_on_2) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_2) except (select * from gs_res_on_2)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_2) except (select * from gs_res_off_2)) d) only_on;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_res_off_3 properties("replication_num"="1") as
+select * from (
+  select grouping(k1, k2) aa, k1, k2, k3, avg(v_big) a, count(v_big) c
+  from gs_pushdown_src group by rollup(k1, k2, k3)
+) t where aa = 1;
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+create table gs_res_on_3 properties("replication_num"="1") as
+select * from (
+  select grouping(k1, k2) aa, k1, k2, k3, avg(v_big) a, count(v_big) c
+  from gs_pushdown_src group by rollup(k1, k2, k3)
+) t where aa = 1;
+-- result:
+-- !result
+select (select count(*) from gs_res_off_3) - (select count(*) from gs_res_on_3) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_3) except (select * from gs_res_on_3)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_3) except (select * from gs_res_off_3)) d) only_on;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = false;
+-- result:
+-- !result
+create table gs_res_off_4 properties("replication_num"="1") as
+select k1, k2, k3, avg(v_big) a
+from gs_pushdown_src group by rollup(k1, k2, k3) having avg(v_big) > 20;
+-- result:
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+create table gs_res_on_4 properties("replication_num"="1") as
+select k1, k2, k3, avg(v_big) a
+from gs_pushdown_src group by rollup(k1, k2, k3) having avg(v_big) > 20;
+-- result:
+-- !result
+select (select count(*) from gs_res_off_4) - (select count(*) from gs_res_on_4) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_4) except (select * from gs_res_on_4)) d) only_off,
+       (select count(*) from ((select * from gs_res_on_4) except (select * from gs_res_off_4)) d) only_on;
+-- result:
+0	0	0
+-- !result
+set cbo_push_down_groupingset = true;
+-- result:
+-- !result
+drop table gs_res_off_1;
+-- result:
+-- !result
+drop table gs_res_on_1;
+-- result:
+-- !result
+drop table gs_res_off_2;
+-- result:
+-- !result
+drop table gs_res_on_2;
+-- result:
+-- !result
+drop table gs_res_off_3;
+-- result:
+-- !result
+drop table gs_res_on_3;
+-- result:
+-- !result
+drop table gs_res_off_4;
+-- result:
+-- !result
+drop table gs_res_on_4;
+-- result:
+-- !result
+drop table gs_pushdown_src;
+-- result:
+-- !result
