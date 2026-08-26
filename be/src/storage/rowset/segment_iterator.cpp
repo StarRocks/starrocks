@@ -2085,8 +2085,13 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
-        if (_opts.lake_io_opts.coalesce_across_columns && !_segment->is_default_column(col) &&
-            _segment->lake_tablet_manager() != nullptr) {
+        // Scalar columns only: registering a column on the segment-wide stream leads to a
+        // get_io_range_vec(range, nullptr) call at range-registration time, and the ARRAY/MAP
+        // iterators (also reached inside STRUCT/JSON/VARIANT) dereference that dst -- the scalar
+        // iterator is the one that ignores it. A semi-typed column stays on its plain file and
+        // reads exactly as before; its segment simply reports itself not prefetch-coverable.
+        if (_opts.lake_io_opts.coalesce_across_columns && !is_semi_type(col.type()) &&
+            !_segment->is_default_column(col) && _segment->lake_tablet_manager() != nullptr) {
             // One stream for the whole segment; ranges of all coalesce columns are registered
             // together after every column iterator exists, so regions from different columns can
             // merge into one read.
