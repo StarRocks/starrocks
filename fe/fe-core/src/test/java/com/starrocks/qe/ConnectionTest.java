@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -432,6 +433,78 @@ public class ConnectionTest {
             Assertions.assertEquals(1, totalTrackedConnections(scheduler));
             ConnectContext owner = scheduler.getContext(first.getConnectionId());
             Assertions.assertTrue(owner == first || owner == second);
+        } finally {
+            scheduler.unregisterConnection(first);
+            scheduler.unregisterConnection(second);
+            executor.shutdownNow();
+            Assertions.assertTrue(executor.awaitTermination(10, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    public void testNextConnectionIdSkipsLiveIdAfterWrap() throws Exception {
+        ConnectScheduler scheduler = new ConnectScheduler(10);
+        scheduler.setNextConnectionId(1 << 24);
+        int wrappedId = scheduler.getNextConnectionId();
+        ConnectContext live = createConnectContextForUser("u1");
+        live.setConnectionId(wrappedId);
+        try {
+            Assertions.assertTrue(scheduler.registerConnection(live).first);
+            scheduler.setNextConnectionId(1 << 24);
+            Assertions.assertNotEquals(wrappedId, scheduler.getNextConnectionId());
+        } finally {
+            scheduler.unregisterConnection(live);
+        }
+    }
+
+    @Test
+    public void testConnectionIdNamespaceExhaustion() throws Exception {
+        ConnectScheduler scheduler = new ConnectScheduler(10, 2);
+        ConnectContext first = createConnectContextForUser("u1");
+        ConnectContext second = createConnectContextForUser("u2");
+        try {
+            first.setConnectionId(scheduler.getNextConnectionId());
+            Assertions.assertTrue(scheduler.registerConnection(first).first);
+            second.setConnectionId(scheduler.getNextConnectionId());
+            Assertions.assertTrue(scheduler.registerConnection(second).first);
+
+            Assertions.assertThrows(ConnectScheduler.ConnectionIdExhaustedException.class,
+                    scheduler::getNextConnectionId);
+        } finally {
+            scheduler.unregisterConnection(first);
+            scheduler.unregisterConnection(second);
+        }
+    }
+
+    @Test
+    public void testConcurrentAllocationAndRegistrationAcrossWrap() throws Exception {
+        ConnectScheduler scheduler = new ConnectScheduler(10);
+        scheduler.setNextConnectionId((1 << 24) - 1);
+        ConnectContext first = createConnectContextForUser("u1");
+        ConnectContext second = createConnectContextForUser("u2");
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CyclicBarrier allocated = new CyclicBarrier(2);
+        try {
+            Future<Integer> firstId = executor.submit(() -> {
+                int id = scheduler.getNextConnectionId();
+                first.setConnectionId(id);
+                allocated.await();
+                Assertions.assertTrue(scheduler.registerConnection(first).first);
+                return id;
+            });
+            Future<Integer> secondId = executor.submit(() -> {
+                int id = scheduler.getNextConnectionId();
+                second.setConnectionId(id);
+                allocated.await();
+                Assertions.assertTrue(scheduler.registerConnection(second).first);
+                return id;
+            });
+
+            int firstAllocatedId = firstId.get();
+            int secondAllocatedId = secondId.get();
+            Assertions.assertNotEquals(firstAllocatedId, secondAllocatedId);
+            Assertions.assertSame(first, scheduler.getContext(firstAllocatedId));
+            Assertions.assertSame(second, scheduler.getContext(secondAllocatedId));
         } finally {
             scheduler.unregisterConnection(first);
             scheduler.unregisterConnection(second);
