@@ -96,6 +96,42 @@ select t0.v1, count(*) from pdc_t0_${uuid0} t0 where t0.v1 not in (select t1.v4 
 2	2
 3	1
 -- !result
+CREATE TABLE pdc_e0_${uuid0}
+(
+v1 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE pdc_e1_${uuid0}
+(
+v4 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v4`)
+DISTRIBUTED BY HASH(`v4`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode=1;
+-- result:
+-- !result
+select k, count(*) from (select 1 as k from pdc_e0_${uuid0} union all select 1 from pdc_e1_${uuid0}) u group by k order by 1;
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode=-1;
+-- result:
+-- !result
+select k, count(*) from (select 1 as k from pdc_e0_${uuid0} union all select 1 from pdc_e1_${uuid0}) u group by k order by 1;
+-- result:
+-- !result
+DROP TABLE pdc_e0_${uuid0};
+-- result:
+-- !result
+DROP TABLE pdc_e1_${uuid0};
+-- result:
+-- !result
 set cbo_push_down_aggregate_mode=0;
 -- result:
 -- !result

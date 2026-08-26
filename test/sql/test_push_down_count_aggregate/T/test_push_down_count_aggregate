@@ -63,6 +63,37 @@ select t0.v1, sum(t0.v2), count(*) from pdc_t0_${uuid0} t0 where t0.v1 in (selec
 
 select t0.v1, count(*) from pdc_t0_${uuid0} t0 where t0.v1 not in (select t1.v4 from pdc_t1_${uuid0} t1) group by t0.v1 order by 1;
 
+-- A UNION branch projecting a constant erases the group-by key, so a count pushed into each branch would
+-- land ungrouped and emit a phantom row. With both inputs empty the query must return no rows at all,
+-- under forced push down exactly as without it.
+CREATE TABLE pdc_e0_${uuid0}
+(
+v1 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE pdc_e1_${uuid0}
+(
+v4 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v4`)
+DISTRIBUTED BY HASH(`v4`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+set cbo_push_down_aggregate_mode=1;
+
+select k, count(*) from (select 1 as k from pdc_e0_${uuid0} union all select 1 from pdc_e1_${uuid0}) u group by k order by 1;
+
+set cbo_push_down_aggregate_mode=-1;
+
+select k, count(*) from (select 1 as k from pdc_e0_${uuid0} union all select 1 from pdc_e1_${uuid0}) u group by k order by 1;
+
+DROP TABLE pdc_e0_${uuid0};
+
+DROP TABLE pdc_e1_${uuid0};
+
 set cbo_push_down_aggregate_mode=0;
 
 DROP TABLE pdc_t0_${uuid0};

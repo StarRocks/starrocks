@@ -58,6 +58,23 @@ public class AggregatePushDownTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountNotPushedIntoConstantKeyUnionBranch() throws Exception {
+        // A group-by key can be erased without ever crossing a join: a UNION branch projecting a constant
+        // (`select 1 as k ... group by k`) leaves the pushed context with a column-less group-by, so the
+        // partial aggregate lands ungrouped in every branch and each emits a phantom row. With all inputs
+        // empty the query would then return one `(1, 0)` group instead of no rows at all.
+        String constKeyUnion = getFragmentPlan(
+                "select k, count(*) from (select 1 as k from t0 union all select 1 from t1) u group by k");
+        Assertions.assertEquals(1, StringUtils.countMatches(constKeyUnion, ":AGGREGATE "), constKeyUnion);
+        assertNotContains(constKeyUnion, "group by: \n");
+
+        // Sanity: a UNION whose key is a real column still pushes a count into both branches.
+        String colKeyUnion = getFragmentPlan(
+                "select k, count(*) from (select v1 as k from t0 union all select v4 from t1) u group by k");
+        Assertions.assertEquals(3, StringUtils.countMatches(colKeyUnion, ":AGGREGATE "), colKeyUnion);
+    }
+
+    @Test
     public void testCountNotPushedBelowKeylessJoin() throws Exception {
         // A count() pushed down with an empty group-by set degenerates into a scalar aggregate
         // that always emits exactly one row, even when its side has zero input rows. Re-joining

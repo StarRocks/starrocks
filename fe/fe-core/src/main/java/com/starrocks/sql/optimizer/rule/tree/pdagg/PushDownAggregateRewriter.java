@@ -464,6 +464,12 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             return visit(optExpression, context);
         }
 
+        // Mirror of the collector's last-line-of-defence check: this is where the partial aggregate is
+        // actually built, so refuse here too if the count would end up ungrouped. See isUngroupedCountPush.
+        if (PushDownAggregateUtils.isUngroupedCountPush(context)) {
+            return visit(optExpression, context);
+        }
+
         // check groupBys is from orig aggregation, not from JoinNode
         if (!context.groupBys.keySet().stream().allMatch(s -> allPushDownGroupBys.contains(s))) {
             return visit(optExpression, context);
