@@ -867,6 +867,8 @@ public class LakeTableIndexFastPathJobBaseTest {
     @SuppressWarnings("unchecked")
     public void testRunPendingJob_UsesLatestGenerationAndStableMetaId() throws Exception {
         LakeTableAddIndexJob job = newJob();
+        setField(job, "partitionToTablets", new HashMap<>(Map.of(999L, List.of(99L))));
+        setField(job, "tabletToIndexMetaId", new HashMap<>(Map.of(99L, 999L)));
         Database db = new Database(2L, "db");
         OlapTable table = mock(OlapTable.class);
         PhysicalPartition pp = mock(PhysicalPartition.class);
@@ -903,9 +905,11 @@ public class LakeTableIndexFastPathJobBaseTest {
 
         Map<Long, List<Long>> p2t = (Map<Long, List<Long>>) getField(job, "partitionToTablets");
         Map<Long, Long> t2i = (Map<Long, Long>) getField(job, "tabletToIndexMetaId");
-        assertEquals(List.of(2L), p2t.get(100L));
+        assertEquals(Map.of(100L, List.of(2L)), p2t);
         assertFalse(p2t.get(100L).contains(1L));
-        assertEquals(50L, t2i.get(2L));
+        assertFalse(p2t.containsKey(999L));
+        assertEquals(Map.of(2L, 50L), t2i);
+        assertFalse(t2i.containsKey(99L));
     }
 
     @Test
