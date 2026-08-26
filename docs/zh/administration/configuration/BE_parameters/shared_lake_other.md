@@ -787,6 +787,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：发送给 Elasticsearch 的 scroll 搜索上下文的 keep-alive 时长。该值在构建初始 scroll URL (`?scroll=<value>`) 以及发送后续 scroll 请求（通过 ESScrollQueryBuilder）时按字面使用（例如 "5m"）。此设置控制 ES 端在垃圾回收前保留搜索上下文的时间；设置更长会让 scroll 上下文存活更久，但会延长 ES 集群的资源占用。该值在启动时由 ES scan reader 读取，运行时不可更改。
 - 引入版本：v3.2.0
 
+### jemalloc_page_size
+
+- 默认值：auto
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：强制 `bin/start_backend.sh` 在 arm64（aarch64）主机上加载指定的 jemalloc 页大小构建版本，而不是通过 `getconf PAGESIZE` 自动探测主机页大小。可选值为 `auto`（默认，自动探测）、`4k`/`4096`（强制使用 4K 页构建）、`64k`/`65536`（强制使用 64K 页构建）；其他任何值都会退回自动探测，并记录一条警告日志。如果 `getconf PAGESIZE` 检测成功且返回的页大小不是 4096，即使配置了 `4k`，也会退回使用 64K 构建并记录警告——因为 jemalloc 在运行时页大小大于其编译时页大小时会直接 abort；如果该检测本身失败（取不到值），则不会否决这个强制值。如果指定了 `4k` 但对应的 4K 页 jemalloc 构建未被打包，BE 会退回使用 64K 构建并记录警告，而不会启动失败。该值由 `bin/start_backend.sh` 在 BE 进程启动前直接从 be.conf/cn.conf 读取（用于决定通过 `LD_LIBRARY_PATH` 加载哪个 jemalloc `.so`），因此不会在运行时重新配置 jemalloc，修改后需要重启 BE 才能生效。在非 arm64 主机上会被忽略，因为这些平台只会产出一份 jemalloc 构建。
+- 引入版本：-
+
 ### load_replica_status_check_interval_ms_on_failure
 
 - 默认值：2000

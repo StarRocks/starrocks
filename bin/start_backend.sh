@@ -165,10 +165,46 @@ if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     # arm64 kernels vary between 4K and 64K pages. lib/jemalloc(-dbg) is built
     # for the 64K worst case (safe on any page size <= 64K); prefer the 4K
     # build when it's present and matches the host, to cut memory
-    # fragmentation from the larger page granularity.
+    # fragmentation from the larger page granularity. An operator can force
+    # either variant via jemalloc_page_size in be.conf/cn.conf, skipping the
+    # getconf PAGESIZE auto-detection below.
+    jemalloc_page_size="auto"
+    if [ ${RUN_BE} -eq 1 ]; then
+        read_var_from_conf jemalloc_page_size $STARROCKS_HOME/conf/be.conf
+    elif [ ${RUN_CN} -eq 1 ]; then
+        read_var_from_conf jemalloc_page_size $STARROCKS_HOME/conf/cn.conf
+    fi
+    jemalloc_page_size=$(echo "$jemalloc_page_size" | tr '[:upper:]' '[:lower:]')
+    case "$jemalloc_page_size" in
+        4k|4096) jemalloc_page_size="4k" ;;
+        64k|65536) jemalloc_page_size="64k" ;;
+        auto) ;;
+        *)
+            echo "[WARNING] Invalid jemalloc_page_size '${jemalloc_page_size}' in conf; expected auto, 4k, or 64k. Using auto."
+            jemalloc_page_size="auto"
+            ;;
+    esac
+
     os_page_size=$(getconf PAGESIZE 2>/dev/null)
-    if [[ "${os_page_size}" == "4096" && -d "$jemalloc_pg4k_dir" ]]; then
-        jemalloc_dir=$jemalloc_pg4k_dir
+    if [[ "$jemalloc_page_size" == "auto" ]]; then
+        if [[ "${os_page_size}" == "4096" ]]; then
+            jemalloc_page_size="4k"
+        fi
+    elif [[ "$jemalloc_page_size" == "4k" && -n "${os_page_size}" && "${os_page_size}" != "4096" ]]; then
+        # jemalloc aborts at startup if the runtime page size is larger than its
+        # build-time page size (see thirdparty/build-thirdparty.sh). Don't honor
+        # an operator-forced 4k request that a successful page-size check
+        # contradicts -- that would abort BE/CN, not just waste memory.
+        echo "[WARNING] jemalloc_page_size=4k requested but the host's actual page size is ${os_page_size} bytes, not 4096; the 4K jemalloc build would abort BE/CN at startup. Falling back to the 64K build."
+        jemalloc_page_size="64k"
+    fi
+
+    if [[ "$jemalloc_page_size" == "4k" ]]; then
+        if [[ -d "$jemalloc_pg4k_dir" ]]; then
+            jemalloc_dir=$jemalloc_pg4k_dir
+        else
+            echo "[WARNING] jemalloc_page_size resolved to 4k but $jemalloc_pg4k_dir is not packaged; falling back to the 64K build."
+        fi
     fi
 fi
 export LD_LIBRARY_PATH=$jemalloc_dir:$LD_LIBRARY_PATH

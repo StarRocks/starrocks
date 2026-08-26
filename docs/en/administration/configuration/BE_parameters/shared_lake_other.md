@@ -781,6 +781,15 @@ This topic introduces the following types of BE configurations:
 - Description: The keep-alive duration sent to Elasticsearch for scroll search contexts. The value is used verbatim (for example "5m") when building the initial scroll URL (`?scroll=<value>`) and when sending subsequent scroll requests (via ESScrollQueryBuilder). This controls how long the ES search context is retained before garbage collection on the ES side; setting it longer keeps scroll contexts alive for more time but prolongs resource usage on the ES cluster. The value is read at startup by the ES scan reader and is not changeable at runtime.
 - Introduced in: v3.2.0
 
+### jemalloc_page_size
+
+- Default: auto
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Forces `bin/start_backend.sh` to load a specific jemalloc page-size variant on arm64 (aarch64) hosts instead of auto-detecting the host's page size via `getconf PAGESIZE`. Accepted values are `auto` (default, auto-detect), `4k`/`4096` (forces the 4K-page build), and `64k`/`65536` (forces the 64K-page build); any other value falls back to auto-detection with a warning logged. A forced `4k` is still rejected in favor of the 64K build (with a warning) if a `getconf PAGESIZE` check succeeds and reports a size other than 4096, since jemalloc aborts at startup when the runtime page size is larger than its build-time one; a failed page-size check does not block the forced value. If `4k` is requested but the 4K-page jemalloc build was not packaged, BE falls back to the 64K build with a warning instead of failing to start. This value is read directly from be.conf/cn.conf by `bin/start_backend.sh` before the BE process starts (to select which jemalloc `.so` to load via `LD_LIBRARY_PATH`), so it does not reconfigure jemalloc at runtime and changing it requires a BE restart. Ignored on non-arm64 hosts, where only one jemalloc build is produced.
+- Introduced in: -
+
 ### load_replica_status_check_interval_ms_on_failure
 
 - Default: 2000

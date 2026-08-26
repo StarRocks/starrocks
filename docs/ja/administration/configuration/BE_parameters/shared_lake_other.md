@@ -763,6 +763,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: トークンチェックを有効にするかどうかを制御するブール値。`true` はトークンチェックを有効にすることを示し、`false` は無効にすることを示します。
 - 導入バージョン: -
 
+### jemalloc_page_size
+
+- デフォルト: auto
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: `getconf PAGESIZE` によるホストのページサイズ自動検出の代わりに、arm64（aarch64）ホスト上で `bin/start_backend.sh` に特定の jemalloc ページサイズバリアントを強制的にロードさせます。指定可能な値は `auto`（デフォルト、自動検出）、`4k`/`4096`（4K ページビルドを強制）、`64k`/`65536`（64K ページビルドを強制）です。それ以外の値は警告ログを出力した上で自動検出にフォールバックします。`getconf PAGESIZE` の検出に成功し、その結果が 4096 以外であった場合、`4k` を指定していても警告を出力した上で 64K ビルドにフォールバックします。これは、実行時のページサイズがビルド時のページサイズより大きいと jemalloc が起動時に abort するためです。検出自体が失敗した場合はこの強制値を無効化しません。`4k` が指定されたが 4K ページの jemalloc ビルドがパッケージングされていない場合、BE は起動に失敗する代わりに警告を出力して 64K ビルドにフォールバックします。この値は BE プロセス起動前に `bin/start_backend.sh` が be.conf/cn.conf から直接読み取り（`LD_LIBRARY_PATH` 経由でロードする jemalloc の `.so` を選択するため）、実行時に jemalloc を再設定するものではないため、変更を反映するには BE の再起動が必要です。arm64 以外のホストでは無視されます（それらのプラットフォームでは jemalloc ビルドが 1 つしか生成されないため）。
+- 導入バージョン: -
+
 ### load_replica_status_check_interval_ms_on_failure
 
 - デフォルト: 2000

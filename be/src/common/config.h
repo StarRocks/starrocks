@@ -125,6 +125,19 @@ CONF_String(jemalloc_conf,
             "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
             "background_thread:true,prof:true,prof_active:false");
 
+// On arm64, bin/start_backend.sh auto-detects the host's page size (via getconf PAGESIZE) to
+// decide whether to load the 4K- or 64K-page jemalloc build. Set this to "4k"/"4096" or
+// "64k"/"65536" to force one of them and skip auto-detection; the default "auto" (or any
+// unrecognized value, which falls back to "auto" with a warning) keeps auto-detection. A forced
+// "4k" is still rejected in favor of the 64K build if a getconf PAGESIZE check succeeds and
+// reports a size other than 4096, since jemalloc aborts at startup when the runtime page size is
+// larger than its build-time one. Like jemalloc_conf, this only affects which .so
+// bin/start_backend.sh loads via LD_LIBRARY_PATH before the BE process starts, so it does not
+// reconfigure jemalloc at runtime and is surfaced here purely for observability via
+// information_schema.be_configs. Ignored on non-arm64 hosts, where only one jemalloc build is
+// ever produced.
+CONF_String(jemalloc_page_size, "auto");
+
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
