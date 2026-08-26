@@ -1447,6 +1447,19 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select cast(cast(id_bool as boolean) as string) from test_bool;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(11: id_bool AS VARCHAR(65533))");
+
+        // a float -> integral cast truncates the value, so it must not be reduced away
+        sql = "select cast(cast(t1f as bigint) as string) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(6: t1f AS BIGINT) AS VARCHAR(65533))");
+
+        sql = "select cast(cast(t1e as bigint) as string) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(5: t1e AS BIGINT) AS VARCHAR(65533))");
+
+        sql = "select cast(cast(t1f as bigint) as double) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(6: t1f AS BIGINT) AS DOUBLE)");
     }
 
     @Test
