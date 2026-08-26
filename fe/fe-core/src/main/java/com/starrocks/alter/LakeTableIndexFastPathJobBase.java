@@ -247,8 +247,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     @Override
     protected void runRunningJob() throws AlterCancelException {
         if (batchTask == null) {
-            batchTask = new AgentBatchTask();
-            dispatchAllTasks();
+            batchTask = dispatchAllTasks();
         }
         if (!batchTask.isFinished()) {
             // Cancel promptly when BE reports a permanent failure for any
@@ -758,7 +757,30 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // Internals
     // ---------------------------------------------------------------------
 
-    private void dispatchAllTasks() throws AlterCancelException {
+    private AgentBatchTask dispatchAllTasks() throws AlterCancelException {
+        List<AgentTask> registeredTasks = new ArrayList<>();
+        try {
+            AgentBatchTask newBatchTask = buildAllTasks();
+            for (AgentTask task : newBatchTask.getAllTasks()) {
+                if (!AgentTaskQueue.addTask(task)) {
+                    throw new AlterCancelException("failed to register alter task for tablet " + task.getTabletId());
+                }
+                registeredTasks.add(task);
+            }
+            AgentTaskExecutor.submit(newBatchTask);
+            LOG.info("index fast-path job {} dispatched {} AlterReplicaTasks", jobId, newBatchTask.getTaskNum());
+            return newBatchTask;
+        } catch (AlterCancelException e) {
+            removeRegisteredTasks(registeredTasks);
+            throw e;
+        } catch (RuntimeException e) {
+            removeRegisteredTasks(registeredTasks);
+            throw new AlterCancelException("failed to dispatch index fast-path job " + jobId + ": " + e.getMessage());
+        }
+    }
+
+    private AgentBatchTask buildAllTasks() throws AlterCancelException {
+        AgentBatchTask newBatchTask = new AgentBatchTask();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("database does not exist, dbId: " + dbId);
@@ -804,19 +826,19 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                             latestIndex.getId(), tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
                             /*generatedColumnReq=*/ null, readSchema);
                     populateAlterRequest(task, indexMetaId, indexMeta, table);
-                    batchTask.addTask(task);
+                    newBatchTask.addTask(task);
                 }
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
-        // Register tasks in AgentTaskQueue *before* submitting so that
-        // LeaderImpl.finishTask() can find them when CNs report back.
-        // Without this, CN reports arrive as "cannot find task" warnings and
-        // the batchTask never transitions to finished.
-        AgentTaskQueue.addBatchTask(batchTask);
-        AgentTaskExecutor.submit(batchTask);
-        LOG.info("index fast-path job {} dispatched {} AlterReplicaTasks", jobId, batchTask.getTaskNum());
+        return newBatchTask;
+    }
+
+    private static void removeRegisteredTasks(List<AgentTask> registeredTasks) {
+        for (AgentTask task : registeredTasks) {
+            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+        }
     }
 
     private void updateNextVersion(OlapTable table) {

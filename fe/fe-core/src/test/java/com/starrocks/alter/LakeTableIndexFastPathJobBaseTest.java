@@ -63,6 +63,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -807,17 +808,52 @@ public class LakeTableIndexFastPathJobBaseTest {
 
     // -------- helpers for lifecycle tests --------
 
-    private static void invokePrivate(Object target, String name) throws Exception {
+    private static Object invokePrivate(Object target, String name) throws Exception {
         Method m = LakeTableIndexFastPathJobBase.class.getDeclaredMethod(name);
         m.setAccessible(true);
         try {
-            m.invoke(target);
+            return m.invoke(target);
         } catch (InvocationTargetException e) {
             if (e.getCause() instanceof Exception) {
                 throw (Exception) e.getCause();
             }
             throw e;
         }
+    }
+
+    private static PhysicalPartition configureRunningDispatch(LakeTableAddIndexJob job, OlapTable table,
+                                                              long... tabletIds) throws Exception {
+        Map<Long, List<Long>> partitionToTablets = new HashMap<>();
+        List<Long> tablets = new ArrayList<>();
+        Map<Long, Long> tabletToIndexMetaId = new HashMap<>();
+        for (long tabletId : tabletIds) {
+            tablets.add(tabletId);
+            tabletToIndexMetaId.put(tabletId, 50L);
+        }
+        partitionToTablets.put(100L, tablets);
+        setField(job, "partitionToTablets", partitionToTablets);
+        setField(job, "tabletToIndexMetaId", tabletToIndexMetaId);
+
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(3L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+        MaterializedIndexMeta indexMeta = mock(MaterializedIndexMeta.class);
+        when(table.getIndexMetaByMetaId(50L)).thenReturn(indexMeta);
+        MaterializedIndex latestIndex = mock(MaterializedIndex.class);
+        when(latestIndex.getId()).thenReturn(70L);
+        when(latestIndex.getTablet(anyLong())).thenReturn(mock(Tablet.class));
+        when(pp.getLatestIndex(50L)).thenReturn(latestIndex);
+        return pp;
+    }
+
+    private static void assertFailedDispatchLeavesRunning(LakeTableAddIndexJob job, PhysicalPartition pp,
+                                                          GlobalStateMgr gsm) throws Exception {
+        assertNull(getField(job, "batchTask"));
+        assertTrue(((Map<?, ?>) getField(job, "commitVersionMap")).isEmpty());
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        verify(pp, never()).getNextVersion();
+        verify(pp, never()).setNextVersion(anyLong());
+        verify(gsm.getEditLog(), never()).logAlterJob(any(), any(WALApplier.class));
     }
 
     private static GlobalTransactionMgr mockTxnMgrYielding(long nextTxnId) {
@@ -1114,6 +1150,138 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob"));
+        }
+    }
+
+    @Test
+    public void testRunRunningJob_ConvertsConstructionRuntimeException() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeNode cn = mock(ComputeNode.class);
+        when(cn.getId()).thenReturn(11L);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<SchemaInfo> schemaStatic = Mockito.mockStatic(SchemaInfo.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            schemaStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
+                    .thenThrow(new RuntimeException("schema boom"));
+
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("1"));
+            assertTrue(thrown.getMessage().contains("schema boom"));
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
+            queueStatic.verify(() -> AgentTaskQueue.addBatchTask(any()), never());
+            executorStatic.verify(() -> AgentTaskExecutor.submit(any()), never());
+        }
+    }
+
+    @Test
+    public void testRunRunningJob_PreservesAlterCancelException() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = mock(WarehouseManager.class);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(null);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertEquals("no alive backend for tablet 1", thrown.getMessage());
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
+        }
+    }
+
+    @Test
+    public void testRunRunningJob_CleansOnlyOwnedTasksOnRegistrationRefusal() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L, 2L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeNode cn = mock(ComputeNode.class);
+        when(cn.getId()).thenReturn(11L);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        SchemaInfo schemaInfo = mock(SchemaInfo.class);
+        when(schemaInfo.toTabletSchema()).thenReturn(new TTabletSchema());
+        ArgumentCaptor<AgentTask> registeredCaptor = ArgumentCaptor.forClass(AgentTask.class);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<SchemaInfo> schemaStatic = Mockito.mockStatic(SchemaInfo.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            schemaStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
+                    .thenReturn(schemaInfo);
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(true, false);
+
+            assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runRunningJob"));
+            queueStatic.verify(() -> AgentTaskQueue.addTask(registeredCaptor.capture()), times(2));
+            List<AgentTask> attemptedTasks = registeredCaptor.getAllValues();
+            AgentTask ownedTask = attemptedTasks.get(0);
+            AgentTask refusedTask = attemptedTasks.get(1);
+            queueStatic.verify(() -> AgentTaskQueue.removeTask(ownedTask.getBackendId(), TTaskType.ALTER,
+                    ownedTask.getSignature()), times(1));
+            queueStatic.verify(() -> AgentTaskQueue.removeTask(refusedTask.getBackendId(), TTaskType.ALTER,
+                    refusedTask.getSignature()), never());
+            queueStatic.verify(() -> AgentTaskQueue.addBatchTask(any()), never());
+            executorStatic.verify(() -> AgentTaskExecutor.submit(any()), never());
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
+        }
+    }
+
+    @Test
+    public void testRunRunningJob_CleansOwnedTasksOnExecutorRejection() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.RUNNING);
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = configureRunningDispatch(job, table, 1L, 2L);
+        GlobalStateMgr gsm = buildLockableGsm(new Database(2L, "db"), table);
+        WarehouseManager wm = mock(WarehouseManager.class);
+        ComputeNode cn = mock(ComputeNode.class);
+        when(cn.getId()).thenReturn(11L);
+        when(wm.getComputeNodeAssignedToTablet(any(), anyLong())).thenReturn(cn);
+        when(gsm.getWarehouseMgr()).thenReturn(wm);
+        SchemaInfo schemaInfo = mock(SchemaInfo.class);
+        when(schemaInfo.toTabletSchema()).thenReturn(new TTabletSchema());
+        ArgumentCaptor<AgentTask> registeredCaptor = ArgumentCaptor.forClass(AgentTask.class);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<SchemaInfo> schemaStatic = Mockito.mockStatic(SchemaInfo.class);
+                MockedStatic<AgentTaskQueue> queueStatic = Mockito.mockStatic(AgentTaskQueue.class);
+                MockedStatic<AgentTaskExecutor> executorStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            schemaStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
+                    .thenReturn(schemaInfo);
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(true);
+            executorStatic.when(() -> AgentTaskExecutor.submit(any())).thenThrow(new RuntimeException("executor boom"));
+
+            AlterCancelException thrown = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runRunningJob"));
+            assertTrue(thrown.getMessage().contains("1"));
+            assertTrue(thrown.getMessage().contains("executor boom"));
+            queueStatic.verify(() -> AgentTaskQueue.addTask(registeredCaptor.capture()), times(2));
+            for (AgentTask task : registeredCaptor.getAllValues()) {
+                queueStatic.verify(() -> AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER,
+                        task.getSignature()), times(1));
+            }
+            queueStatic.verify(() -> AgentTaskQueue.addBatchTask(any()), never());
+            assertFailedDispatchLeavesRunning(job, pp, gsm);
         }
     }
 
@@ -1511,7 +1679,6 @@ public class LakeTableIndexFastPathJobBaseTest {
     @Test
     public void testDispatchAllTasks_HappyPath() throws Exception {
         LakeTableAddIndexJob job = newJob();
-        setField(job, "batchTask", new AgentBatchTask());
         Map<Long, List<Long>> p2t = new HashMap<>();
         p2t.put(100L, Collections.singletonList(1L));
         setField(job, "partitionToTablets", p2t);
@@ -1549,19 +1716,19 @@ public class LakeTableIndexFastPathJobBaseTest {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             siStatic.when(() -> SchemaInfo.fromMaterializedIndex(eq(table), eq(50L), any()))
                     .thenReturn(schemaInfo);
-            invokePrivate(job, "dispatchAllTasks");
-            queueStatic.verify(() -> AgentTaskQueue.addBatchTask(any()), times(1));
-            execStatic.verify(() -> AgentTaskExecutor.submit(any()), times(1));
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(true);
+            AgentBatchTask batch = (AgentBatchTask) invokePrivate(job, "dispatchAllTasks");
+            queueStatic.verify(() -> AgentTaskQueue.addTask(any()), times(1));
+            queueStatic.verify(() -> AgentTaskQueue.addBatchTask(any()), never());
+            execStatic.verify(() -> AgentTaskExecutor.submit(batch), times(1));
+            assertEquals(1, batch.getTaskNum());
         }
-        AgentBatchTask batch = (AgentBatchTask) getField(job, "batchTask");
-        assertEquals(1, batch.getTaskNum());
     }
 
     @Test
     public void testDispatchAllTasks_UsesPhysicalIndexIdForFinishCallback() throws Exception {
         LakeTableAddIndexJob job = newJob();
         job.putNewSchema(50L, 900L, 12L);
-        setField(job, "batchTask", new AgentBatchTask());
         setField(job, "partitionToTablets", Map.of(100L, List.of(1L)));
         setField(job, "tabletToIndexMetaId", Map.of(1L, 50L));
 
@@ -1596,10 +1763,13 @@ public class LakeTableIndexFastPathJobBaseTest {
                 MockedStatic<AgentTaskExecutor> execStatic = Mockito.mockStatic(AgentTaskExecutor.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             siStatic.when(() -> SchemaInfo.fromMaterializedIndex(table, 50L, indexMeta)).thenReturn(schemaInfo);
-            invokePrivate(job, "dispatchAllTasks");
+            queueStatic.when(() -> AgentTaskQueue.addTask(any())).thenReturn(true);
+            AgentBatchTask batch = (AgentBatchTask) invokePrivate(job, "dispatchAllTasks");
 
-            AgentBatchTask batch = (AgentBatchTask) getField(job, "batchTask");
             AlterReplicaTask task = (AlterReplicaTask) batch.getAllTasks().get(0);
+            queueStatic.verify(() -> AgentTaskQueue.addTask(any()), times(1));
+            queueStatic.verify(() -> AgentTaskQueue.addBatchTask(any()), never());
+            execStatic.verify(() -> AgentTaskExecutor.submit(batch), times(1));
             siStatic.verify(() -> SchemaInfo.fromMaterializedIndex(table, 50L, indexMeta), times(1));
             assertEquals(70L, task.getIndexId());
             TAlterTabletReqV2 request = task.toThrift();
