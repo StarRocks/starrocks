@@ -14,6 +14,10 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include <fmt/format.h>
+
+#include <chrono>
+
 #include "base/debug/trace.h"
 #include "base/string/string_util.h"
 #include "common/config_primary_key_fwd.h"
@@ -240,8 +244,11 @@ Status PersistentIndexMemtable::flush() {
     sstable_pb.set_encryption_meta(encryption_meta);
     sstable_pb.mutable_range()->CopyFrom(range_pb);
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
-    std::lock_guard<std::mutex> lg(_flush_mutex);
-    _sstable = std::move(sstable);
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _sstable = std::move(sstable);
+    }
+    _flush_cv.notify_all();
     return Status::OK();
 }
 
@@ -254,14 +261,20 @@ void PersistentIndexMemtable::run() {
     auto st = flush();
     if (!st.ok()) {
         LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
-        std::lock_guard<std::mutex> lg(_flush_mutex);
-        _flush_status = st;
+        {
+            std::lock_guard<std::mutex> lg(_flush_mutex);
+            _flush_status = st;
+        }
+        _flush_cv.notify_all();
     }
 }
 
 void PersistentIndexMemtable::cancel() {
-    std::lock_guard<std::mutex> lg(_flush_mutex);
-    _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+    }
+    _flush_cv.notify_all();
 }
 
 std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
@@ -271,6 +284,15 @@ std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable
 
 Status PersistentIndexMemtable::flush_status() const {
     std::lock_guard<std::mutex> lg(_flush_mutex);
+    return _flush_status;
+}
+
+Status PersistentIndexMemtable::wait_for_flush(int64_t wait_timeout_us) {
+    std::unique_lock<std::mutex> lock(_flush_mutex);
+    if (!_flush_cv.wait_for(lock, std::chrono::microseconds(wait_timeout_us),
+                            [this] { return _sstable != nullptr || !_flush_status.ok(); })) {
+        return Status::TimedOut(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
+    }
     return _flush_status;
 }
 

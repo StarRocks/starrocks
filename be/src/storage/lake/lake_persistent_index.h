@@ -183,6 +183,8 @@ public:
     int64_t publish_sst_flush_bytes() const { return _publish_sst_flush_bytes; }
 
 private:
+    Status sync_flush_inactive_memtables(int64_t wait_timeout_us);
+
     // Open all SSTables in parallel using thread pool.
     // Returns opened SSTables in the same order as sstable_meta.sstables().
     static StatusOr<std::vector<PersistentIndexSstableUniquePtr>> _open_sstables_parallel(
