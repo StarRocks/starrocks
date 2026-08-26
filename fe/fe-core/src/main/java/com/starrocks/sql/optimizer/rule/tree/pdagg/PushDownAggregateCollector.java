@@ -424,13 +424,10 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
                     .forEach(v -> childContext.groupBys.put(v, v));
         }
 
-        // A count pushed with an empty group-by set degenerates into a scalar (ungrouped) aggregate,
-        // which always emits exactly one row even when this child has zero input rows. Re-joining that
-        // phantom row through a keyless join (CROSS JOIN, or INNER JOIN with a non-column condition,
-        // where the on-predicate/post-join-predicate above contributed no columns) would corrupt the
-        // join's cardinality instead of correctly producing no rows/groups. Refuse the push in that case.
-        if (childContext.groupBys.isEmpty() &&
-                childContext.aggregations.values().stream().anyMatch(PushDownAggregateUtils::isCountAgg)) {
+        // Refuse a count that would land on this child without any real group-by key (no column-bearing
+        // group-by expression): it degenerates into a scalar aggregate that emits a phantom row for an
+        // empty child. See isUngroupedCountPush.
+        if (PushDownAggregateUtils.isUngroupedCountPush(childContext)) {
             return AggregatePushDownContext.EMPTY;
         }
 

@@ -437,6 +437,14 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                     .map(factory::getColumnRef).forEach(v -> childContext.groupBys.put(v, v));
         }
 
+        // Re-check the same guard the collector applies, against the group-by set this pass actually
+        // built. The collector may derive a partial group-by from an expression spanning both join sides
+        // (`group by t0.v1 + t1.v4` -> `t0.v1 + NULL`) while the loop above drops that entry outright, so
+        // a push the collector accepted as grouped can still be ungrouped here. See isUngroupedCountPush.
+        if (PushDownAggregateUtils.isUngroupedCountPush(childContext)) {
+            return process(joinOpt.inputAt(child), AggregatePushDownContext.EMPTY);
+        }
+
         return process(joinOpt.inputAt(child), childContext);
     }
 

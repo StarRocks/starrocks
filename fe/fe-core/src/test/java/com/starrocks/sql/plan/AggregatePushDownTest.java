@@ -63,8 +63,8 @@ public class AggregatePushDownTest extends PlanTestBase {
         // that always emits exactly one row, even when its side has zero input rows. Re-joining
         // that phantom row through a keyless join (CROSS JOIN, or an INNER JOIN whose condition
         // contributes no columns) would corrupt the join's cardinality instead of correctly
-        // producing no rows/groups, so PushDownAggregateCollector#splitJoinAggregate must refuse
-        // to push count() in that shape.
+        // producing no rows/groups, so both the collector and the rewriter must refuse to push count()
+        // in that shape (PushDownAggregateUtils#isUngroupedCountPush).
         String crossJoinPlan = getFragmentPlan("select t1.v4, count(*) from t0, t1 group by t1.v4");
         Assertions.assertEquals(1, StringUtils.countMatches(crossJoinPlan, ":AGGREGATE "));
         assertNotContains(crossJoinPlan, "group by: \n");
@@ -74,12 +74,56 @@ public class AggregatePushDownTest extends PlanTestBase {
         Assertions.assertEquals(1, StringUtils.countMatches(constCondPlan, ":AGGREGATE "));
         assertNotContains(constCondPlan, "group by: \n");
 
+        // Grouping on a constant is ungrouped too, even though the group-by map is not empty: the entry
+        // carries an expression that uses no column, so the pushed count would again be a scalar
+        // aggregate emitting a phantom row for an empty child.
+        String constGroupByPlan = getFragmentPlan("select 1 + 1, count(*) from t0, t1 group by 1 + 1");
+        Assertions.assertEquals(1, StringUtils.countMatches(constGroupByPlan, ":AGGREGATE "), constGroupByPlan);
+        assertNotContains(constGroupByPlan, "group by: \n");
+
+        // Same constant group-by over a real equi-join still pushes: the on-predicate column supplies the
+        // grouping key the constant does not.
+        String constGroupByEquiPlan =
+                getFragmentPlan("select 1 + 1, count(*) from t0 join t1 on t0.v1 = t1.v4 group by 1 + 1");
+        Assertions.assertEquals(2, StringUtils.countMatches(constGroupByEquiPlan, ":AGGREGATE "), constGroupByEquiPlan);
+
+        // A group-by expression spanning both sides of a keyless join is NOT ungrouped: the rewriter
+        // flattens `t0.v1 + t1.v4` into its component columns before reaching the join, so child 0 keeps
+        // `v1` as its grouping key and the pushed count stays correct (an empty t0 produces no rows).
+        String derivedGroupByPlan =
+                getFragmentPlan("select t0.v1 + t1.v4, count(*) from t0, t1 group by t0.v1 + t1.v4");
+        Assertions.assertEquals(2, StringUtils.countMatches(derivedGroupByPlan, ":AGGREGATE "), derivedGroupByPlan);
+        assertContains(derivedGroupByPlan, "output: count(*)\n  |  group by: 1: v1");
+
         // Sanity: a real equi-join still gets count() pushed below it (the two-stage aggregate
         // this whole feature exists for), since the join column populates a non-empty group-by
         // set on the pushed side.
         String realJoinPlan =
                 getFragmentPlan("select t0.v1, count(*) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
         Assertions.assertEquals(2, StringUtils.countMatches(realJoinPlan, ":AGGREGATE "));
+    }
+
+    @Test
+    public void testCountPushedBelowSemiAntiJoin() throws Exception {
+        // A semi/anti join only filters its preserved side: it neither duplicates those rows nor pads them
+        // with NULLs, and it decides row by row on the on-predicate columns, which the pushed group-by set
+        // always contains. sum(partial_count) over the surviving groups is therefore the true count.
+        //
+        // Rejecting these would not merely forgo a count push down. A count that cannot land on a side
+        // aborts the whole push down for that side, so it would also cancel the sum/min/max push downs that
+        // already worked below semi joins -- which is what regressed TPC-DS Q14 (its `ss_item_sk IN (...)`
+        // becomes a LEFT SEMI JOIN).
+        String semiPlan = getFragmentPlan(
+                "select t0.v1, count(*) from t0 where t0.v1 in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(semiPlan, ":AGGREGATE "), semiPlan);
+
+        String antiPlan = getFragmentPlan(
+                "select t0.v1, count(*) from t0 where t0.v1 not in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(antiPlan, ":AGGREGATE "), antiPlan);
+
+        String mixedPlan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2), count(*) from t0 where t0.v1 in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(mixedPlan, ":AGGREGATE "), mixedPlan);
     }
 
     @Test

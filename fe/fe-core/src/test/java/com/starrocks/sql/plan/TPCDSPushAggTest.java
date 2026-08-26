@@ -219,10 +219,12 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
 
     private static Stream<Arguments> testUnPushDownProvider() {
         // orig(-1), auto(0), force(1), mid(2), high(3)
+        // Q10/Q69 gain one aggregate under force(1) only: their EXISTS subqueries become semi joins, and
+        // count() is pushable to a semi join's preserved side (PushDownAggregateUtils#canPushCountToJoinChild).
         Arguments[] cases = new Arguments[] {
                 Arguments.of("Q07", 2, 2, 2, 2, 2),
                 Arguments.of("Q09", 30, 30, 30, 30, 30),
-                Arguments.of("Q10", 2, 2, 2, 2, 2),
+                Arguments.of("Q10", 2, 2, 3, 2, 2),
                 Arguments.of("Q13", 2, 2, 2, 2, 2),
                 Arguments.of("Q16", 4, 4, 4, 4, 4),
                 Arguments.of("Q17", 2, 2, 2, 2, 2),
@@ -248,7 +250,7 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q62", 2, 2, 2, 2, 2),
                 Arguments.of("Q66", 6, 6, 6, 6, 6),
                 Arguments.of("Q67", 2, 2, 2, 2, 2),
-                Arguments.of("Q69", 2, 2, 2, 2, 2),
+                Arguments.of("Q69", 2, 2, 3, 2, 2),
                 Arguments.of("Q72", 2, 2, 2, 2, 2),
                 Arguments.of("Q76", 2, 2, 2, 2, 2),
                 Arguments.of("Q80", 8, 8, 8, 8, 8),
