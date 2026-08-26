@@ -184,6 +184,7 @@ colspecs = base_colspecs | {
     sqltypes.Date: DATE,
     sqltypes.DateTime: DATETIME,
     sqltypes.DECIMAL: DECIMAL,
+    sqltypes.Time: TIME,
 }
 
 class StarRocksTypeCompiler(MySQLTypeCompiler):

@@ -21,6 +21,8 @@ compiles a reflected column — comparing a table against its declared shape,
 for instance — therefore failed on a table that had itself created happily.
 """
 
+from datetime import timedelta
+
 import pytest
 from sqlalchemy import Column, MetaData, Table
 from sqlalchemy.sql import sqltypes
@@ -61,6 +63,68 @@ def test_reflected_type_is_not_nulltype(type_string):
     instance = parsed() if isinstance(parsed, type) else parsed
 
     assert not isinstance(instance, sqltypes.NullType)
+
+
+@pytest.mark.parametrize(
+    "wire_value, expected",
+    [
+        ("12:34:56", timedelta(hours=12, minutes=34, seconds=56)),
+        # timediff('1000-01-02 01:01:01', '1000-01-01 01:01:01'). A time-of-day
+        # processor drops timedelta.days here and reports 00:00:00.
+        ("24:00:00", timedelta(hours=24)),
+        ("-24:00:00", timedelta(hours=-24)),
+        # The sign is what gets lost on this one -- it reads back as 23:59:59.
+        ("-00:00:01", timedelta(seconds=-1)),
+        # Past 999 hours PyMySQL stops parsing and hands the string through, so
+        # anything expecting a timedelta from the driver raises AttributeError.
+        ("78883632:00:00", timedelta(hours=78883632)),
+        ("-78883632:00:01", -timedelta(hours=78883632, seconds=1)),
+        ("00:00:00.123456", timedelta(microseconds=123456)),
+        ("-00:00:00.5", timedelta(microseconds=-500000)),
+    ],
+)
+def test_time_preserves_signed_and_multi_day_durations(wire_value, expected, dialect):
+    """StarRocks TIME is a signed duration, not a time of day.
+
+    It is held as a signed number of seconds and rendered as ``[-]HH:MM:SS``
+    with no day part, so ``timediff`` legitimately produces ``24:00:00`` and
+    ``-78883632:00:01``. Reflecting such a column as a time-of-day type
+    silently truncates every one of these.
+    """
+    result = TIME().result_processor(dialect, None)
+
+    assert result(wire_value) == expected
+
+
+def test_time_accepts_the_drivers_timedelta_unchanged(dialect):
+    """PyMySQL decodes TIME within its range for us; keep the full duration."""
+    result = TIME().result_processor(dialect, None)
+
+    assert result(timedelta(days=1)) == timedelta(hours=24)
+
+
+def test_time_decodes_bytes_from_the_driver(dialect):
+    result = TIME().result_processor(dialect, None)
+
+    assert result(b"24:00:00") == timedelta(hours=24)
+
+
+def test_time_passes_null_through(dialect):
+    assert TIME().result_processor(dialect, None)(None) is None
+
+
+def test_time_rejects_an_unparseable_value(dialect):
+    result = TIME().result_processor(dialect, None)
+
+    with pytest.raises(ValueError):
+        result("not a time")
+
+
+def test_generic_time_column_uses_the_starrocks_type(dialect):
+    """A declared sqlalchemy.Time must not fall back to the MySQL processor."""
+    column = Column("c", sqltypes.Time())
+
+    assert isinstance(column.type.dialect_impl(dialect), TIME)
 
 
 def test_variant_insert_parses_json_server_side(dialect):
