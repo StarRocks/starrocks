@@ -98,7 +98,8 @@ private:
     void _cache_segment_no_lock(std::string_view key, size_t mem_cost, std::shared_ptr<Segment> segment,
                                 CacheCleanup* cleanup);
 
-    void insert(std::string_view key, CacheValue* ptr, size_t size, CacheCleanup* cleanup = nullptr);
+    void insert(std::string_view key, CacheValue* ptr, size_t size);
+    void insert(std::string_view key, CacheValue* ptr, size_t size, CacheCleanup* cleanup);
 
     std::unique_ptr<ShardedLRUCache> _cache;
 

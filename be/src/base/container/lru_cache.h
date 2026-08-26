@@ -227,7 +227,7 @@ public:
 
 // An entry is a variable length heap-allocated structure.  Entries
 // are kept in a circular doubly linked list ordered by access time.
-struct LRUHandle {
+typedef struct LRUHandle {
     void* value;
     void (*deleter)(const CacheKey&, void* value);
     LRUHandle* next_hash;
@@ -256,7 +256,8 @@ struct LRUHandle {
         (*deleter)(key(), value);
         ::free(this);
     }
-};
+
+} LRUHandle;
 
 // We provide our own simple hash tablet since it removes a whole bunch
 // of porting hacks and is also faster than some of the built-in hash
@@ -302,9 +303,13 @@ public:
     // Like Cache methods, but with an extra "hash" parameter.
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                           void (*deleter)(const CacheKey& key, void* value),
-                          CachePriority priority = CachePriority::NORMAL, CacheCleanup* cleanup = nullptr);
+                          CachePriority priority = CachePriority::NORMAL);
+    Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                          void (*deleter)(const CacheKey& key, void* value), CachePriority priority,
+                          CacheCleanup* cleanup);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
-    void release(Cache::Handle* handle, CacheCleanup* cleanup = nullptr);
+    void release(Cache::Handle* handle);
+    void release(Cache::Handle* handle, CacheCleanup* cleanup);
     void touch(const CacheKey& key, uint32_t hash);
     void erase(const CacheKey& key, uint32_t hash);
     int prune();

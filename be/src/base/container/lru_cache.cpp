@@ -262,6 +262,10 @@ Cache::Handle* LRUCache::lookup(const CacheKey& key, uint32_t hash) {
     return reinterpret_cast<Cache::Handle*>(e);
 }
 
+void LRUCache::release(Cache::Handle* handle) {
+    release(handle, nullptr);
+}
+
 void LRUCache::release(Cache::Handle* handle, CacheCleanup* cleanup) {
     if (handle == nullptr) {
         return;
@@ -340,6 +344,11 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
     e->in_cache = false;
     _unref(e);
     _usage -= e->charge;
+}
+
+Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
+    return insert(key, hash, value, value_size, deleter, priority, nullptr);
 }
 
 Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,

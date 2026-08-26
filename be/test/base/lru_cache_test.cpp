@@ -414,7 +414,7 @@ TEST_F(CacheTest, TouchUpdatesRecencyOnShardedCache) {
 TEST_F(CacheTest, InsertDefersDeleterUntilCleanup) {
     const size_t entry_charge = entry_charge_for_int_key();
     const auto keys = find_int_keys_in_same_shard();
-    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * kNumShards));
+    auto cache = std::make_unique<ShardedLRUCache>(entry_charge * kNumShards);
 
     insert_cache(cache.get(), keys[0], 1000, 1);
 
@@ -440,7 +440,7 @@ TEST_F(CacheTest, InsertDefersDeleterUntilCleanup) {
 
 TEST_F(CacheTest, ReleaseDefersDeleterUntilCleanup) {
     const size_t entry_charge = entry_charge_for_int_key();
-    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * kNumShards));
+    auto cache = std::make_unique<ShardedLRUCache>(entry_charge * kNumShards);
 
     std::string encoded;
     auto* handle = cache->insert(EncodeKey(&encoded, 100), EncodeValue(1000), 1, &CacheTest::Deleter);

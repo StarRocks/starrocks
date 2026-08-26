@@ -109,6 +109,10 @@ void Metacache::cache_value_deleter(const CacheKey& /*key*/, void* value) {
     delete static_cast<CacheValue*>(value);
 }
 
+void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size) {
+    insert(key, ptr, size, nullptr);
+}
+
 void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size, CacheCleanup* cleanup) {
     Cache::Handle* handle =
             _cache->insert(CacheKey(key), ptr, size, cache_value_deleter, CachePriority::NORMAL, cleanup);
@@ -189,12 +193,8 @@ std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_
 
 std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
     CacheCleanup cleanup;
-    std::shared_ptr<Segment> segment;
-    {
-        std::shared_lock lock(_mutex);
-        segment = _lookup_segment_no_lock(key, &cleanup);
-    }
-    return segment;
+    std::shared_lock lock(_mutex);
+    return _lookup_segment_no_lock(key, &cleanup);
 }
 
 std::shared_ptr<Segment> Metacache::_lookup_segment_no_lock(std::string_view key, CacheCleanup* cleanup) {
@@ -254,10 +254,8 @@ bool Metacache::lookup_aggregation_partition(std::string_view key) {
 void Metacache::cache_segment(std::string_view key, std::shared_ptr<Segment> segment) {
     auto mem_cost = segment->mem_usage();
     CacheCleanup cleanup;
-    {
-        std::unique_lock lock(_mutex);
-        _cache_segment_no_lock(key, mem_cost, std::move(segment), &cleanup);
-    }
+    std::unique_lock lock(_mutex);
+    _cache_segment_no_lock(key, mem_cost, std::move(segment), &cleanup);
 }
 
 void Metacache::_cache_segment_no_lock(std::string_view key, size_t mem_cost, std::shared_ptr<Segment> segment,
@@ -270,31 +268,28 @@ std::shared_ptr<Segment> Metacache::cache_segment_if_absent(std::string_view key
                                                             const std::shared_ptr<Segment>& segment) {
     auto mem_cost = segment->mem_usage();
     CacheCleanup cleanup;
-    std::shared_ptr<Segment> result;
-    {
-        std::unique_lock lock(_mutex);
-        result = _lookup_segment_no_lock(key, &cleanup);
-        if (result == nullptr) {
-            _cache_segment_no_lock(key, mem_cost, segment, &cleanup);
-            result = _lookup_segment_no_lock(key, &cleanup);
-        }
+    std::unique_lock lock(_mutex);
+    auto seg = _lookup_segment_no_lock(key, &cleanup);
+    if (seg != nullptr) {
+        // already exists, return the one in cache
+        return seg;
     }
-    return result;
+    _cache_segment_no_lock(key, mem_cost, segment, &cleanup);
+    return _lookup_segment_no_lock(key, &cleanup);
 }
 
 intptr_t Metacache::cache_segment_if_present(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
     CacheCleanup cleanup;
-    intptr_t result = 0;
-    {
-        std::unique_lock lock(_mutex);
-        auto segment = _lookup_segment_no_lock(key, &cleanup);
-        if (segment != nullptr &&
-            (segment_addr_hint == 0 || reinterpret_cast<intptr_t>(segment.get()) == segment_addr_hint)) {
-            _cache_segment_no_lock(key, mem_cost, std::move(segment), &cleanup);
-            result = segment_addr_hint;
-        }
+    std::unique_lock lock(_mutex);
+    auto seg = _lookup_segment_no_lock(key, &cleanup);
+    if (seg == nullptr) {
+        return 0;
     }
-    return result;
+    if (segment_addr_hint != 0 && reinterpret_cast<intptr_t>(seg.get()) != segment_addr_hint) {
+        return 0;
+    }
+    _cache_segment_no_lock(key, mem_cost, std::move(seg), &cleanup);
+    return segment_addr_hint;
 }
 
 void Metacache::cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec) {
