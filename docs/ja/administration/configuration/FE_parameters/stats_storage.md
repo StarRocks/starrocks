@@ -270,7 +270,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_online_optimize_table`
 
-- デフォルト：true
+- デフォルト：false
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
