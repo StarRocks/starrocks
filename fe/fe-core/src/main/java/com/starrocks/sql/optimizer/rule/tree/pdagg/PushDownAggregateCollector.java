@@ -383,14 +383,14 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         // pushed to exactly one side. count(*)/count(col) has no aggregationsRefs to source-check above,
         // so without this strip both sides would otherwise accept it.
         Map<ColumnRefOperator, CallOperator> childAggregations = Maps.newHashMap(context.aggregations);
-        if (!childAggregations.isEmpty()) {
-            childAggregations.entrySet().removeIf(
-                    e -> PushDownAggregateUtils.isCountAgg(e.getValue())
-                            && !PushDownAggregateUtils.canPushCountToJoinChild(join.getJoinType(), child));
-            if (childAggregations.isEmpty()) {
-                // nothing left to pre-aggregate on this side; don't degenerate into a group-by-only push down.
-                return AggregatePushDownContext.EMPTY;
-            }
+        childAggregations.entrySet().removeIf(
+                e -> PushDownAggregateUtils.isCountAgg(e.getValue())
+                        && !PushDownAggregateUtils.canPushCountToJoinChild(join.getJoinType(), child));
+        if (childAggregations.size() != context.aggregations.size()) {
+            // A count was stripped from this side. Pushing only the remaining aggregations is not an option:
+            // pushing anything at all collapses this child to one row per group key, and the count left above
+            // the join would then count the collapsed rows instead of the real join rows. Refuse entirely.
+            return AggregatePushDownContext.EMPTY;
         }
 
         int rootToLeafPathIndex = child == 0 ? context.rootToLeafPathIndex : nextRootToLeafPathIndex.getAndIncrement();

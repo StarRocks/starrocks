@@ -152,7 +152,11 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         // operator with the mapping of c2->c1. At this time, c2 and c1 are both columnRef, but they are different.
         if (!originProjectMap.values().stream().allMatch(ScalarOperator::isColumnRef) ||
                 !originProjectMap.entrySet().stream().allMatch(e -> e.getKey().equals(e.getValue()))) {
-            rewriteProject(context, originProjectMap);
+            if (!rewriteProject(context, originProjectMap)) {
+                // this pass disagrees with the collector about what is pushable here; abandon the push down
+                // rather than producing a wrong plan or throwing at the user.
+                return visit(optExpression, context);
+            }
         }
 
         context.aggregations.keySet().forEach(k -> originProjectMap.put(k, k));
@@ -162,10 +166,35 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         return processChild(newOpt, context);
     }
 
+    private static boolean isCaseWhenOrIf(ScalarOperator op) {
+        return op instanceof CaseWhenOperator
+                || (op instanceof CallOperator && ((CallOperator) op).getFunction() != null
+                && FunctionSet.IF.equals(((CallOperator) op).getFunction().getFunctionName().getFunction()));
+    }
+
+    // count() can't be split per-branch of a case-when/if: the NULL branch would make the partial value NULL,
+    // and sum(NULL) = NULL while count(...) = 0. The collector refuses such a push down; check it here too,
+    // before mutating anything, so a disagreement between the two passes drops the push down instead of
+    // corrupting the plan.
+    private boolean canRewriteProject(AggregatePushDownContext context,
+                                      Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
+        return context.aggregations.values().stream()
+                .filter(PushDownAggregateUtils::isCountAgg)
+                .filter(aggFn -> !aggFn.getArguments().isEmpty())
+                .map(aggFn -> aggFn.getChild(0))
+                .filter(ScalarOperator::isColumnRef)
+                .noneMatch(input -> isCaseWhenOrIf(originProjectMap.get(input)));
+    }
+
     // rewrite groupBys/aggregation by project expression, maybe needs push down
-    // expression with aggregation or rewrite project expression
-    private void rewriteProject(AggregatePushDownContext context,
-                                Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
+    // expression with aggregation or rewrite project expression.
+    // Returns false if this project can't be rewritten, in which case context is left untouched.
+    private boolean rewriteProject(AggregatePushDownContext context,
+                                   Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
+        if (!canRewriteProject(context, originProjectMap)) {
+            return false;
+        }
+
         // rewrite group bys
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originProjectMap);
         context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
@@ -192,15 +221,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
             ScalarOperator aggExpr = originProjectMap.get(aggInput);
             boolean isCaseWhen = aggExpr instanceof CaseWhenOperator;
-            boolean isIfFn = aggExpr instanceof CallOperator
-                    && ((CallOperator) aggExpr).getFunction() != null
-                    && FunctionSet.IF.equals(((CallOperator) aggExpr).getFunction().getFunctionName().getFunction());
+            boolean isIfFn = !isCaseWhen && isCaseWhenOrIf(aggExpr);
 
+            // count() never reaches the two branches below: canRewriteProject() above already bailed out.
             if (isCaseWhen) {
-                // count() can't be split per-branch: the NULL branch would make the partial value NULL,
-                // and sum(NULL) = NULL while count(...) = 0. The collector must have already refused this.
-                Preconditions.checkState(!PushDownAggregateUtils.isCountAgg(aggFn),
-                        "count aggregate must not reach the case-when push down path");
                 // Clone to avoid mutating the shared object in originProjectMap/project's columnRefMap.
                 // Without clone, when multiple aggregations reference the same CASE WHEN column,
                 // the first aggregation's setThenClause/setElseClause corrupts the shared operator.
@@ -233,9 +257,6 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 context.aggregations.remove(key);
                 originProjectMap.put(key, new CaseWhenOperator(key.getType(), caseWhen));
             } else if (isIfFn) {
-                // Same reasoning as the CASE-WHEN branch above.
-                Preconditions.checkState(!PushDownAggregateUtils.isCountAgg(aggFn),
-                        "count aggregate must not reach the if() push down path");
                 // Clone to avoid mutating the shared object (same reason as CaseWhen above).
                 CallOperator ifFn = (CallOperator) aggExpr.clone();
                 ifFn.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
@@ -258,6 +279,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 context.aggregations.put(key, (CallOperator) rewriter.rewrite(aggFn));
             }
         }
+        return true;
     }
 
     private ColumnRefOperator replaceByNewAggregation(CallOperator originAggFn, ScalarOperator input,
@@ -294,6 +316,13 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 .flatMap(Collection::stream)
                 .distinct().collect(Collectors.toList());
 
+        // Every whitelisted function has a rollup mapping today, but that map lives in another module;
+        // if one ever goes missing, drop the push down instead of throwing at the user.
+        if (allAggregateRefs.stream().map(aggregate.getAggregations()::get)
+                .anyMatch(c -> AggregateFunctionRollupUtils.getRollupFunctionName(c, false) == null)) {
+            return visit(optExpression, context);
+        }
+
         // rewrite origin aggregation
         for (ColumnRefOperator ref : allAggregateRefs) {
             CallOperator call = aggregate.getAggregations().get(ref);
@@ -322,9 +351,8 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     // Used when rewriting the aggregate that sits above the push-down target: the rolled-up
     // function name may differ from origin's (e.g. count -> sum).
     private CallOperator genRollupAggregation(CallOperator origin, ColumnRefOperator partialRef) {
+        // callers check for a null rollup name up front and abandon the push down if there is none.
         String rollupName = AggregateFunctionRollupUtils.getRollupFunctionName(origin, false);
-        // canPushDown() only lets whitelisted functions through, and every one of them has a rollup mapping.
-        Preconditions.checkState(rollupName != null, "no rollup function for %s", origin);
         return genAggregation(rollupName, origin, partialRef);
     }
 
@@ -378,13 +406,14 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         // must land on exactly one side. The collector already enforces this; re-derive it here too since
         // this pass independently re-walks the push-down path instead of following the collector's choice.
         Map<ColumnRefOperator, CallOperator> childAggregations = Maps.newHashMap(context.aggregations);
-        if (!childAggregations.isEmpty()) {
-            childAggregations.entrySet().removeIf(
-                    e -> PushDownAggregateUtils.isCountAgg(e.getValue())
-                            && !PushDownAggregateUtils.canPushCountToJoinChild(join.getJoinType(), child));
-            if (childAggregations.isEmpty()) {
-                return process(joinOpt.inputAt(child), AggregatePushDownContext.EMPTY);
-            }
+        childAggregations.entrySet().removeIf(
+                e -> PushDownAggregateUtils.isCountAgg(e.getValue())
+                        && !PushDownAggregateUtils.canPushCountToJoinChild(join.getJoinType(), child));
+        if (childAggregations.size() != context.aggregations.size()) {
+            // A count was stripped from this side; pushing the rest would still collapse this child's
+            // cardinality and make the count left above the join wrong. Refuse entirely, matching the
+            // collector's decision.
+            return process(joinOpt.inputAt(child), AggregatePushDownContext.EMPTY);
         }
 
         AggregatePushDownContext childContext = new AggregatePushDownContext();

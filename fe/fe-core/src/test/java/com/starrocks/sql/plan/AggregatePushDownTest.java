@@ -83,6 +83,30 @@ public class AggregatePushDownTest extends PlanTestBase {
     }
 
     @Test
+    public void testCountNotLeftAboveJoinWhenOtherAggPushed() throws Exception {
+        // Pushing ANY aggregation to a join child collapses that child to one row per group key.
+        // count(*) is the only whitelisted function sensitive to that collapse, so if count() is
+        // stripped from a side (because it may only land on one side of the join) the remaining
+        // aggregations must not be pushed either -- otherwise the count() left above the join
+        // counts the collapsed rows instead of the real join rows.
+        //
+        // t0 = {(1,10),(1,20)}, t1 = {(1),(1),(1)} joins to 6 rows: sum = 90, count = 6.
+        // Collapsing t0 to a single (v1=1, sum=30) row would yield count = 3.
+        String plan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2), count(*) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE "), plan);
+
+        String leftJoinPlan = getFragmentPlan(
+                "select t0.v1, sum(t1.v5), count(*) from t0 left join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(1, StringUtils.countMatches(leftJoinPlan, ":AGGREGATE "), leftJoinPlan);
+
+        // Sanity: sum() alone is insensitive to the collapse, so it is still pushed below the join.
+        String sumOnlyPlan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(sumOnlyPlan, ":AGGREGATE "), sumOnlyPlan);
+    }
+
+    @Test
     public void testPushDownDisableOnBroadcastJoin() {
         connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
         try {

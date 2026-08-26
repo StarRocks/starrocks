@@ -35,6 +35,12 @@ class PushDownAggregateUtils {
      * while count-of-nothing is 0, so the partial column must never be NULL-padded by a join; and because
      * count over a join is N0*N1 (not recoverable from sum(cnt_left) and sum(cnt_right)), it must be pushed
      * to exactly one side. v1 only covers INNER/CROSS pushed to child 0.
+     *
+     * `child == 0` is an arbitrary tie-break, not a semantic requirement: count(*) uses no columns, so the
+     * "aggregation columns must come from this child" check accepts both children of an inner/cross join and
+     * something has to pick one. Child 1 would be equally correct. Note child 0 is the logical left input at
+     * this point in the plan, which is not necessarily the left table as written in the SQL, so which shape of
+     * query benefits from this push down depends on the join order chosen upstream.
      */
     static boolean canPushCountToJoinChild(JoinOperator type, int child) {
         if (type.isInnerJoin() || type.isCrossJoin()) {
