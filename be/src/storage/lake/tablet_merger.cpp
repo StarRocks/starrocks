@@ -19,7 +19,6 @@
 #include <algorithm>
 #include <limits>
 #include <map>
-#include <numeric>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
@@ -35,16 +34,12 @@
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "gutil/stl_util.h"
-#include "gutil/strings/escaping.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -2427,9 +2422,6 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
     ASSIGN_OR_RETURN(auto range_proof, validate_metadata_reuse_source_ranges(contexts, target));
     if (range_proof != MergeSourceRangeProof::kReusable) {
         return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
-    }
-    if (contexts.empty()) {
-        return Status::InternalError("tablet merge identical SST proof has no source context");
     }
 
     const auto& canonical_metadata = *contexts.front().metadata();

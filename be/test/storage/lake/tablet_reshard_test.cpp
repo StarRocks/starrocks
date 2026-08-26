@@ -23,7 +23,6 @@
 #include <ctime>
 #include <functional>
 #include <limits>
-#include <numeric>
 #include <set>
 
 #include "base/failpoint/fail_point.h"
@@ -1400,20 +1399,15 @@ protected:
                                  const std::vector<int32_t>& deleted_keys) {
         ASSIGN_OR_ABORT(auto rows, read_two_column_rows(metadata));
         EXPECT_EQ(expected_rows, rows);
-        int64_t key_sum = 0;
         std::set<int32_t> distinct_keys;
         std::vector<std::string> keys;
         for (const auto& [key, value] : expected_rows) {
             (void)value;
-            key_sum += key;
             distinct_keys.insert(key);
             keys.emplace_back(encode_int_primary_key(key));
         }
         for (int32_t key : deleted_keys) keys.emplace_back(encode_int_primary_key(key));
         EXPECT_EQ(expected_rows.size(), distinct_keys.size());
-        EXPECT_EQ(std::accumulate(expected_rows.begin(), expected_rows.end(), int64_t{0},
-                                  [](int64_t sum, const auto& row) { return sum + row.first; }),
-                  key_sum);
 
         ASSIGN_OR_ABORT(auto values, load_index_values(metadata, metadata->id(), keys));
         ASSERT_EQ(keys.size(), values.size());
