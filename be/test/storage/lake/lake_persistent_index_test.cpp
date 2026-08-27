@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -171,6 +172,25 @@ protected:
         }));
         std::sort(ssts.begin(), ssts.end());
         return ssts;
+    }
+
+    std::vector<std::string> sst_inventory_delta(const std::vector<std::string>& before,
+                                                 const std::vector<std::string>& after) {
+        std::vector<std::string> delta;
+        std::set_difference(after.begin(), after.end(), before.begin(), before.end(), std::back_inserter(delta));
+        return delta;
+    }
+
+    void remove_exact_ssts(int64_t tablet_id, const std::vector<std::string>& filenames) {
+        for (const auto& filename : filenames) {
+            const auto path = _lp->sst_location(tablet_id, filename);
+            const auto exists = FileSystem::Default()->path_exists(path);
+            if (exists.ok()) {
+                CHECK_OK(FileSystem::Default()->delete_file(path));
+            } else {
+                CHECK(exists.is_not_found()) << path << ": " << exists;
+            }
+        }
     }
 
     TabletSchemaPB create_tablet_schema_pb(const std::vector<std::pair<std::string, std::string>>& columns,
@@ -859,7 +879,8 @@ TEST_F(LakePersistentIndexTest, test_memtable_flush_failure_removes_current_outp
             "PersistentIndexSstable::init:table_open_error",
     };
 
-    auto retry_from_fresh_index = [&](const TabletMetadataPtr& metadata, bool tde, const std::string& key) {
+    auto retry_from_fresh_index = [&](const TabletMetadataPtr& metadata, bool tde, const std::string& key,
+                                      std::vector<std::string>* committed_filenames) {
         auto retry = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
         ASSERT_OK(retry->init(metadata));
         const Slice key_slice(key);
@@ -883,6 +904,10 @@ TEST_F(LakePersistentIndexTest, test_memtable_flush_failure_removes_current_outp
         IndexValue actual;
         ASSERT_OK(reloaded->get(1, &key_slice, &actual));
         EXPECT_EQ(value, actual);
+
+        for (const auto& sstable : committed->sstable_meta().sstables()) {
+            committed_filenames->emplace_back(sstable.filename());
+        }
     };
 
     for (bool tde : {false, true}) {
@@ -890,6 +915,7 @@ TEST_F(LakePersistentIndexTest, test_memtable_flush_failure_removes_current_outp
         for (const char* failure_point : failure_points) {
             auto metadata = make_varchar_pk_metadata();
             ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+            ASSERT_TRUE(sst_inventory(metadata->id()).empty());
             const std::string key = fmt::format("flush-failure-{}-{}", tde, failure_point);
             const Slice key_slice(key);
             const IndexValue value(kValue);
@@ -928,54 +954,65 @@ TEST_F(LakePersistentIndexTest, test_memtable_flush_failure_removes_current_outp
             failed.reset();
             SyncPoint::GetInstance()->ClearCallBack(failure_point);
             SyncPoint::GetInstance()->DisableProcessing();
-            retry_from_fresh_index(metadata, tde, key);
+            const auto failed_outputs = sst_inventory_delta(before, sst_inventory(metadata->id()));
+            std::vector<std::string> retry_outputs;
+            retry_from_fresh_index(metadata, tde, key, &retry_outputs);
+            remove_exact_ssts(metadata->id(), failed_outputs);
+            remove_exact_ssts(metadata->id(), retry_outputs);
+            EXPECT_THAT(sst_inventory(metadata->id()), testing::ElementsAreArray(before));
         }
 
-        // The first completed inactive output can remain after a later inactive output fails: that outer
-        // orphan window is intentionally outside the nearest-output cleanup contract. The failed second
-        // output, metadata mutation, and fresh retry remain covered here.
+        // Make the first output an inactive flush, then synchronously hand it off before arming the second
+        // flush's callback. This gives the callback one deterministic current output to fail: callback order
+        // cannot decide which logical memtable receives the error.
         auto metadata = make_varchar_pk_metadata();
         ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        ASSERT_TRUE(sst_inventory(metadata->id()).empty());
         const std::string first_key = fmt::format("first-inactive-{}", tde);
         const std::string second_key = fmt::format("second-inactive-{}", tde);
+        const auto before = sst_inventory(metadata->id());
         const std::string metadata_before = metadata->SerializeAsString();
-        std::vector<std::string> created_paths;
-        int create_count = 0;
-        std::mutex created_paths_mutex;
-        ConfigResetGuard<int32_t> max_memtables_guard(&config::pk_index_memtable_max_count, 3);
         auto failed = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
         ASSERT_OK(failed->init(metadata));
+        const Slice first_slice(first_key);
+        const Slice second_slice(second_key);
+        const IndexValue value(kValue);
+        ASSERT_OK(failed->insert(1, &first_slice, &value, /*version=*/1));
+        ASSERT_OK(failed->flush_memtable(/*force=*/true));
+        ASSERT_OK(failed->sync_flush_all_memtables(10'000'000));
+        const auto after_first_handoff = sst_inventory(metadata->id());
+        const auto first_outputs = sst_inventory_delta(before, after_first_handoff);
+        ASSERT_EQ(1, first_outputs.size());
+
+        std::string second_created_path;
         SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void* arg) {
-            std::lock_guard<std::mutex> lock(created_paths_mutex);
             auto* result = static_cast<std::pair<const std::string*, Status*>*>(arg);
-            created_paths.emplace_back(*result->first);
-            if (++create_count == 2) {
-                *result->second = Status::InternalError("injected memtable flush failure");
-            }
+            second_created_path = *result->first;
+            *result->second = Status::InternalError("injected memtable flush failure");
         });
         SyncPoint::GetInstance()->EnableProcessing();
         DeferOp disable_multi_injection([&]() {
             SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::flush:after_create");
             SyncPoint::GetInstance()->DisableProcessing();
         });
-        const Slice first_slice(first_key);
-        const Slice second_slice(second_key);
-        const IndexValue value(kValue);
-        ASSERT_OK(failed->insert(1, &first_slice, &value, /*version=*/1));
-        ASSERT_OK(failed->flush_memtable(/*force=*/true));
         ASSERT_OK(failed->insert(1, &second_slice, &value, /*version=*/1));
         ASSERT_OK(failed->flush_memtable(/*force=*/true));
         const Status multi_status = failed->sync_flush_all_memtables(10'000'000);
         EXPECT_TRUE(multi_status.is_internal_error()) << multi_status;
         EXPECT_EQ(metadata_before, metadata->SerializeAsString());
-        ASSERT_GE(created_paths.size(), 2);
-        EXPECT_TRUE(FileSystem::Default()->path_exists(created_paths.front()).ok());
-        EXPECT_TRUE(FileSystem::Default()->path_exists(created_paths.back()).is_not_found());
+        EXPECT_TRUE(FileSystem::Default()->path_exists(_lp->sst_location(metadata->id(), first_outputs[0])).ok());
+        EXPECT_TRUE(FileSystem::Default()->path_exists(second_created_path).is_not_found());
+        EXPECT_THAT(sst_inventory(metadata->id()), testing::ElementsAreArray(after_first_handoff));
 
         failed.reset();
         SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::flush:after_create");
         SyncPoint::GetInstance()->DisableProcessing();
-        retry_from_fresh_index(metadata, tde, second_key);
+        const auto failed_outputs = sst_inventory_delta(before, sst_inventory(metadata->id()));
+        std::vector<std::string> retry_outputs;
+        retry_from_fresh_index(metadata, tde, second_key, &retry_outputs);
+        remove_exact_ssts(metadata->id(), failed_outputs);
+        remove_exact_ssts(metadata->id(), retry_outputs);
+        EXPECT_THAT(sst_inventory(metadata->id()), testing::ElementsAreArray(before));
     }
 }
 
