@@ -274,20 +274,23 @@ description: "Alphabetical d - h"
 - 类型: 平均值
 - 描述: FE 的新连接速率。
 
-## `fe_edit_log`
-
-- 单位: 个（`current`）/ 字节（`current_bytes`）
-- 类型: 累积值
-- 标签: `type` (`current` 或 `current_bytes`)
-- 描述: 自上次有效清理以来 FE 元数据日志的积压量：`current` 统计条数，`current_bytes` 统计字节数。两者随日志写入而累加，仅当某轮 checkpoint **确实删除了** journal database 时才会重新基准化——`current_bytes` 归零，`current` 被置为 BDB JE 中仍保留的日志条数。Checkpoint 守护线程只有在所有已注册的 FE 都收到新 image 之后才会删除旧日志，因此一个无法访问的已注册 FE 会导致两个序列持续增长，可作为元数据磁盘即将写满的预警。
-
-  两点注意：FE 进程重启后两个序列都会从 0 重新开始；两者仅覆盖 FE 元数据日志，不含存算分离模式下与之共用同一个 BDB JE 环境的 StarMgr 日志。它们以 counter 类型上报，因此适合观察增长和趋势，而不应当作磁盘实际占用的精确值。
-
 ## `fe_edit_log_read`
 
 - 单位: 次/秒
 - 类型: 平均值
 - 描述: FE 编辑日志的读取速度。
+
+## `fe_edit_log_retained`
+
+- 单位: 个
+- 类型: 累积值
+- 描述: 自上次有效清理以来 BDB JE 中保留的 FE 元数据日志条数。该值随日志写入而累加，仅当某轮 checkpoint **确实删除了** journal database 时才会重新基准化，此时被置为 BDB JE 中仍保留的日志条数。Checkpoint 守护线程只有在所有已注册的 FE 都收到新 image 之后才会删除旧日志，因此一个无法访问的已注册 FE 会导致该值持续增长，可作为元数据磁盘即将写满的预警。FE 进程重启后该值从 0 重新开始；且仅覆盖 FE 元数据日志，不含存算分离模式下与之共用同一个 BDB JE 环境的 StarMgr 日志。
+
+## `fe_edit_log_retained_bytes`
+
+- 单位: 字节
+- 类型: 累积值
+- 描述: 自上次有效清理以来 BDB JE 中保留的 FE 元数据日志字节数。累加与重新基准化的行为同 [`fe_edit_log_retained`](#fe_edit_log_retained)，区别在于清理成功后该值归零，而不是被置为剩余量。适合观察增长和趋势，不应当作磁盘实际占用的精确值：它不含上一次清理后保留下来的日志，也不含 BDB JE 尚未回收的空间，并且在 FE 进程重启后从 0 重新开始。
 
 ## `fe_edit_log_size_bytes`
 

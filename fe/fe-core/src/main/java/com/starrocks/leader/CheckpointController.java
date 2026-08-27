@@ -516,9 +516,9 @@ public class CheckpointController extends LeaderDaemon {
             if (belongToGlobalStateMgr && MetricRepo.hasInit) {
                 // Only on a real reclaim. deleteJournals() returns normally when it removes
                 // nothing, so keying off "it did not throw" would also fire when deleteVersion is
-                // pinned at 0 by an unreachable peer, zeroing a backlog that is still growing.
-                MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.reset();
-                MetricRepo.COUNTER_EDIT_LOG_CURRENT.update(
+                // pinned at 0 by an unreachable peer, zeroing a value that is still growing.
+                MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.reset();
+                MetricRepo.COUNTER_EDIT_LOG_RETAINED.update(
                         getRetainedJournalCount(databaseNamesAfter, journal.getMaxJournalId()));
             }
             LOG.info("Delete old edit log succeeded: deleteVersion={}, imageVersion={}, "
@@ -547,7 +547,7 @@ public class CheckpointController extends LeaderDaemon {
 
     /**
      * Journals still held after a reclaim: from the oldest surviving journal database up to the
-     * newest written id. Called once per successful cleanup to re-baseline the backlog counter -
+     * newest written id. Called once per successful cleanup to re-baseline edit_log_retained -
      * never from the metrics path, since getMaxJournalId() runs Database.count() over the newest
      * journal database.
      */

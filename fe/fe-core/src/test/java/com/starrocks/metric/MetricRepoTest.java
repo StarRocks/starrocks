@@ -140,16 +140,18 @@ public class MetricRepoTest extends PlanTestBase {
         MetricRepo.getMetric(visitor, params);
         String output = visitor.build();
 
-        Assertions.assertTrue(output.contains("starrocks_fe_edit_log{type=\"current\""), output);
-        Assertions.assertTrue(output.contains("starrocks_fe_edit_log{type=\"current_bytes\""), output);
+        // Count and bytes are separate metric names, each carrying its own unit - a single
+        // # TYPE / # HELP line is emitted per name, so they cannot share one.
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log_retained counter"), output);
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log_retained_bytes counter"), output);
+        // and they must not be re-introduced as labels on the old shared name
+        Assertions.assertFalse(output.contains("starrocks_fe_edit_log{type="), output);
+
+        // image outcomes DO share a name: same quantity, same unit, two results
         Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"success\""), output);
         Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"failed\""), output);
         Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"success\""), output);
         Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"failed\""), output);
-
-        // All of these are counters. Only one TYPE line is emitted per metric name
-        // (PrometheusMetricVisitor dedupes it), so the series sharing a name must agree.
-        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log counter"), output);
         Assertions.assertTrue(output.contains("# TYPE starrocks_fe_image_write counter"), output);
         Assertions.assertTrue(output.contains("# TYPE starrocks_fe_image_push counter"), output);
     }

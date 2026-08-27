@@ -98,9 +98,10 @@ public class JournalWriter {
         this.journalQueue = journalQueue;
         // StarMgr builds its own JournalWriter over the same class with a "starmgr_" prefix, and its
         // journal is reclaimed by a separate CheckpointController. Only the unprefixed FE metadata
-        // journal feeds the backlog counters, so that what accumulates here matches what that
+        // journal feeds the retained-journal counters, so that what accumulates here matches what that
         // controller resets.
-        this.globalStateJournal = Strings.isNullOrEmpty(journal.getPrefix());
+        // Tolerates a null journal: test doubles subclass this writer via super(null, queue).
+        this.globalStateJournal = journal != null && Strings.isNullOrEmpty(journal.getPrefix());
     }
 
     /**
@@ -390,7 +391,7 @@ public class JournalWriter {
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) currentBatchTasks.size());
             if (globalStateJournal) {
-                MetricRepo.COUNTER_EDIT_LOG_CURRENT.increase((long) currentBatchTasks.size());
+                MetricRepo.COUNTER_EDIT_LOG_RETAINED.increase((long) currentBatchTasks.size());
             }
             MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update(durationMs);
             MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(currentBatchTasks.size());
@@ -400,7 +401,7 @@ public class JournalWriter {
             for (JournalTask e : currentBatchTasks) {
                 MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase(e.estimatedSizeByte());
                 if (globalStateJournal) {
-                    MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.increase(e.estimatedSizeByte());
+                    MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.increase(e.estimatedSizeByte());
                 }
             }
         }

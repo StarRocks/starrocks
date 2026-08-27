@@ -57,7 +57,7 @@ public class LongCounterMetric extends CounterMetric<Long> {
     }
 
     /**
-     * Only for "since the last X" counters such as edit_log{type="current"}, whose whole point is
+     * Only for "since the last X" counters such as edit_log_retained, whose whole point is
      * to drop back when X happens. Prometheus reads the drop as a counter restart, which is
      * acceptable here: the alternative is recomputing the level out of bdbje on every scrape, and
      * that puts a full btree scan on the metrics path. Do not call these on a plain cumulative

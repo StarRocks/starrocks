@@ -328,12 +328,12 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
-    // Journal backlog since the last effective cleanup. Accumulated on the write path and only
+    // Journals retained since the last effective cleanup. Accumulated on the write path and only
     // walked back when a journal database is actually removed - never read out of bdbje at scrape
     // time, because that would put Database.count() (a full btree scan, and slowest exactly when
-    // the backlog is largest) on the metrics path.
-    public static LongCounterMetric COUNTER_EDIT_LOG_CURRENT;
-    public static LongCounterMetric COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES;
+    // the retained set is largest) on the metrics path.
+    public static LongCounterMetric COUNTER_EDIT_LOG_RETAINED;
+    public static LongCounterMetric COUNTER_EDIT_LOG_RETAINED_BYTES;
     public static LongCounterMetric COUNTER_IMAGE_WRITE;
     public static LongCounterMetric COUNTER_IMAGE_WRITE_FAILED;
     public static LongCounterMetric COUNTER_IMAGE_PUSH;
@@ -942,14 +942,15 @@ public final class MetricRepo {
         COUNTER_EDIT_LOG_SIZE_BYTES =
                 new LongCounterMetric("edit_log_size_bytes", MetricUnit.BYTES, "size of edit log");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_SIZE_BYTES);
-        COUNTER_EDIT_LOG_CURRENT = new LongCounterMetric(
-                "edit_log", MetricUnit.OPERATIONS, "number of edit logs retained since the last cleanup");
-        COUNTER_EDIT_LOG_CURRENT.addLabel(new MetricLabel("type", "current"));
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_CURRENT);
-        COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES = new LongCounterMetric(
-                "edit_log", MetricUnit.BYTES, "bytes of edit logs retained since the last cleanup");
-        COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.addLabel(new MetricLabel("type", "current_bytes"));
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES);
+        // Separate metric names rather than one name with a type label: the two carry different
+        // units, and a single # TYPE / # HELP line is emitted per name. This also matches how
+        // edit_log_write / edit_log_read / edit_log_size_bytes above are already registered.
+        COUNTER_EDIT_LOG_RETAINED = new LongCounterMetric("edit_log_retained", MetricUnit.OPERATIONS,
+                "number of edit logs retained in bdbje since the last cleanup");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_RETAINED);
+        COUNTER_EDIT_LOG_RETAINED_BYTES = new LongCounterMetric("edit_log_retained_bytes", MetricUnit.BYTES,
+                "bytes of edit logs retained in bdbje since the last cleanup");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_RETAINED_BYTES);
         COUNTER_IMAGE_WRITE = new LongCounterMetric("image_write", MetricUnit.OPERATIONS, "counter of image generated");
         COUNTER_IMAGE_WRITE.addLabel(new MetricLabel("type", "success"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE);

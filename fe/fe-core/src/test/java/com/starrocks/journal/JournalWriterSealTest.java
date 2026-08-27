@@ -40,6 +40,18 @@ import java.util.function.BooleanSupplier;
  */
 public class JournalWriterSealTest {
 
+    /**
+     * The constructor must not dereference the journal. Test doubles elsewhere subclass this writer
+     * via super(null, queue) - notably GlobalStateMgrTest.StubJournalWriter - so reading
+     * journal.getPrefix() eagerly here breaks them with an NPE.
+     */
+    @Test
+    public void testConstructorToleratesNullJournal() {
+        JournalWriter writer = new JournalWriter(null, new ArrayBlockingQueue<>(1));
+
+        Assertions.assertNotNull(writer);
+    }
+
     @Test
     public void testWriteBatchCommitsAndAdvancesWatermark() throws Exception {
         TestJournal journal = new TestJournal();

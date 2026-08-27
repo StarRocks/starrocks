@@ -274,20 +274,23 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Average
 - Description: New connection rate of FE.
 
-## `fe_edit_log`
-
-- Unit: Count (`current`) / Bytes (`current_bytes`)
-- Type: Cumulative
-- Labels: `type` (`current` or `current_bytes`)
-- Description: Backlog of FE metadata journals since the last effective cleanup: `current` counts entries, `current_bytes` counts bytes. Both accumulate as journals are written and are re-baselined only when a checkpoint round actually removes a journal database — `current_bytes` returns to zero and `current` is set to the number of journals BDB JE still holds. The checkpoint daemon removes old journals only after every registered FE has received the new image, so a registered FE that cannot be reached leaves both series climbing, which is the early warning that the metadata disk is filling up.
-
-  Two caveats. Both series restart at zero when the FE process restarts, and both cover only the FE metadata journal, not the StarMgr journal that shares the same BDB JE environment in shared-data mode. They are reported as counters, so use them for growth and trend rather than as an exact on-disk size.
-
 ## `fe_edit_log_read`
 
 - Unit: Count/s
 - Type: Average
 - Description: Read speed of FE edit log.
+
+## `fe_edit_log_retained`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of FE metadata journals retained in BDB JE since the last effective cleanup. It accumulates as journals are written and is re-baselined only when a checkpoint round actually removes a journal database, at which point it is set to the number of journals BDB JE still holds. The checkpoint daemon removes old journals only after every registered FE has received the new image, so a registered FE that cannot be reached leaves this value climbing, which is the early warning that the metadata disk is filling up. It restarts at zero when the FE process restarts, and covers only the FE metadata journal — not the StarMgr journal that shares the same BDB JE environment in shared-data mode.
+
+## `fe_edit_log_retained_bytes`
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Bytes of FE metadata journals retained in BDB JE since the last effective cleanup. Same accumulate-and-re-baseline behavior as [`fe_edit_log_retained`](#fe_edit_log_retained), except that it returns to zero on a successful cleanup rather than being set to a remaining amount. Use it for growth and trend rather than as an exact on-disk size: it excludes journals that survived the previous cleanup, excludes space BDB JE has not reclaimed yet, and restarts at zero when the FE process restarts.
 
 ## `fe_edit_log_size_bytes`
 
