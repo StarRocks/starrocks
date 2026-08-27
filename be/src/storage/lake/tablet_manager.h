@@ -91,6 +91,38 @@ public:
     // Compact with pre-selected rowsets (for parallel compaction)
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context, std::vector<RowsetPtr> input_rowsets);
 
+    // Durable tablet-metadata layout contract:
+    //
+    // When file_bundling is disabled:
+    // - Version 1 is normally a standard lake protobuf file named with the tablet id and contains
+    //   one complete TabletMetadataPB for that tablet. For example, tablet 42 uses
+    //   `000000000000002A_0000000000000001.meta` with this content:
+    //       [optional protobuf checksum header][serialized TabletMetadataPB(42, version 1)]
+    // - Version 2 and later use the same per-tablet filename and standard TabletMetadataPB format.
+    //   For example, tablet 42 at version 7 uses
+    //   `000000000000002A_0000000000000007.meta` with this content:
+    //       [optional protobuf checksum header][serialized TabletMetadataPB(42, version 7)]
+    //
+    // When file_bundling is enabled for normal table creation and publish:
+    // - Version 1 is a single shared initial-metadata file for the physical partition. Its filename
+    //   uses tablet id 0, but its payload is still one complete, standard TabletMetadataPB, not a
+    //   BundleTabletMetadataPB. The embedded id can identify the tablet that wrote the shared file,
+    //   so an id-based read normalizes it to the requested tablet id. The filename and content are:
+    //       `0000000000000000_0000000000000001.meta`
+    //       [optional protobuf checksum header][serialized writer TabletMetadataPB(version 1)]
+    // - Version 2 and later use one bundle file per physical partition and version, also named with
+    //   tablet id 0. The file contains serialized per-tablet metadata pages followed by a
+    //   BundleTabletMetadataPB footer with page pointers, deduplicated schemas, and checksums. Each
+    //   read extracts and returns one tablet's TabletMetadataPB from that bundle. For version 7:
+    //       `0000000000000000_0000000000000007.meta`
+    //       [TabletMetadataPB(42) page][TabletMetadataPB(43) page]...[BundleTabletMetadataPB]
+    //       [optional bundle footer checksum][uint64 bundle footer size and flags]
+    //
+    // The actual version-1 write switch is TCreateTabletReq::enable_tablet_creation_optimization.
+    // For normal table creation FE enables it for a file-bundling table, but a standalone config,
+    // legacy data, or a specialized creation path can make the version-1 layout differ from the
+    // table's current file_bundling property. Readers must therefore retain both version-1
+    // fallbacks. The version-2+ bundled-metadata marker does not change the version-1 file encoding.
     Status put_tablet_metadata(const TabletMetadata& metadata);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);
@@ -133,7 +165,19 @@ public:
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
 
-    // Do not use this function except in a list dir
+    // Reads the tablet metadata named by |path|, but resolves it through this TabletManager's own
+    // LocationProvider: the tablet id comes from the filename, and a bundled partition is then read via
+    // bundle_tablet_metadata_location(tablet_id, version). The bundle path, the
+    // _bundle_tablet_metadata_group singleflight key, the metacache key, and the cn-free version-1
+    // fallback therefore all derive from the local provider, not from |path|.
+    //
+    // Precondition: |path| must resolve into the same physical partition as that tablet id's metadata
+    // root. Paths obtained by listing a metadata root satisfy this, including sibling tablets' files:
+    // their virtual roots differ (staros://<shard>/meta) but real_location() maps them to one physical
+    // partition. A path under a different physical partition does not qualify -- it would be served the
+    // local partition's bundle on a tablet-id collision. Reads against storage this provider does not
+    // describe belong in a reader that takes its root explicitly; see build_source_tablet_meta() in
+    // lake_replication_txn_manager.cpp.
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true,
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
@@ -235,6 +279,15 @@ public:
     std::string real_tablet_root_location(int64_t tablet_id) const;
 
     std::string tablet_metadata_root_location(int64_t tablet_id) const;
+
+    // Cache a process-local marker indicating that the tablet's physical partition uses bundled
+    // metadata. The marker key uses the resolved storage path so every tablet in the partition
+    // consults the same cache entry.
+    void cache_bundled_metadata_partition_marker(int64_t tablet_id);
+
+    // Check only the process-local metacache for the bundled-metadata marker. This does not inspect
+    // the local data cache or remote storage.
+    bool lookup_cached_bundled_metadata_partition_marker(int64_t tablet_id);
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
