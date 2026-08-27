@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -258,8 +259,10 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     sstable_pb.mutable_range()->CopyFrom(sst_range);
     RETURN_IF_ERROR(
             sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */, std::move(delvec)));
+    const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
     // try to merge to a existing fileset
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    _memtable->advance_max_rss_rowid(direct_max_rss_rowid);
     TRACE_COUNTER_INCREMENT("ingest_sst_times", 1);
     return Status::OK();
 }
@@ -613,7 +616,9 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     sstable_pb.mutable_range()->CopyFrom(del_sst_range);
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+    _memtable->advance_max_rss_rowid(direct_max_rss_rowid);
     TRACE_COUNTER_INCREMENT("bulk_erase_keys", n);
     return Status::OK();
 }
@@ -1729,6 +1734,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const bool use_parallel = should_parallel_rebuild_prefetch(rebuild_unit_count);
 
     if (use_parallel) {
+        TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::load_from_lake_tablet:parallel", nullptr);
         // Phase A: build all rebuild rowsets' iterators + flat scan units (each segment with its own
         // stats), since the parallel scan needs them all alive concurrently.
         ASSIGN_OR_RETURN(auto plan, build_rebuild_scan_units(tablet_mgr, metadata, base_version, builder, pkey_schema,
@@ -1787,6 +1793,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             }
         }
     } else {
+        TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::load_from_lake_tablet:serial", nullptr);
         // Serial fallback: build, scan-and-insert, and release ONE rowset at a time, so peak memory is
         // bounded to a single rowset's iterators plus one decoded chunk. Inserts each chunk straight
         // away (at most one chunk held), and applies a rowset's del files after its segments.
