@@ -20,6 +20,7 @@
 #include <cmath>
 
 #include "butil/time.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/cast_expr.h"
@@ -27,6 +28,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -305,6 +307,86 @@ TEST_F(VectorizedFunctionCallExprTest, prepare_close) {
     st = expr_context.open(&_runtime_state);
     ASSERT_TRUE(st.ok());
     expr_context.close(&_runtime_state);
+}
+
+// ---------------------------------------------------------------------------
+// ngram_bloom_filter pushdown helper: builds a ngram_search_case_insensitive
+// call so the index-side reader path can be probed directly with a bloom
+// filter and the index metadata a rowset would supply.
+// ---------------------------------------------------------------------------
+
+class NgramBloomFilterPushdownTest : public ::testing::Test {
+protected:
+    static TExprNode make_typed_node(TPrimitiveType::type t) {
+        TExprNode n;
+        n.node_type = TExprNodeType::SLOT_REF;
+        n.num_children = 0;
+        n.type = gen_type_desc(t);
+        return n;
+    }
+
+    TExprNode build_ngram_call_node() {
+        TFunction function;
+        TFunctionName functionName;
+        functionName.__set_function_name("ngram_search_case_insensitive");
+        function.__set_name(functionName);
+        function.__set_binary_type(TFunctionBinaryType::BUILTIN);
+        function.__set_fid(30441);
+        function.__set_has_var_args(false);
+        std::vector<TTypeDesc> arg_types = {
+                gen_type_desc(TPrimitiveType::VARCHAR),
+                gen_type_desc(TPrimitiveType::VARCHAR),
+                gen_type_desc(TPrimitiveType::INT),
+        };
+        function.__set_arg_types(arg_types);
+        function.__set_ret_type(gen_type_desc(TPrimitiveType::DOUBLE));
+
+        TExprNode parent;
+        parent.node_type = TExprNodeType::FUNCTION_CALL;
+        parent.num_children = 3;
+        parent.type = gen_type_desc(TPrimitiveType::DOUBLE);
+        parent.__set_fn(function);
+        return parent;
+    }
+
+    RuntimeState _runtime_state;
+};
+
+TEST_F(NgramBloomFilterPushdownTest, ZeroGramNumDisablesIndex) {
+    TExprNode varchar_node = make_typed_node(TPrimitiveType::VARCHAR);
+    TExprNode int_node = make_typed_node(TPrimitiveType::INT);
+    TExprNode parent_node = build_ngram_call_node();
+
+    VectorizedFunctionCallExpr expr(parent_node);
+    MockColumnExpr haystack(varchar_node, BinaryColumn::create());
+    MockConstVectorizedExpr<TYPE_VARCHAR> needle(varchar_node, "legacy-ngram-index");
+    MockConstVectorizedExpr<TYPE_INT> gram_num(int_node, 3);
+    expr.add_child(&haystack);
+    expr.add_child(&needle);
+    expr.add_child(&gram_num);
+
+    ExprContext expr_context(&expr);
+    std::vector<ExprContext*> expr_ctxs = {&expr_context};
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+
+    NgramBloomFilterReaderOptions opts;
+    opts.index_gram_num = 3;
+    opts.index_case_sensitive = false;
+    std::unique_ptr<BloomFilter> bf;
+    ASSERT_OK(BloomFilter::create(BLOCK_BLOOM_FILTER, &bf));
+    ASSERT_OK(bf->init(16, 0.05, HashStrategyPB::HASH_MURMUR3_X64_64));
+
+    // Populate the expression-local cache from a valid rowset first. The
+    // empty bloom filter makes the valid 3-gram probe reject the page.
+    EXPECT_FALSE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
+
+    // A later legacy rowset must still leave the page unpruned, rather than
+    // using the ngrams cached for the earlier valid rowset.
+    opts.index_gram_num = 0;
+    EXPECT_TRUE(expr.ngram_bloom_filter(&expr_context, bf.get(), opts));
+
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 } // namespace starrocks
