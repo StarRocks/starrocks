@@ -503,4 +503,52 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
     latch->wait();
 }
 
+// Reproduce the inverted reserved-scale bug: after many MemoryLimitExceeded events,
+// shrinking compact_threads used old_total/new_val and produced `_reserved > _total`
+// and `_free < 0`, after which acquire() never succeeded.
+TEST(LakeCompactionLimiterTest, shrink_after_oom_does_not_go_negative) {
+    CompactionScheduler::Limiter limiter(32);
+    // total=32, reserved=15 (OOM throttled), free=17, running=0
+    limiter.TEST_set_state(32, 17, 15);
+    limiter.adapt_to_task_queue_size(8);
+
+    EXPECT_EQ(8, limiter.TEST_total());
+    EXPECT_EQ(3, limiter.TEST_reserved()); // 15 * 8 / 32
+    EXPECT_EQ(5, limiter.TEST_free());     // 8 - 3 - 0
+    EXPECT_EQ(5, limiter.concurrency());
+    EXPECT_TRUE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, expand_after_oom_keeps_reserved) {
+    CompactionScheduler::Limiter limiter(8);
+    limiter.TEST_set_state(8, 1, 7);
+    limiter.adapt_to_task_queue_size(16);
+
+    EXPECT_EQ(16, limiter.TEST_total());
+    EXPECT_EQ(7, limiter.TEST_reserved());
+    EXPECT_EQ(9, limiter.TEST_free());
+    EXPECT_EQ(9, limiter.concurrency());
+}
+
+TEST(LakeCompactionLimiterTest, shrink_with_inflight_recovers_as_tasks_finish) {
+    CompactionScheduler::Limiter limiter(16);
+    // total=16, reserved=4, free=2 => running=10
+    limiter.TEST_set_state(16, 2, 4);
+    limiter.adapt_to_task_queue_size(8);
+
+    EXPECT_EQ(2, limiter.TEST_reserved()); // 4 * 8 / 16
+    EXPECT_EQ(-4, limiter.TEST_free());    // 8 - 2 - 10
+    EXPECT_FALSE(limiter.acquire());
+
+    // Each successful finish increments `_free`. Every 2 successes also restores one reserved slot.
+    limiter.no_memory_limit_exceeded(); // free=-3
+    EXPECT_FALSE(limiter.acquire());
+    limiter.no_memory_limit_exceeded(); // restore reserved, free=-1
+    EXPECT_FALSE(limiter.acquire());
+    limiter.no_memory_limit_exceeded(); // free=0
+    EXPECT_FALSE(limiter.acquire());
+    limiter.no_memory_limit_exceeded(); // restore reserved, free=2
+    EXPECT_TRUE(limiter.acquire());
+}
+
 } // namespace starrocks::lake

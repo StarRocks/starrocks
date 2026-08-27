@@ -130,6 +130,7 @@ struct CompactionTaskInfo {
 };
 
 class CompactionScheduler {
+public:
     // Limiter is used to control the maximum compaction concurrency based on the memory usage limitation:
     //  - The initial maximum compaction concurrency is config::compact_threads
     //  - Once Status::MemoryLimitExceeded is encountered, reduce the maximum concurrency by one until the
@@ -157,10 +158,19 @@ class CompactionScheduler {
 
         void adapt_to_task_queue_size(int16_t new_val);
 
+        // only for TEST purpose
+        void TEST_set_state(int16_t total, int64_t free, int16_t reserved);
+        int16_t TEST_total() const;
+        int64_t TEST_free() const;
+        int16_t TEST_reserved() const;
+
     private:
         mutable std::mutex _mtx;
         int16_t _total;
         // The number of tokens can be assigned to compaction tasks.
+        // May be temporarily negative when in-flight tasks exceed the new limit after shrinking
+        // `compact_threads`. `acquire()` rejects `_free <= 0`, and each finished task increments
+        // `_free` until it becomes positive again.
         int64_t _free;
         // The number of reserved tokens. reserved tokens cannot be assigned to compaction task.
         int16_t _reserved{0};
@@ -316,26 +326,62 @@ inline int16_t CompactionScheduler::Limiter::concurrency() const {
 
 inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {
     std::lock_guard l(_mtx);
-    if (new_val > _total) {
-        auto diff = new_val - _total;
-        _free += diff;
-        _total += diff;
-    } else if (new_val < _total) {
-        if (_reserved != 0) {
-            double percentage = static_cast<double>(_total) / new_val;
-            _reserved = static_cast<int16_t>(static_cast<double>(_reserved) * percentage);
-            _total = new_val;
-            _free = _total - _reserved;
-        } else {
-            _total = new_val;
-            _free = _total;
-        }
-    } else {
-        // nothing change
+    if (new_val <= 0) {
+        LOG(ERROR) << "Ignore invalid compact_threads " << new_val << ", keep total=" << _total;
         return;
     }
+
+    // Tokens currently held by in-flight tasks. Negative means the limiter is already
+    // inconsistent; treat as no in-flight work so `_free` can be repaired.
+    int64_t running = static_cast<int64_t>(_total) - _reserved - _free;
+    if (running < 0) {
+        running = 0;
+    }
+
+    const int16_t old_total = _total;
+    if (old_total > 0 && new_val < old_total && _reserved > 0) {
+        // Keep the reserved/total ratio when shrinking. The previous formula used
+        // old_total/new_val, which *increased* `_reserved` and could make `_free` negative.
+        _reserved = static_cast<int16_t>(static_cast<int64_t>(_reserved) * new_val / old_total);
+    }
+    // When expanding, keep the absolute `_reserved` (OOM throttle should not grow).
+
+    _total = new_val;
+    if (_reserved < 0) {
+        _reserved = 0;
+    }
+    if (_reserved >= _total) {
+        _reserved = static_cast<int16_t>(_total - 1);
+    }
+    // `_free` may be negative when in-flight tasks exceed the new limit. acquire()
+    // will block new work until enough tasks finish and increment `_free`.
+    _free = static_cast<int64_t>(_total) - _reserved - running;
+
     LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to " << _free
               << ", and _reserved value to " << _reserved;
+}
+
+inline void CompactionScheduler::Limiter::TEST_set_state(int16_t total, int64_t free, int16_t reserved) {
+    std::lock_guard l(_mtx);
+    _total = total;
+    _free = free;
+    _reserved = reserved;
+    _success = 0;
+}
+
+inline int16_t CompactionScheduler::Limiter::TEST_total() const {
+    std::lock_guard l(_mtx);
+    return _total;
+}
+
+inline int64_t CompactionScheduler::Limiter::TEST_free() const {
+    std::lock_guard l(_mtx);
+    return _free;
+}
+
+inline int16_t CompactionScheduler::Limiter::TEST_reserved() const {
+    std::lock_guard l(_mtx);
+    return _reserved;
 }
 
 inline int CompactionScheduler::WrapTaskQueues::task_queue_size() {
