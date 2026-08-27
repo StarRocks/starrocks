@@ -340,4 +340,213 @@ TEST_F(LakeCompactionSchedulerTest, test_skip_write_txnlog_fills_metacache) {
     EXPECT_EQ(response.txn_logs(0).op_compaction().compact_version(), cached->op_compaction().compact_version());
 }
 
+<<<<<<< HEAD
+=======
+// Test for process_parallel_compaction (lines 299-369 in compaction_scheduler.cpp)
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
+    // Create a tablet with multiple rowsets for parallel compaction
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+
+    // Add rowsets
+    for (int i = 0; i < 10; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024); // 1MB each
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
+    }
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+
+    // Enable parallel compaction
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024); // 5MB limit
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+
+    // The response should have some result (success or failure with txn_log)
+    // Since we're testing the code path, we verify it didn't crash
+}
+
+// Test parallel compaction with single tablet fallback on failure
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_fallback) {
+    // Create a tablet with rowsets
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+
+    // Add rowsets
+    for (int i = 0; i < 5; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024);
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+        segment_meta->set_size(1024 * 1024);
+    }
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+
+    // Enable parallel compaction with very small max_bytes to create multiple groups
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(2);
+    parallel_config->set_max_bytes_per_subtask(2 * 1024 * 1024); // 2MB limit
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+}
+
+// Test parallel compaction with multiple tablets
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
+    std::vector<int64_t> tablet_ids;
+
+    // Create multiple tablets with rowsets
+    for (int t = 0; t < 3; t++) {
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(next_id());
+        metadata->set_version(11);
+        tablet_ids.push_back(metadata->id());
+
+        for (int i = 0; i < 5; i++) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(i);
+            rowset->set_overlapped(true);
+            rowset->set_num_rows(100);
+            rowset->set_data_size(1024 * 1024);
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(fmt::format("segment_{}.dat", i));
+            segment_meta->set_size(1024 * 1024);
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    }
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+
+    CompactRequest request;
+    CompactResponse response;
+    for (auto tablet_id : tablet_ids) {
+        request.add_tablet_ids(tablet_id);
+    }
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+
+    // Enable parallel compaction
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(2);
+    parallel_config->set_max_bytes_per_subtask(3 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_with_reserved) {
+    CompactionScheduler::Limiter limiter(8);
+    // Two tasks finished with memory limit exceeded, two tokens get reserved.
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(6, limiter.concurrency());
+
+    // Shrink the total from 8 to 4: the reserved tokens are scaled down
+    // proportionally (2 * 4/8 = 1) instead of being inflated.
+    limiter.adapt_to_task_queue_size(4);
+    ASSERT_EQ(3, limiter.concurrency());
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_preserves_inflight_tokens) {
+    CompactionScheduler::Limiter limiter(8);
+    // Three tasks are running.
+    for (int i = 0; i < 3; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+
+    limiter.adapt_to_task_queue_size(4);
+    ASSERT_EQ(4, limiter.concurrency());
+    // Only one more token can be granted while the three tasks are still running.
+    ASSERT_TRUE(limiter.acquire());
+    ASSERT_FALSE(limiter.acquire());
+
+    // After all running tasks finished, the concurrency is still bounded by the new total.
+    for (int i = 0; i < 4; i++) {
+        limiter.no_memory_limit_exceeded();
+    }
+    for (int i = 0; i < 4; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_keeps_one_token) {
+    CompactionScheduler::Limiter limiter(4);
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(2, limiter.concurrency());
+
+    // Shrinking to 1 must keep one grantable token instead of zeroing the concurrency.
+    limiter.adapt_to_task_queue_size(1);
+    ASSERT_EQ(1, limiter.concurrency());
+    ASSERT_TRUE(limiter.acquire());
+    ASSERT_FALSE(limiter.acquire());
+}
+
+TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_grow) {
+    CompactionScheduler::Limiter limiter(4);
+    ASSERT_TRUE(limiter.acquire());
+    limiter.memory_limit_exceeded();
+    ASSERT_EQ(3, limiter.concurrency());
+
+    limiter.adapt_to_task_queue_size(8);
+    ASSERT_EQ(7, limiter.concurrency());
+    for (int i = 0; i < 7; i++) {
+        ASSERT_TRUE(limiter.acquire());
+    }
+    ASSERT_FALSE(limiter.acquire());
+}
+
+>>>>>>> a52feb7 ([BugFix] Fix lake compaction Limiter resize losing tokens on shrink (#78087))
 } // namespace starrocks::lake
