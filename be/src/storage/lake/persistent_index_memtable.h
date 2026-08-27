@@ -79,6 +79,8 @@ public:
 
     Status flush();
 
+    void advance_max_rss_rowid(uint64_t max_rss_rowid);
+
     void clear();
 
     const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
