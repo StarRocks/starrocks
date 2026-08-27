@@ -513,13 +513,11 @@ public class CheckpointController extends LeaderDaemon {
         }
         List<Long> databaseNamesAfter = journal.getDatabaseNames();
         if (journalDatabaseDeleted(databaseNamesBefore, databaseNamesAfter)) {
-            if (belongToGlobalStateMgr && MetricRepo.hasInit) {
-                // Only on a real reclaim. deleteJournals() returns normally when it removes
-                // nothing, so keying off "it did not throw" would also fire when deleteVersion is
-                // pinned at 0 by an unreachable peer, zeroing a value that is still growing.
-                MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.reset();
-                MetricRepo.COUNTER_EDIT_LOG_RETAINED.update(
-                        getRetainedJournalCount(databaseNamesAfter, journal.getMaxJournalId()));
+            // Keep a conservative value after partial cleanup. Reset only when this journal has
+            // been cleaned down to its current database; FE metadata and StarMgr use independent
+            // observation baselines because their checkpoint controllers run independently.
+            if (journalFullyCleaned(databaseNamesAfter)) {
+                MetricRepo.resetEditLogRetained(belongToGlobalStateMgr);
             }
             LOG.info("Delete old edit log succeeded: deleteVersion={}, imageVersion={}, "
                             + "minReplayedJournalId={}, prefix={}, databasesBefore={}, databasesAfter={}",
@@ -545,17 +543,8 @@ public class CheckpointController extends LeaderDaemon {
         return after.isEmpty() || after.get(0) > before.get(0);
     }
 
-    /**
-     * Journals still held after a reclaim: from the oldest surviving journal database up to the
-     * newest written id. Called once per successful cleanup to re-baseline edit_log_retained -
-     * never from the metrics path, since getMaxJournalId() runs Database.count() over the newest
-     * journal database.
-     */
-    static long getRetainedJournalCount(List<Long> databaseNames, long maxJournalId) {
-        if (databaseNames == null || databaseNames.isEmpty() || maxJournalId < databaseNames.get(0)) {
-            return 0;
-        }
-        return maxJournalId - databaseNames.get(0) + 1;
+    static boolean journalFullyCleaned(List<Long> databaseNames) {
+        return databaseNames != null && databaseNames.size() <= 1;
     }
 
     // Package-private so same-package tests can exercise the per-node push failure path.
@@ -596,14 +585,10 @@ public class CheckpointController extends LeaderDaemon {
                 });
 
                 LOG.info("push image successfully, url = {}", url);
-                if (MetricRepo.hasInit) {
-                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
-                }
+                MetricRepo.recordImagePush(frontend.getNodeName(), true);
             } catch (IOException e) {
                 pushSuccess = false;
-                if (MetricRepo.hasInit) {
-                    MetricRepo.COUNTER_IMAGE_PUSH_FAILED.increase(1L);
-                }
+                MetricRepo.recordImagePush(frontend.getNodeName(), false);
                 LOG.error("Push image failed: imageVersion={}, nodeName={}, host={}, subDir={}",
                         imageVersion, frontend.getNodeName(), frontend.getHost(), subDir, e);
             } finally {

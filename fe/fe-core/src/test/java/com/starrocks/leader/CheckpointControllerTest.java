@@ -205,6 +205,14 @@ public class CheckpointControllerTest {
         Assertions.assertFalse(CheckpointController.journalDatabaseDeleted(List.of(1L), null));
     }
 
+    @Test
+    public void testJournalFullyCleaned() {
+        Assertions.assertTrue(CheckpointController.journalFullyCleaned(List.of()));
+        Assertions.assertTrue(CheckpointController.journalFullyCleaned(List.of(201L)));
+        Assertions.assertFalse(CheckpointController.journalFullyCleaned(List.of(101L, 201L)));
+        Assertions.assertFalse(CheckpointController.journalFullyCleaned(null));
+    }
+
     /**
      * The scenario this PR is about: a registered FE that cannot be reached pins
      * getMinReplayedJournalId() at 0, so deleteVersion collapses to 0 and the round reclaims
@@ -240,63 +248,66 @@ public class CheckpointControllerTest {
         Mockito.verify(journal, Mockito.times(2)).getDatabaseNames();
     }
 
-    /**
-     * A real reclaim re-baselines the retained-journal counters: bytes go back to zero, the count is set to
-     * what bdbje still holds. This is the only place they are lowered - the scrape path never reads
-     * them out of the journal, because getMaxJournalId() runs a full btree count().
-     */
     @Test
-    public void testRetainedCountersReBaselinedOnReclaim() {
+    public void testRetainedMetricsResetOnFullCleanup() {
         Journal journal = Mockito.mock(Journal.class);
         Mockito.when(journal.getPrefix()).thenReturn("");
         Mockito.when(journal.getDatabaseNames())
                 .thenReturn(List.of(1L, 101L, 201L))
                 .thenReturn(List.of(201L));
-        Mockito.when(journal.getMaxJournalId()).thenReturn(300L);
         CheckpointController controller = new CheckpointController("test-rebaseline", journal, "");
 
         withRetainedMetrics(() -> {
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED.increase(5000L);
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.increase(9_000_000L);
+            MetricRepo.recordEditLogBatch(true, 5000L, 9_000_000L);
+            MetricRepo.recordEditLogBatch(false, 50L, 90_000L);
 
             controller.deleteOldJournals(500L);
 
-            // journals 201..300 survive -> 100 retained
-            assertEquals(100L, MetricRepo.COUNTER_EDIT_LOG_RETAINED.getValue());
-            assertEquals(0L, MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.getValue());
+            assertEquals(0L, MetricRepo.getEditLogRetainedCount(true));
+            assertEquals(0L, MetricRepo.getEditLogRetainedBytes(true));
+            assertEquals(50L, MetricRepo.getEditLogRetainedCount(false));
+            assertEquals(90_000L, MetricRepo.getEditLogRetainedBytes(false));
         });
     }
 
-    /**
-     * The case this PR is about: an unreachable peer pins deleteVersion at 0, nothing is reclaimed,
-     * and the retained-journal counters must keep their accumulated values. Keying the reset off
-     * "deleteJournals() did not throw" would be wrong here - it returns normally having removed
-     * nothing, which would zero a value that is still growing.
-     */
     @Test
-    public void testRetainedCountersKeptWhenNothingReclaimed() {
+    public void testRetainedMetricsKeptOnPartialCleanup() {
+        Journal journal = Mockito.mock(Journal.class);
+        Mockito.when(journal.getPrefix()).thenReturn("");
+        Mockito.when(journal.getDatabaseNames())
+                .thenReturn(List.of(1L, 101L, 201L))
+                .thenReturn(List.of(101L, 201L));
+        CheckpointController controller = new CheckpointController("test-partial", journal, "");
+
+        withRetainedMetrics(() -> {
+            MetricRepo.recordEditLogBatch(true, 5000L, 9_000_000L);
+
+            controller.deleteOldJournals(500L);
+
+            assertEquals(5000L, MetricRepo.getEditLogRetainedCount(true));
+            assertEquals(9_000_000L, MetricRepo.getEditLogRetainedBytes(true));
+        });
+    }
+
+    @Test
+    public void testRetainedMetricsKeptWhenNothingReclaimed() {
         Journal journal = Mockito.mock(Journal.class);
         Mockito.when(journal.getPrefix()).thenReturn("");
         Mockito.when(journal.getDatabaseNames()).thenReturn(List.of(1L, 101L));
         CheckpointController controller = new CheckpointController("test-keep", journal, "");
 
         withRetainedMetrics(() -> {
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED.increase(5000L);
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.increase(9_000_000L);
+            MetricRepo.recordEditLogBatch(true, 5000L, 9_000_000L);
 
             controller.deleteOldJournals(500L);
 
-            assertEquals(5000L, MetricRepo.COUNTER_EDIT_LOG_RETAINED.getValue());
-            assertEquals(9_000_000L, MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.getValue());
+            assertEquals(5000L, MetricRepo.getEditLogRetainedCount(true));
+            assertEquals(9_000_000L, MetricRepo.getEditLogRetainedBytes(true));
         });
     }
 
-    /**
-     * StarMgr runs its own CheckpointController over its own "starmgr_" journal; it must not
-     * re-baseline the FE metadata journal's counters.
-     */
     @Test
-    public void testStarMgrReclaimLeavesGlobalStateCountersAlone() {
+    public void testStarMgrFullCleanupResetsOnlyStarMgrMetrics() {
         Journal journal = Mockito.mock(Journal.class);
         Mockito.when(journal.getPrefix()).thenReturn("starmgr_");
         Mockito.when(journal.getDatabaseNames())
@@ -306,48 +317,26 @@ public class CheckpointControllerTest {
         CheckpointController controller = new CheckpointController("test-starmgr", journal, "starmgr");
 
         withRetainedMetrics(() -> {
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED.increase(5000L);
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.increase(9_000_000L);
+            MetricRepo.recordEditLogBatch(true, 5000L, 9_000_000L);
+            MetricRepo.recordEditLogBatch(false, 50L, 90_000L);
 
             controller.deleteOldJournals(500L);
 
-            assertEquals(5000L, MetricRepo.COUNTER_EDIT_LOG_RETAINED.getValue());
-            assertEquals(9_000_000L, MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES.getValue());
+            assertEquals(5000L, MetricRepo.getEditLogRetainedCount(true));
+            assertEquals(9_000_000L, MetricRepo.getEditLogRetainedBytes(true));
+            assertEquals(0L, MetricRepo.getEditLogRetainedCount(false));
+            assertEquals(0L, MetricRepo.getEditLogRetainedBytes(false));
         });
     }
 
-    @Test
-    public void testGetRetainedJournalCount() {
-        // journals 101..200 still held -> 100
-        assertEquals(100L, CheckpointController.getRetainedJournalCount(List.of(101L), 200L));
-        // a single journal in a freshly rolled database
-        assertEquals(1L, CheckpointController.getRetainedJournalCount(List.of(101L), 101L));
-        // counted from the oldest surviving database
-        assertEquals(300L, CheckpointController.getRetainedJournalCount(List.of(1L, 101L, 201L), 300L));
-        // everything gone / environment closing / unreadable max id must not go negative
-        assertEquals(0L, CheckpointController.getRetainedJournalCount(List.of(), 200L));
-        assertEquals(0L, CheckpointController.getRetainedJournalCount(null, 200L));
-        assertEquals(0L, CheckpointController.getRetainedJournalCount(List.of(101L), -1L));
-    }
-
-    /**
-     * Swaps in fresh retained-journal counters and flips MetricRepo.hasInit for the body, then restores.
-     */
     private void withRetainedMetrics(Runnable body) {
-        LongCounterMetric oldCount = MetricRepo.COUNTER_EDIT_LOG_RETAINED;
-        LongCounterMetric oldBytes = MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES;
-        boolean oldHasInit = MetricRepo.hasInit;
-        MetricRepo.COUNTER_EDIT_LOG_RETAINED =
-                new LongCounterMetric("edit_log", Metric.MetricUnit.OPERATIONS, "test");
-        MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES =
-                new LongCounterMetric("edit_log", Metric.MetricUnit.BYTES, "test");
-        MetricRepo.hasInit = true;
+        MetricRepo.resetEditLogRetained(true);
+        MetricRepo.resetEditLogRetained(false);
         try {
             body.run();
         } finally {
-            MetricRepo.hasInit = oldHasInit;
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED = oldCount;
-            MetricRepo.COUNTER_EDIT_LOG_RETAINED_BYTES = oldBytes;
+            MetricRepo.resetEditLogRetained(true);
+            MetricRepo.resetEditLogRetained(false);
         }
     }
 
@@ -536,20 +525,29 @@ public class CheckpointControllerTest {
     }
 
     /**
-     * A node that cannot be reached must leave the image-push failure counter incremented and the
-     * node still queued, so the next round retries it - that pending node is what keeps
-     * deleteOldJournals() from running.
+     * Each unreachable node gets its own failure series and stays queued for the next round. The
+     * per-node label identifies which registered FE is preventing deleteOldJournals() from running.
      */
     @Test
-    public void testPushImageFailureIsCounted() {
+    public void testPushImageFailureIsCountedByNode() {
         withImageMetrics(() -> {
             controller.nodesToPushImage.add("follower1");
+            controller.nodesToPushImage.add("follower2");
+
+            long follower1Before = MetricRepo.getImagePushCount("follower1", false);
+            long follower2Before = MetricRepo.getImagePushCount("follower2", false);
+            long follower1SuccessBefore = MetricRepo.getImagePushCount("follower1", true);
+            long follower2SuccessBefore = MetricRepo.getImagePushCount("follower2", true);
 
             controller.pushImage(100L);
 
-            assertEquals(0L, MetricRepo.COUNTER_IMAGE_PUSH.getValue());
-            assertEquals(1L, MetricRepo.COUNTER_IMAGE_PUSH_FAILED.getValue());
+            assertEquals(follower1Before + 1L, MetricRepo.getImagePushCount("follower1", false));
+            assertEquals(follower2Before + 1L, MetricRepo.getImagePushCount("follower2", false));
+            assertEquals(follower1SuccessBefore, MetricRepo.getImagePushCount("follower1", true));
+            assertEquals(follower2SuccessBefore, MetricRepo.getImagePushCount("follower2", true));
             assertTrue(controller.nodesToPushImage.contains("follower1"),
+                    "a node that failed to receive the image must stay queued for retry");
+            assertTrue(controller.nodesToPushImage.contains("follower2"),
                     "a node that failed to receive the image must stay queued for retry");
         });
     }
@@ -566,7 +564,7 @@ public class CheckpointControllerTest {
             controller.pushImage(100L);
 
             assertTrue(controller.nodesToPushImage.isEmpty());
-            assertEquals(0L, MetricRepo.COUNTER_IMAGE_PUSH_FAILED.getValue());
+            assertEquals(0L, MetricRepo.getImagePushCount("gone", false));
         });
     }
 
@@ -618,11 +616,11 @@ public class CheckpointControllerTest {
             Config.http_port = server.getAddress().getPort();
             withImageMetrics(() -> {
                 controller.nodesToPushImage.add("follower1");
+                long successBefore = MetricRepo.getImagePushCount("follower1", true);
 
                 controller.pushImage(100L);
 
-                assertEquals(1L, MetricRepo.COUNTER_IMAGE_PUSH.getValue());
-                assertEquals(0L, MetricRepo.COUNTER_IMAGE_PUSH_FAILED.getValue());
+                assertEquals(successBefore + 1L, MetricRepo.getImagePushCount("follower1", true));
                 assertTrue(controller.nodesToPushImage.isEmpty(),
                         "a node that received the image must leave the queue");
             });
@@ -639,17 +637,11 @@ public class CheckpointControllerTest {
     private void withImageMetrics(Runnable body) {
         LongCounterMetric oldWrite = MetricRepo.COUNTER_IMAGE_WRITE;
         LongCounterMetric oldWriteFailed = MetricRepo.COUNTER_IMAGE_WRITE_FAILED;
-        LongCounterMetric oldPush = MetricRepo.COUNTER_IMAGE_PUSH;
-        LongCounterMetric oldPushFailed = MetricRepo.COUNTER_IMAGE_PUSH_FAILED;
         boolean oldHasInit = MetricRepo.hasInit;
         MetricRepo.COUNTER_IMAGE_WRITE =
                 new LongCounterMetric("image_write", Metric.MetricUnit.OPERATIONS, "test");
         MetricRepo.COUNTER_IMAGE_WRITE_FAILED =
                 new LongCounterMetric("image_write", Metric.MetricUnit.OPERATIONS, "test");
-        MetricRepo.COUNTER_IMAGE_PUSH =
-                new LongCounterMetric("image_push", Metric.MetricUnit.OPERATIONS, "test");
-        MetricRepo.COUNTER_IMAGE_PUSH_FAILED =
-                new LongCounterMetric("image_push", Metric.MetricUnit.OPERATIONS, "test");
         MetricRepo.hasInit = true;
         try {
             body.run();
@@ -657,8 +649,6 @@ public class CheckpointControllerTest {
             MetricRepo.hasInit = oldHasInit;
             MetricRepo.COUNTER_IMAGE_WRITE = oldWrite;
             MetricRepo.COUNTER_IMAGE_WRITE_FAILED = oldWriteFailed;
-            MetricRepo.COUNTER_IMAGE_PUSH = oldPush;
-            MetricRepo.COUNTER_IMAGE_PUSH_FAILED = oldPushFailed;
         }
     }
 

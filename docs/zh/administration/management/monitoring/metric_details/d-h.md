@@ -283,14 +283,16 @@ description: "Alphabetical d - h"
 ## `fe_edit_log_retained`
 
 - 单位: 个
-- 类型: 累积值
-- 描述: 自上次有效清理以来 BDB JE 中保留的 FE 元数据日志条数。该值随日志写入而累加，仅当某轮 checkpoint **确实删除了** journal database 时才会重新基准化，此时被置为 BDB JE 中仍保留的日志条数。Checkpoint 守护线程只有在所有已注册的 FE 都收到新 image 之后才会删除旧日志，因此一个无法访问的已注册 FE 会导致该值持续增长，可作为元数据磁盘即将写满的预警。FE 进程重启后该值从 0 重新开始；且仅覆盖 FE 元数据日志，不含存算分离模式下与之共用同一个 BDB JE 环境的 StarMgr 日志。
+- 类型: 瞬时值
+- 标签: `journal`（`fe_meta` 或 `star_mgr`）
+- 描述: 当前 Leader FE 自当选 Leader 或上次完整清理以来观测到的、已成功提交的编辑日志条数。完整清理指仅剩当前 journal database；partial cleanup 不降低该值，因此该指标是保守估算。FE metadata 与 StarMgr 由各自独立的 checkpoint controller 清理，分别使用 `fe_meta` 和 `star_mgr` 统计。无法访问的已注册 FE 会阻止清理，使对应序列持续增长。完整清理、FE 重启或 Leader 切换后该值归零；非 Leader FE 上报 0。
 
 ## `fe_edit_log_retained_bytes`
 
 - 单位: 字节
-- 类型: 累积值
-- 描述: 自上次有效清理以来 BDB JE 中保留的 FE 元数据日志字节数。累加与重新基准化的行为同 [`fe_edit_log_retained`](#fe_edit_log_retained)，区别在于清理成功后该值归零，而不是被置为剩余量。适合观察增长和趋势，不应当作磁盘实际占用的精确值：它不含上一次清理后保留下来的日志，也不含 BDB JE 尚未回收的空间，并且在 FE 进程重启后从 0 重新开始。
+- 类型: 瞬时值
+- 标签: `journal`（`fe_meta` 或 `star_mgr`）
+- 描述: 与 [`fe_edit_log_retained`](#fe_edit_log_retained) 相同观测窗口内，已成功提交的编辑日志逻辑字节数。每个成功提交的 journal batch 仅更新一次，采集指标时不会读取 BDB JE。该指标适合观察积压增长趋势，而非精确磁盘占用：不含当前 Leader 观测窗口开始前已保留的数据和 BDB JE 存储开销，partial cleanup 后还可能暂时高估剩余字节数。
 
 ## `fe_edit_log_size_bytes`
 
@@ -332,8 +334,8 @@ description: "Alphabetical d - h"
 
 - 单位: 次
 - 类型: 累积值
-- 标签: `type` (`success` 或 `failed`)
-- 描述: Leader FE 向其他 FE 节点推送新生成 image 文件的次数，每次尝试按目标节点各计一次。只有当所有节点都拿到新 image 之后才会删除旧的元数据日志，因此 `failed` 序列持续增长可以解释 `fe_edit_log{type="current"}` 为何迟迟不下降。
+- 标签: `type`（`success` 或 `failed`）和 `node`（目标 FE 节点名称）
+- 描述: Leader FE 向其他 FE 节点推送新生成 image 文件的次数，每次尝试按目标节点各计一次。只有当所有节点都拿到新 image 之后才会删除旧的元数据日志，因此 `failed` 序列可以直接定位阻止 `fe_edit_log_retained` 归零的目标 FE。
 
 ## `fe_image_write`
 

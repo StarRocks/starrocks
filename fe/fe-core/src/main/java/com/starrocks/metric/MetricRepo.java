@@ -328,16 +328,12 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
-    // Journals retained since the last effective cleanup. Accumulated on the write path and only
-    // walked back when a journal database is actually removed - never read out of bdbje at scrape
-    // time, because that would put Database.count() (a full btree scan, and slowest exactly when
-    // the retained set is largest) on the metrics path.
-    public static LongCounterMetric COUNTER_EDIT_LOG_RETAINED;
-    public static LongCounterMetric COUNTER_EDIT_LOG_RETAINED_BYTES;
+    private static final EditLogRetainedMetrics FE_META_EDIT_LOG_RETAINED = new EditLogRetainedMetrics();
+    private static final EditLogRetainedMetrics STAR_MGR_EDIT_LOG_RETAINED = new EditLogRetainedMetrics();
+    private static final Map<String, LongCounterMetric> IMAGE_PUSH_SUCCESS_METRICS = new ConcurrentHashMap<>();
+    private static final Map<String, LongCounterMetric> IMAGE_PUSH_FAILED_METRICS = new ConcurrentHashMap<>();
     public static LongCounterMetric COUNTER_IMAGE_WRITE;
     public static LongCounterMetric COUNTER_IMAGE_WRITE_FAILED;
-    public static LongCounterMetric COUNTER_IMAGE_PUSH;
-    public static LongCounterMetric COUNTER_IMAGE_PUSH_FAILED;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_REJECT;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_BEGIN;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_FAILED;
@@ -942,15 +938,8 @@ public final class MetricRepo {
         COUNTER_EDIT_LOG_SIZE_BYTES =
                 new LongCounterMetric("edit_log_size_bytes", MetricUnit.BYTES, "size of edit log");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_SIZE_BYTES);
-        // Separate metric names rather than one name with a type label: the two carry different
-        // units, and a single # TYPE / # HELP line is emitted per name. This also matches how
-        // edit_log_write / edit_log_read / edit_log_size_bytes above are already registered.
-        COUNTER_EDIT_LOG_RETAINED = new LongCounterMetric("edit_log_retained", MetricUnit.OPERATIONS,
-                "number of edit logs retained in bdbje since the last cleanup");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_RETAINED);
-        COUNTER_EDIT_LOG_RETAINED_BYTES = new LongCounterMetric("edit_log_retained_bytes", MetricUnit.BYTES,
-                "bytes of edit logs retained in bdbje since the last cleanup");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_RETAINED_BYTES);
+        registerEditLogRetainedMetrics(FE_META_EDIT_LOG_RETAINED, "fe_meta");
+        registerEditLogRetainedMetrics(STAR_MGR_EDIT_LOG_RETAINED, "star_mgr");
         COUNTER_IMAGE_WRITE = new LongCounterMetric("image_write", MetricUnit.OPERATIONS, "counter of image generated");
         COUNTER_IMAGE_WRITE.addLabel(new MetricLabel("type", "success"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE);
@@ -958,14 +947,6 @@ public final class MetricRepo {
                 "image_write", MetricUnit.OPERATIONS, "counter of image generation failures");
         COUNTER_IMAGE_WRITE_FAILED.addLabel(new MetricLabel("type", "failed"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE_FAILED);
-        COUNTER_IMAGE_PUSH = new LongCounterMetric("image_push", MetricUnit.OPERATIONS,
-                "counter of image succeeded in pushing to other frontends");
-        COUNTER_IMAGE_PUSH.addLabel(new MetricLabel("type", "success"));
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH);
-        COUNTER_IMAGE_PUSH_FAILED = new LongCounterMetric("image_push", MetricUnit.OPERATIONS,
-                "counter of image failed in pushing to other frontends");
-        COUNTER_IMAGE_PUSH_FAILED.addLabel(new MetricLabel("type", "failed"));
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH_FAILED);
 
         COUNTER_SHORTCIRCUIT_QUERY = new LongCounterMetric("shortcircuit_query", MetricUnit.REQUESTS, "total shortcircuit query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
@@ -1383,6 +1364,96 @@ public final class MetricRepo {
                 stat.counterCloneTaskIntraNodeCopyDurationMs);
         cloneTaskIntraNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
         STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyDurationMs);
+    }
+
+    private static void registerEditLogRetainedMetrics(EditLogRetainedMetrics metrics, String journal) {
+        Metric<Long> count = new LeaderAwareGaugeMetricLong(
+                "edit_log_retained", MetricUnit.OPERATIONS,
+                "number of edit logs observed since the last full cleanup or leader activation") {
+            @Override
+            public Long getValueLeader() {
+                return metrics.getCount();
+            }
+        };
+        count.addLabel(new MetricLabel("journal", journal));
+        STARROCKS_METRIC_REGISTER.addMetric(count);
+
+        Metric<Long> bytes = new LeaderAwareGaugeMetricLong(
+                "edit_log_retained_bytes", MetricUnit.BYTES,
+                "logical edit log bytes observed since the last full cleanup or leader activation") {
+            @Override
+            public Long getValueLeader() {
+                return metrics.getBytes();
+            }
+        };
+        bytes.addLabel(new MetricLabel("journal", journal));
+        STARROCKS_METRIC_REGISTER.addMetric(bytes);
+    }
+
+    /** Records one successfully committed journal batch without touching bdbje. */
+    public static void recordEditLogBatch(boolean globalStateJournal, long count, long bytes) {
+        getEditLogRetainedMetrics(globalStateJournal).record(count, bytes);
+    }
+
+    /** Starts a new observation baseline for one independently cleaned journal. */
+    public static void resetEditLogRetained(boolean globalStateJournal) {
+        getEditLogRetainedMetrics(globalStateJournal).reset();
+    }
+
+    public static long getEditLogRetainedCount(boolean globalStateJournal) {
+        return getEditLogRetainedMetrics(globalStateJournal).getCount();
+    }
+
+    public static long getEditLogRetainedBytes(boolean globalStateJournal) {
+        return getEditLogRetainedMetrics(globalStateJournal).getBytes();
+    }
+
+    private static EditLogRetainedMetrics getEditLogRetainedMetrics(boolean globalStateJournal) {
+        return globalStateJournal ? FE_META_EDIT_LOG_RETAINED : STAR_MGR_EDIT_LOG_RETAINED;
+    }
+
+    private static final class EditLogRetainedMetrics {
+        private long count;
+        private long bytes;
+
+        private synchronized void record(long countDelta, long bytesDelta) {
+            count += countDelta;
+            bytes += bytesDelta;
+        }
+
+        private synchronized void reset() {
+            count = 0L;
+            bytes = 0L;
+        }
+
+        private synchronized long getCount() {
+            return count;
+        }
+
+        private synchronized long getBytes() {
+            return bytes;
+        }
+    }
+
+    public static void recordImagePush(String nodeName, boolean success) {
+        if (!hasInit) {
+            return;
+        }
+        String type = success ? "success" : "failed";
+        Map<String, LongCounterMetric> metrics = success ? IMAGE_PUSH_SUCCESS_METRICS : IMAGE_PUSH_FAILED_METRICS;
+        metrics.computeIfAbsent(nodeName, ignored -> {
+            LongCounterMetric metric = new LongCounterMetric(
+                    "image_push", MetricUnit.OPERATIONS, "counter of image push attempts by result and target FE");
+            metric.addLabel(new MetricLabel("type", type));
+            metric.addLabel(new MetricLabel("node", nodeName));
+            STARROCKS_METRIC_REGISTER.addMetric(metric);
+            return metric;
+        }).increase(1L);
+    }
+
+    public static long getImagePushCount(String nodeName, boolean success) {
+        LongCounterMetric metric = (success ? IMAGE_PUSH_SUCCESS_METRICS : IMAGE_PUSH_FAILED_METRICS).get(nodeName);
+        return metric == null ? 0L : metric.getValue();
     }
 
     // to generate the metrics related to tablets of each backend

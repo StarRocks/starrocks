@@ -16,6 +16,7 @@ package com.starrocks.journal;
 
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
+import com.starrocks.metric.MetricRepo;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +71,9 @@ public class JournalWriterSealTest {
         Assertions.assertTrue(task2.get());
         Assertions.assertEquals(5L, writer.getLastCommittedJournalId());
         Assertions.assertEquals(List.of(4L, 5L), journal.getCommittedJournalIds());
+        Assertions.assertEquals(2L, MetricRepo.getEditLogRetainedCount(true));
+        Assertions.assertEquals(task1.estimatedSizeByte() + task2.estimatedSizeByte(),
+                MetricRepo.getEditLogRetainedBytes(true));
     }
 
     @Test
@@ -92,6 +96,34 @@ public class JournalWriterSealTest {
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED,
                 ((JournalWriteException) abortException.getCause()).getReason());
         Assertions.assertEquals(3L, writer.getLastCommittedJournalId());
+        Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedCount(true));
+        Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedBytes(true));
+    }
+
+    @Test
+    public void testStarMgrBatchUsesIndependentRetainedMetrics() throws Exception {
+        MetricRepo.resetEditLogRetained(true);
+        MetricRepo.resetEditLogRetained(false);
+        MetricRepo.recordEditLogBatch(true, 7L, 70L);
+        try {
+            TestJournal journal = new TestJournal("starmgr_");
+            BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
+            JournalWriter writer = new JournalWriter(journal, queue);
+            writer.init(3L);
+
+            JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
+            queue.put(task);
+            writer.writeOneBatch();
+
+            Assertions.assertTrue(task.get());
+            Assertions.assertEquals(7L, MetricRepo.getEditLogRetainedCount(true));
+            Assertions.assertEquals(70L, MetricRepo.getEditLogRetainedBytes(true));
+            Assertions.assertEquals(1L, MetricRepo.getEditLogRetainedCount(false));
+            Assertions.assertEquals(task.estimatedSizeByte(), MetricRepo.getEditLogRetainedBytes(false));
+        } finally {
+            MetricRepo.resetEditLogRetained(true);
+            MetricRepo.resetEditLogRetained(false);
+        }
     }
 
     @Test
@@ -251,11 +283,20 @@ public class JournalWriterSealTest {
     }
 
     private static class TestJournal implements Journal {
+        private final String prefix;
         private long maxJournalId = 0L;
         private boolean commitFailure;
         private final List<Long> stagingJournalIds = new ArrayList<>();
         private final List<Long> committedJournalIds = new ArrayList<>();
         private final List<Long> rollJournalIds = new ArrayList<>();
+
+        private TestJournal() {
+            this("");
+        }
+
+        private TestJournal(String prefix) {
+            this.prefix = prefix;
+        }
 
         @Override
         public void open() {
@@ -321,7 +362,7 @@ public class JournalWriterSealTest {
 
         @Override
         public String getPrefix() {
-            return "";
+            return prefix;
         }
 
         public void setCommitFailure(boolean commitFailure) {
