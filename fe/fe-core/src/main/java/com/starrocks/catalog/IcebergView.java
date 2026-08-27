@@ -42,12 +42,15 @@ public class IcebergView extends ConnectorView {
             if (Strings.isNullOrEmpty(name.getCatalog()) &&
                     Strings.isNullOrEmpty(name.getDb()) &&
                     cteRelationNames.contains(name.getTbl())) {
-                return;
+                continue;
             }
 
             // iceberg view query statement with external catalog which created by starrocks must have catalog name
             if (Strings.isNullOrEmpty(name.getCatalog())) {
-                name.setCatalog(defaultCatalogName);
+                // iceberg view's default-catalog is optional
+                // When default-catalog is null or not set, the catalog in which the view is stored must
+                // be used as the default catalog.
+                name.setCatalog(Strings.isNullOrEmpty(defaultCatalogName) ? this.catalogName : defaultCatalogName);
             }
 
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
