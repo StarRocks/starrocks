@@ -167,7 +167,18 @@ public:
 
     Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
-    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+    // |expected_tablet_ids| is the set of tablets this combined txn log must cover. A combined txn
+    // log is the only record of those tablets' rowset metadata: publish looks each tablet up inside
+    // it and has no per-tablet fallback, so an object written short of an entry leaves the
+    // transaction permanently unpublishable once it commits.
+    //
+    // Mirrors put_bundle_tablet_metadata(): the set is only worth passing when it comes from a
+    // source independent of whatever produced |logs| -- deriving it from the collected logs would
+    // just compare that source against itself. Callers with no such source pass empty, which is
+    // what the single-argument overload does, leaving them exactly as they were.
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs, const std::set<int64_t>& expected_tablet_ids);
+
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs) { return put_combined_txn_log(logs, {}); }
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
