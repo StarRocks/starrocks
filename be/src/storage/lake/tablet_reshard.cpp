@@ -431,9 +431,9 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
     }
     tablet_reshard_helper::set_all_data_files_shared(txn_log);
     RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
-    // Pass this sibling's range so the stat apportionment can tell a sibling that provably owns
-    // none of the rowset's keys (a true 0, so the siblings' stats sum to the source) from one that
-    // may own them (the plain share).
+    // This sibling range supplies endpoint ownership: a non-overlapping child is pruned, and its
+    // virtual shares fold into the nearest overlapping boundary child so sibling statistics sum to
+    // the source.
     //
     // The classifier compares a rowset's sort_key_min/sort_key_max envelope against the range, which
     // is sound only while the sort key IS the range key. A primary-key tablet with a separate ORDER
