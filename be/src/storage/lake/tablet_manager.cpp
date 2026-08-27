@@ -1317,12 +1317,16 @@ DEFINE_FAIL_POINT(put_combined_txn_log_success);
 DEFINE_FAIL_POINT(put_combined_txn_log_fail);
 Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs,
                                            const std::set<int64_t>& expected_tablet_ids) {
+    // Ahead of the fail points on purpose: this is an invariant on the object we are about to
+    // write, not part of the write itself, so a fail point that stubs out the object-store call
+    // must not be able to skip it -- otherwise put_combined_txn_log_success silently disables the
+    // check and no test using that fail point can observe it.
+    RETURN_IF_ERROR(check_combined_txn_log_coverage(logs, expected_tablet_ids));
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_success, Status::OK());
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_fail, Status::InternalError("write combined_txn_log_fail"));
     if (UNLIKELY(logs.txn_logs_size() == 0)) {
         return Status::InvalidArgument("empty CombinedTxnLogPB");
     }
-    RETURN_IF_ERROR(check_combined_txn_log_coverage(logs, expected_tablet_ids));
     DUMP_TRACE_IF_TIMEOUT(config::lake_put_txn_log_timeout_guard_ms);
     std::vector<int64_t> candidate_tablet_ids;
     candidate_tablet_ids.reserve(logs.txn_logs_size());

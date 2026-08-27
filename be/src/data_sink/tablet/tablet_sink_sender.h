@@ -78,8 +78,9 @@ protected:
     // For every partition this sink is about to write a combined txn log for, the set of tablets
     // that log must cover, taken from the partition metadata the FE dispatched -- a source
     // independent of the collected logs themselves. Partitions with no dispatched metadata here
-    // (e.g. brought in by an incremental open) are left out, so they stay unchecked rather than
-    // being judged against a guess.
+    // (e.g. dropped from _partition_params by remove_partitions() on the immutable-partition
+    // path) are left out, so they stay unchecked rather than being judged against a guess.
+    // Partitions brought in by an incremental open do have metadata here and are checked.
     ExpectedTabletsByPartition _expected_tablets_by_partition() const;
     void _mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool _is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
