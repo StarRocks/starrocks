@@ -62,6 +62,9 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"QUERY_REWRITE_STATUS_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LAST_FRESHNESS_CONFIRMED_AT", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"BASE_TABLE_REFRESH_VERSION_TIMES", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"EFFECTIVE_REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"EFFECTIVE_REFRESH_MODE_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_EXECUTED_REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -535,6 +538,39 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // BASE_TABLE_REFRESH_VERSION_TIMES
             if (info.__isset.base_table_refresh_version_times) {
                 const std::string* str = &info.base_table_refresh_version_times;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 37: {
+            // EFFECTIVE_REFRESH_MODE
+            if (info.__isset.effective_refresh_mode) {
+                const std::string* str = &info.effective_refresh_mode;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 38: {
+            // EFFECTIVE_REFRESH_MODE_REASON
+            if (info.__isset.effective_refresh_mode_reason) {
+                const std::string* str = &info.effective_refresh_mode_reason;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 39: {
+            // LAST_EXECUTED_REFRESH_MODE
+            if (info.__isset.last_executed_refresh_mode) {
+                const std::string* str = &info.last_executed_refresh_mode;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {

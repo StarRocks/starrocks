@@ -38,6 +38,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowMaterializedViewStatus;
@@ -54,6 +55,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.platform.commons.util.Preconditions;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -137,7 +139,12 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.query_rewrite_status_reason AS query_rewrite_status_reason, " +
                         "information_schema.materialized_views.last_freshness_confirmed_at AS last_freshness_confirmed_at, " +
                         "information_schema.materialized_views.base_table_refresh_version_times " +
-                        "AS base_table_refresh_version_times" +
+                        "AS base_table_refresh_version_times, " +
+                        "information_schema.materialized_views.effective_refresh_mode AS effective_refresh_mode, " +
+                        "information_schema.materialized_views.effective_refresh_mode_reason " +
+                        "AS effective_refresh_mode_reason, " +
+                        "information_schema.materialized_views.last_executed_refresh_mode " +
+                        "AS last_executed_refresh_mode" +
                         " FROM " +
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
@@ -255,5 +262,28 @@ public class ShowMaterializedViewTest {
             com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
             Assertions.fail("No exception throws");
         });
+    }
+
+    @Test
+    public void testDegradationReasonStopsApplyingOnceTheModesAgree() throws Exception {
+        starRocksAssert.withDatabase("db_eff_reason").useDatabase("db_eff_reason");
+        starRocksAssert.withTable("CREATE TABLE er_base (k1 int, v1 bigint SUM) "
+                + "AGGREGATE KEY(k1) DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num' = '1')");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW er_mv REFRESH MANUAL "
+                + "AS SELECT k1, SUM(v1) AS v1 FROM er_base GROUP BY k1");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable("db_eff_reason", "er_mv");
+
+        mv.getTableProperty().setMvRefreshMode("auto");
+        mv.setCurrentRefreshMode(MaterializedView.RefreshMode.PCT);
+        mv.setCurrentRefreshModeReason("aggregate column counts differ");
+
+        Assertions.assertEquals("aggregate column counts differ",
+                ShowMaterializedViewStatus.of("db_eff_reason", mv, new ArrayList<>()).getEffectiveRefreshModeReason());
+
+        // What ALTER SET ('refresh_mode' = 'pct') leaves behind on a view that had degraded to PCT.
+        mv.getTableProperty().setMvRefreshMode("pct");
+
+        Assertions.assertNull(
+                ShowMaterializedViewStatus.of("db_eff_reason", mv, new ArrayList<>()).getEffectiveRefreshModeReason());
     }
 }

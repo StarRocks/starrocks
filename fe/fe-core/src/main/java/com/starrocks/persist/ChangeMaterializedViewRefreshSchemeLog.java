@@ -45,6 +45,8 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     // Boxed: null = the log predates this field (replay keeps the in-memory value); 0 = a real leader value.
     @SerializedName(value = "lastRefreshTime")
     private Long lastRefreshTime;
+    @SerializedName(value = "lastExecutedRefreshMode")
+    private MaterializedView.RefreshMode lastExecutedRefreshMode;
 
     public ChangeMaterializedViewRefreshSchemeLog(MaterializedView materializedView) {
         this(materializedView, materializedView.getRefreshScheme());
@@ -58,6 +60,7 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         this.asyncRefreshContext = refreshScheme.getAsyncRefreshContext().copy();
         this.lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();
         this.lastRefreshTime = refreshScheme.getLastRefreshTime();
+        this.lastExecutedRefreshMode = refreshScheme.getLastExecutedRefreshMode();
     }
 
     public ChangeMaterializedViewRefreshSchemeLog() {
@@ -85,6 +88,10 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
 
     public Long getLastRefreshTime() {
         return lastRefreshTime;
+    }
+
+    public MaterializedView.RefreshMode getLastExecutedRefreshMode() {
+        return lastExecutedRefreshMode;
     }
 
     public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {

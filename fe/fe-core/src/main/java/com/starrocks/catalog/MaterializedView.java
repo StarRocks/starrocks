@@ -534,6 +534,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // Wall-clock confirm time of the last successful refresh run, not the base-table data version (see lastRefreshTime).
         @SerializedName(value = "lastFreshnessConfirmedAt")
         private long lastFreshnessConfirmedAt;
+        @SerializedName(value = "lastExecutedRefreshMode")
+        private RefreshMode lastExecutedRefreshMode;
 
         public MvRefreshScheme() {
             this.moment = RefreshMoment.IMMEDIATE;
@@ -601,12 +603,21 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
         }
 
+        public RefreshMode getLastExecutedRefreshMode() {
+            return lastExecutedRefreshMode;
+        }
+
+        public void setLastExecutedRefreshMode(RefreshMode lastExecutedRefreshMode) {
+            this.lastExecutedRefreshMode = lastExecutedRefreshMode;
+        }
+
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
             res.moment = this.moment;
             res.type = this.type;
             res.lastRefreshTime = this.lastRefreshTime;
             res.lastFreshnessConfirmedAt = this.lastFreshnessConfirmedAt;
+            res.lastExecutedRefreshMode = this.lastExecutedRefreshMode;
             if (this.asyncRefreshContext != null) {
                 res.asyncRefreshContext = this.asyncRefreshContext.copy();
             }
@@ -621,6 +632,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     ", asyncRefreshContext=" + asyncRefreshContext +
                     ", lastRefreshTime=" + lastRefreshTime +
                     ", lastFreshnessConfirmedAt=" + lastFreshnessConfirmedAt +
+                    ", lastExecutedRefreshMode=" + lastExecutedRefreshMode +
                     '}';
         }
     }
@@ -716,6 +728,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // it may be different from the defined refresh mode since we only support limited auto mode now.
     @SerializedName(value = "currentRefreshMode")
     private RefreshMode currentRefreshMode = RefreshMode.PCT;
+
+    // Set only when CREATE settled on a mode the user did not ask for, so it explains a currentRefreshMode
+    // that differs from the refresh_mode property. Fixed at creation; a refresh never rewrites it.
+    @SerializedName(value = "currentRefreshModeReason")
+    private String currentRefreshModeReason;
 
     // this is the version for encode row id algorithm which must be consistent along with the mv's lifecycle,
     // otherwise the incremental refresh may cause incorrect result.
@@ -1124,6 +1141,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setCurrentRefreshMode(RefreshMode currentRefreshMode) {
         this.currentRefreshMode = currentRefreshMode;
+    }
+
+    public String getCurrentRefreshModeReason() {
+        return currentRefreshModeReason;
+    }
+
+    public void setCurrentRefreshModeReason(String currentRefreshModeReason) {
+        this.currentRefreshModeReason = currentRefreshModeReason;
     }
 
     public int getEncodeRowIdVersion() {

@@ -1,0 +1,139 @@
+-- name: test_effective_refresh_mode_reports_create_time_degradation @cloud
+CREATE TABLE ef_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ef_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ef (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM ef_base GROUP BY dt, k;
+-- result:
+-- !result
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+-- result:
+AUTO	PCT
+-- !result
+SELECT EFFECTIVE_REFRESH_MODE_REASON LIKE '%column counts%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+-- result:
+1
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+[UC]REFRESH MATERIALIZED VIEW mv_ef WITH SYNC MODE;
+INSERT INTO ef_base VALUES ('2026-08-03',3,7);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ef WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+-- result:
+PCT
+-- !result
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+-- result:
+0
+-- !result
+ALTER MATERIALIZED VIEW mv_ef SET ('refresh_mode' = 'pct');
+-- result:
+-- !result
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+-- result:
+PCT	PCT	
+-- !result
+
+-- name: test_effective_refresh_mode_stays_auto_across_a_run_level_fallback @cloud
+CREATE TABLE fb_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fb_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fb
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM fb_base GROUP BY dt, k;
+-- result:
+-- !result
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- result:
+AUTO	AUTO		
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+INSERT INTO fb_base VALUES ('2026-08-02',2,5);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- result:
+INCREMENTAL
+-- !result
+ALTER TABLE fb_base DROP PARTITION p20260801;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- result:
+AUTO	AUTO	PCT
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+function: assert_query_contains("SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = (SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb') ORDER BY CREATE_TIME DESC LIMIT 1", "SKIPPED", "INCREMENTAL")
+-- result:
+None
+-- !result
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- result:
+PCT
+-- !result
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb' AND EXECUTED_REFRESH_MODE = 'PCT'", "1")
+-- result:
+None
+-- !result
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb' AND EXECUTED_REFRESH_MODE IS NULL", "1")
+-- result:
+None
+-- !result
+INSERT INTO fb_base VALUES ('2026-08-03',3,7);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+SELECT EFFECTIVE_REFRESH_MODE, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- result:
+AUTO	INCREMENTAL
+-- !result
+-- name: test_effective_refresh_mode_matches_configured_mode_when_nothing_was_settled @cloud
+CREATE TABLE pl_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_pl
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'pct')
+AS SELECT dt, k, SUM(v) AS v FROM pl_base GROUP BY dt, k;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_in
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM pl_base GROUP BY dt, k;
+-- result:
+-- !result
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_pl';
+-- result:
+PCT	PCT		
+-- !result
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_in';
+-- result:
+INCREMENTAL	INCREMENTAL		
+-- !result

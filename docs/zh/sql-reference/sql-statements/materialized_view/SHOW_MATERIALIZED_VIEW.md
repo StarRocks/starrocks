@@ -80,6 +80,9 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | query_rewrite_status_reason | `query_rewrite_status` 的原因。有效值：`OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION` 和 `UNKNOWN`。 |
 | last_freshness_confirmed_at | 最近一次成功刷新的开始时间，在整次刷新（其全部 task run）完成后才记录；确认基表无变化、无需刷新的刷新同样会确认新鲜度。物化视图反映该时刻的基表数据。区别于 `last_refresh_time`（基表数据版本时间），这是墙钟时间。首次成功刷新前、以及同步物化视图，为空。按分区范围的 REFRESH（部分刷新）不推进该值。 |
 | base_table_refresh_version_times | 各基表的数据版本时间，以 JSON 对象给出：键为基表的 `catalog.database.table` 名称，值为观测到的最新数据版本时间。这是 `last_refresh_time`（所有基表的单一最大值）背后的按表明细：外部/数据湖基表上报分区源修改时间，OLAP（内部）基表上报可见版本提交时间。无任何基表有可记录时间时为 `{}`。 |
+| effective_refresh_mode | 该物化视图实际建成的刷新模式。有效值与 `refresh_mode` 相同:`PCT`、`INCREMENTAL`、`AUTO`。它通常与 `refresh_mode` 一致,只有一种情况例外 —— `refresh_mode` 为 `AUTO`,但定义无法增量维护,`CREATE` 于是建成了 `PCT` 物化视图,此列即为 `PCT`。该判定在建表时一次完成且永不改变:只能通过重建物化视图重新尝试增量。同步物化视图为空。 |
+| effective_refresh_mode_reason | `effective_refresh_mode` 与 `refresh_mode` 不同的原因 —— 即该定义无法增量维护的具体说明。建表时记录,之后不再更新。两个模式列一致时为空。 |
+| last_executed_refresh_mode | 最近一次刷新实际使用的刷新模式。有效值:`PCT`、`INCREMENTAL`。当 `refresh_mode` 与 `effective_refresh_mode` 都为 `AUTO` 时,此列为 `PCT` 表示只有那一次刷新发生了回退,后续刷新仍可回到增量;而若 `effective_refresh_mode` 为 `PCT`,则表示该物化视图从不尝试增量。因基表无变化而被跳过的刷新不会改变此列的值。首次刷新之前,以及同步物化视图,为空。 |
 
 ## 示例
 

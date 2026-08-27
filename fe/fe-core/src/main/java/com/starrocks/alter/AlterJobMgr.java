@@ -566,6 +566,7 @@ public class AlterJobMgr {
                         Math.max(oldRefreshScheme.getLastRefreshTime(), derived));
             }
             newMvRefreshScheme.setLastFreshnessConfirmedAt(log.getLastFreshnessConfirmedAt());
+            newMvRefreshScheme.setLastExecutedRefreshMode(log.getLastExecutedRefreshMode());
 
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(

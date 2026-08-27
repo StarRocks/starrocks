@@ -180,6 +180,9 @@ public class ShowMaterializedViewStatusTest {
         Assertions.assertEquals("0", thriftStatus.getRows());
         Assertions.assertNull(thriftStatus.getQuery_rewrite_status());
         Assertions.assertNull(thriftStatus.getCreator());
+        Assertions.assertEquals("", thriftStatus.getEffective_refresh_mode());
+        Assertions.assertEquals("", thriftStatus.getEffective_refresh_mode_reason());
+        Assertions.assertEquals("", thriftStatus.getLast_executed_refresh_mode());
     }
 
     @Test
@@ -188,7 +191,7 @@ public class ShowMaterializedViewStatusTest {
 
         List<String> resultSet = viewStatus.toResultSet();
 
-        Assertions.assertEquals(36, resultSet.size());
+        Assertions.assertEquals(39, resultSet.size());
         Assertions.assertEquals("", resultSet.get(3)); // refresh type
         Assertions.assertEquals("false", resultSet.get(4)); // is active
         Assertions.assertEquals("", resultSet.get(5)); // inactive reason
@@ -218,6 +221,29 @@ public class ShowMaterializedViewStatusTest {
         Assertions.assertEquals("", resultSet.get(31)); // refresh policy
         Assertions.assertEquals("", resultSet.get(32)); // resource group
         Assertions.assertEquals("", resultSet.get(33)); // query rewrite status reason
+        Assertions.assertEquals("", resultSet.get(36)); // effective refresh mode
+        Assertions.assertEquals("", resultSet.get(37)); // effective refresh mode reason
+        Assertions.assertEquals("", resultSet.get(38)); // last executed refresh mode
+    }
+
+    @Test
+    public void refreshModeFieldsKeepTheirResultSetAndThriftSlots() {
+        ShowMaterializedViewStatus viewStatus = new ShowMaterializedViewStatus(1L, "testDb", "testView");
+        viewStatus.setEffectiveRefreshMode("PCT");
+        viewStatus.setEffectiveRefreshModeReason("incremental analysis rejected");
+        viewStatus.setLastExecutedRefreshMode("INCREMENTAL");
+
+        List<String> resultSet = viewStatus.toResultSet();
+
+        Assertions.assertEquals("PCT", resultSet.get(36));
+        Assertions.assertEquals("incremental analysis rejected", resultSet.get(37));
+        Assertions.assertEquals("INCREMENTAL", resultSet.get(38));
+
+        TMaterializedViewStatus thriftStatus = viewStatus.toThrift();
+
+        Assertions.assertEquals("PCT", thriftStatus.getEffective_refresh_mode());
+        Assertions.assertEquals("incremental analysis rejected", thriftStatus.getEffective_refresh_mode_reason());
+        Assertions.assertEquals("INCREMENTAL", thriftStatus.getLast_executed_refresh_mode());
     }
 
     @Test

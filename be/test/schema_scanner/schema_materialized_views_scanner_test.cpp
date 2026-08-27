@@ -44,6 +44,11 @@ protected:
     std::string _ip = "127.0.0.1";
     ObjectPool _pool;
     std::unique_ptr<RuntimeState> _state;
+
+    // Slot ids are 1-based and follow _s_columns order in the scanner.
+    static constexpr int EFFECTIVE_REFRESH_MODE = 37;
+    static constexpr int EFFECTIVE_REFRESH_MODE_REASON = 38;
+    static constexpr int LAST_EXECUTED_REFRESH_MODE = 39;
 };
 
 TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
@@ -54,7 +59,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
 
     // Test that scanner has the correct number of columns
     auto slot_descs = scanner.get_slot_descs();
-    EXPECT_EQ(36, slot_descs.size());
+    EXPECT_EQ(39, slot_descs.size());
 
     // Test column names and types
     EXPECT_EQ("MATERIALIZED_VIEW_ID", slot_descs[0]->col_name());
@@ -93,6 +98,9 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
     EXPECT_EQ("QUERY_REWRITE_STATUS_REASON", slot_descs[33]->col_name());
     EXPECT_EQ("LAST_FRESHNESS_CONFIRMED_AT", slot_descs[34]->col_name());
     EXPECT_EQ("BASE_TABLE_REFRESH_VERSION_TIMES", slot_descs[35]->col_name());
+    EXPECT_EQ("EFFECTIVE_REFRESH_MODE", slot_descs[36]->col_name());
+    EXPECT_EQ("EFFECTIVE_REFRESH_MODE_REASON", slot_descs[37]->col_name());
+    EXPECT_EQ("LAST_EXECUTED_REFRESH_MODE", slot_descs[38]->col_name());
 }
 
 TEST_F(SchemaMaterializedViewsScannerTest, test_uninitialized_scanner) {
@@ -204,6 +212,9 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     mv.__set_query_rewrite_status_reason("UNSUPPORTED_DEFINITION");
     mv.__set_last_freshness_confirmed_at("2025-01-01 10:06:07");
     mv.__set_base_table_refresh_version_times("{\"default_catalog.db.ext_t\":\"2025-01-01 09:00:00\"}");
+    mv.__set_effective_refresh_mode("PCT");
+    mv.__set_effective_refresh_mode_reason("rejected_for_test");
+    mv.__set_last_executed_refresh_mode("PCT");
 
     scanner._mv_results.materialized_views = {mv};
 
@@ -244,6 +255,12 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     EXPECT_TRUE(row.find("UNSUPPORTED_DEFINITION") != std::string::npos);   // QUERY_REWRITE_STATUS_REASON
     EXPECT_TRUE(row.find("2025-01-01 10:06:07") != std::string::npos);      // LAST_FRESHNESS_CONFIRMED_AT
     EXPECT_TRUE(row.find("default_catalog.db.ext_t") != std::string::npos); // BASE_TABLE_REFRESH_VERSION_TIMES
+
+    // Adjacent varchars: a substring probe over the row cannot spot a mis-numbered case label.
+    EXPECT_EQ("PCT", chunk->get_column_by_slot_id(EFFECTIVE_REFRESH_MODE)->get(0).get_slice().to_string());
+    EXPECT_EQ("rejected_for_test",
+              chunk->get_column_by_slot_id(EFFECTIVE_REFRESH_MODE_REASON)->get(0).get_slice().to_string());
+    EXPECT_EQ("PCT", chunk->get_column_by_slot_id(LAST_EXECUTED_REFRESH_MODE)->get(0).get_slice().to_string());
 
     chunk->reset();
     EXPECT_OK(scanner.get_next(&chunk, &eos));
@@ -347,6 +364,11 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_null_values) {
     EXPECT_TRUE(row.find("test_db") != std::string::npos); // TABLE_SCHEMA
     EXPECT_TRUE(row.find("test_mv") != std::string::npos); // TABLE_NAME
     EXPECT_TRUE(row.find("NULL") != std::string::npos);    // Should have null values
+
+    // The scanner's own contract: an unset optional becomes NULL, not an empty slice.
+    EXPECT_TRUE(chunk->get_column_by_slot_id(EFFECTIVE_REFRESH_MODE)->is_null(0));
+    EXPECT_TRUE(chunk->get_column_by_slot_id(EFFECTIVE_REFRESH_MODE_REASON)->is_null(0));
+    EXPECT_TRUE(chunk->get_column_by_slot_id(LAST_EXECUTED_REFRESH_MODE)->is_null(0));
 }
 
 TEST_F(SchemaMaterializedViewsScannerTest, test_invalid_numeric_values) {

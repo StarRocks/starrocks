@@ -52,11 +52,14 @@ public class MVVersionManager {
     private final Logger logger;
     private final MaterializedView mv;
     private final MvTaskRunContext mvTaskRunContext;
+    private final MaterializedView.RefreshMode runRefreshMode;
 
     public MVVersionManager(MaterializedView mv,
-                            MvTaskRunContext mvTaskRunContext) {
+                            MvTaskRunContext mvTaskRunContext,
+                            MaterializedView.RefreshMode runRefreshMode) {
         this.mv = mv;
         this.mvTaskRunContext = mvTaskRunContext;
+        this.runRefreshMode = runRefreshMode;
         this.logger = MVTraceUtils.getLogger(mv, MVVersionManager.class);
     }
 
@@ -126,13 +129,10 @@ public class MVVersionManager {
         if (isFinalBatchRun && freshnessBaseline > copiedScheme.getLastFreshnessConfirmedAt()) {
             copiedScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
         }
-        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
         logger.info("Update materialized view {} refresh scheme, " +
                         "last refresh time: {}, version meta changed",
                 mv.getName(), maxChangedTableRefreshTime);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                wal -> mv.setRefreshScheme(copiedScheme));
+        persistRefreshScheme(copiedScheme);
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
@@ -159,13 +159,22 @@ public class MVVersionManager {
                 return;
             }
             copiedScheme.setLastFreshnessConfirmedAt(confirmTime);
-            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                    new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                    wal -> mv.setRefreshScheme(copiedScheme));
+            persistRefreshScheme(copiedScheme);
         } finally {
             locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
         }
+    }
+
+    // The single place a refresh scheme reaches the edit log, so the executed mode is stamped on every
+    // write; a run that executed nothing passes null and leaves the mode of the run that did.
+    private void persistRefreshScheme(MaterializedView.MvRefreshScheme copiedScheme) {
+        if (runRefreshMode != null) {
+            copiedScheme.setLastExecutedRefreshMode(runRefreshMode);
+        }
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                wal -> mv.setRefreshScheme(copiedScheme));
     }
 
     // The batch's first-run start time, propagated across batch runs via MV_FRESHNESS_BASELINE_TIME. A single-run

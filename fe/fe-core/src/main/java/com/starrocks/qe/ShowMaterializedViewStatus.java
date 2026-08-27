@@ -83,6 +83,9 @@ public class ShowMaterializedViewStatus {
     private long lastRefreshTime;
     private long lastFreshnessConfirmedAt;
     private String baseTableRefreshVersionTimes = "{}";
+    private String effectiveRefreshMode;
+    private String effectiveRefreshModeReason;
+    private String lastExecutedRefreshMode;
     private String warehouse;
     private String refreshMode;
     private String refreshTrigger;
@@ -362,12 +365,20 @@ public class ShowMaterializedViewStatus {
         if (refreshScheme != null) {
             status.setLastRefreshTime(refreshScheme.getLastRefreshTime());
             status.setLastFreshnessConfirmedAt(refreshScheme.getLastFreshnessConfirmedAt());
+            status.setLastExecutedRefreshMode(refreshScheme.getLastExecutedRefreshMode() == null
+                    ? null : refreshScheme.getLastExecutedRefreshMode().name());
         }
         status.setBaseTableRefreshVersionTimes(mv.getBaseTableRefreshVersionTimesJson());
         boolean syncRefresh = refreshScheme != null
                 && refreshScheme.getType() == MaterializedViewRefreshType.SYNC;
         status.setWarehouse(syncRefresh || !RunMode.isSharedDataMode() ? "" : mv.getWarehouseName());
         status.setRefreshMode(syncRefresh || mv.getRefreshMode() == null ? null : mv.getRefreshMode().name());
+        status.setEffectiveRefreshMode(syncRefresh ? null : mv.getCurrentRefreshMode().name());
+        // The reason explains a mode the user did not ask for, so it stops applying once the two agree:
+        // ALTER to the already-settled mode is permitted and leaves the stored reason behind.
+        boolean modeHonoured = mv.getRefreshMode() == mv.getCurrentRefreshMode();
+        status.setEffectiveRefreshModeReason(
+                syncRefresh || modeHonoured ? null : mv.getCurrentRefreshModeReason());
         status.setRefreshTrigger(mv.getRefreshTriggerString());
         status.setRefreshPolicy(mv.getRefreshPolicyString());
         status.setResourceGroup(mv.getResourceGroupString());
@@ -406,6 +417,9 @@ public class ShowMaterializedViewStatus {
         }
         status.setWarehouse("");
         status.setRefreshMode(null);
+        status.setEffectiveRefreshMode(null);
+        status.setEffectiveRefreshModeReason(null);
+        status.setLastExecutedRefreshMode(null);
         status.setRefreshTrigger("NONE");
         status.setRefreshPolicy("NONE");
         status.setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
@@ -530,6 +544,30 @@ public class ShowMaterializedViewStatus {
 
     public void setBaseTableRefreshVersionTimes(String baseTableRefreshVersionTimes) {
         this.baseTableRefreshVersionTimes = baseTableRefreshVersionTimes;
+    }
+
+    public String getEffectiveRefreshMode() {
+        return effectiveRefreshMode;
+    }
+
+    public void setEffectiveRefreshMode(String effectiveRefreshMode) {
+        this.effectiveRefreshMode = effectiveRefreshMode;
+    }
+
+    public String getEffectiveRefreshModeReason() {
+        return effectiveRefreshModeReason;
+    }
+
+    public void setEffectiveRefreshModeReason(String effectiveRefreshModeReason) {
+        this.effectiveRefreshModeReason = effectiveRefreshModeReason;
+    }
+
+    public String getLastExecutedRefreshMode() {
+        return lastExecutedRefreshMode;
+    }
+
+    public void setLastExecutedRefreshMode(String lastExecutedRefreshMode) {
+        this.lastExecutedRefreshMode = lastExecutedRefreshMode;
     }
 
     public String getWarehouse() {
@@ -805,6 +843,12 @@ public class ShowMaterializedViewStatus {
             status.setLast_freshness_confirmed_at(TimeUtils.longToTimeString(lastFreshnessConfirmedAt));
         }
         status.setBase_table_refresh_version_times(Strings.nullToEmpty(baseTableRefreshVersionTimes));
+        // Empty rather than unset: MaterializedViewsSystemTable.infoToScalar coerces every null string to "",
+        // so leaving these unset would return NULL through a backend scan and "" through the frontend-served
+        // path for the same query.
+        status.setEffective_refresh_mode(Strings.nullToEmpty(effectiveRefreshMode));
+        status.setEffective_refresh_mode_reason(Strings.nullToEmpty(effectiveRefreshModeReason));
+        status.setLast_executed_refresh_mode(Strings.nullToEmpty(lastExecutedRefreshMode));
 
         return status;
     }
@@ -888,6 +932,9 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, Strings.nullToEmpty(queryRewriteStatusReason));
         addField(resultRow, lastFreshnessConfirmedAt > 0 ? TimeUtils.longToTimeString(lastFreshnessConfirmedAt) : "");
         addField(resultRow, Strings.nullToEmpty(baseTableRefreshVersionTimes));
+        addField(resultRow, Strings.nullToEmpty(effectiveRefreshMode));
+        addField(resultRow, Strings.nullToEmpty(effectiveRefreshModeReason));
+        addField(resultRow, Strings.nullToEmpty(lastExecutedRefreshMode));
 
         return resultRow;
     }

@@ -141,7 +141,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 logger.info("No base table has changed, skip the refresh for materialized view: {}",
                         mv.getName());
                 // No base-table change means the MV is confirmed fresh as of this run's start.
-                confirmFreshness();
+                confirmFreshnessOnSkip();
                 // Every delta here is a point range (from == to): the window records that the
                 // bookmark had caught up with the base table head.
                 recordImvSourceRangesOnTaskRun();

@@ -81,7 +81,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private String originalDBName;
     private List<BaseTableInfo> baseTableInfos;
     // the refresh mode of the mv determined by analyzer
-    private MaterializedView.RefreshMode analyzedRefreshMode = MaterializedView.RefreshMode.PCT;
+    private AnalyzedRefreshMode analyzedRefreshMode = AnalyzedRefreshMode.of(MaterializedView.RefreshMode.PCT);
     // the encode row id version deduced by analyzer
     private int encodeRowIdVersion = 0;
     // the __ROW_ID__ production strategy deduced by analyzer for incremental MVs;
@@ -391,12 +391,30 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         isRefBaseTablePartitionWithTransform = refBaseTablePartitionWithTransform;
     }
 
-    public void setAnalyzedRefreshMode(MaterializedView.RefreshMode analyzedRefreshMode) {
+    public void setAnalyzedRefreshMode(AnalyzedRefreshMode analyzedRefreshMode) {
         this.analyzedRefreshMode = analyzedRefreshMode;
     }
 
+    public String getAnalyzedRefreshModeReason() {
+        return analyzedRefreshMode.degradedReason();
+    }
+
     public MaterializedView.RefreshMode getAnalyzedRefreshMode() {
-        return analyzedRefreshMode;
+        return analyzedRefreshMode.mode();
+    }
+
+    /**
+     * What the CREATE analysis settled on. {@code degradedReason} is null unless the analysis could not honour
+     * the requested mode, so a reason can never be left behind on a mode that was honoured.
+     */
+    public record AnalyzedRefreshMode(MaterializedView.RefreshMode mode, String degradedReason) {
+        public static AnalyzedRefreshMode of(MaterializedView.RefreshMode mode) {
+            return new AnalyzedRefreshMode(mode, null);
+        }
+
+        public static AnalyzedRefreshMode degradedTo(MaterializedView.RefreshMode mode, String reason) {
+            return new AnalyzedRefreshMode(mode, reason);
+        }
     }
 
     public void setEncodeRowIdVersion(int encodeRowIdVersion) {

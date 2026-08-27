@@ -36,6 +36,7 @@ description: "materialized_view_refresh_jobs はマテリアライズドビュ�
 | FAILED_QUERY_ID                    | 失敗した task run のクエリ ID。失敗した task run がない場合は `NULL`。 |
 | ERROR_CODE                         | 失敗した task run のエラーコード。失敗した task run がない場合は `NULL`。 |
 | ERROR_MESSAGE                      | 失敗した task run のエラーメッセージ。失敗した task run がない場合は `NULL`。 |
+| EXECUTED_REFRESH_MODE | この refresh job が実際に使用したモードです（`INCREMENTAL` または `PCT`）。マテリアライズドビューの `REFRESH_MODE` が `AUTO` の場合、増分維持では表現できない基テーブルの変更があったために、その job だけ `PCT` に切り替わることがあります。この列を `REFRESH_MODE` と比較すれば、その job がフォールバックしたかどうかが分かります。複数段に分かれて実行された job では最後に使用したモードを、失敗した job では失敗時に使用していたモードを示します。モードを選択する前に終わった job（リフレッシュ不要でスキップされた job、選択前に失敗した job）、および記録のない過去の job では NULL。 |
 
 :::note
 このビューは永続的なストレージを持ちません。その行はクエリ時に `task_runs` から導出されるため、記録の保持期間は `task_runs` の履歴設定に従います。各ジョブはクエリ時にその `task_runs` の行から集約されるため、ジョブのすべての task run が `task_runs` の履歴ウィンドウ内に残っている間のみ、そのジョブは完全に表現されます。このウィンドウより古いジョブは表示されず、保持境界をまたぐジョブは部分的にしか集約されない場合があります（例えば、その `SUBMIT_TIME` や `IMV_SOURCE_*` の範囲が、保持されている task run のみを反映することがあります）。

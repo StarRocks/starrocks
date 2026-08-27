@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog.system.information;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -87,6 +88,7 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                         .column("FAILED_QUERY_ID", TypeFactory.createVarcharType(64))
                         .column("ERROR_CODE", TypeFactory.createVarcharType(20))
                         .column("ERROR_MESSAGE", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXECUTED_REFRESH_MODE", TypeFactory.createVarcharType(16))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEW_REFRESH_JOBS);
     }
 
@@ -169,6 +171,10 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                 info.setResource_group(mv.getResourceGroupString());
                 info.setRefresh_mode(mv.getRefreshMode().name());
             }
+            String executedRefreshMode = lastExecutedRefreshMode(batch);
+            if (executedRefreshMode != null) {
+                info.setExecuted_refresh_mode(executedRefreshMode);
+            }
             info.setTask_id(String.valueOf(anyRun.getTaskId()));
             if (anyRun.getWarehouseName() != null) {
                 info.setWarehouse(anyRun.getWarehouseName());
@@ -242,6 +248,39 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
         }
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId);
         return (table instanceof MaterializedView) ? (MaterializedView) table : null;
+    }
+
+    /**
+     * A job is a batch of runs and a hybrid run reports its own mode, so the job's executed mode is the last
+     * one any run recorded -- that is the mode the job ended on after any in-batch fallback. The batch arrives
+     * sorted by create time, which is what makes the walk backwards a walk from the latest run. A run records its
+     * mode when its processor is built, so runs that executed nothing are passed over rather than
+     * overwriting the mode of the run that did.
+     */
+    @VisibleForTesting
+    static String lastExecutedRefreshMode(List<TaskRunStatus> batch) {
+        for (int i = batch.size() - 1; i >= 0; i--) {
+            TaskRunStatus run = batch.get(i);
+            if (!executedARefresh(run.getState())) {
+                continue;
+            }
+            MVTaskRunExtraMessage extra = run.getMvTaskRunExtraMessage();
+            if (extra != null && isExecutedMode(extra.getRefreshMode())) {
+                return extra.getRefreshMode();
+            }
+        }
+        return null;
+    }
+
+    // SKIPPED counts as a success state but runs nothing, and MERGED hands the work to another run.
+    private static boolean executedARefresh(Constants.TaskRunState state) {
+        return state == Constants.TaskRunState.SUCCESS || state == Constants.TaskRunState.FAILED;
+    }
+
+    // AUTO is what a hybrid run carries until it picks a lane, so a run that failed before picking one
+    // still reports it -- and AUTO is never a mode anything executed in.
+    private static boolean isExecutedMode(String mode) {
+        return !Strings.isNullOrEmpty(mode) && !MaterializedView.RefreshMode.AUTO.name().equals(mode);
     }
 
     // Merges a per-base-table scalar map (the pinned snapshot id) across the job's runs. The pinned

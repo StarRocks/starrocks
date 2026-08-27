@@ -74,7 +74,8 @@ public class MaterializedViewRefreshJobsSystemTableTest {
             "FAILED_TASK_RUN_ID",
             "FAILED_QUERY_ID",
             "ERROR_CODE",
-            "ERROR_MESSAGE");
+            "ERROR_MESSAGE",
+            "EXECUTED_REFRESH_MODE");
 
     @Test
     public void testColumnContractMatchesThriftOrder() {
@@ -82,7 +83,7 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         List<String> actual = table.getBaseSchema().stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
-        Assertions.assertEquals(23, actual.size());
+        Assertions.assertEquals(24, actual.size());
         Assertions.assertEquals(EXPECTED_COLUMNS, actual);
         Assertions.assertEquals(Table.TableType.SCHEMA, table.getType());
     }
@@ -93,7 +94,7 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         Table table = db.getTable(MaterializedViewRefreshJobsSystemTable.NAME);
         Assertions.assertNotNull(table);
         Assertions.assertEquals(Table.TableType.SCHEMA, table.getType());
-        Assertions.assertEquals(23, table.getBaseSchema().size());
+        Assertions.assertEquals(24, table.getBaseSchema().size());
     }
 
     @Test
@@ -403,5 +404,60 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         props.put(TaskRun.MV_ID, "100");
         run.setProperties(props);
         return run;
+    }
+
+    private static TaskRunStatus runWithMode(String refreshMode) {
+        return runWithMode(refreshMode, Constants.TaskRunState.SUCCESS);
+    }
+
+    private static TaskRunStatus runWithMode(String refreshMode, Constants.TaskRunState state) {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setState(state);
+        if (refreshMode != null) {
+            status.getMvTaskRunExtraMessage().setRefreshMode(refreshMode);
+        }
+        return status;
+    }
+
+    /**
+     * A hybrid run records its own mode, so a batch that fell back mid-way reports the mode it ended on
+     * rather than the one it started with.
+     */
+    @Test
+    public void testExecutedRefreshModeIsTheModeTheBatchEndedOn() {
+        Assertions.assertEquals("PCT", MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("INCREMENTAL"), runWithMode("PCT"))));
+        Assertions.assertEquals("INCREMENTAL", MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("PCT"), runWithMode("INCREMENTAL"))));
+    }
+
+    /** An unrecorded mode is the empty string here, so it must not mask an earlier run that did record one. */
+    @Test
+    public void testExecutedRefreshModeSkipsRunsThatRecordedNoMode() {
+        Assertions.assertEquals("INCREMENTAL", MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("INCREMENTAL"), runWithMode(null))));
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode(null), runWithMode(null))));
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(List.of()));
+    }
+
+    @Test
+    public void testExecutedRefreshModeIgnoresRunsThatExecutedNothing() {
+        Assertions.assertEquals("PCT", MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("PCT"), runWithMode("INCREMENTAL", Constants.TaskRunState.SKIPPED))));
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("INCREMENTAL", Constants.TaskRunState.SKIPPED))));
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("INCREMENTAL", Constants.TaskRunState.PENDING))));
+        Assertions.assertEquals("INCREMENTAL", MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("INCREMENTAL", Constants.TaskRunState.FAILED))));
+    }
+
+    @Test
+    public void testExecutedRefreshModeIgnoresARunThatNeverPickedALane() {
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("AUTO", Constants.TaskRunState.FAILED))));
+        Assertions.assertEquals("PCT", MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(
+                List.of(runWithMode("PCT"), runWithMode("AUTO", Constants.TaskRunState.FAILED))));
     }
 }

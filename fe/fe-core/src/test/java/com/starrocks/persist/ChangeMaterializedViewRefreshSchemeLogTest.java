@@ -413,4 +413,55 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         Assertions.assertEquals(absorbedRefreshTime, replayed,
                 "replay of a pre-upgrade log with nothing to derive from must keep the in-memory value");
     }
+
+    @Test
+    public void testLastExecutedRefreshModeSurvivesReplay(@Mocked GlobalStateMgr globalStateMgr,
+                                                          @Injectable Database db) throws IOException {
+        File file = new File(fileName);
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(Files.newOutputStream(file.toPath()));
+
+        List<Column> columns = new LinkedList<>();
+        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setLastExecutedRefreshMode(MaterializedView.RefreshMode.PCT);
+        MaterializedView materializedView = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
+                partitionInfo, distributionInfo, refreshScheme);
+        ChangeMaterializedViewRefreshSchemeLog changeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(materializedView);
+        Text.writeString(out, GsonUtils.GSON.toJson(changeLog, ChangeMaterializedViewRefreshSchemeLog.class));
+        out.flush();
+        out.close();
+
+        DataInputStream in = new DataInputStream(Files.newInputStream(file.toPath()));
+        ChangeMaterializedViewRefreshSchemeLog readChangeLog = ChangeMaterializedViewRefreshSchemeLog.read(in);
+        in.close();
+        // Nothing else records which mode a run used, so a leader that logs it and a follower that
+        // replays it are the only path by which the column stays right across a restart.
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT, readChangeLog.getLastExecutedRefreshMode());
+
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getLocalMetastore().getDb(anyLong);
+                result = db;
+
+                globalStateMgr.getCurrentState().getLocalMetastore().getTable(anyLong, anyLong);
+                result = materializedView;
+
+                db.getId();
+                result = anyLong;
+
+                materializedView.getId();
+                result = anyLong;
+            }
+        };
+        new AlterJobMgr(null, null, null)
+                .replayChangeMaterializedViewRefreshScheme(changeLog);
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT,
+                materializedView.getRefreshScheme().getLastExecutedRefreshMode());
+    }
 }

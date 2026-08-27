@@ -233,11 +233,22 @@ public abstract class MVRefreshProcessor {
     public abstract boolean hasNextBatchRun();
 
     public void confirmFreshness() {
+        confirmFreshness(runRefreshMode);
+    }
+
+    /**
+     * Confirm freshness for a run that executed no refresh, leaving the executed mode on the last run that did.
+     */
+    public void confirmFreshnessOnSkip() {
+        confirmFreshness(null);
+    }
+
+    private void confirmFreshness(MaterializedView.RefreshMode executedMode) {
         // Freshness is confirmed by the batch's final run only; intermediate runs leave it untouched.
         if (hasNextBatchRun()) {
             return;
         }
-        new MVVersionManager(mv, mvContext).confirmFreshness();
+        new MVVersionManager(mv, mvContext, executedMode).confirmFreshness();
     }
 
     /**
@@ -878,7 +889,7 @@ public abstract class MVRefreshProcessor {
                     db.getFullName(), this.mv.getName(), db.getFullName(), Config.mv_refresh_try_lock_timeout_ms);
         }
 
-        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
+        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext, runRefreshMode);
         try {
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
                     refBaseTableIds, refTableAndPartitionNames, tvrDeltaToPromote, !hasNextBatchRun());

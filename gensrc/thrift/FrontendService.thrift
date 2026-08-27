@@ -439,6 +439,9 @@ struct TMaterializedViewStatus {
     37: optional string query_rewrite_status_reason
     38: optional string last_freshness_confirmed_at
     39: optional string base_table_refresh_version_times
+    40: optional string effective_refresh_mode
+    41: optional string effective_refresh_mode_reason
+    42: optional string last_executed_refresh_mode
 }
 
 struct TListPipesParams {
@@ -533,6 +536,7 @@ struct TMaterializedViewRefreshJobInfo {
     21: optional string failed_query_id
     22: optional string error_code
     23: optional string error_message
+    24: optional string executed_refresh_mode
 }
 
 struct TListMaterializedViewRefreshJobsResult {

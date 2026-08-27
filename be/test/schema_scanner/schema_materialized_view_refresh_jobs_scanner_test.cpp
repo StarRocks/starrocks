@@ -61,6 +61,7 @@ protected:
     static constexpr int REFRESH_STATE = 12;
     static constexpr int FINISH_TIME = 13;
     static constexpr int DURATION_TIME = 14;
+    static constexpr int EXECUTED_REFRESH_MODE = 24;
 };
 
 TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_scanner_initialization) {
@@ -68,7 +69,7 @@ TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_scanner_initialization
     init_scanner(scanner);
 
     auto slot_descs = scanner.get_slot_descs();
-    EXPECT_EQ(23, slot_descs.size());
+    EXPECT_EQ(24, slot_descs.size());
 
     EXPECT_EQ("JOB_ID", slot_descs[0]->col_name());
     EXPECT_EQ("MATERIALIZED_VIEW_ID", slot_descs[1]->col_name());
@@ -93,6 +94,7 @@ TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_scanner_initialization
     EXPECT_EQ("FAILED_QUERY_ID", slot_descs[20]->col_name());
     EXPECT_EQ("ERROR_CODE", slot_descs[21]->col_name());
     EXPECT_EQ("ERROR_MESSAGE", slot_descs[22]->col_name());
+    EXPECT_EQ("EXECUTED_REFRESH_MODE", slot_descs[23]->col_name());
 }
 
 TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_uninitialized_scanner) {
@@ -159,6 +161,7 @@ TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_single_job_all_fields)
     info.__set_failed_query_id("failed-query-1");
     info.__set_error_code("0");
     info.__set_error_message("");
+    info.__set_executed_refresh_mode("INCREMENTAL");
 
     scanner._jobs_result.jobs = {info};
     scanner._jobs_index = 0;
@@ -191,6 +194,7 @@ TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_single_job_all_fields)
     EXPECT_EQ("job-001", chunk->get_column_by_slot_id(JOB_ID)->get(0).get_slice().to_string());
     EXPECT_FALSE(chunk->get_column_by_slot_id(REFRESH_STATE)->is_null(0));
     EXPECT_EQ("SUCCESS", chunk->get_column_by_slot_id(REFRESH_STATE)->get(0).get_slice().to_string());
+    EXPECT_EQ("INCREMENTAL", chunk->get_column_by_slot_id(EXECUTED_REFRESH_MODE)->get(0).get_slice().to_string());
     EXPECT_EQ("test_db", chunk->get_column_by_slot_id(TABLE_SCHEMA)->get(0).get_slice().to_string());
     EXPECT_EQ("test_mv", chunk->get_column_by_slot_id(TABLE_NAME)->get(0).get_slice().to_string());
 

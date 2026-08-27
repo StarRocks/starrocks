@@ -71,6 +71,7 @@ import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement.AnalyzedRefreshMode;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -359,7 +360,7 @@ public class MaterializedViewAnalyzer {
      */
     private record MvAnalysisState(KeysType keysType,
                                    RowIdStrategy rowIdStrategy,
-                                   MaterializedView.RefreshMode analyzedRefreshMode,
+                                   AnalyzedRefreshMode analyzedRefreshMode,
                                    int encodeRowIdVersion,
                                    List<BaseTableInfo> baseTableInfos,
                                    List<String> sortKeys,
@@ -379,7 +380,8 @@ public class MaterializedViewAnalyzer {
         static MvAnalysisState capture(CreateMaterializedViewStatement statement) {
             return new MvAnalysisState(statement.getKeysType(),
                     statement.getRowIdStrategy(),
-                    statement.getAnalyzedRefreshMode(),
+                    new AnalyzedRefreshMode(statement.getAnalyzedRefreshMode(),
+                            statement.getAnalyzedRefreshModeReason()),
                     statement.getEncodeRowIdVersion(),
                     statement.getBaseTableInfos(),
                     statement.getSortKeys(),
@@ -527,7 +529,7 @@ public class MaterializedViewAnalyzer {
             try {
                 analyzeMvDefinition(statement, context, MaterializedView.RefreshMode.INCREMENTAL,
                         catalog, dbName);
-                statement.setAnalyzedRefreshMode(MaterializedView.RefreshMode.AUTO);
+                statement.setAnalyzedRefreshMode(AnalyzedRefreshMode.of(MaterializedView.RefreshMode.AUTO));
             } catch (SemanticException e) {
                 // IvmTrialRewriter reports an internal rewriter failure as a rejection too, so a bug in the
                 // incremental path degrades silently unless it is logged here.
@@ -535,6 +537,8 @@ public class MaterializedViewAnalyzer {
                         statement.getTblName(), e);
                 parsedState.restore(statement, context);
                 analyzeMvDefinition(statement, context, MaterializedView.RefreshMode.PCT, catalog, dbName);
+                statement.setAnalyzedRefreshMode(AnalyzedRefreshMode.degradedTo(
+                        MaterializedView.RefreshMode.PCT, e.getMessage()));
             }
         }
 
@@ -557,9 +561,9 @@ public class MaterializedViewAnalyzer {
                 // All incremental MVs are PK tables; the row-id strategy decides how __ROW_ID__ is sourced.
                 statement.setKeysType(KeysType.PRIMARY_KEYS);
                 statement.setRowIdStrategy(result.rowIdStrategy());
-                statement.setAnalyzedRefreshMode(result.analyzedRefreshMode());
+                statement.setAnalyzedRefreshMode(AnalyzedRefreshMode.of(result.analyzedRefreshMode()));
             } else {
-                statement.setAnalyzedRefreshMode(refreshMode);
+                statement.setAnalyzedRefreshMode(AnalyzedRefreshMode.of(refreshMode));
             }
 
             // collect table from query statement

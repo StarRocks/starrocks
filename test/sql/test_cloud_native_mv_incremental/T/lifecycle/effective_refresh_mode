@@ -1,0 +1,85 @@
+-- An AUTO view reaches PCT two ways that look identical in REFRESH_MODE and in the per-run mode, and
+-- whose remedies are opposite: a run-level fallback recovers by itself, a create-time degradation only
+-- by rebuilding. EFFECTIVE_REFRESH_MODE is what separates them, because it is fixed at creation.
+
+-- name: test_effective_refresh_mode_reports_create_time_degradation @cloud
+CREATE TABLE ef_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ef_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+-- An explicit column list cannot be matched against a query the incremental rewrite has added columns to.
+CREATE MATERIALIZED VIEW mv_ef (d, kk, sv)
+DISTRIBUTED BY HASH(d) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM ef_base GROUP BY dt, k;
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+SELECT EFFECTIVE_REFRESH_MODE_REASON LIKE '%column counts%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+[UC]REFRESH MATERIALIZED VIEW mv_ef WITH SYNC MODE;
+INSERT INTO ef_base VALUES ('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_ef WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL';
+-- ALTER to the mode the view already settled on is accepted, and once the two agree the creation-time
+-- rejection has nothing left to explain.
+ALTER MATERIALIZED VIEW mv_ef SET ('refresh_mode' = 'pct');
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ef';
+
+-- name: test_effective_refresh_mode_stays_auto_across_a_run_level_fallback @cloud
+CREATE TABLE fb_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO fb_base VALUES ('2026-08-01',1,1),('2026-08-02',2,1);
+CREATE MATERIALIZED VIEW mv_fb
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM fb_base GROUP BY dt, k;
+-- A definition that does support incremental refresh: nothing was settled away, so no reason either.
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+INSERT INTO fb_base VALUES ('2026-08-02',2,5);
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- Dropping a base partition cannot be maintained incrementally, so this one run falls back.
+ALTER TABLE fb_base DROP PARTITION p20260801;
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+-- The discriminating row: the run went PCT while the view is still an AUTO one.
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- A refresh with nothing left to do is SKIPPED, and the skipped run still records the incremental lane
+-- the hybrid processor picked before it found no work -- so the column has to keep the mode that last
+-- actually ran, not the one the skipped run reported.
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+function: assert_query_contains("SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = (SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb') ORDER BY CREATE_TIME DESC LIMIT 1", "SKIPPED", "INCREMENTAL")
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+-- Per job, the same split shows up on materialized_view_refresh_jobs: the job that fell back reports
+-- PCT, and the job that skipped reports nothing at all rather than the lane it had picked.
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb' AND EXECUTED_REFRESH_MODE = 'PCT'", "1")
+function: assert_query_contains("SELECT (count(*) >= 1) FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb' AND EXECUTED_REFRESH_MODE IS NULL", "1")
+-- and the next append-only change goes back to incremental, which a degraded view never does
+INSERT INTO fb_base VALUES ('2026-08-03',3,7);
+[UC]REFRESH MATERIALIZED VIEW mv_fb WITH SYNC MODE;
+SELECT EFFECTIVE_REFRESH_MODE, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fb';
+
+-- name: test_effective_refresh_mode_matches_configured_mode_when_nothing_was_settled @cloud
+CREATE TABLE pl_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE MATERIALIZED VIEW mv_pl
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'pct')
+AS SELECT dt, k, SUM(v) AS v FROM pl_base GROUP BY dt, k;
+CREATE MATERIALIZED VIEW mv_in
+PARTITION BY (date_trunc('day', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM pl_base GROUP BY dt, k;
+-- Queried one view at a time on an equality predicate: an IN list plans as a backend scan, which is a
+-- different surface from the values this case is about.
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_pl';
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON, LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_in';

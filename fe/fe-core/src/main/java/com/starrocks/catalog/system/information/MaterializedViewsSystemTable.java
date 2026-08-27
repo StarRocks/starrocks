@@ -118,6 +118,9 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("QUERY_REWRITE_STATUS_REASON", TypeFactory.createVarcharType(32))
                         .column("LAST_FRESHNESS_CONFIRMED_AT", DateType.DATETIME)
                         .column("BASE_TABLE_REFRESH_VERSION_TIMES", TypeFactory.createVarcharType(1024))
+                        .column("EFFECTIVE_REFRESH_MODE", TypeFactory.createVarcharType(16))
+                        .column("EFFECTIVE_REFRESH_MODE_REASON", TypeFactory.createVarcharType(1024))
+                        .column("LAST_EXECUTED_REFRESH_MODE", TypeFactory.createVarcharType(16))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 

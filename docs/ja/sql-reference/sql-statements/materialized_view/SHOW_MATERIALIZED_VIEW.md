@@ -80,6 +80,9 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | query_rewrite_status_reason | `query_rewrite_status` の理由。有効な値: `OK`、`MV_INACTIVE`、`QUERY_REWRITE_DISABLED`、`UNSUPPORTED_DEFINITION`、`UNKNOWN`。 |
 | last_freshness_confirmed_at | 最後に成功した更新の開始時刻。更新全体（そのすべてのタスク実行）が完了した時点で記録されます。ベーステーブルに変更がなく更新不要と確認された場合も新鮮さが確認されます。マテリアライズドビューはこの時点のベーステーブルのデータを反映します。`last_refresh_time`（ベーステーブルのデータバージョン時刻）とは異なり、これは実時刻です。最初の更新が成功するまで、および同期マテリアライズドビューの場合は空です。パーティション範囲を指定した REFRESH（部分更新）では値は進みません。 |
 | base_table_refresh_version_times | 各ベーステーブルのデータバージョン時刻を、ベーステーブルの `catalog.database.table` 名から観測された最新のデータバージョン時刻へのマッピングとして JSON オブジェクトで示します。これは `last_refresh_time`（それらの単一の最大値）の背後にあるテーブルごとの内訳です。外部/データレイクのベーステーブルはパーティションのソース更新時刻を、OLAP（内部）ベーステーブルは可視バージョンのコミット時刻を報告します。記録された時刻を持つベーステーブルがない場合は `{}` です。 |
+| effective_refresh_mode | このマテリアライズドビューが実際に構築されたリフレッシュモードです。有効値は `refresh_mode` と同じ（`PCT`、`INCREMENTAL`、`AUTO`）。通常は `refresh_mode` と一致し、例外は 1 つだけです。`refresh_mode` が `AUTO` でも定義を増分で維持できない場合、`CREATE` は `PCT` のマテリアライズドビューを作成し、この列は `PCT` になります。この判定は作成時に一度だけ行われ、その後変わりません。増分を再度試すにはマテリアライズドビューを作り直すしかありません。同期マテリアライズドビューでは空。 |
+| effective_refresh_mode_reason | `effective_refresh_mode` が `refresh_mode` と異なる理由、つまりこの定義を増分で維持できない理由の説明です。マテリアライズドビューの作成時に記録され、その後は更新されません。2 つのモード列が一致する場合は空。 |
+| last_executed_refresh_mode | 直近のリフレッシュが実際に使用したリフレッシュモードです（有効値: `PCT`、`INCREMENTAL`）。`refresh_mode` と `effective_refresh_mode` がどちらも `AUTO` のとき、この列が `PCT` であれば、そのリフレッシュだけがフォールバックしたことを意味し、以降のリフレッシュは増分に戻れます。一方 `effective_refresh_mode` が `PCT` の場合は、そのマテリアライズドビューが増分をまったく試みないことを意味します。変更がなくスキップされたリフレッシュは、この列の値を変えません。最初のリフレッシュより前、および同期マテリアライズドビューでは空。 |
 
 ## 例
 

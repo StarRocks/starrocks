@@ -152,7 +152,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             PCTRefreshScope refreshScope = mvContext.getRefreshScope();
             if (refreshScope == null || refreshScope.isEmpty()) {
                 // An empty refresh scope means base tables were checked and the MV is already fresh.
-                confirmFreshness();
+                confirmFreshnessOnSkip();
                 promoteFrozenTvrDeltaOnSkip();
                 // A partition-scoped request only proves its own range is fresh -- the same rule
                 // MVVersionManager applies before advancing LAST_FRESHNESS_CONFIRMED_AT.

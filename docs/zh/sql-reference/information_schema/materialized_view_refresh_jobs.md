@@ -36,6 +36,7 @@ description: "materialized_view_refresh_jobs 提供物化视图刷新的作业�
 | FAILED_QUERY_ID                    | 失败 task run 的查询 ID。如果没有 task run 失败，则为 `NULL`。 |
 | ERROR_CODE                         | 失败 task run 的错误代码。如果没有 task run 失败，则为 `NULL`。 |
 | ERROR_MESSAGE                      | 失败 task run 的错误消息。如果没有 task run 失败，则为 `NULL`。 |
+| EXECUTED_REFRESH_MODE | 该刷新任务实际使用的刷新模式:`INCREMENTAL` 或 `PCT`。当物化视图的 `REFRESH_MODE` 为 `AUTO` 时,某次任务可能因为基表发生了增量维护无法表达的变更而改用 `PCT`;把此列与 `REFRESH_MODE` 对比,就能看出这次任务是否发生了回退。分成多步完成的任务,此列给出它最终结束时所用的模式;失败的任务给出它失败时正在使用的模式。任务从未选定模式时为 NULL —— 即因无需刷新而被跳过,或在选定之前就失败 —— 历史任务未记录时同样为 NULL。 |
 
 :::note
 该视图没有持久化存储。其数据行在查询时由 `task_runs` 派生而来，因此记录的保留时长遵循 `task_runs` 历史记录的设置。由于每个作业都是在查询时由其 `task_runs` 数据行汇总而来，因此只有当一个作业的所有 task run 仍处于 `task_runs` 历史记录窗口内时，该作业才会被完整呈现；早于该窗口的作业不会显示，而跨越保留边界的作业可能只被部分汇总（例如，其 `SUBMIT_TIME` 或 `IMV_SOURCE_*` 范围可能仅反映被保留的 task run）。

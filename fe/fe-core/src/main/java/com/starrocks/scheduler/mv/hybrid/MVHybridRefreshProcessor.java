@@ -48,7 +48,7 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         this.ivmProcessor = new MVIVMRefreshProcessor(db, mv, mvContext, mvEntity,
                 MaterializedView.RefreshMode.INCREMENTAL);
         this.pctProcessor = new MVPCTRefreshProcessor(db, mv, mvContext, mvEntity,
-                MaterializedView.RefreshMode.AUTO);
+                MaterializedView.RefreshMode.PCT);
     }
 
     @Override

@@ -125,7 +125,8 @@ public class MVVersionManagerTest {
     @Test
     public void confirmFreshnessAdvancesAndLogsOnce() {
         MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
 
         manager.confirmFreshness();
 
@@ -136,7 +137,8 @@ public class MVVersionManagerTest {
     @Test
     public void confirmFreshnessIsNoopWhenAlreadyConfirmed() {
         MaterializedView mv = buildMv(2000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
 
         manager.confirmFreshness();
 
@@ -149,7 +151,8 @@ public class MVVersionManagerTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "1500");
         MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
 
         manager.confirmFreshness();
 
@@ -162,7 +165,8 @@ public class MVVersionManagerTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "not-a-number");
         MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
 
         manager.confirmFreshness();
 
@@ -180,7 +184,8 @@ public class MVVersionManagerTest {
             }
         };
         MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
 
         manager.confirmFreshness();
 
@@ -193,7 +198,8 @@ public class MVVersionManagerTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(TaskRun.MV_FRESHNESS_BASELINE_TIME, "0");
         MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(properties, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
 
         manager.confirmFreshness();
 
@@ -204,7 +210,8 @@ public class MVVersionManagerTest {
     @Test
     public void confirmFreshnessIsNoopWithoutRunStatus() {
         MaterializedView mv = buildMv(1000L);
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, null));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, null),
+                MaterializedView.RefreshMode.PCT);
 
         manager.confirmFreshness();
 
@@ -228,11 +235,38 @@ public class MVVersionManagerTest {
         PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(mock(BaseTableInfo.class), baseTable);
         Assertions.assertTrue(snapshot.getRefreshedPartitionInfos().isEmpty());
 
-        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)));
+        MVVersionManager manager = new MVVersionManager(mv, buildContext(null, statusWithProcessStartTime(2000L)),
+                MaterializedView.RefreshMode.PCT);
         manager.updateMVVersionInfo(Map.of(2000L, snapshot), PCellSortedSet.of(), Set.of(2000L),
                 Map.of(), null, true);
 
         Assertions.assertEquals(absorbedRefreshTime, mv.getRefreshScheme().getLastRefreshTime(),
                 "a run that refreshed no partition must not report the MV as never refreshed");
+    }
+
+    @Test
+    public void confirmFreshnessRecordsTheModeTheRunExecuted() {
+        MaterializedView mv = buildMv(1000L);
+        MVVersionManager manager = new MVVersionManager(mv,
+                buildContext(null, statusWithProcessStartTime(2000L)), MaterializedView.RefreshMode.PCT);
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT,
+                mv.getRefreshScheme().getLastExecutedRefreshMode());
+    }
+
+    @Test
+    public void confirmFreshnessLeavesTheExecutedModeWhenTheRunExecutedNothing() {
+        MaterializedView mv = buildMv(1000L);
+        mv.getRefreshScheme().setLastExecutedRefreshMode(MaterializedView.RefreshMode.PCT);
+        MVVersionManager manager = new MVVersionManager(mv,
+                buildContext(null, statusWithProcessStartTime(2000L)), null);
+
+        manager.confirmFreshness();
+
+        Assertions.assertEquals(2000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT,
+                mv.getRefreshScheme().getLastExecutedRefreshMode());
     }
 }

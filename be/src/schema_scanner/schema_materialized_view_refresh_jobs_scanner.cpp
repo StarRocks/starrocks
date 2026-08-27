@@ -46,6 +46,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewRefreshJobsScanner::_s_tbls_colu
         {"FAILED_QUERY_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"ERROR_CODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"EXECUTED_REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewRefreshJobsScanner::SchemaMaterializedViewRefreshJobsScanner()
@@ -343,6 +344,17 @@ Status SchemaMaterializedViewRefreshJobsScanner::fill_chunk(ChunkPtr* chunk) {
             // ERROR_MESSAGE
             if (info.__isset.error_message) {
                 const std::string* str = &info.error_message;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 24: {
+            // EXECUTED_REFRESH_MODE
+            if (info.__isset.executed_refresh_mode) {
+                const std::string* str = &info.executed_refresh_mode;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {

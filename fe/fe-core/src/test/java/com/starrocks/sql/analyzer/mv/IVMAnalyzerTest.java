@@ -1148,6 +1148,29 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertEquals(KeysType.DUP_KEYS, stmt.getKeysType());
     }
 
+    /**
+     * The settled mode and its reason have to survive onto the mv, not just onto the statement: the analyzer
+     * writes them to the statement and LocalMetastore copies them across, and only the mv copy is queryable.
+     */
+    @Test
+    public void testDegradedAutoPersistsSettledModeAndReasonOnTheMv() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_settled_reason (sm, id, c1, av) "
+                + "DISTRIBUTED BY HASH(id) BUCKETS 3 REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"auto\") "
+                + "AS SELECT SUM(c2) AS sm, id, c1, AVG(c2) AS av "
+                + "FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id, c1";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_settled_reason");
+            assertEquals(MaterializedView.RefreshMode.AUTO, mv.getRefreshMode(),
+                    "the property the user wrote is untouched");
+            assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode(),
+                    "the mode the system settled on");
+            assertNotNull(mv.getCurrentRefreshModeReason(), "a degraded mv must say why");
+            assertTrue(mv.getCurrentRefreshModeReason().contains("column counts"),
+                    "got: " + mv.getCurrentRefreshModeReason());
+        });
+    }
+
     @Test
     public void testTrialMockMatchesReorderedTargetAndAlignsHeterogeneousStates() throws Exception {
         boolean previous = connectContext.getSessionVariable().isEnableRangeDistribution();
