@@ -16,6 +16,11 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableSet;
+>>>>>>> ae84366 ([BugFix] Drop iceberg table whose metadata file is missing (#77786))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
@@ -80,6 +85,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -111,6 +117,12 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.exceptions.NotFoundException;
+import org.apache.iceberg.exceptions.ValidationException;
+import org.apache.iceberg.expressions.Evaluator;
+>>>>>>> ae84366 ([BugFix] Drop iceberg table whose metadata file is missing (#77786))
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.ResidualEvaluator;
@@ -361,8 +373,343 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void dropTable(DropTableStmt stmt) {
         Table icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+=======
+    public void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) {
+        String dbName = truncateTableStmt.getDbName();
+        String tableName = truncateTableStmt.getTblName();
+        org.apache.iceberg.Table table = icebergCatalog.getTable(context, dbName, tableName);
+
+        if (table == null) {
+            throw new StarRocksConnectorException(
+                    "Failed to load iceberg table: " + truncateTableStmt.getTblRef().toString());
+        }
+
+        if (truncateTableStmt instanceof TruncateTablePartitionStmt) {
+            throw new StarRocksConnectorException("Iceberg table partition truncate is not supported: %s.%s",
+                    dbName, tableName);
+        }
+
+        DeleteFiles deleteFiles = table.newDelete().deleteFromRowFilter(Expressions.alwaysTrue());
+        updateCommitInfo(deleteFiles, context);
+        boolean shouldInvalidateCache = true;
+        try {
+            deleteFiles.commit();
+        } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
+            shouldInvalidateCache = e instanceof CommitStateUnknownException;
+            LOG.error("Failed to truncate iceberg table: {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to truncate iceberg table: %s.%s", dbName, tableName), e);
+        } finally {
+            if (shouldInvalidateCache) {
+                invalidateCacheAfterCommit(dbName, tableName);
+                asyncRefreshOthersFeMetadataCache(dbName, tableName);
+            }
+        }
+    }
+
+    public static void updateCommitInfo(SnapshotUpdate update, ConnectContext context) {
+        updateCommitInfo(update, "StarRocks",
+                GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion(),
+                context.getCurrentUserIdentity() != null ?
+                        context.getCurrentUserIdentity().getUser() : "None");
+    }
+
+    public static void updateCommitInfo(SnapshotUpdate update, String engineName, String engineVersion, String user) {
+        update.set(ENGINE_NAME, engineName);
+        update.set(ENGINE_VERSION, engineVersion);
+        update.set(STARROCKS_USER, user);
+    }
+
+    /**
+     * Check if the delete can be performed using metadata operations only.
+     * This is possible when:
+     * 1. The delete expression selects entire partitions, OR
+     * 2. The delete expression matches all rows in candidate files (based on file statistics)
+     *
+     * @param table     The Iceberg table
+     * @param predicate The delete predicate in ScalarOperator form
+     * @return true if metadata-level delete can be used, false otherwise
+     */
+    @Override
+    public boolean canDeleteUsingMetadata(Table table, ScalarOperator predicate) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        // Use caseSensitive=false to be consistent with StarRocks expression conversion
+        boolean caseSensitive = false;
+
+        // Cast-on-string-partition conjuncts (e.g. CAST(c AS DATETIME) = <ts>) cannot be soundly expressed as an
+        // Iceberg (string-domain) filter, so they are split out and evaluated StarRocks-side per partition in
+        // executeMetadataDelete. Metadata (whole-file) delete stays sound only when every candidate file is
+        // entirely matched or entirely unmatched by the whole predicate.
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        PartitionCastPredicatePruner.PartitionResidual residual =
+                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+        boolean droppedExists = residual.pushable.size() + residual.residual.size() < conjuncts.size();
+        if (droppedExists) {
+            // A cast-on-string conjunct references a non-partition column (or a mixed OR): a file may contain
+            // both matching and non-matching rows, so it cannot be whole-file deleted -> fall back to row-level.
+            return false;
+        }
+        if (residual.hasResidual()) {
+            // Partition values must be readable (no partition-transform evolution) to evaluate the residual, and
+            // the pushable part must also be partition level so each file is wholly matched/unmatched; otherwise
+            // fall back to row-level delete.
+            if (icebergTable.hasPartitionTransformedEvolution()) {
+                return false;
+            }
+            if (!residual.pushable.isEmpty()) {
+                // Strict conversion: a non-cast conjunct that cannot be converted/bound must make metadata delete
+                // ineligible. Non-strict convert would silently skip it and still return alwaysTrue, so
+                // selectsPartitions could wrongly pass and the skipped conjunct would be ignored at execution ->
+                // whole-file over-delete. On null (some pushable conjunct is unconvertible) fall back to row-level.
+                Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
+                        new ScalarOperatorToIcebergExpr.IcebergContext(nativeTable.schema().asStruct()));
+                if (pushableExpr == null || !ExpressionUtil.selectsPartitions(pushableExpr, nativeTable, caseSensitive)) {
+                    return false;
+                }
+            }
+            // The residual is evaluated against each partition value at execution time. A non-deterministic
+            // function (rand(), uuid(), ...) only materializes per row at execution and never folds to a constant,
+            // so executeMetadataDelete could evaluate nothing and silently delete nothing. Such predicates must be
+            // evaluated per row -> fall back to row-level delete.
+            for (ScalarOperator conjunct : residual.residual) {
+                if (Utils.hasNonDeterministicFunc(conjunct)) {
+                    return false;
+                }
+            }
+            // Whole predicate is partition level and deterministic; the matching partitions are deleted
+            // file-by-file in executeMetadataDelete after StarRocks-side residual evaluation.
+            return true;
+        }
+
+        // Convert ScalarOperator to Iceberg Expression
+        Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTable.schema());
+        if (deleteExpr == null) {
+            return false;
+        }
+
+        // First check: does the expression select entire partitions?
+        if (ExpressionUtil.selectsPartitions(deleteExpr, nativeTable, caseSensitive)) {
+            return true;
+        }
+
+        // Second check: scan candidate files and verify all rows match using file statistics
+        TableScan scan = nativeTable.newScan()
+                .filter(deleteExpr)
+                .caseSensitive(caseSensitive)
+                .includeColumnStats()   // Must include column statistics for evaluation
+                .ignoreResiduals();
+
+        try (CloseableIterable<FileScanTask> tasks = scan.planFiles()) {
+            StrictMetricsEvaluator metricsEvaluator =
+                    new StrictMetricsEvaluator(nativeTable.schema(), deleteExpr, caseSensitive);
+
+            for (FileScanTask task : tasks) {
+                DataFile file = task.file();
+                PartitionSpec spec = task.spec();
+
+                // Check 1: strict partition projection matches
+                Evaluator evaluator = new Evaluator(
+                        spec.partitionType(),
+                        Projections.strict(spec, caseSensitive).project(deleteExpr));
+                boolean partitionMatches = evaluator.eval(file.partition());
+
+                // Check 2: file statistics indicate all rows match
+                boolean metricsMatch = metricsEvaluator.eval(file);
+
+                // Must satisfy at least one condition, otherwise cannot use metadata delete
+                if (!partitionMatches && !metricsMatch) {
+                    return false;
+                }
+            }
+            // All files can be deleted via metadata operation
+            return true;
+        } catch (IOException e) {
+            LOG.warn("Failed to evaluate files for metadata delete", e);
+            return false;
+        }
+    }
+
+    /**
+     * Execute metadata-level delete using Iceberg's DeleteFiles API.
+     * This method is used for DELETE operations that can be performed without
+     * generating position delete files, when the delete expression matches
+     * entire partitions or all rows in candidate files.
+     *
+     * @param table     The Iceberg table
+     * @param predicate The delete predicate in ScalarOperator form
+     * @param context   The connect context for audit info
+     */
+    @Override
+    public void executeMetadataDelete(Table table, ScalarOperator predicate, ConnectContext context) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
+
+        long startMs = System.currentTimeMillis();
+        String deleteType = "metadata";
+
+        // Cast-on-string-partition conjuncts cannot be expressed as a sound Iceberg filter; evaluate them
+        // StarRocks-side per partition and delete matching files individually. Anything else keeps the existing
+        // row-filter delete. canDeleteUsingMetadata guarantees the whole predicate is partition level here.
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        PartitionCastPredicatePruner.PartitionResidual residual =
+                PartitionCastPredicatePruner.split(conjuncts, identityStringPartitionColumns(icebergTable));
+
+        DeleteFiles deleteFiles = nativeTbl.newDelete();
+        String deleteDesc;
+        if (residual.hasResidual()) {
+            // This branch enumerates the files to delete (and skips the commit when nothing matches) from
+            // nativeTbl, which is served from a cross-query cache and can lag the real table until the cache is
+            // next refreshed (lazily on access, or by the periodic background refresh controlled by
+            // background_refresh_metadata_interval_millis). Refresh so files appended by an external writer since
+            // the handle was cached are not silently left behind; the row-filter branch below needs no refresh
+            // because its DeleteFiles.commit() re-applies the filter against a refreshed snapshot internally.
+            try {
+                nativeTbl.refresh();
+            } catch (Exception e) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to refresh Iceberg table %s.%s before metadata delete: %s",
+                        dbName, tableName, e.getMessage());
+            }
+            if (icebergTable.hasPartitionTransformedEvolution()) {
+                // Defensive: canDeleteUsingMetadata should have returned false; never silently mis-delete.
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Cannot metadata-delete cast-on-string-partition predicate under partition evolution", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Cannot metadata-delete a cast-on-string-partition predicate on " +
+                        "partition-transform-evolved table %s.%s", dbName, tableName);
+            }
+            // Strict conversion, consistent with canDeleteUsingMetadata: an unconvertible pushable conjunct must
+            // not be silently dropped (that would ignore it and over-delete). canDeleteUsingMetadata already
+            // guarantees non-null here; guard defensively.
+            Expression pushableExpr = new ScalarOperatorToIcebergExpr().convertStrict(residual.pushable,
+                    new ScalarOperatorToIcebergExpr.IcebergContext(nativeTbl.schema().asStruct()));
+            if (pushableExpr == null) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Unconvertible pushable predicate for metadata delete", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Cannot metadata-delete on %s.%s: pushable predicate is not " +
+                        "convertible to an Iceberg expression", dbName, tableName);
+            }
+            int matchedFiles = 0;
+            try (CloseableIterable<FileScanTask> tasks = nativeTbl.newScan()
+                    .filter(pushableExpr).caseSensitive(false).ignoreResiduals().planFiles()) {
+                for (FileScanTask task : tasks) {
+                    if (PartitionCastPredicatePruner.partitionDefinitelyMatches(residual.residual,
+                            icebergPartitionValues(task, icebergTable, false))) {
+                        deleteFiles.deleteFile(task.file());
+                        matchedFiles++;
+                    }
+                }
+            } catch (IOException e) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to plan files for metadata delete on %s.%s: %s",
+                        dbName, tableName, e.getMessage());
+            }
+            if (matchedFiles == 0) {
+                // No partition matched the residual -> nothing to delete; do not commit an empty snapshot.
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                LOG.info("Metadata delete on {}.{} matched no partitions; nothing deleted", dbName, tableName);
+                return;
+            }
+            deleteDesc = "cast-on-string-partition residual, matchedFiles=" + matchedFiles;
+        } else {
+            // Convert ScalarOperator to Iceberg Expression
+            Expression deleteExpr = convertScalarOperatorToIcebergExpr(predicate, nativeTbl.schema());
+            if (deleteExpr == null) {
+                ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        "Failed to convert predicate to Iceberg expression", deleteType);
+                ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs, deleteType);
+                throw new StarRocksConnectorException("Failed to convert predicate to Iceberg expression");
+            }
+            deleteFiles.deleteFromRowFilter(deleteExpr);
+            deleteDesc = deleteExpr.toString();
+        }
+
+        // Set engine info and user for audit
+        updateCommitInfo(deleteFiles, context);
+
+        try {
+            deleteFiles.commit();
+            LOG.info("Successfully executed metadata delete on {}.{}, delete: {}",
+                    dbName, tableName, deleteDesc);
+
+            // Get deleted rows and bytes from snapshot summary
+            Snapshot newSnapshot = nativeTbl.currentSnapshot();
+            if (newSnapshot != null && newSnapshot.summary() != null) {
+                Map<String, String> summary = newSnapshot.summary();
+                long deletedRows = Long.parseLong(
+                        summary.getOrDefault(SnapshotSummary.DELETED_RECORDS_PROP, "0"));
+                long deletedBytes = Long.parseLong(
+                        summary.getOrDefault(SnapshotSummary.REMOVED_FILE_SIZE_PROP, "0"));
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+                ConnectorMetricsMgr.increaseDeleteRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedRows, deleteType);
+                ConnectorMetricsMgr.increaseDeleteBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deletedBytes, deleteType);
+            } else {
+                ConnectorMetricsMgr.increaseDeleteTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG, deleteType);
+            }
+        } catch (UncheckedIOException | ValidationException | CommitFailedException | CommitStateUnknownException e) {
+            LOG.error("Failed to execute metadata delete on {}.{}", dbName, tableName, e);
+            ConnectorMetricsMgr.increaseDeleteTotalFail(ConnectorMetricsMgr.CONNECTOR_ICEBERG, e, deleteType);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to execute metadata delete on %s.%s", dbName, tableName), e);
+        } finally {
+            ConnectorMetricsMgr.increaseDeleteDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                    System.currentTimeMillis() - startMs, deleteType);
+        }
+
+        // Invalidate cache after commit
+        invalidateCacheAfterCommit(dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    /**
+     * Helper method to convert ScalarOperator to Iceberg Expression.
+     * Returns null if conversion fails.
+     */
+    private Expression convertScalarOperatorToIcebergExpr(ScalarOperator predicate, Schema schema) {
+        if (predicate == null) {
+            return Expressions.alwaysTrue();
+        }
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                new ScalarOperatorToIcebergExpr.IcebergContext(schema.asStruct());
+        return new ScalarOperatorToIcebergExpr().convertStrict(Collections.singletonList(predicate), icebergContext);
+    }
+
+    @Override
+    public void dropTable(ConnectContext context, DropTableStmt stmt) {
+        Table icebergTable;
+        try {
+            icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+        } catch (StarRocksConnectorException | NotFoundException e) {
+            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
+                throw e;
+            }
+            // Iceberg tolerates this on drop: HiveCatalog#dropTable still removes the catalog entry when the
+            // metadata cannot be read. Never purge here, the table's files are unknown without its metadata.
+            LOG.warn("Metadata of iceberg table {}.{} is missing, only dropping the catalog entry",
+                    stmt.getDbName(), stmt.getTableName(), e);
+            icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), false);
+            tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
+            dropNameKeyedStatistics(stmt.getDbName(), stmt.getTableName());
+            asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+            return;
+        }
+>>>>>>> ae84366 ([BugFix] Drop iceberg table whose metadata file is missing (#77786))
 
         if (icebergTable != null && icebergTable.isIcebergView()) {
             icebergCatalog.dropView(stmt.getDbName(), stmt.getTableName());
@@ -377,6 +724,51 @@ public class IcebergMetadata implements ConnectorMetadata {
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+    }
+
+    /**
+     * Iceberg raises {@link NotFoundException} only for a file that is really absent, so an unreadable one
+     * (permission, connectivity) keeps propagating: that table's metadata may be intact and dropping its entry
+     * would orphan the data. The cause chain is walked because {@link CachingIcebergCatalog#getTable} wraps
+     * load failures into a {@link StarRocksConnectorException}.
+     */
+    private static boolean isMetadataFileMissing(Throwable throwable) {
+        return Throwables.getCausalChain(throwable).stream().anyMatch(t -> t instanceof NotFoundException);
+    }
+
+    /**
+     * {@link #getTable} also analyzes the table properties, which loads the tables a foreign key constraint
+     * refers to ({@link PropertyAnalyzer#analyzeForeignKeyConstraint}). Confirm the missing file is this
+     * table's own, or a healthy table would lose its catalog entry over a broken neighbour.
+     */
+    private boolean isTableMetadataMissing(String dbName, String tableName) {
+        try {
+            icebergCatalog.getTable(new ConnectContext(), dbName, tableName);
+            return false;
+        } catch (Exception e) {
+            return isMetadataFileMissing(e);
+        }
+    }
+
+    /**
+     * Drops what is reachable by name, so that a table recreated under this name does not inherit a broken
+     * table's leftovers. Data goes with the metadata describing it:
+     * {@link AnalyzeMgr#clearStatisticFromExternalDroppedTable} finds leftovers through the basic stats
+     * metadata, so dropping that alone would strand the rows for good. The rest is keyed by the table UUID,
+     * unreachable without the missing metadata and never mistaken for a recreated table's own statistics.
+     */
+    private void dropNameKeyedStatistics(String dbName, String tableName) {
+        IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
+        if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
+            // getTable() lower cases the names of these catalogs before the statistics get keyed by them
+            dbName = dbName.toLowerCase();
+            tableName = tableName.toLowerCase();
+        }
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        analyzeMgr.dropExternalBasicStatsMetaAndData(catalogName, dbName, tableName);
+        analyzeMgr.dropExternalHistogramStatsMetaAndData(catalogName, dbName, tableName);
+        analyzeMgr.dropAnalyzeJob(catalogName, dbName, tableName);
     }
 
     public void updateTableProperty(Database db, IcebergTable icebergTable) {
