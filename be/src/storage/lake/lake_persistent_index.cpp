@@ -1079,6 +1079,12 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
         // we need to do flush to reduce index rebuild cost later.
         RETURN_IF_ERROR(flush_memtable(true));
     }
+    const bool first_nonempty_checkpoint =
+            builder->tablet_meta()->sstable_meta().sstables().empty() && !_sstable_filesets.empty();
+    const bool has_pending_memtable = !_inactive_memtables.empty() || (_memtable != nullptr && !_memtable->empty());
+    if (first_nonempty_checkpoint && has_pending_memtable) {
+        RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+    }
     PersistentIndexSstableMetaPB sstable_meta;
     int64_t last_max_rss_rowid = 0;
     for (auto& sstable_fileset : _sstable_filesets) {

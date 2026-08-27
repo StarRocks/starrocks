@@ -29,6 +29,7 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_compaction_fwd.h"
@@ -253,7 +254,28 @@ public:
         return txn_id;
     }
 
-    TabletMetadataPtr build_non_monotonic_partial_checkpoint_history(bool append_post_frontier) {
+    std::string encoded_primary_key(int32_t key) {
+        auto chunk = std::make_unique<Chunk>();
+        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        column->append_datum(Datum(key));
+        chunk->append_column(std::move(column), 0);
+
+        std::vector<ColumnId> pk_columns = {0};
+        auto pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
+        MutableColumnPtr encoded;
+        const auto encoding_type = _tablet_metadata->has_range() ? PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2
+                                                                 : PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+        CHECK_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded, encoding_type));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, encoded.get(), encoding_type);
+        if (encoded->is_binary()) {
+            return ColumnHelper::get_binary_column(encoded.get())->get_slice(0).to_string();
+        }
+        RawDataVisitor visitor;
+        CHECK_OK(encoded->accept(&visitor));
+        return std::string(reinterpret_cast<const char*>(visitor.result()), encoded->type_size());
+    }
+
+    TabletMetadataPtr build_non_monotonic_cache_only_history(bool append_post_frontier) {
         constexpr int32_t kHighKey = 1000;
         constexpr int32_t kHighValue = 10'000;
         constexpr int32_t kLowKey = 50;
@@ -300,6 +322,58 @@ public:
         CHECK_EQ(101, version5->rowsets(version5->rowsets_size() - 2).id());
         CHECK_EQ(102, version5->rowsets(version5->rowsets_size() - 1).id());
         return version5;
+    }
+
+    TabletMetadataPtr build_non_monotonic_complete_checkpoint_history() {
+        constexpr int32_t kHighKey = 1000;
+        constexpr int32_t kHighValue = 10'000;
+        constexpr int32_t kLowKey = 50;
+        constexpr int32_t kOldLowValue = 500;
+        auto metadata = new_cloud_native_pk_tablet();
+        metadata->set_version(3);
+        metadata->set_next_rowset_id(101);
+        append_physical_rowset(metadata.get(), kHighKey, kHighValue, 100, 2);
+        append_physical_rowset(metadata.get(), kLowKey, kOldLowValue, 50, 3);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+        CHECK_OK(index->init(metadata));
+        const auto high_key = encoded_primary_key(kHighKey);
+        const auto low_key = encoded_primary_key(kLowKey);
+        const Slice high_slice(high_key);
+        const Slice low_slice(low_key);
+        const IndexValue high_value(uint64_t{100} << 32);
+        const IndexValue low_value(uint64_t{50} << 32);
+        CHECK_OK(index->insert(1, &high_slice, &high_value, 2));
+        CHECK_OK(index->sync_flush_all_memtables(10'000'000));
+        CHECK_OK(index->insert(1, &low_slice, &low_value, 3));
+
+        Tablet tablet(_tablet_mgr.get(), metadata->id());
+        MetaFileBuilder first_builder(tablet, metadata);
+        CHECK_OK(index->commit(&first_builder));
+        CHECK_EQ(2, metadata->sstable_meta().sstables_size());
+        CHECK_EQ(uint64_t{100} << 32, metadata->sstable_meta().sstables(0).max_rss_rowid());
+        CHECK_EQ(uint64_t{100} << 32, metadata->sstable_meta().sstables(1).max_rss_rowid());
+
+        metadata->set_version(4);
+        append_physical_rowset(metadata.get(), 1010, 10'100, 101, 4);
+        const auto key_101 = encoded_primary_key(1010);
+        const Slice slice_101(key_101);
+        const IndexValue value_101(uint64_t{101} << 32);
+        CHECK_OK(index->insert(1, &slice_101, &value_101, 4));
+        metadata->set_version(5);
+        append_physical_rowset(metadata.get(), 1020, 10'200, 102, 5);
+        const auto key_102 = encoded_primary_key(1020);
+        const Slice slice_102(key_102);
+        const IndexValue value_102(uint64_t{102} << 32);
+        CHECK_OK(index->insert(1, &slice_102, &value_102, 5));
+        metadata->set_next_rowset_id(103);
+        const auto first_sstable_meta = metadata->sstable_meta().SerializeAsString();
+        MetaFileBuilder cache_only_builder(tablet, metadata);
+        CHECK_OK(index->commit(&cache_only_builder));
+        CHECK_EQ(first_sstable_meta, metadata->sstable_meta().SerializeAsString());
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        return metadata;
     }
 
     IndexValue prepare_and_point_get(const TabletMetadataPtr& metadata, int64_t version, int32_t key) {
@@ -3819,7 +3893,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_non_monotonic_partial_checkpoint_publish_
     for (bool parallel : {false, true}) {
         SCOPED_TRACE(parallel ? "parallel" : "serial");
         ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, parallel);
-        auto metadata = build_non_monotonic_partial_checkpoint_history(true);
+        auto metadata = build_non_monotonic_complete_checkpoint_history();
         const auto tablet_id = metadata->id();
         ASSERT_EQ(kBaseVersion, metadata->version());
         ASSERT_GT(metadata->next_rowset_id(), 102);
@@ -3889,7 +3963,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_ro
     const IndexValue expected_new_value(uint64_t{kNewRssid} << 32);
 
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
-    auto metadata = build_non_monotonic_partial_checkpoint_history(false);
+    auto metadata = build_non_monotonic_cache_only_history(false);
     const auto tablet_id = metadata->id();
     DeferOp cleanup([&]() { _update_mgr->unload_and_remove_primary_index(tablet_id); });
     ASSERT_EQ(expected_old_value, prepare_and_point_get(metadata, kBaseVersion, kLowKey));
