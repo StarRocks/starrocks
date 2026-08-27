@@ -394,6 +394,22 @@ message BloomFilterIndexPB {
     optional IndexedColumnMetaPB bloom_filter = 3;
 }
 
+// Extension point for BuiltinInvertedIndexPB. DO NOT MODIFY: do not add fields
+// here, and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New
+// BuiltinInvertedIndexPB fields belong on BuiltinInvertedIndexPB itself, whose
+// remaining numbers are free.
+message BuiltinInvertedIndexExtPB {
+}
+
 message BuiltinInvertedIndexPB {
     optional BitmapIndexPB bitmap_index = 1;
+    // Tags 2-4 are occupied by downstream distributions and already persisted
+    // in downstream segment metadata. Placeholders are declared here (unused by
+    // upstream) so that no upstream field is ever allocated on these tags.
+    optional int32 placeholder_2 = 2;
+    optional bytes placeholder_3 = 3;
+    optional bytes placeholder_4 = 4;
+    optional BuiltinInvertedIndexExtPB ext = 5;
 }

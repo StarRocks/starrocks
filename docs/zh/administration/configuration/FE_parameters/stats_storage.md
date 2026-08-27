@@ -270,7 +270,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_online_optimize_table`
 
-- 默认值: true
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
@@ -599,6 +599,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 旧 Tablet 最多可分割成多少个新 Tablet。
 - 引入版本: v4.1.0
 
+### `tablet_reshard_orderby_max_split_count`
+
+- 默认值: 2
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当分裂会附带一次完整的 UNSHARE 重写时（即 Range 分布的主键表，其 `ORDER BY` 键与主键不同），单个源 Tablet 最多可分裂成的新 Tablet 数量。此类分裂无法对父 Tablet 的共享 Segment 做 Range 过滤，每个子 Tablet 都会被整体重写，因此过大的扇出会成倍放大读放大。该值还会被 `tablet_reshard_max_split_count` 进一步限制。取值小于或等于 `1` 时禁用该额外限制。
+- 引入版本: -
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当分裂会附带一次完整的 UNSHARE 重写时，单个分裂任务最多可**分裂**的源 Tablet 数量。优先选择最大的 Tablet。注意该值限制的是分裂扇出而非重写量：未被分裂的兄弟 Tablet 仍会在新索引中成为 Identical Tablet，而 UNSHARE Compaction 是分区级的，因此这些 Tablet 同样会被重写。取值小于或等于 `0` 时表示使用该 Warehouse 的计算节点数量。
+- 引入版本: -
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- 默认值: 180
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 对于分裂会附带完整 UNSHARE 重写的表，上一个 Tablet Reshard 任务完成后，自动分裂再次触发前的静默期。用于给 Size-tiered Compaction 留出窗口，清理占用 Compaction 槽位期间累积的小文件。取值小于或等于 `0` 时禁用等待。注意该间隔仅在上一个任务仍被保留期间生效，即最长不超过 `tablet_reshard_history_job_keep_max_ms`。
+- 引入版本: -
+
 ### `tablet_reshard_min_split_size`
 
 - 默认值: 2147483648 (2 GB)
@@ -671,6 +698,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 Range 分布的增量物化视图（incremental materialized view）刷新启用基于采样的 Tablet 预分裂。这类物化视图以一个隐藏的 row-id 列作为键，其取值域是预先已知的，因此边界由推导得出而非采样得出，完全不读取数据。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 引入版本: v4.2.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - 默认值: 300
@@ -737,7 +773,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
+1. 将四个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table` 和 `enable_tablet_pre_split_for_mv_refresh`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 

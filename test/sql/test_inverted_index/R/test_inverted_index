@@ -368,3 +368,84 @@ select id from t_gin_or_prune_${uuid0} where v like '%red%' order by id;
 DROP TABLE t_gin_or_prune_${uuid0};
 -- result:
 -- !result
+-- name: test_gin_prune_primary_key_table @native
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+set low_cardinality_optimize_v2 = false;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+CREATE TABLE `t_gin_prune_pk_${uuid0}` (
+  `id` bigint NOT NULL,
+  `ts` datetime NOT NULL,
+  `v`  varchar(255) NOT NULL,
+  INDEX gin_v (`v`) USING GIN ("parser" = "none")
+) ENGINE=OLAP
+PRIMARY KEY(`id`, `ts`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+-- result:
+-- !result
+insert into t_gin_prune_pk_${uuid0} values
+  (1, "2024-01-01 00:00:00", "redx"),
+  (2, "2024-01-01 00:00:00", "redy"),
+  (3, "2024-01-01 00:00:00", "blue"),
+  (4, "2024-01-01 00:00:00", "redx");
+-- result:
+-- !result
+select max(id) from t_gin_prune_pk_${uuid0} where v = 'redx';
+-- result:
+4
+-- !result
+select count(1) from t_gin_prune_pk_${uuid0} where v = 'redx';
+-- result:
+2
+-- !result
+select id from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+-- result:
+1
+4
+-- !result
+select id, v from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+-- result:
+1	redx
+4	redx
+-- !result
+select max(id) from t_gin_prune_pk_${uuid0} where v like '%red%';
+-- result:
+4
+-- !result
+set enable_prune_column_after_index_filter = false;
+-- result:
+-- !result
+select max(id) from t_gin_prune_pk_${uuid0} where v = 'redx';
+-- result:
+4
+-- !result
+select count(1) from t_gin_prune_pk_${uuid0} where v = 'redx';
+-- result:
+2
+-- !result
+select id from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+-- result:
+1
+4
+-- !result
+select id, v from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+-- result:
+1	redx
+4	redx
+-- !result
+select max(id) from t_gin_prune_pk_${uuid0} where v like '%red%';
+-- result:
+4
+-- !result
+set enable_prune_column_after_index_filter = true;
+-- result:
+-- !result
+DROP TABLE t_gin_prune_pk_${uuid0};
+-- result:
+-- !result

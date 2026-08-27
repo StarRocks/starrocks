@@ -36,9 +36,11 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
+#include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -157,6 +159,19 @@ struct RowidSortEntry {
     RowidSortEntry(uint32_t rowid, uint32_t idx) : rowid(rowid), idx(idx) {}
     bool operator<(const RowidSortEntry& rhs) const { return rowid < rhs.rowid; }
 };
+
+void RowsetUpdateState::mask_unowned_rowids(const Filter& owned, std::vector<uint64_t>* rss_rowids) {
+    if (owned.empty()) {
+        return;
+    }
+    DCHECK_EQ(owned.size(), rss_rowids->size());
+    const size_t n = std::min(owned.size(), rss_rowids->size());
+    for (size_t i = 0; i < n; i++) {
+        if (owned[i] == 0) {
+            (*rss_rowids)[i] = static_cast<uint64_t>(-1);
+        }
+    }
+}
 
 // group rowids by rssid, and for each group sort by rowid, return as `rowids_by_rssid`
 // num_default: return the number of rows that need to fill in default values
@@ -355,6 +370,16 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &(_auto_increment_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
+    // A cross-published child receives its siblings' rows too, and resolving one can name a rowset the
+    // split pruned away, so blank those answers out. A sibling's row then looks like a row with no old
+    // value, and it must KEEP looking like one: every such row gets its own slot in the idxes remap
+    // below, and the values filling those slots are fetched per entry of `rowids` -- from this rowset's
+    // own segment, which is always readable. Dropping siblings from `rowids` here would leave the remap
+    // pointing past the end of the fetched column. What a sibling's row must not reach is the delete
+    // decision further down, which is derived from `rowids` and erases keys.
+    const Filter& owned = _upserts[segment_id]->standalone_owned();
+    mask_unowned_rowids(owned, &_auto_increment_partial_update_states[segment_id].src_rss_rowids);
+
     std::vector<uint32_t> rowids;
     uint32_t n = _auto_increment_partial_update_states[segment_id].src_rss_rowids.size();
     for (uint32_t j = 0; j < n; j++) {
@@ -418,6 +443,12 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user
     for (unsigned int row_idx : _auto_increment_partial_update_states[segment_id].rowids) {
+        if (!owned.empty() && owned[row_idx] == 0) {
+            // A sibling's row only looks like a new row because its lookup was masked. Erasing its key
+            // is what #77744 had to clip out of a cross-published del file: the key is not this child's,
+            // and its location resolves against sstables inherited from the parent.
+            continue;
+        }
         if (data[row_idx] == 0) {
             delete_idxes.emplace_back(row_idx);
         }
@@ -442,7 +473,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     MutableColumns read_columns;
     read_columns.resize(read_column_ids.size());
     _partial_update_states[segment_id].write_columns.resize(read_columns.size());
-    _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->standalone_pk_column()->size());
+    const auto& segment_pk_column = _upserts[segment_id]->standalone_pk_column();
+    auto& src_rss_rowids = _partial_update_states[segment_id].src_rss_rowids;
+    src_rss_rowids.resize(segment_pk_column->size());
     for (uint32_t j = 0; j < read_columns.size(); ++j) {
         auto column = ChunkFactory::column_from_field(*read_column_schema.field(j).get());
         read_columns[j] = column->clone_empty();
@@ -451,14 +484,18 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
 
     // use upsert to get rowids for this segment
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
-            params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
-            &(_partial_update_states[segment_id].src_rss_rowids), need_lock));
+            params.tablet->id(), _base_versions[segment_id], segment_pk_column, &src_rss_rowids, need_lock));
+    // A cross-published child receives its siblings' rows too. Those are not its rows to merge, and
+    // resolving one can name a rowset the split pruned away, so leave them at the "no old row"
+    // sentinel -- plan_read_by_rssid turns it into default values, and rewrite_segment then writes a
+    // default in the column this write does not carry.
+    mask_unowned_rowids(_upserts[segment_id]->standalone_owned(), &src_rss_rowids);
 
     size_t num_default = 0;
     std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
     vector<uint32_t> idxes;
-    plan_read_by_rssid(_partial_update_states[segment_id].src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
-    size_t total_rows = _partial_update_states[segment_id].src_rss_rowids.size();
+    plan_read_by_rssid(src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
+    size_t total_rows = src_rss_rowids.size();
     // get column values by rowid, also get default values if needed
     RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
             params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
@@ -485,6 +522,144 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
     }
 }
 
+// Append |count| copies of the value the merge produces for a row that has no old value: the column's
+// declared default, or the expression default this transaction carries for it, exactly as
+// UpdateManager::get_column_values fills its default slot -- which is what makes a narrowed publish and
+// a per-row-selected one write the same segment. |tablet_column| null means the caller has no such
+// notion (the auto-increment column, whose no-old-row values come from the FE allocation rather than a
+// default) and gets the column's plain zero value.
+static Status append_no_old_row_values(const TabletColumn* tablet_column,
+                                       const std::map<std::string, std::string>& column_to_expr_value, size_t count,
+                                       Column* column) {
+    if (count == 0) {
+        return Status::OK();
+    }
+    bool has_default_value = tablet_column != nullptr && tablet_column->has_default_value();
+    std::string default_value = has_default_value ? tablet_column->default_value() : "";
+    if (tablet_column != nullptr) {
+        auto iter = column_to_expr_value.find(std::string(tablet_column->name()));
+        if (iter != column_to_expr_value.end()) {
+            has_default_value = true;
+            default_value = iter->second;
+        }
+    }
+    if (!has_default_value) {
+        TRY_CATCH_BAD_ALLOC(column->append_default(count));
+        return Status::OK();
+    }
+    const TypeInfoPtr& type_info = get_type_info(*tablet_column);
+    auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+            true, default_value, tablet_column->is_nullable(), type_info, tablet_column->length(), count);
+    ColumnIteratorOptions iter_opts;
+    RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+    return default_value_iter->fetch_values_by_rowid(nullptr, count, column);
+}
+
+// Widen the merged values to one per row of the SOURCE segment, defaulting the rows a sibling owns.
+//
+// On a cross publish the publish iterator is narrowed to this tablet's slice of the shared segment
+// (get_each_segment_iterator -> Rowset::set_segment_tablet_range), so the state built from it covers
+// only [base, base + k) of the segment. The rewriters are not narrowed and cannot be:
+// rewrite_partial_update copies the source segment's own columns verbatim -- every row of them -- and
+// rewrite_auto_increment_lake re-reads every row, so a short column makes the segment they emit
+// inconsistent. The first fails outright (SegmentWriter::finalize_columns, "num rows written
+// mismatch"), which fails the publish for good since publish retries; the second builds a chunk whose
+// columns disagree in length.
+//
+// The padded rows belong to a sibling, so a default is as good as anything: nothing reads them from
+// here, because the rowset carries this tablet's range and Rowset::set_segment_tablet_range clips the
+// rewrite output on it -- the output file is private (MetaFileBuilder clears `shared`) but the rows in
+// it are not all ours.
+//
+// Returns a COPY, and nullptr when the column already spans the segment. Widening the state in place
+// would break a publish retry: the state is cached per transaction, and on the next attempt
+// _resolve_conflict_partial_update patches write_columns at iterator-relative offsets, which line up
+// only with the unwidened column.
+static StatusOr<MutableColumnPtr> widen_rewrite_column_to_segment(
+        const Column& column, uint32_t base, size_t num_segment_rows, const TabletColumn* tablet_column,
+        const std::map<std::string, std::string>& column_to_expr_value) {
+    const size_t merged_rows = column.size();
+    if (merged_rows == num_segment_rows) {
+        // Not narrowed: an ordinary publish, or a cross publish whose ownership was decided per row.
+        return MutableColumnPtr{};
+    }
+    RETURN_ERROR_IF_FALSE(base + merged_rows <= num_segment_rows,
+                          fmt::format("rewrite column does not fit the source segment, base:{} rows:{} segment:{}",
+                                      base, merged_rows, num_segment_rows));
+    auto widened = column.clone_empty();
+    RETURN_IF_ERROR(append_no_old_row_values(tablet_column, column_to_expr_value, base, widened.get()));
+    TRY_CATCH_BAD_ALLOC(widened->append(column));
+    RETURN_IF_ERROR(append_no_old_row_values(tablet_column, column_to_expr_value, num_segment_rows - base - merged_rows,
+                                             widened.get()));
+    return widened;
+}
+
+Status RowsetUpdateState::_widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params,
+                                                                   uint32_t segment_id, const FileInfo& src,
+                                                                   const std::vector<ColumnId>& unmodified_column_ids,
+                                                                   MutableColumns* widened_write_columns,
+                                                                   MutableColumnPtr* unwidened_auto_increment_column) {
+    // Only a resharded tablet can have a narrowed publish iterator: narrowing needs a range on the ROWSET
+    // (convert_txn_log_for_splitting stamps this tablet's onto a cross-published op_write) plus a segment
+    // the split marked shared. No range on the tablet, no narrowing, nothing to widen -- which is every
+    // tablet that was never resharded, so the ordinary publish path stops here.
+    if (!params.metadata->has_range()) {
+        return Status::OK();
+    }
+    const auto& src_seg_meta = params.op_write.rowset().segment_metas(segment_id);
+    size_t num_segment_rows = src_seg_meta.num_rows();
+    if (!src_seg_meta.has_num_rows()) {
+        // A txn log written by an older BE carries only the deprecated per-segment arrays, and the
+        // segment_metas lake_proto_normalizer synthesizes from them have no row count. Read it off the
+        // segment rather than skip the widening: the rewrite would copy every row of this file and append
+        // only this tablet's slice, failing the publish on every retry. A count that IS present and zero
+        // means a genuinely empty segment -- the one a delete-only write leaves behind to reserve its del
+        // file's op_offset -- and there is nothing to widen there.
+        size_t footer_size_hint = 16 * 1024;
+        LakeIOOptions lake_io_opts{.fill_data_cache = false, .buffer_size = -1};
+        ASSIGN_OR_RETURN(auto segment,
+                         params.tablet->tablet_mgr()->load_segment(src, segment_id, &footer_size_hint, lake_io_opts,
+                                                                   false /*fill_meta_cache*/, params.tablet_schema));
+        num_segment_rows = segment->num_rows();
+    }
+    if (num_segment_rows == 0) {
+        return Status::OK();
+    }
+    const uint32_t owned_base = _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0;
+
+    if (has_partial_update_state(params) && !unmodified_column_ids.empty()) {
+        // An empty unmodified_column_ids means rewrite_partial_update takes its copy-only fast path and
+        // never reads these columns -- reachable when a schema change between the partial write and its
+        // publish leaves no unmodified column, in which case the cached state's columns no longer pair
+        // with the recomputed ids either.
+        auto& write_columns = _partial_update_states[segment_id].write_columns;
+        RETURN_ERROR_IF_FALSE(write_columns.size() == unmodified_column_ids.size());
+        for (size_t i = 0; i < write_columns.size(); i++) {
+            ASSIGN_OR_RETURN(auto widened,
+                             widen_rewrite_column_to_segment(*write_columns[i], owned_base, num_segment_rows,
+                                                             &params.tablet_schema->column(unmodified_column_ids[i]),
+                                                             _column_to_expr_value));
+            if (widened != nullptr) {
+                widened_write_columns->emplace_back(std::move(widened));
+            }
+        }
+        // Every column came from the same iterator, so either all of them span the segment or none do.
+        RETURN_ERROR_IF_FALSE(widened_write_columns->empty() || widened_write_columns->size() == write_columns.size());
+    }
+
+    auto& auto_increment_state = _auto_increment_partial_update_states[segment_id];
+    if (has_auto_increment_partial_update_state(params) && auto_increment_state.write_column != nullptr) {
+        ASSIGN_OR_RETURN(auto widened,
+                         widen_rewrite_column_to_segment(*auto_increment_state.write_column, owned_base,
+                                                         num_segment_rows, nullptr, _column_to_expr_value));
+        if (widened != nullptr) {
+            *unwidened_auto_increment_column = std::move(auto_increment_state.write_column);
+            auto_increment_state.write_column = std::move(widened);
+        }
+    }
+    return Status::OK();
+}
+
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, SegmentFileInfo>* replace_segments,
                                           std::vector<FileMetaPB>* orphan_files) {
@@ -495,13 +670,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
-    // Segments count as "there is something to rewrite" alongside num_rows. On a split cross
-    // publish that count is apportioned per sibling, so a row-mode partial update whose segments
-    // hold this tablet's rows can still arrive with num_rows == 0; returning on the count alone
-    // would leave the partial segment (only the updated columns) attached without its unmodified
-    // columns rewritten in.
+    // Whether there is anything to rewrite is exactly "does this rowset hold rows", so ask the shared
+    // predicate rather than either count on its own. The rowset counter is apportioned per sibling on
+    // a split cross publish, so a row-mode partial update whose segments hold this tablet's rows can
+    // arrive with num_rows == 0; returning on it alone would leave the partial segment (only the
+    // updated columns) attached without its unmodified columns rewritten in. Merely counting segments
+    // is not enough either: a DELETE-only write is also a "partial update" (its write schema is just
+    // the primary key columns) and it emits one segment per flush that is empty by construction --
+    // the segment exists only to reserve the del file's op_offset. Rewriting those is pointless IO,
+    // and fatal once ORDER BY puts value columns into a primary key table's sort key, because the
+    // rewrite writes the unmodified (value-only) column set and SegmentWriter::init then demands the
+    // whole sort key be present in it.
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_meta_size() == 0 ||
-        (rowset_meta.num_rows() == 0 && rowset_meta.segment_metas_size() == 0)) {
+        !rowset_holds_rows(rowset_meta)) {
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_meta_size() == rowset_meta.segment_metas_size());
@@ -553,6 +734,20 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto vector_index_opts, resolve_rewrite_vector_index_options(params, dest_path));
     const bool defer_vector_index_build = vector_index_opts.defer_build;
 
+    MutableColumns widened_write_columns;
+    MutableColumnPtr unwidened_auto_increment_column;
+    auto& auto_increment_state = _auto_increment_partial_update_states[segment_id];
+    // Must outlive the rewrite below: it hands the state its unwidened auto-increment column back.
+    DeferOp restore_auto_increment_column([&]() {
+        if (unwidened_auto_increment_column != nullptr) {
+            auto_increment_state.write_column = std::move(unwidened_auto_increment_column);
+        }
+    });
+    RETURN_IF_ERROR(_widen_rewrite_columns_for_cross_publish(params, segment_id, src, unmodified_column_ids,
+                                                             &widened_write_columns, &unwidened_auto_increment_column));
+    MutableColumns* rewrite_write_columns =
+            widened_write_columns.empty() ? &_partial_update_states[segment_id].write_columns : &widened_write_columns;
+
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
@@ -560,8 +755,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         file_info.path = params.tablet->segment_location(dest_path);
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
-                unmodified_column_ids,
-                has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
+                unmodified_column_ids, has_partial_update_state(params) ? rewrite_write_columns : nullptr,
                 params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids));
         file_info.path = dest_path;
         stamp_rewrite_vector_index_owner(params, &file_info);
@@ -572,9 +766,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         file_info.path = params.tablet->segment_location(dest_path);
 
         RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
-                src, &file_info, params.tablet_schema, unmodified_column_ids,
-                _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer,
-                {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
+                src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, segment_id,
+                partial_rowset_footer, {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
                 &file_info.vector_index_ids));
         file_info.path = dest_path;
 
@@ -693,7 +886,15 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
     std::vector<uint32_t> conflict_idxes;
     std::vector<uint64_t> conflict_rowids;
     DCHECK_EQ(num_rows, _partial_update_states[segment_id].src_rss_rowids.size());
+    // A cross-published child holds its siblings' rows too. Their old values were never read (the first
+    // lookup was masked, so they sit at the "no old row" sentinel and the rewrite fills a default), so
+    // there is nothing to re-read for them here either -- and re-reading would resolve against sstables
+    // inherited from the parent, whose location can name a rowset the split pruned away.
+    const Filter& owned = _upserts[segment_id]->standalone_owned();
     for (size_t i = 0; i < new_rss_rowids.size(); ++i) {
+        if (!owned.empty() && owned[i] == 0) {
+            continue;
+        }
         uint64_t new_rss_rowid = new_rss_rowids[i];
         uint32_t new_rssid = new_rss_rowid >> 32;
         uint64_t rss_rowid = _partial_update_states[segment_id].src_rss_rowids[i];
@@ -732,10 +933,19 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
     return Status::OK();
 }
 
+// NOT cross-publish aware beyond the erase guard at the end: |new_rss_rowids| arrives unmasked, so a
+// sibling's row that this child's inherited sstables still answer for is re-read from its old location,
+// which the split may have pruned from this child. Masking it here is not enough -- this function
+// rebuilds `rowids` from every sentinel entry in the whole vector while its idxes remap is derived from
+// the conflicting rows alone, so the two have different bases and widening one silently misaligns the
+// fetched column. Whatever relaxes ORDER BY on a range-distributed primary-key table owes this path a
+// rework with tests; until then the mask is all ones here, because the publish iterator is narrowed by
+// the tablet range (see CrossPublishRowSelector).
 Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateStateParams& params,
                                                            const std::vector<uint64_t>& new_rss_rowids,
                                                            uint32_t segment_id, size_t& total_conflicts) {
     uint32_t num_rows = new_rss_rowids.size();
+    const Filter& owned = _upserts[segment_id]->standalone_owned();
     std::vector<uint32_t> conflict_idxes;
     std::vector<uint64_t> conflict_rowids;
     DCHECK_EQ(num_rows, _auto_increment_partial_update_states[segment_id].src_rss_rowids.size());
@@ -818,6 +1028,11 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         // just check the rows which are not exist in the previous version
         // because the rows exist in the previous version may contain 0 which are specified by the user
         for (unsigned int row_idx : _auto_increment_partial_update_states[segment_id].rowids) {
+            if (!owned.empty() && owned[row_idx] == 0) {
+                // Not this child's key to erase -- see the same guard in
+                // _prepare_auto_increment_partial_update_states.
+                continue;
+            }
             if (data[row_idx] == 0) {
                 delete_idxes.emplace_back(row_idx);
             }
@@ -897,10 +1112,12 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
 // file and erases every key in it from its OWN primary index. The upsert side does not have this
 // problem because it is clipped at read time -- convert_txn_log_for_splitting stamps this tablet's
 // range onto op_write.rowset, and get_each_segment_iterator turns it into
-// SegmentReadOptions::tablet_range, which _apply_tablet_range resolves to a rowid range via the
-// short key index so out-of-range rows are never even read. A del file is a flat serialized PK
-// column with no index and no guaranteed key order, so it gets no such pruning and every child sees
-// every key.
+// SegmentReadOptions::tablet_range, which _apply_tablet_range resolves to a rowid range via the short
+// key index so out-of-range rows are never even read. Where that resolution is impossible -- a
+// primary-key tablet ordered by a separate sort key, whose range describes no rowid interval --
+// CrossPublishRowSelector answers per row instead; see cross_publish_context.h. A del file is a flat
+// serialized PK column with no index and no guaranteed key order, so it gets neither: it is clipped
+// against the range directly, here.
 //
 // Erasing a key it does not own is not merely wasted work: the child's primary index still carries
 // the ancestor entries inherited through its shared sstables (the tablet-range gate on those runs

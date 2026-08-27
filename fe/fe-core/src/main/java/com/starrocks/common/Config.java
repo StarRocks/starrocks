@@ -1598,7 +1598,7 @@ public class Config extends ConfigBase {
      * Online optimize table allows to optimize a table without blocking write operations.
      */
     @ConfField(mutable = true)
-    public static boolean enable_online_optimize_table = true;
+    public static boolean enable_online_optimize_table = false;
 
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
@@ -1943,6 +1943,27 @@ public class Config extends ConfigBase {
     // default timeout of backup job
     @ConfField(mutable = true)
     public static int backup_job_default_timeout_ms = 86400 * 1000; // 1 day
+
+    /**
+     * Whether expired backup snapshots are deleted from their repository automatically.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_backup_snapshot_auto_clean = true;
+
+    /**
+     * How often expired backup snapshots are looked for.
+     */
+    @ConfField(mutable = true)
+    public static long backup_clean_check_interval_seconds = 3600;
+
+    /**
+     * How many consecutive failures automatic cleanup makes on one snapshot before leaving it alone.
+     * Only the cleaner's own failures are counted. The count is kept in memory, so a restart, a
+     * leader switch, or raising this limit lets cleanup try again; DROP SNAPSHOT deletes the
+     * snapshot regardless of it.
+     */
+    @ConfField(mutable = true)
+    public static int backup_clean_retry_limit = 3;
 
     // Set runtime locale when exec some cmds
     @ConfField
@@ -4857,6 +4878,26 @@ public class Config extends ConfigBase {
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
 
+    @ConfField(mutable = true, comment = "Max number of new tablets one source tablet may be split into when the "
+            + "split drags a full UNSHARE rewrite behind it -- a range-distributed primary-key table whose ORDER BY "
+            + "key differs from the primary key. Such a split cannot range-filter the parent's shared segments, so "
+            + "every child is rewritten wholesale; a wide fan-out multiplies that read amplification. Further "
+            + "clamped by tablet_reshard_max_split_count. Values <= 1 disable this extra clamp.")
+    public static int tablet_reshard_orderby_max_split_count = 2;
+
+    @ConfField(mutable = true, comment = "Max number of source tablets one split job may SPLIT when the split drags "
+            + "a full UNSHARE rewrite behind it. The largest tablets are chosen first. Note this bounds the split "
+            + "fan-out, not the rewrite: every untouched sibling still becomes an IdenticalTablet in the replacement "
+            + "index and the UNSHARE compaction is partition-wide, so it rewrites those too. Values <= 0 mean the "
+            + "warehouse's compute-node count.")
+    public static int tablet_reshard_orderby_max_split_tablets_per_job = 0;
+
+    @ConfField(mutable = true, comment = "Quiet period, in seconds, after the previous tablet reshard job on a table "
+            + "finishes before an auto split may trigger again, for tables whose split drags a full UNSHARE rewrite "
+            + "behind it. Gives size-tiered compaction a window to drain the small files that accumulated while the "
+            + "partition's compaction slot was held. Values <= 0 disable the wait.")
+    public static int tablet_reshard_orderby_split_interval_second = 180;
+
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
             + "INSERT INTO ... SELECT FROM FILES() loads. Default on as of v4.1.0 after the GA gate. "
             + "Set to false to disable cluster-wide. The session variable enable_tablet_pre_split "
@@ -4875,6 +4916,13 @@ public class Config extends ConfigBase {
             + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
             + "enable_tablet_pre_split must also be true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
+
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for the "
+            + "refresh of a range-distributed incremental materialized view. Such a view is keyed by a "
+            + "hidden row-id column whose value domain is known, so its boundaries are derived rather "
+            + "than sampled and no data is read. Set to false to disable cluster-wide. The session "
+            + "variable enable_tablet_pre_split must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_mv_refresh = true;
 
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
             + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
@@ -5025,4 +5073,12 @@ public class Config extends ConfigBase {
             "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
             "or equal to 0 are treated as 0, which truncates the list entirely.")
     public static int explain_dict_column_size = 5;
+
+    @ConfField(mutable = true, comment = "Safety net for the failpoint pause mode. A thread parked " +
+            "at a failpoint armed with ADMIN ENABLE FAILPOINT ... WITH PAUSE resumes after this many " +
+            "seconds even if ADMIN DISABLE FAILPOINT is never issued, so a forgotten pause cannot " +
+            "wedge a node until it is restarted. Values below 1 are clamped to 1. The value is also " +
+            "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
+            "timeout.")
+    public static int failpoint_pause_timeout_second = 300;
 }

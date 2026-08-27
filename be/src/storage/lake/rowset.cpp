@@ -153,6 +153,14 @@ Rowset::~Rowset() {
 }
 
 StatusOr<std::optional<SeekRange>> Rowset::get_seek_range() const {
+    // Range-distributed PK tablets with ORDER BY != PK persist their tablet/rowset
+    // boundaries in PK space while segment pages are ordered by the independent sort key.
+    // Such a boundary is not a contiguous segment seek range. Parent-tablet reads therefore
+    // read a deduplicated shared segment in full; UNSHARE applies the PK range row-by-row.
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _tablet_schema->has_separate_sort_key()) {
+        return std::optional<SeekRange>{};
+    }
+
     const TabletRangePB* range_pb = nullptr;
     if (_metadata->has_range()) {
         range_pb = &_metadata->range();
@@ -417,9 +425,20 @@ Status Rowset::set_segment_tablet_range(size_t segment_idx, const std::optional<
         }
         return Status::OK();
     }
-    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) &&
-        _metadata->segment_metas(segment_idx).shared() && shared_segment_range.has_value()) {
-        segment_options->tablet_range = *shared_segment_range;
+    if (segment_idx < static_cast<size_t>(_metadata->segment_metas_size()) && shared_segment_range.has_value()) {
+        // A segment needs the range when it can hold rows this tablet does not own. `shared` says so
+        // directly: the split handed that segment to every child. A rowset carrying its OWN range says
+        // so too, and it is not the same set -- convert_txn_log_for_splitting stamps this tablet's range
+        // onto a cross-published op_write, and the segment a row-mode partial update rewrites out of one
+        // is private to this tablet (MetaFileBuilder clears `shared`, because the file really is not
+        // shared) while still holding every row of the source segment, the siblings' rows included.
+        // Without this a reader would serve those rows. A rowset this tablet wrote itself carries no
+        // range of its own and is in range by construction, so it stays unclipped and pays nothing.
+        const bool may_hold_rows_of_other_tablets =
+                _metadata->segment_metas(segment_idx).shared() || _metadata->has_range();
+        if (may_hold_rows_of_other_tablets) {
+            segment_options->tablet_range = *shared_segment_range;
+        }
     }
     return Status::OK();
 }
@@ -715,8 +734,12 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.lake_io_opts.location_provider = _tablet_mgr->location_provider();
     seg_options.is_primary_keys = true;
-    seg_options.delvec_loader =
-            std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts);
+    // The caller already supplied the complete tablet metadata used to build this rowset. Reuse it
+    // for delvec lookup instead of reading the same version back from object storage. This is
+    // required by aggregate publish: query-parent synthesis flushes child PK indexes before the
+    // new-version bundle has been persisted, so that version exists only in the RPC response here.
+    seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/,
+                                                                   seg_options.lake_io_opts, _tablet_metadata);
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
     seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
     seg_options.version = version;

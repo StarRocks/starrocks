@@ -270,7 +270,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_online_optimize_table`
 
-- デフォルト：true
+- デフォルト：false
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
@@ -599,6 +599,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：古いタブレットを分割できる新しいタブレットの最大数。
 - 導入時期：v4.1.0
 
+### `tablet_reshard_orderby_max_split_count`
+
+- デフォルト：2
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：分割が完全な UNSHARE 再書き込みを伴う場合、つまり `ORDER BY` キーが主キーと異なる range 分散 PRIMARY KEY テーブルの場合に、1 つのソースタブレットが分割される新しいタブレットの最大数。この種の分割では親の共有セグメントを range でフィルタできないため、すべての子タブレットが丸ごと書き直され、ファンアウトが大きいほど読み取りの増幅が倍増します。さらに `tablet_reshard_max_split_count` によって制限されます。`1` 以下の値ではこの追加の制限が無効になります。
+- 導入時期：-
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- デフォルト：0
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：分割が完全な UNSHARE 再書き込みを伴う場合に、1 つの分割ジョブが**分割**できるソースタブレットの最大数。最大のタブレットが優先的に選択されます。これが制限するのは分割のファンアウトであり、再書き込み量ではない点に注意してください。分割されなかった兄弟タブレットも置き換え後のインデックスでは identical タブレットとなり、UNSHARE コンパクションはパーティション単位で実行されるため、それらも書き直されます。`0` 以下の値はウェアハウスのコンピュートノード数を意味します。
+- 導入時期：-
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- デフォルト：180
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：分割が完全な UNSHARE 再書き込みを伴うテーブルについて、直前の tablet reshard ジョブが完了してから自動分割が再度トリガーされるまでの待機期間。コンパクションスロットが占有されている間に蓄積した小さなファイルを size-tiered コンパクションが処理するための時間を確保します。`0` 以下の値では待機が無効になります。この間隔は直前のジョブが保持されている間、つまり最長で `tablet_reshard_history_job_keep_max_ms` までしか適用できない点に注意してください。
+- 導入時期：-
+
 ### `tablet_reshard_min_split_size`
 
 - デフォルト：2147483648 (2 GB)
@@ -671,6 +698,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ソースが内部 OLAP テーブルまたは外部 Iceberg テーブルである `INSERT INTO ... SELECT FROM <table>` 形式の取り込みに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。自動 Range パーティションのターゲットをサポートし、明示的に指定された通常／一時パーティション、および static／dynamic の両方の `INSERT OVERWRITE` を含みます。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
 - 導入時期：v4.1.0
 
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：Range 分散の増分マテリアライズドビュー（incremental materialized view）のリフレッシュに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。この種のビューは隠し row-id 列をキーとし、その値域が事前に分かっているため、境界はサンプリングではなく導出によって求められ、データは一切読み取られません。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。
+- 導入時期：v4.2.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - デフォルト：300
@@ -737,7 +773,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
 
-1. 3 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`。新規取り込みは即座に事前分割をスキップします。
+1. 4 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`、`enable_tablet_pre_split_for_mv_refresh`。新規取り込みは即座に事前分割をスキップします。
 2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
 3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
 

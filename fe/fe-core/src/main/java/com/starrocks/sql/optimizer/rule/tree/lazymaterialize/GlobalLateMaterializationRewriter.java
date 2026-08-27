@@ -1203,7 +1203,14 @@ public class GlobalLateMaterializationRewriter {
                         // acquire global dict
                         final Pair<Integer, ColumnDict> globalDict = handler.getGlobalDict(scan, lazyColumn);
                         if (globalDict != null) {
-                            globalDictsBuilder.put(globalDict.first, globalDict.second);
+                            // Key it by the id the lookup will actually ask with. resolve() maps the
+                            // column back into the scan's id space so the dictionary can be found on
+                            // the scan, but the lookup's slots are built from materializedLazyColumns,
+                            // which are in this operator's space. Shipping the scan-space id meant the
+                            // backend looked its slot up in a map that did not contain it, silently
+                            // skipped applying the dictionary, and read the raw string into a slot the
+                            // plan had already typed as the dictionary code.
+                            globalDictsBuilder.put(columnRef.getId(), globalDict.second);
                         }
                     }
                 }

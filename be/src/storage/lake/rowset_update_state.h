@@ -156,6 +156,24 @@ public:
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
+    // Blank out the index answers for the rows a sibling owns, leaving them at the "no old row"
+    // sentinel. |owned| is SegmentPKChunkRef::owned / SegmentPKIterator::standalone_owned(), one byte
+    // per entry of |rss_rowids|; empty means "own every row" and this is then a no-op, which is every
+    // publish but a SPLIT child's cross publish.
+    //
+    // Why any of this: cross publish hands each child the parent's whole op_write, siblings' rows
+    // included. A sibling's key still resolves -- against the sstables this child inherited from the
+    // parent -- and the location it returns can name a rowset the split pruned away, which
+    // plan_read_by_rssid would route to get_column_values and fail the publish for good on an unknown
+    // rssid. That is the failure #77744 fixed for del files, reached from the upsert side.
+    //
+    // A mask and not a filter on purpose: the vector keeps one entry per row of the source segment, so
+    // every caller's row i still names segment rowid i and no rowid derived from it has to be
+    // remapped -- and rewrite_segment needs one entry per row regardless. This only makes the ANSWER
+    // harmless; a caller that would act on "no old row" (insert the row, let it win a comparison,
+    // allocate an id for it) must still skip the row itself.
+    static void mask_unowned_rowids(const Filter& owned, std::vector<uint64_t>* rss_rowids);
+
     const MutableColumnPtr& auto_increment_deletes(uint32_t segment_id) const;
 
     static StatusOr<bool> file_exist(const std::string& full_path);
@@ -170,6 +188,21 @@ private:
 
     Status _prepare_auto_increment_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                                          bool need_lock);
+
+    // Widen the merged columns of segment |segment_id| to one value per row of the SOURCE segment, which
+    // is what the rewriters demand and what a cross publish's narrowed publish iterator does not give.
+    // A no-op on every tablet that was never resharded -- see the definition.
+    //
+    // Widens COPIES: |widened_write_columns| receives them, empty meaning nothing needed widening and the
+    // caller should hand the rewriter the state's own columns. The auto-increment column is the exception
+    // -- the rewriter reads it out of the state and moves it -- so the widened copy is swapped in here and
+    // the original handed back through |unwidened_auto_increment_column|; the caller owns putting it back,
+    // and must do so after the rewrite.
+    Status _widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params, uint32_t segment_id,
+                                                    const FileInfo& src,
+                                                    const std::vector<ColumnId>& unmodified_column_ids,
+                                                    MutableColumns* widened_write_columns,
+                                                    MutableColumnPtr* unwidened_auto_increment_column);
 
     // resolve conflict when publish transaction
     Status _resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version);

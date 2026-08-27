@@ -444,6 +444,18 @@ public class OlapTableSink extends DataSink {
             tSink.setPartition(partitionParam);
             tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
+            // A column-mode partial update writes the new values into a DCG beside the segment it
+            // patches. A split's UNSHARE compaction rewrites every segment wholesale and does not carry
+            // those across, so the update would be silently lost the first time such a table is split.
+            // Row mode rewrites whole rows and is unaffected. hasSeparateSortKey carries the range and
+            // primary-key tests itself, so a HASH-distributed primary-key table with a separate ORDER BY
+            // -- long supported -- stays out of this.
+            if ((this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPDATE_MODE
+                    || this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPSERT_MODE)
+                    && MetaUtils.hasSeparateSortKey(dstTable, dstTable.getBaseIndexMetaId())) {
+                throw new StarRocksException("Column-mode partial update is not supported on a range-distributed "
+                        + "primary key table whose ORDER BY key differs from the primary key");
+            }
             tSink.setPartial_update_mode(this.partialUpdateMode);
             tSink.setAutomatic_bucket_size(automaticBucketSize);
             if (canUseColocateMVIndex(dstTable)) {

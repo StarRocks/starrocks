@@ -167,6 +167,34 @@ public class SplitTabletJobTest {
     }
 
     @Test
+    public void testPkOrderByFactoryLeavesBoundarySelectionToBePkIndex() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE pk_order_by_split "
+                + "(pk1 int not null, pk2 int not null, sort_col int not null) "
+                + "PRIMARY KEY(pk1, pk2) ORDER BY(sort_col) "
+                + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'true')");
+        OlapTable pkOrderByTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "pk_order_by_split");
+        PhysicalPartition physicalPartition = pkOrderByTable.getAllPhysicalPartitions().iterator().next();
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob job = (SplitTabletJob) new SplitTabletJobFactory(db, pkOrderByTable, clause)
+                .createTabletReshardJob();
+
+        SplittingTablet splittingTablet = job.getReshardingPhysicalPartitions().values().stream()
+                .flatMap(partition -> partition.getReshardingIndexes().values().stream())
+                .flatMap(index -> index.getReshardingTablets().stream())
+                .map(ReshardingTablet::getSplittingTablet)
+                .filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow();
+        Assertions.assertTrue(splittingTablet.getNewTabletRanges().isEmpty(),
+                "ordinary split must let BE derive PK boundaries from the cloud-native PK index");
+        Assertions.assertTrue(splittingTablet.getNewTabletIds().size() > 1);
+    }
+
+    @Test
     public void testRunBumpsOptimisticVersion() throws Exception {
         installLakeServiceMock(this::addDataDrivenRanges);
 

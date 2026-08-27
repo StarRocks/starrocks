@@ -1,0 +1,410 @@
+-- name: test_range_orderby_partial_update @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null,
+    c1 int not null,
+    c2 int not null,
+    c3 int not null,
+    c4 int not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values
+    (1, 1, 100, 'a', 11, 12, 13, 14),
+    (2, 2, 200, 'b', 21, 22, 23, 24),
+    (3, 3, 300, 'c', 31, 32, 33, 34);
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	100	a	11	12	13	14
+2	2	200	b	21	22	23	24
+3	3	300	c	31	32	33	34
+-- !result
+set partial_update_mode = 'row';
+-- result:
+-- !result
+insert into t (k1, k2, v1, v2, c1) values (1, 1, 100, 'a', 111);
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	100	a	111	12	13	14
+2	2	200	b	21	22	23	24
+3	3	300	c	31	32	33	34
+-- !result
+insert into t (k1, k2, c1) values (1, 1, 112);
+-- result:
+[REGEX]E: \(5609, .*partial update on table with sort key must provide all sort key columns.*
+-- !result
+select * from t order by k1;
+-- result:
+1	1	100	a	111	12	13	14
+2	2	200	b	21	22	23	24
+3	3	300	c	31	32	33	34
+-- !result
+set partial_update_mode = 'column';
+-- result:
+-- !result
+insert into t (k1, k2, v1, v2, c1) values (1, 1, 100, 'a', 113);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column-mode partial update is not supported on a range-distributed primary key table whose ORDER BY key differs from the primary key.')
+-- !result
+select * from t order by k1;
+-- result:
+1	1	100	a	111	12	13	14
+2	2	200	b	21	22	23	24
+3	3	300	c	31	32	33	34
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+update t set c1 = 999 where k1 = 2 and k2 = 2;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	100	a	111	12	13	14
+2	2	200	b	999	22	23	24
+3	3	300	c	31	32	33	34
+-- !result
+update t set c1 = 998;
+-- result:
+[REGEX]E: \(5609, .*partial update on table with sort key must provide all sort key columns.*
+-- !result
+select * from t order by k1;
+-- result:
+1	1	100	a	111	12	13	14
+2	2	200	b	999	22	23	24
+3	3	300	c	31	32	33	34
+-- !result
+update t set v1 = 250, v2 = 'bb';
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	250	bb	31	32	33	34
+-- !result
+set partial_update_mode = 'column';
+-- result:
+-- !result
+update t set c1 = 997 where k1 = 3 and k2 = 3;
+-- result:
+[REGEX]E: \(5609, .*partial update on table with sort key must provide all sort key columns.*
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	250	bb	31	32	33	34
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_row_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:row" -H "columns:k1,k2,v1,v2,c1" -d "3,3,300,c,331" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	300	c	331	32	33	34
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_col_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:k1,k2,v1,v2,c1" -d "3,3,300,c,332" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "Column-mode partial update is not supported on a range-distributed primary key table whose ORDER BY key differs from the primary key"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	300	c	331	32	33	34
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_auto_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "columns:k1,k2,c1" -d "3,3,333" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Fail"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	300	c	331	32	33	34
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_old_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "columns:k1,k2,v1,v2,c1,c2,c3,c4" -d "3,3,299,z,91,92,93,94" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	300	c	331	32	33	34
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_new_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "columns:k1,k2,v1,v2,c1,c2,c3,c4" -d "3,3,301,z,91,92,93,94" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	301	z	91	92	93	94
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_old_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "1,1,50,a,150" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	301	z	91	92	93	94
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_new_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "1,1,150,a,151" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	301	z	91	92	93	94
+-- !result
+insert into t properties("merge_condition" = "v1") values (2, 2, 249, 'q', 71, 72, 73, 74);
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	250	bb	999	22	23	24
+3	3	301	z	91	92	93	94
+-- !result
+insert into t properties("merge_condition" = "v1") values (2, 2, 251, 'q', 71, 72, 73, 74);
+-- result:
+-- !result
+select * from t order by k1;
+-- result:
+1	1	250	bb	111	12	13	14
+2	2	251	q	71	72	73	74
+3	3	301	z	91	92	93	94
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+
+-- name: test_range_orderby_partial_update_after_split @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(256) not null,
+    c1 int not null,
+    c2 int not null,
+    c3 int not null,
+    c4 int not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t
+select x, x % 7, 100000 - x, repeat(md5(cast(x as varchar)), 6), x, x * 2, x * 3, x * 4
+from table(generate_series(1, 20000)) as g(x);
+-- result:
+-- !result
+[UC]alter table t split tablet properties('tablet_reshard_target_size' = '1024');
+shell: n=1; for i in $(seq 1 55); do n=$(${mysql_cmd} -Ne "select count(1) from information_schema.tablet_reshard_jobs where db_name='db_${uuid0}' and job_state not in ('FINISHED','ABORTED')" 2>/dev/null); [ "$n" = "0" ] && break; sleep 2; done; echo "pending=$n"
+-- result:
+0
+pending=0
+-- !result
+select buckets > 1 as did_split from information_schema.partitions_meta
+    where db_name = 'db_${uuid0}' and table_name = 't';
+-- result:
+1
+-- !result
+select count(*) from t;
+-- result:
+20000
+-- !result
+select k1, k2, v1, c1, c2 from t where k1 in (5, 19000) order by k1;
+-- result:
+5	5	99995	5	10
+19000	2	81000	19000	38000
+-- !result
+set partial_update_mode = 'row';
+-- result:
+-- !result
+insert into t (k1, k2, v1, v2, c1) values
+    (5, 5, 99995, repeat(md5(cast(5 as varchar)), 6), 555),
+    (19000, 19000 % 7, 81000, repeat(md5(cast(19000 as varchar)), 6), 190000);
+-- result:
+-- !result
+select k1, k2, v1, c1, c2 from t where k1 in (5, 19000) order by k1;
+-- result:
+5	5	99995	555	10
+19000	2	81000	190000	38000
+-- !result
+set partial_update_mode = 'auto';
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_row_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:row" -H "columns:k1,k2,v1,v2,c1" -d "5,5,99995,pad5,556" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+-- result:
+5	5	99995	pad5	556	10
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_col_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:k1,k2,v1,v2,c1" -d "5,5,99995,pad5,557" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "Column-mode partial update is not supported on a range-distributed primary key table whose ORDER BY key differs from the primary key"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+-- result:
+5	5	99995	pad5	556	10
+-- !result
+insert into t properties("merge_condition" = "v1") values (5, 5, 99994, 'older', 1, 1, 1, 1);
+-- result:
+-- !result
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+-- result:
+5	5	99995	pad5	556	10
+-- !result
+insert into t properties("merge_condition" = "v1") values (5, 5, 99996, 'newer', 2, 2, 2, 2);
+-- result:
+-- !result
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+-- result:
+5	5	99996	newer	2	2
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_old_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "19000,2,80999,pad19000,7" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select k1, k2, v1, c1, c2 from t where k1 = 19000;
+-- result:
+19000	2	81000	190000	38000
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_new_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "19000,2,81001,pad19000,8" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select k1, k2, v1, c1, c2 from t where k1 = 19000;
+-- result:
+19000	2	81001	8	38000
+-- !result
+select k1, k2, v1, c1, c2, c3, c4 from t where k1 = 777;
+-- result:
+777	0	99223	777	1554	2331	3108
+-- !result
+select count(*) from t;
+-- result:
+20000
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

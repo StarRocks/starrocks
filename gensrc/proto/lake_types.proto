@@ -325,6 +325,14 @@ enum CompactionStrategyPB {
     REAL_TIME = 1;
 }
 
+// Extension point for TabletMetadataPB. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TabletMetadataPB
+// fields belong on TabletMetadataPB itself, whose remaining numbers are free.
+message TabletMetadataExtPB {
+}
+
 message TabletMetadataPB {
     optional int64 id = 1;
     optional int64 version = 2;
@@ -373,6 +381,22 @@ message TabletMetadataPB {
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
+
+    // Tags 50, 51 are occupied by downstream distributions and already persisted
+    // in downstream tablet metadata. Placeholders are declared here (unused by
+    // upstream) so that no upstream field is ever allocated on these tags.
+    repeated int64 placeholder_50 = 50;
+    optional bytes placeholder_51 = 51;
+    optional TabletMetadataExtPB ext = 25;
+}
+
+// Extension point for MetadataUpdateInfoPB. DO NOT MODIFY: do not add fields
+// here, and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New
+// MetadataUpdateInfoPB fields belong on MetadataUpdateInfoPB itself, whose
+// remaining numbers are free.
+message MetadataUpdateInfoExtPB {
 }
 
 message MetadataUpdateInfoPB {
@@ -384,6 +408,7 @@ message MetadataUpdateInfoPB {
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
     optional TabletRangePB tablet_range = 7;
+    optional MetadataUpdateInfoExtPB ext = 8;
 }
 
 message BundleTabletMetadataPB {
@@ -660,6 +685,10 @@ message TxnInfoPB {
     // W == 1 empty fast-path to a partition that is empty at W > 1 (e.g. a repeat online rewrite of an
     // empty range partition). When false, the source op_write MUST exist and is loaded as before.
     optional bool shadow_rewrite_source_empty = 14;
+    // Marks the partition-wide compaction that removes split-shared segments. This is copied from the
+    // persisted compaction transaction attachment so aggregate publish can omit the query-only parent
+    // metadata even after an FE leader failover (when the in-memory compaction job no longer exists).
+    optional bool unshare_compaction = 15;
 }
 
 message SplittingTabletInfoPB {

@@ -48,6 +48,7 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
 // new_mask_merge_iterator create a merge iterator based on source masks.
 // the order of rows is determined by mask sequence.
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         RowSourceMaskBuffer* mask_buffer);
+                                         RowSourceMaskBuffer* mask_buffer,
+                                         RowSourceMaskBuffer* selection_buffer = nullptr);
 
 } // namespace starrocks

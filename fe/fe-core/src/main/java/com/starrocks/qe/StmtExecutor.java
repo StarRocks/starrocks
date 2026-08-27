@@ -44,6 +44,8 @@ import com.google.common.primitives.Ints;
 import com.google.gson.Gson;
 import com.starrocks.alter.AlterJobException;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitEstimates;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
@@ -358,6 +360,12 @@ public class StmtExecutor {
     private PQueryStatistics statisticsForAuditLog;
     private boolean statisticsForAuditLogFromPlaceholder = false;
     private List<StmtExecutor> subStmtExecutors;
+    // Set as soon as a cancellation reaches this statement, by whatever route: KILL QUERY, a cancelled
+    // TaskRun, a closed client. cancel() itself only reaches the coordinator, so once a statement has
+    // moved past execution -- committing, for instance -- this flag is the only thing that keeps the
+    // cancellation observable. A StmtExecutor serves exactly one statement, so it cannot leak to the
+    // next one. Written by the killing thread, read by the executing thread.
+    private volatile boolean cancelled;
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext = null;
@@ -495,6 +503,7 @@ public class StmtExecutor {
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
         Tracers.toRuntimeProfile(plannerProfile);
+        PreSplitProfile.appendTo(profile, context);
         return profile;
     }
 
@@ -946,6 +955,23 @@ public class StmtExecutor {
         context.setIsForward(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
+        // A statement replaces the previous statement's diagnostics, following the MySQL
+        // diagnostics area. Three statement classes are exempt while they succeed: SET,
+        // transaction control, and SHOW (which covers SHOW WARNINGS / SHOW ERRORS reading the
+        // buffer back), so a load's warnings stay readable across the SET / COMMIT / SHOW
+        // statements a client typically issues before checking them. This is narrower than the
+        // MySQL rule, which exempts every statement that uses no tables and generates no
+        // messages. A failing statement of any class, including the three above, still replaces
+        // the buffer with its own error (see the finally block below).
+        boolean preservesDiagnosticsArea = parsedStmt instanceof ShowStmt
+                || parsedStmt instanceof SetStmt
+                || parsedStmt instanceof BeginStmt
+                || parsedStmt instanceof CommitStmt
+                || parsedStmt instanceof RollbackStmt;
+        if (!preservesDiagnosticsArea) {
+            context.clearWarnings();
+        }
+
         SessionVariable sessionVariableBackup = context.getSessionVariable();
         ComputeResource computeResourceBackup = context.getCurrentComputeResourceNoAcquire();
         // set true to change session variable
@@ -1331,6 +1357,29 @@ public class StmtExecutor {
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError()) {
+                // Surface the failing statement's error as a session diagnostic so SHOW ERRORS /
+                // SHOW WARNINGS can read it back. The code mirrors the ERR packet (default 1064).
+                if (preservesDiagnosticsArea) {
+                    // A failure generates a message, which replaces the diagnostics area even for
+                    // statement classes that preserve it on success (skipped at the top). This
+                    // includes SHOW WARNINGS / SHOW ERRORS themselves: they only read the buffer
+                    // back while they succeed, and a client that just received an ERR packet for
+                    // one of them must find that error in the buffer, not the previous statement's
+                    // diagnostics.
+                    context.clearWarnings();
+                }
+                // A statement forwarded to the leader is answered with the leader's own ERR
+                // packet, which ConnectProcessor.finalizeCommand() relays verbatim. TMasterOpResult
+                // brings the message back but carries no error code, so LeaderOpExecutor leaves
+                // this QueryState without one and a diagnostic built here would pair the leader's
+                // message with the local 1064 fallback, disagreeing with the code the client just
+                // read. Record nothing in that case, matching the empty result a follower already
+                // returns for the warnings of a forwarded statement. getOutputPacket() is non-null
+                // exactly when a leader result came back, which is the same condition
+                // finalizeCommand() uses to pick the leader's packet.
+                if (getOutputPacket() == null) {
+                    context.addWarning(QueryWarning.fromErrorState(context.getState()));
+                }
                 ExecuteExceptionHandler.logFailedQueryPlan(lastExecPlan, context, originStmt);
                 if (coord != null) {
                     coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR, context.getState().getErrorMessage());
@@ -1380,7 +1429,7 @@ public class StmtExecutor {
      * some statements may execute multiple statement which will also create multiple StmtExecutor, so here
      * we accumulate them into the ConnectContext instead of using the last one
      */
-    private void recordExecStatsIntoContext() {
+    public void recordExecStatsIntoContext() {
         PQueryStatistics execStats = getQueryStatisticsForAuditLog();
         context.getAuditEventBuilder().addCpuCostNs(execStats.getCpuCostNs() != null ? execStats.getCpuCostNs() : 0);
         context.getAuditEventBuilder()
@@ -1761,6 +1810,7 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel(String cancelledMessage) {
+        cancelled = true;
         if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
@@ -1778,6 +1828,11 @@ public class StmtExecutor {
                 coordRef.cancel(cancelledMessage);
             }
         }
+    }
+
+    /** Whether a cancellation has reached this statement. See {@link #cancelled}. */
+    public boolean isCancelled() {
+        return cancelled;
     }
 
     // Handle kill statement.
@@ -3254,7 +3309,7 @@ public class StmtExecutor {
         return statisticsForAuditLog;
     }
 
-    public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
+    public void handleInsertOverwrite(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
         TableRef tableRef = insertStmt.getTableRef();
         Database db =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableRef.getCatalogName(), tableRef.getDbName());
@@ -3294,7 +3349,9 @@ public class StmtExecutor {
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
-        manager.executeJob(context, this, job);
+        // The runner replans against the temporary partitions and never sees the plan built for this
+        // statement, so the size the optimizer estimated has to be read here and handed down.
+        manager.executeJob(context, this, job, PreSplitEstimates.fromExecPlan(execPlan));
     }
 
     /**
@@ -3431,7 +3488,7 @@ public class StmtExecutor {
 
         if (dmlType == DmlType.INSERT_OVERWRITE && !((InsertStmt) parsedStmt).hasOverwriteJob() &&
                 !(targetTable.isIcebergTable() || targetTable.isHiveTable())) {
-            handleInsertOverwrite((InsertStmt) parsedStmt);
+            handleInsertOverwrite(execPlan, (InsertStmt) parsedStmt);
             return;
         }
 
@@ -3933,6 +3990,12 @@ public class StmtExecutor {
             sb.append("}");
         }
 
+        if (filteredRows > 0) {
+            // Surface the silently filtered / NULL-substituted rows as a session warning so the
+            // client can read the detail back via SHOW WARNINGS (the OK packet already reports the
+            // count).
+            context.addWarning(QueryWarning.filteredRowsWarning(filteredRows, coord.getTrackingUrl()));
+        }
         // filterRows may be overflow when to convert it into int, use `saturatedCast` to avoid overflow
         context.getState().setOk(loadedRows, Ints.saturatedCast(filteredRows), sb.toString());
     }

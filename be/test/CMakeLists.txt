@@ -159,6 +159,7 @@ set(EXEC_FILES
 if (NOT APPLE)
     list(APPEND EXEC_FILES
         ./gutil/sysinfo-test.cc
+        ./service/lake_service_parent_view_test.cpp
         ./service/lake_service_test.cpp
     )
 endif ()
@@ -281,6 +282,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
+    ./storage/lake/lake_primary_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp

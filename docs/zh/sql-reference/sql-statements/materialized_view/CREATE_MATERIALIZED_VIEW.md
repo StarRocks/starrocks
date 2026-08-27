@@ -469,6 +469,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 - 如果省略 `distribution_desc`，仅当处于存算分离模式且 `enable_range_distribution` 已启用时，StarRocks 才使用 Range 分布。其他情况下，StarRocks 回退到基于目标表全部 Key 列的哈希分布。
 - Range 分布没有用户可指定的 `DISTRIBUTED BY RANGE` 语法，无法显式指定。
 - 如果显式指定哈希分布或随机分布，StarRocks 会将其归一化为基于目标表全部 Key 列的哈希分布，并保留显式指定的分桶数量。
+- Range 分布的分区初始只有一个 Tablet，因此首次刷新原本只能由单个节点写入。为此 StarRocks 会对该次刷新写入的 Tablet 进行预分裂，其区间边界由内部 Row ID 列推导得出，不采样任何数据。该行为在以下条件下生效：物化视图的 Row ID 由存储引擎生成、尚未为该视图分配过任何 Row ID（新建视图的首次刷新即属于此情况），并且该次刷新只写入单个分区。这是尽力而为的优化：其他情况下刷新将不做预分裂，原因记录在 `starrocks_fe_tablet_pre_split_eligibility_skipped` 中。将 `enable_tablet_pre_split_for_mv_refresh` 设为 `false` 可关闭该行为。
 
 #### 排序键
 

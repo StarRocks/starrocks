@@ -1,0 +1,75 @@
+-- name: test_range_orderby_alter @cloud
+-- SQL integration: ALTER guards for a range-distributed PRIMARY KEY table whose ORDER BY
+-- differs from the primary key. The two properties this shape depends on -- bundled files
+-- and boundaries stored in primary-key space -- cannot be taken away in place.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+insert into t values (1, 1, 300, 'c'), (2, 2, 200, 'b'), (3, 3, 100, 'a');
+select * from t order by k1;
+
+-- Rejected: a split already in flight waits on an UNSHARE rewrite that is only scheduled for
+-- file-bundling tables, so turning it off would strand the table in TABLET_RESHARD.
+alter table t set ('file_bundling' = 'false');
+
+-- Rejected: the tablet boundaries on disk are in primary-key space. Re-pointing the sort key
+-- in place would reinterpret them in sort-key space.
+alter table t order by (v2, v1);
+
+-- Accepted: adding a value column leaves both the primary key and the sort key alone.
+alter table t add column v3 int not null default '9';
+function: wait_alter_table_finish()
+select * from t order by k1;
+insert into t values (4, 4, 50, 'x', 7);
+select * from t order by k1;
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't';
+
+drop database db_${uuid0} force;
+
+-- name: test_range_orderby_alter_back_to_pk @cloud
+-- SQL integration: ORDER BY can still be pointed back at the primary key. That reorder does
+-- not separate the sort key from the routing key, so it takes the range-rewrite path, which
+-- re-samples the tablet layout instead of reinterpreting the boundaries on disk. Once the
+-- two keys agree again, file_bundling is no longer load-bearing and may be turned off.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+insert into t values (1, 1, 300, 'c'), (2, 2, 200, 'b'), (3, 3, 100, 'a');
+
+alter table t order by (k1, k2);
+function: wait_alter_table_finish()
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't';
+select * from t order by k1;
+insert into t values (2, 2, 20, 'bb');
+select * from t order by k1;
+
+alter table t set ('file_bundling' = 'false');
+select count(*) from t;
+
+drop database db_${uuid0} force;

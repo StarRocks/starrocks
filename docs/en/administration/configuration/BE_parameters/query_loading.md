@@ -823,7 +823,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to fall back to exact brute-force scoring when a filtered top-k vector index search returns fewer rows than `min(k, matched candidate count)`. When this parameter is `true`, StarRocks rescans the matched candidates exactly to fill the result up to `k`. When it is `false`, StarRocks returns the vector index result without this count-based fallback. This parameter applies only to pre-filtered top-k searches; it does not apply to range searches, where fewer results can legitimately mean that no more candidates satisfy the requested radius.
+- Description: Whether to use exact brute-force scoring to protect top-k vector searches from underfilled results. When this parameter is `true`, StarRocks routes a query to exact scoring if a predicate or runtime filter is evaluated after the per-Segment ANN search, and rescans matched candidates exactly if a pre-filtered ANN search returns fewer rows than `min(k, matched candidate count)`. When it is `false`, StarRocks keeps the ANN physical plan even when some predicates or runtime filters must be evaluated later, and returns pre-filtered ANN results without the count-based fallback; either case can return fewer than `k` rows. The count-based fallback applies only to top-k searches, not to range searches, where fewer results can legitimately mean that no more candidates satisfy the requested radius.
 - Introduced in: -
 
 ### vector_index_build_flush_threshold_rows

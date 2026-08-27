@@ -312,6 +312,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：StarRocks が FE 設定ファイルで指定されたオブジェクトストレージ関連プロパティを使用して、組み込みストレージボリュームを作成することを許可するかどうか。デフォルト値は v3.4.1 以降 `true` から `false` に変更されました。
 - 導入時期：v3.1.0
 
+### `failpoint_pause_timeout_second`
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: はい
+- 説明: failpoint の一時停止 (pause) モードのフォールバックタイムアウト。`ADMIN ENABLE FAILPOINT ... WITH PAUSE` で一時停止したスレッドは、`ADMIN DISABLE FAILPOINT` が実行されなくてもこの秒数の経過後に自動的に再開し、その failpoint は解除されます。これにより、解除し忘れてもノードの再起動が必要になることはありません。1 未満の値は 1 に丸められます。この値は failpoint を有効化するリクエストとともに BE/CN にも送信されるため、FE と BE の一時停止は同じタイムアウトを共有します。障害注入テスト専用です。FE は `--failpoint` を付けて起動する必要があり、BE 側の failpoint にはさらに `ENABLE_FAULT_INJECTION=ON` でコンパイルした BE が必要です。
+- 導入バージョン: v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - デフォルト：Empty string
@@ -868,6 +877,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：LDAP オブジェクトでユーザーを識別する属性の名前。
 - 導入時期：-
 
+### `backup_clean_check_interval_seconds`
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: Yes
+- 説明: Leader FE が期限切れのバックアップスナップショットを探す間隔。`enable_backup_snapshot_auto_clean` が `true` の場合のみ有効です。変更は次回のラウンドから反映され、再起動は不要です。
+- 導入バージョン: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 自動クリーンアップが 1 つのスナップショットに対して連続で何回失敗したら、そのスナップショットを対象から外すか。カウントされるのは自動クリーンアップ自身の失敗のみです。カウントはメモリ上にのみ保持されるため、FE の再起動、Leader の切り替え、またはこの値を大きくすると再試行が再開されます。DROP SNAPSHOT はこの値に関係なくスナップショットを削除します。
+- 導入バージョン: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - デフォルト：86400 * 1000
@@ -876,6 +903,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：バックアップジョブのタイムアウト期間。この値を超えると、バックアップジョブは失敗します。
 - 導入時期：-
+
+### `enable_backup_snapshot_auto_clean`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 期限切れのバックアップスナップショットをリポジトリから自動的に削除するかどうか。リポジトリ内の job info ファイルに、作成元クラスタとして本クラスタが記録されており、かつ有効期限を過ぎている場合にのみ削除されます。他のクラスタが作成したスナップショット、本機能の導入前に作成されたスナップショット、および保持ポリシーを読み取れないスナップショットが自動的に削除されることはありません。[BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md) の `ttl` プロパティを参照してください。
+- 導入バージョン: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 

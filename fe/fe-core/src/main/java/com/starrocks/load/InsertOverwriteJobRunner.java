@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -69,6 +70,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -114,13 +116,26 @@ public class InsertOverwriteJobRunner {
     private final long dbId;
     private final long tableId;
     private final String postfix;
+    // What the optimizer estimated this statement writes. A boundary source that derives boundaries
+    // without sampling reads no data, so it has no sample to learn the input size from and takes it
+    // from here.
+    private final Estimates outputEstimates;
 
     // execution stat
     private long createPartitionElapse;
     private long insertElapse;
     private TransactionState transactionState;
 
+    // Matches the pre-split coordinator's job-poll cadence: a reshard of an empty temp partition is
+    // metadata-only and finishes in seconds, so a sub-second poll keeps the added commit latency small.
+    private static final long COMMIT_TABLE_STATE_POLL_INTERVAL_MS = 500L;
+
     public InsertOverwriteJobRunner(InsertOverwriteJob job, ConnectContext context, StmtExecutor stmtExecutor) {
+        this(job, context, stmtExecutor, Estimates.ZERO);
+    }
+
+    public InsertOverwriteJobRunner(InsertOverwriteJob job, ConnectContext context, StmtExecutor stmtExecutor,
+                                    Estimates outputEstimates) {
         this.job = job;
         this.context = context;
         this.stmtExecutor = stmtExecutor;
@@ -128,6 +143,7 @@ public class InsertOverwriteJobRunner {
         this.dbId = job.getTargetDbId();
         this.tableId = job.getTargetTableId();
         this.postfix = "_" + job.getJobId();
+        this.outputEstimates = outputEstimates;
         this.createPartitionElapse = 0;
         this.insertElapse = 0;
     }
@@ -138,6 +154,8 @@ public class InsertOverwriteJobRunner {
         this.dbId = job.getTargetDbId();
         this.tableId = job.getTargetTableId();
         this.postfix = "_" + job.getJobId();
+        // Replay has no plan to estimate from, and it never loads data, so there is nothing to size.
+        this.outputEstimates = Estimates.ZERO;
         this.createPartitionElapse = 0;
         this.insertElapse = 0;
     }
@@ -205,6 +223,10 @@ public class InsertOverwriteJobRunner {
         transferTo(InsertOverwriteJobState.OVERWRITE_SUCCESS);
     }
 
+    Estimates getOutputEstimates() {
+        return outputEstimates;
+    }
+
     void preSplitDynamicOverwriteTempPartitions() {
         if (job.isDynamicOverwrite() && job.getTxnId() > 0) {
             InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(insertStmt, context, job.getTxnId());
@@ -234,7 +256,8 @@ public class InsertOverwriteJobRunner {
                 return;
             }
             InsertPreSplitHook.maybeRunStaticOverwritePreSplit(
-                    insertStmt, context, job.getSourcePartitionNames(), temporaryPartitionNames);
+                    insertStmt, context, job.getSourcePartitionNames(), temporaryPartitionNames,
+                    getOutputEstimates());
         } catch (Throwable unexpected) {
             // Pre-split is opportunistic. A catalog race or coordinator failure must never turn a
             // valid INSERT OVERWRITE into a failed load after its temporary partitions were cloned.
@@ -705,6 +728,88 @@ public class InsertOverwriteJobRunner {
         }
     }
 
+    /**
+     * Acquires the target table's WRITE lock for {@link #doCommit}, waiting out a concurrent tablet
+     * reshard. Returns holding that lock.
+     *
+     * <p>A tablet reshard (a load's pre-split, or the background split/merge daemon) holds
+     * {@code TABLET_RESHARD} until it finishes, and it cannot be aborted once it has left PENDING.
+     * Failing the commit for that would throw away everything this overwrite already wrote, so wait
+     * instead. Only {@code TABLET_RESHARD} is waited out: it changes no schema and is designed to
+     * coexist with DML. Every other non-NORMAL state (SCHEMA_CHANGE, ROLLUP, ...) can change the
+     * schema or index metadata this job's temporary partitions and already-built insert plan were
+     * derived from, so committing after it finished could target a layout that no longer matches —
+     * those return immediately and the caller's own state check fails the commit, exactly as before.
+     * So does a reshard that outlasts the load's remaining budget.
+     *
+     * <p>The state is only ever read under the WRITE lock — {@code OlapTable.state} is a plain field,
+     * not volatile — and the table is re-resolved by id on every attempt so a concurrent drop cannot
+     * be missed. The lock is never held across the sleep: a reshard job needs it to restore NORMAL.
+     *
+     * <p>One case this does NOT rescue, and it is pre-existing rather than introduced here. A reshard
+     * job captures its cleanup watermark at the END of its RUNNING phase, not when it is admitted
+     * ({@code SplitTabletJob#runRunningJob}), so a load transaction opened after a pre-split wait timed
+     * out can still fall below that watermark. Its CLEANING phase then waits for that transaction to
+     * become visible, while this loop waits for CLEANING to restore NORMAL. The transaction does become
+     * visible eventually, so this resolves rather than deadlocks — but if publish is slow enough that the
+     * transaction is still merely COMMITTED (a state the statement executor already reports as a
+     * successful load) when this deadline expires, the commit fails after its data was written. Before
+     * this wait existed that case failed immediately instead, so waiting is strictly better.
+     *
+     * <p>Dynamic overwrite is not immune to that window either, despite registering its transaction in
+     * the job's cleanup-exclusion set: that exclusion is revoked as soon as its pre-split wait returns
+     * ({@code PreSplitFlow}), because it is only sound while the transaction is known not to be writing.
+     * Excluding a transaction that is writing would let CLEANING unregister the resharding tablets
+     * underneath it. So the exclusion set cannot close this window for any route by construction —
+     * closing it properly means scoping the reshard state to the partition being resharded, so an
+     * overwrite's commit does not depend on a table-wide state at all. That is a separate fix.
+     */
+    private void lockForCommitWaitingOutReshard(Database db, Locker locker) {
+        // The load's REMAINING budget, not a fresh timeout: planning and writing already spent part of
+        // it. ConnectContext.getExecTimeout() honors a statement-level timeout property and excludes
+        // query-queue waiting time, matching the normal timeout checker. Replay and test callers have
+        // no context and no budget, so they never wait.
+        //
+        // A cancelled statement also stops waiting, so the request is released instead of sitting here
+        // for the rest of its budget: by this point the data is written and the coordinator has already
+        // finished, so nothing else interrupts this thread. It has to be isStatementCancelled() rather
+        // than isKilled() -- the routes that matter for an overwrite all call kill(false, ...), which
+        // leaves isKilled false: KILL QUERY, a cancelled MV TaskRun (TaskRunManager) and a closed client
+        // (MySQLReadListener).
+        Instant deadline = context == null
+                ? Instant.EPOCH
+                : context.getStartTimeInstant().plusSeconds(context.getExecTimeout());
+        while (true) {
+            if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+                throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+            }
+            OlapTable.OlapTableState state;
+            try {
+                state = checkAndGetTable(db, tableId).getState();
+            } catch (Throwable resolveFailure) {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+                throw resolveFailure;
+            }
+            if (state != OlapTable.OlapTableState.TABLET_RESHARD
+                    || !Instant.now().isBefore(deadline)
+                    || (context != null && context.isStatementCancelled())) {
+                return;
+            }
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+            LOG.info("insert overwrite job {} waiting for table {} to leave {} before committing",
+                    job.getJobId(), tableId, state);
+            try {
+                Thread.sleep(COMMIT_TABLE_STATE_POLL_INTERVAL_MS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
+                    throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
+                }
+                return;
+            }
+        }
+    }
+
     protected void doCommit() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
@@ -717,9 +822,7 @@ public class InsertOverwriteJobRunner {
         Set<Tablet> sourceTablets = Sets.newHashSet();
 
         Locker locker = new Locker();
-        if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE)) {
-            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
-        }
+        lockForCommitWaitingOutReshard(db, locker);
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);

@@ -14,6 +14,8 @@
 
 #include "storage/lake/vertical_compaction_task.h"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <numeric>
 #include <unordered_set>
@@ -33,6 +35,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -72,6 +75,10 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     DCHECK(!store_paths.empty());
     auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path);
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
+    const bool pk_range_filter = _context->is_unshare && _tablet_schema->has_separate_sort_key();
+    auto selection_buffer =
+            pk_range_filter ? std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path) : nullptr;
+    auto selection_masks = pk_range_filter ? std::make_unique<std::vector<RowSourceMask>>() : nullptr;
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
@@ -101,7 +108,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     // Separate-sort-key PK tables with eager index build: the PK columns are non-sort columns and
     // would otherwise land in value groups where the eager SST writer (which only sees the key group)
     // cannot reach them. Move them into the key group so compaction builds the PK-index SST eagerly.
-    const bool pk_in_key_group = writer->enable_pk_index_eager_build() && _tablet_schema->has_separate_sort_key();
+    const bool pk_in_key_group =
+            (writer->enable_pk_index_eager_build() || pk_range_filter) && _tablet_schema->has_separate_sort_key();
     if (pk_in_key_group) {
         move_pk_columns_into_key_group(&column_groups);
     }
@@ -121,12 +129,16 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             // read mask buffer from the beginning
             SCOPED_RAW_TIMER(&_context->stats->mask_io_ns);
             RETURN_IF_ERROR(mask_buffer->flip_to_read());
+            if (selection_buffer != nullptr) {
+                RETURN_IF_ERROR(selection_buffer->flip_to_read());
+            }
         }
         int64_t column_group_ns = 0;
         {
             SCOPED_RAW_TIMER(&column_group_ns);
             RETURN_IF_ERROR(compact_column_group(is_key, i, column_group_size, column_groups[i], writer,
-                                                 mask_buffer.get(), source_masks.get(), cancel_func, pk_in_key_group));
+                                                 mask_buffer.get(), source_masks.get(), selection_buffer.get(),
+                                                 selection_masks.get(), cancel_func, pk_in_key_group));
         }
         if (is_key) {
             _context->stats->vertical_key_group_ns += column_group_ns;
@@ -232,12 +244,11 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
                                                 total_mem_footprint, _total_input_segs);
 }
 
-Status VerticalCompactionTask::compact_column_group(bool is_key, int column_group_index, size_t column_group_size,
-                                                    const std::vector<uint32_t>& column_group,
-                                                    std::unique_ptr<TabletWriter>& writer,
-                                                    RowSourceMaskBuffer* mask_buffer,
-                                                    std::vector<RowSourceMask>* source_masks,
-                                                    const CancelFunc& cancel_func, bool pk_in_key_group) {
+Status VerticalCompactionTask::compact_column_group(
+        bool is_key, int column_group_index, size_t column_group_size, const std::vector<uint32_t>& column_group,
+        std::unique_ptr<TabletWriter>& writer, RowSourceMaskBuffer* mask_buffer,
+        std::vector<RowSourceMask>* source_masks, RowSourceMaskBuffer* selection_buffer,
+        std::vector<RowSourceMask>* selection_masks, const CancelFunc& cancel_func, bool pk_in_key_group) {
     int32_t chunk_size = 0;
     Schema schema;
     {
@@ -260,7 +271,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         }
     }
     TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer,
-                        _tablet_schema);
+                        _tablet_schema, selection_buffer);
     {
         SCOPED_RAW_TIMER(&_context->stats->reader_prepare_ns);
         RETURN_IF_ERROR(reader.prepare());
@@ -307,6 +318,13 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     std::vector<uint64_t> rssid_rowids;
     rssid_rowids.reserve(chunk_size);
 
+    // Built once: only the encode-and-compare depends on the chunk. Only the key group carries the
+    // PK columns, so only it filters; the value groups replay the selection stream instead.
+    std::optional<PrimaryKeyRangeFilter> pk_range_filter;
+    if (is_key && selection_buffer != nullptr) {
+        ASSIGN_OR_RETURN(pk_range_filter, PrimaryKeyRangeFilter::create(_tablet.metadata()->range(), _tablet_schema));
+    }
+
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
@@ -344,8 +362,52 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
         {
             SCOPED_RAW_TIMER(&_context->stats->chunk_transform_ns);
             ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
+            if (is_key && selection_buffer != nullptr) {
+                // The key group is ordered as [sort-key columns, then any PK columns that
+                // are not already sort keys]. Project the PK columns into tablet-key order
+                // before encoding them for the child-tablet range check.
+                Filter filter;
+                {
+                    // Keep this projection in a nested scope: it shares column pointers with
+                    // |chunk|, so it must be destroyed before chunk->filter() mutates them.
+                    Chunk pk_chunk;
+                    for (uint32_t pk_column = 0; pk_column < _tablet_schema->num_key_columns(); ++pk_column) {
+                        auto it = std::find(column_group.begin(), column_group.end(), pk_column);
+                        if (it == column_group.end()) {
+                            return Status::InternalError(
+                                    fmt::format("vertical UNSHARE key group does not contain PK column {}", pk_column));
+                        }
+                        size_t chunk_index = static_cast<size_t>(std::distance(column_group.begin(), it));
+                        pk_chunk.append_column(chunk->get_column_by_index(chunk_index), static_cast<SlotId>(pk_column));
+                    }
+                    ASSIGN_OR_RETURN(filter, pk_range_filter->build(pk_chunk));
+                }
+                if (source_masks->size() != filter.size()) {
+                    return Status::InternalError(
+                            fmt::format("vertical UNSHARE source-mask size {} differs from filter size {}",
+                                        source_masks->size(), filter.size()));
+                }
+                selection_masks->clear();
+                selection_masks->reserve(filter.size());
+                for (uint8_t selected : filter) {
+                    selection_masks->emplace_back(static_cast<uint16_t>(selected != 0 ? 1 : 0), false);
+                }
+                RETURN_IF_ERROR(selection_buffer->write(*selection_masks));
+
+                if (!rssid_rowids.empty()) {
+                    DCHECK_EQ(rssid_rowids.size(), filter.size());
+                    size_t output_index = 0;
+                    for (size_t row = 0; row < rssid_rowids.size(); ++row) {
+                        if (filter[row]) {
+                            rssid_rowids[output_index++] = rssid_rowids[row];
+                        }
+                    }
+                    rssid_rowids.resize(output_index);
+                }
+                chunk->filter(filter);
+            }
         }
-        {
+        if (chunk->num_rows() > 0) {
             SCOPED_RAW_TIMER(&_context->stats->writer_write_ns);
             if (rssid_rowids.empty()) {
                 RETURN_IF_ERROR(writer->write_columns(*chunk, column_group, is_key));
@@ -384,6 +446,9 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     if (is_key) {
         SCOPED_RAW_TIMER(&_context->stats->mask_io_ns);
         RETURN_IF_ERROR(mask_buffer->flush());
+        if (selection_buffer != nullptr) {
+            RETURN_IF_ERROR(selection_buffer->flush());
+        }
     }
     return Status::OK();
 }
