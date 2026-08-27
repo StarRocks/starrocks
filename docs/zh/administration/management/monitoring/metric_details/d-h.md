@@ -274,6 +274,13 @@ description: "Alphabetical d - h"
 - 类型: 平均值
 - 描述: FE 的新连接速率。
 
+## `fe_edit_log`
+
+- 单位: 个
+- 类型: 瞬时
+- 标签: `type` (`current`)
+- 描述: 当前保留在 BDB JE 中的元数据日志条数，从保留的最早一条日志计算到最新写入的一条。Checkpoint 守护线程只有在所有已注册的 FE 都收到新 image 之后才会删除旧日志，因此一个无法访问的已注册 FE 会导致该值持续增长，可作为元数据磁盘即将写满的预警。该值在每次采集时从日志中实时读取，因此 FE 重启后立即准确，并在日志被真正删除后随之下降。
+
 ## `fe_edit_log_read`
 
 - 单位: 次/秒
@@ -315,6 +322,20 @@ description: "Alphabetical d - h"
 - 单位: 次数
 - 类型: 平均值
 - 描述: 已完成的插入任务数量。
+
+## `fe_image_push`
+
+- 单位: 次
+- 类型: 累积值
+- 标签: `type` (`success` 或 `failed`)
+- 描述: Leader FE 向其他 FE 节点推送新生成 image 文件的次数，每次尝试按目标节点各计一次。只有当所有节点都拿到新 image 之后才会删除旧的元数据日志，因此 `failed` 序列持续增长可以解释 `fe_edit_log{type="current"}` 为何迟迟不下降。
+
+## `fe_image_write`
+
+- 单位: 次
+- 类型: 累积值
+- 标签: `type` (`success` 或 `failed`)
+- 描述: 生成 image 的尝试次数，每一轮确实需要生成新 image 的 checkpoint 计一次。image 已是最新、无需生成的轮次不计入。
 
 ## `fe_loading_broker_load_job`
 

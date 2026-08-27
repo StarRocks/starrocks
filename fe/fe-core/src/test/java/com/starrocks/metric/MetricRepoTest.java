@@ -24,6 +24,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.Journal;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
@@ -36,6 +37,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Set;
@@ -134,17 +136,49 @@ public class MetricRepoTest extends PlanTestBase {
 
     @Test
     public void testJournalAndImageMetricsExposure() {
-        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        // same prefix MetricsAction uses, so the asserted names are the ones operators scrape
+        MetricVisitor visitor = new PrometheusMetricVisitor("starrocks_fe");
         MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
         MetricRepo.getMetric(visitor, params);
         String output = visitor.build();
 
-        Assertions.assertTrue(output.contains("edit_log{type=\"current\""), output);
-        Assertions.assertTrue(output.contains("edit_log{type=\"current_bytes\""), output);
-        Assertions.assertTrue(output.contains("image_write{type=\"success\""), output);
-        Assertions.assertTrue(output.contains("image_write{type=\"failed\""), output);
-        Assertions.assertTrue(output.contains("image_push{type=\"success\""), output);
-        Assertions.assertTrue(output.contains("image_push{type=\"failed\""), output);
+        Assertions.assertTrue(output.contains("starrocks_fe_edit_log{type=\"current\""), output);
+        Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"success\""), output);
+        Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"failed\""), output);
+        Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"success\""), output);
+        Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"failed\""), output);
+
+        // The retained-journal level is a gauge; image counts stay counters. Only one TYPE line is
+        // emitted per metric name (PrometheusMetricVisitor dedupes it), so declaring the retained
+        // level as a counter would make every cleanup look like a counter reset to Prometheus.
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log gauge"), output);
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_image_write counter"), output);
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_image_push counter"), output);
+    }
+
+    @Test
+    public void testGetRetainedJournalCount() {
+        // journals 101..200 are still on disk -> 100 retained
+        Assertions.assertEquals(100L, MetricRepo.getRetainedJournalCount(journalOf(List.of(101L), 200L)));
+        // a single journal written into a freshly rolled database
+        Assertions.assertEquals(1L, MetricRepo.getRetainedJournalCount(journalOf(List.of(101L), 101L)));
+        // several databases retained: counted from the oldest surviving one
+        Assertions.assertEquals(300L, MetricRepo.getRetainedJournalCount(
+                journalOf(List.of(1L, 101L, 201L), 300L)));
+
+        // nothing retained / bdb environment closing / journal not open yet
+        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(journalOf(List.of(), 200L)));
+        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(journalOf(null, 200L)));
+        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(null));
+        // getMaxJournalId() returns -1 when the environment cannot be read; must not go negative
+        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(journalOf(List.of(101L), -1L)));
+    }
+
+    private static Journal journalOf(List<Long> databaseNames, long maxJournalId) {
+        Journal journal = Mockito.mock(Journal.class);
+        Mockito.when(journal.getDatabaseNames()).thenReturn(databaseNames);
+        Mockito.when(journal.getMaxJournalId()).thenReturn(maxJournalId);
+        return journal;
     }
 
     @Test

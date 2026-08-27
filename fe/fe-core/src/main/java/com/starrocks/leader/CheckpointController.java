@@ -496,7 +496,9 @@ public class CheckpointController extends LeaderDaemon {
         }
     }
 
-    private void deleteOldJournals(long imageVersion) {
+    // Package-private so same-package tests can drive the reclaim / skipped / failed outcomes
+    // without standing up a checkpoint round.
+    void deleteOldJournals(long imageVersion) {
         // To ensure that all nodes will not lose data,
         // deleteVersion should be the minimum value of imageVersion and replayedJournalId.
         long minReplayedJournalId = getMinReplayedJournalId();
@@ -511,11 +513,6 @@ public class CheckpointController extends LeaderDaemon {
         }
         List<Long> databaseNamesAfter = journal.getDatabaseNames();
         if (journalDatabaseDeleted(databaseNamesBefore, databaseNamesAfter)) {
-            if (belongToGlobalStateMgr && MetricRepo.hasInit) {
-                MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.reset();
-                MetricRepo.COUNTER_EDIT_LOG_CURRENT.update(
-                        getRetainedJournalCount(databaseNamesAfter, journal.getMaxJournalId()));
-            }
             LOG.info("Delete old edit log succeeded: deleteVersion={}, imageVersion={}, "
                             + "minReplayedJournalId={}, prefix={}, databasesBefore={}, databasesAfter={}",
                     deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(),
@@ -525,9 +522,14 @@ public class CheckpointController extends LeaderDaemon {
                             + "imageVersion={}, minReplayedJournalId={}, prefix={}, databases={}",
                     deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(), databaseNamesAfter);
         }
-
     }
 
+    /**
+     * Whether deleteJournals() actually dropped a journal database. It is a no-op whenever the
+     * delete version has not yet crossed the next database boundary - including the case this PR
+     * is about, where an unreachable follower pins deleteVersion at 0 forever - so the caller can
+     * tell a real cleanup apart from a round that reclaimed nothing.
+     */
     static boolean journalDatabaseDeleted(List<Long> before, List<Long> after) {
         if (before == null || before.isEmpty() || after == null) {
             return false;
@@ -535,14 +537,8 @@ public class CheckpointController extends LeaderDaemon {
         return after.isEmpty() || after.get(0) > before.get(0);
     }
 
-    static long getRetainedJournalCount(List<Long> databaseNames, long maxJournalId) {
-        if (databaseNames == null || databaseNames.isEmpty() || maxJournalId < databaseNames.get(0)) {
-            return 0;
-        }
-        return maxJournalId - databaseNames.get(0) + 1;
-    }
-
-    private void pushImage(long imageVersion) {
+    // Package-private so same-package tests can exercise the per-node push failure path.
+    void pushImage(long imageVersion) {
         Iterator<String> iterator = nodesToPushImage.iterator();
         int needToPushCnt = nodesToPushImage.size();
         int successPushedCnt = 0;
@@ -630,7 +626,11 @@ public class CheckpointController extends LeaderDaemon {
                 if (minReplayedJournalId > id) {
                     minReplayedJournalId = id;
                 }
-            } catch (IOException e) {
+                // HttpURLConnection.getHeaderField() swallows the IOException and hands back null
+                // when the peer is unreachable, so an unreachable node surfaces as
+                // NumberFormatException from parseLong(null), not as IOException. Catching only the
+                // latter let it escape the whole checkpoint round and suppressed the log line below.
+            } catch (IOException | NumberFormatException e) {
                 LOG.error("Delete old edit log skipped: reason=replay_id_unreachable, nodeName={}, "
                                 + "host={}, port={}, prefix={}", fe.getNodeName(), host, port, journal.getPrefix(), e);
                 minReplayedJournalId = 0;
@@ -679,6 +679,12 @@ public class CheckpointController extends LeaderDaemon {
 
     public Journal getJournal() {
         return journal;
+    }
+
+    // Package-private so same-package tests can wait until a checkpoint round has actually picked
+    // its worker before driving finishCheckpoint() / cancelCheckpoint().
+    String getWorkerNodeName() {
+        return workerNodeName;
     }
 
     public ClusterSnapshotInfo getClusterSnapshotInfo() {

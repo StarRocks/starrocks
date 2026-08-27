@@ -274,6 +274,13 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Average
 - Description: New connection rate of FE.
 
+## `fe_edit_log`
+
+- Unit: Count
+- Type: Instantaneous
+- Labels: `type` (`current`)
+- Description: Number of edit logs currently retained in BDB JE, counted from the oldest retained journal to the newest one written. The checkpoint daemon deletes old journals only after every registered FE has received the new image, so a registered FE that cannot be reached keeps this value climbing and gives early warning that the metadata disk is filling up. The value is read from the journal on every scrape, so it is accurate right after an FE restart and drops as soon as journals are actually deleted.
+
 ## `fe_edit_log_read`
 
 - Unit: Count/s
@@ -315,6 +322,20 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Type: Average
 - Description: Number of completed insert jobs.
+
+## `fe_image_push`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`success` or `failed`)
+- Description: Number of attempts by the Leader FE to push a newly generated image file to another FE node, counted once per target node per attempt. Old edit logs are deleted only after every node has the new image, so a `failed` series that keeps growing explains why `fe_edit_log{type="current"}` is not coming back down.
+
+## `fe_image_write`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`success` or `failed`)
+- Description: Number of image generation attempts, counted once per checkpoint round that actually needs a new image. Rounds where the image is already up to date are not counted.
 
 ## `fe_loading_broker_load_job`
 
