@@ -726,6 +726,8 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     RowsetMetadataPB bounds_missing;
     bounds_missing.add_segment_metas()->set_filename("no_bounds.dat");
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(bounds_missing, co_range(40, 50)));
+    EXPECT_EQ(RangeOverlap::kUnknown,
+              classify_rowset_range_overlap(bounds_missing, co_range(std::nullopt, std::nullopt)));
 
     // One segment without bounds poisons the whole envelope.
     RowsetMetadataPB partial_bounds;

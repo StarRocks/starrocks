@@ -631,11 +631,6 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
     if (!range.from_proto(range_pb).ok()) {
         return RangeOverlap::kUnknown;
     }
-    if (range.is_all()) {
-        // (-inf, +inf) contains every key.
-        return RangeOverlap::kContainsBoth;
-    }
-
     VariantTuple envelope_min;
     VariantTuple envelope_max;
     for (const auto& segment_meta : rowset.segment_metas()) {
@@ -669,6 +664,11 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
         (!range.is_minimum() && range.lower_bound().size() != envelope_arity) ||
         (!range.is_maximum() && range.upper_bound().size() != envelope_arity)) {
         return RangeOverlap::kUnknown;
+    }
+
+    if (range.is_all()) {
+        // (-inf, +inf) contains every valid envelope.
+        return RangeOverlap::kContainsBoth;
     }
 
     // [envelope_min, envelope_max] is a superset of the rowset's keys, so "the range sits entirely
