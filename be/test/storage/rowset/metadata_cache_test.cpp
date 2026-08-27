@@ -35,9 +35,21 @@ namespace starrocks {
 class RecordingCache final : public Cache {
 public:
     Handle* insert(const CacheKey& /*key*/, void* /*value*/, size_t /*value_size*/,
-                   void (*/*deleter*/)(const CacheKey& key, void* value),
+                   void (* /*deleter*/)(const CacheKey& key, void* value),
                    CachePriority /*priority*/ = CachePriority::NORMAL) override {
         return nullptr;
+    }
+
+    Handle* insert_if_absent(const CacheKey& /*key*/, void* /*value*/, size_t /*value_size*/,
+                             void (* /*deleter*/)(const CacheKey& key, void* value), bool* inserted,
+                             CachePriority /*priority*/ = CachePriority::NORMAL) override {
+        *inserted = false;
+        return nullptr;
+    }
+
+    bool update_charge_if(const CacheKey& /*key*/, size_t /*new_value_size*/,
+                          bool (* /*pred*/)(void* value, const void* ctx), const void* /*ctx*/) override {
+        return false;
     }
 
     Handle* lookup(const CacheKey& key) override {
