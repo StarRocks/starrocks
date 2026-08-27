@@ -149,7 +149,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     }
 
     @Override
-    public void removeStats(ColumnIdentifier identifier, StatsVersion version) {
+    public void removeStats(ColumnIdentifier identifier) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;

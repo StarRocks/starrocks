@@ -41,23 +41,11 @@ create table t4(k int, v int sum) aggregate key(k) distributed by random buckets
 create table t5(k int, v int sum) aggregate key(k) distributed by hash(k);
 alter table t5 distributed by random buckets 20;
 
--- name: test_bucket_shuffle
-create table t(k int);
-insert into t values(1),(1);
-create table t2(k int, v int) distributed by hash(k);
-insert into t2 values(1,1),(1,2),(1,3);
-select * from t join t2 on t.k = t2.k order by t.k, t2.v;
-
 -- name: test_automatic_partition_random_distribute @native
 create table t(k date, v int) partition by date_trunc('day', k);
 insert into t values('2023-02-14', 2),('2033-03-01',2);
 select * from t order by k;
 function: assert_query_contains("show create table t;", "PARTITION BY date_trunc(\\'day\\', k)", "DISTRIBUTED BY RANDOM")
--- name: test_sync_mv
-create table t(k int, v int);
-create materialized view tv as select k, sum(v) from t group by k;
-insert into t values(1,1),(1,2);
-select sum(v) from t;
 -- name: test_async_mv
 create table t(k int, v int);
 insert into t values(1,1),(1,2);

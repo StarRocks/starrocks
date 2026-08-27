@@ -24,19 +24,52 @@
 
 namespace starrocks {
 
-HdfsJsonReader::HdfsJsonReader(RandomAccessFile* file, const std::vector<SlotDescriptor*>& slot_descs) {
+// static
+std::map<std::string, std::string> HdfsJsonReader::_parse_column_name_mapping(
+        const std::map<std::string, std::string>& serde_properties) {
+    std::map<std::string, std::string> column_to_json_field;
+    const std::string prefix = "mapping.";
+    for (const auto& [key, value] : serde_properties) {
+        if (key.size() <= prefix.size() || key.compare(0, prefix.size(), prefix) != 0 || value.empty()) {
+            continue;
+        }
+        column_to_json_field[key.substr(prefix.size())] = value;
+    }
+    return column_to_json_field;
+}
+
+HdfsJsonReader::HdfsJsonReader(RandomAccessFile* file, const std::vector<SlotDescriptor*>& slot_descs,
+                               const std::map<std::string, std::string>& serde_properties)
+        : _column_to_json_field(_parse_column_name_mapping(serde_properties)) {
     _file = file;
 
     for (const auto* slot_desc : slot_descs) {
         if (slot_desc == nullptr) {
             continue;
         }
-        _desc_dict.emplace(slot_desc->col_name(),
-                           std::make_pair(slot_desc, JsonUtils::construct_json_type(slot_desc->type())));
+        std::string_view key = slot_desc->col_name();
+        if (auto iter = _column_to_json_field.find(std::string(key)); iter != _column_to_json_field.end()) {
+            key = iter->second;
+        }
+        _desc_dict[key].emplace_back(slot_desc, JsonUtils::construct_json_type(slot_desc->type()));
     }
 }
 
+Status HdfsJsonReader::_validate_fan_out_targets() const {
+    for (const auto& [key, targets] : _desc_dict) {
+        for (size_t i = 1; i < targets.size(); i++) {
+            if (!(targets[i].second == targets[0].second)) {
+                return Status::NotSupported(
+                        fmt::format("Json field '{}' is mapped to columns '{}' and '{}' with different types", key,
+                                    targets[0].first->col_name(), targets[i].first->col_name()));
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status HdfsJsonReader::init() {
+    RETURN_IF_ERROR(_validate_fan_out_targets());
     ASSIGN_OR_RETURN(_buf, ByteBuffer::allocate_with_tracker(INIT_BUF_SIZE));
     return Status::OK();
 }
@@ -120,48 +153,52 @@ Status HdfsJsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* ch
     try {
         uint32_t key_index = 0;
         for (auto field : *row) {
-            int column_index;
             std::string_view key = field_unescaped_key_safe(field, &buf);
 
-            if (_prev_parsed_position.size() > key_index && _prev_parsed_position[key_index].key == key) {
-                column_index = _prev_parsed_position[key_index].column_index;
-                if (column_index < 0) {
-                    key_index++;
-                    continue;
-                }
-            } else {
+            if (!(_prev_parsed_position.size() > key_index && _prev_parsed_position[key_index].key == key)) {
                 auto iter = _desc_dict.find(key);
-                if (iter == _desc_dict.end()) {
-                    _prev_parsed_position.emplace_back(key);
-                    key_index++;
-                    continue;
+                std::vector<ColumnTarget> targets;
+                if (iter != _desc_dict.end()) {
+                    targets.reserve(iter->second.size());
+                    for (const auto& [slot_desc, type_desc] : iter->second) {
+                        targets.push_back({chunk->get_index_by_slot_id(slot_desc->id()), type_desc});
+                    }
                 }
-
-                const auto* slot_desc = iter->second.first;
-                const auto& type_desc = iter->second.second;
-                column_index = chunk->get_index_by_slot_id(slot_desc->id());
 
                 if (_prev_parsed_position.size() <= key_index) {
-                    _prev_parsed_position.emplace_back(key, column_index, type_desc);
+                    _prev_parsed_position.emplace_back(key, std::move(targets));
                 } else {
                     _prev_parsed_position[key_index].key = key;
-                    _prev_parsed_position[key_index].column_index = column_index;
-                    _prev_parsed_position[key_index].type = type_desc;
+                    _prev_parsed_position[key_index].targets = std::move(targets);
                 }
             }
 
-            if (_parsed_columns[column_index]) {
+            const auto& targets = _prev_parsed_position[key_index].targets;
+            if (targets.empty()) {
                 key_index++;
                 continue;
             }
-            _parsed_columns[column_index] = true;
 
-            auto* column = chunk->get_column_raw_ptr_by_index(column_index);
-
-            auto value = field.value().value();
-
-            RETURN_IF_ERROR(_construct_column(value, column, _prev_parsed_position[key_index].type,
-                                              _prev_parsed_position[key_index].key));
+            // A json key mapped to several columns (fan-out) is decoded once into the first
+            // not-yet-populated target, and cloned into the rest: they were validated in
+            // init() to share the same type, and simdjson's on-demand `value` can only be
+            // consumed once, so it can't be re-decoded per target.
+            Column* primary_column = nullptr;
+            for (const auto& target : targets) {
+                if (_parsed_columns[target.column_index]) {
+                    continue;
+                }
+                _parsed_columns[target.column_index] = true;
+                auto* column = chunk->get_column_raw_ptr_by_index(target.column_index);
+                if (primary_column == nullptr) {
+                    auto value = field.value().value();
+                    RETURN_IF_ERROR(
+                            _construct_column(value, column, target.type, _prev_parsed_position[key_index].key));
+                    primary_column = column;
+                } else {
+                    column->append(*primary_column, primary_column->size() - 1, 1);
+                }
+            }
             key_index++;
         }
 
@@ -186,6 +223,9 @@ Status HdfsJsonReader::_construct_column(simdjson::ondemand::value& value, Colum
     return add_nullable_column(column, type_desc, col_name, &value, true);
 }
 
+HdfsJsonScanner::HdfsJsonScanner(const std::map<std::string, std::string>& serde_properties)
+        : _serde_properties(serde_properties) {}
+
 Status HdfsJsonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
     const auto& text_file_desc = _scanner_ctx->scan_range->text_file_desc;
     return _setup_compression_type(text_file_desc);
@@ -198,7 +238,7 @@ Status HdfsJsonScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
 
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    _reader = std::make_unique<HdfsJsonReader>(_file.get(), _scanner_ctx->slot_descs);
+    _reader = std::make_unique<HdfsJsonReader>(_file.get(), _scanner_ctx->slot_descs, _serde_properties);
     RETURN_IF_ERROR(_reader->init());
 
     return Status::OK();

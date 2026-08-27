@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 toc_max_heading_level: 5
 description: "StarRocks supports Paimon catalogs from v3.1 onwards."
@@ -48,6 +49,11 @@ You can only use Paimon catalogs to query data. You cannot use Paimon catalogs t
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` is supported from v4.2 onwards for splits read by the native reader (append-only tables and compacted primary-key data). Reading `VARIANT` from uncompacted primary-key data requires the JNI reader and is not yet supported; such queries are rejected with a plan-time error.
+:::
 
 ## Integration preparations
 
@@ -65,7 +71,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication).
 
 ### HDFS
 
@@ -181,7 +187,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 

@@ -41,6 +41,7 @@
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -448,18 +449,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Plan how del files interleave with segments (see DelInterleavePlan / build_del_interleave_plan).
     DelInterleavePlan del_plan =
             build_del_interleave_plan(op_write, rowset_id, assigned_global_segments, max_segment_id, del_rebuild_rssid);
-    // Apply one del file's erase into the index with its own rssid, recording shadowed rows in
-    // `new_deletes`. Called at the interleave point (right after the segment it follows) so the
-    // upsert/delete order within this transaction is preserved.
-    auto apply_one_del = [&](uint32_t del_id) -> Status {
-        RETURN_IF_ERROR(state.load_delete(del_id, params));
-        DCHECK(state.deletes(del_id) != nullptr);
-        RETURN_IF_ERROR(index.erase(metadata, *state.deletes(del_id), &new_deletes, del_plan.del_rssids[del_id]));
-        _index_cache.update_object_size(index_entry, index.memory_usage());
-        state.release_delete(del_id);
-        del_plan.del_applied[del_id] = true;
-        return Status::OK();
-    };
     // When too many sst files, we need to compact them early.
     int32_t current_fileset_start_idx = index.current_fileset_index();
     AsyncCompactCBPtr async_compact_cb;
@@ -589,7 +578,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             if (auto it = del_plan.dels_after_segment.find(global_segment_id);
                 it != del_plan.dels_after_segment.end()) {
                 for (uint32_t del_id : it->second) {
-                    RETURN_IF_ERROR(apply_one_del(del_id));
+                    RETURN_IF_ERROR(
+                            _do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
+                    _index_cache.update_object_size(index_entry, index.memory_usage());
+                    del_plan.del_applied[del_id] = true;
                 }
             }
             if (async_compact_cb) {
@@ -629,7 +621,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         if (del_plan.del_applied[del_id]) {
             continue;
         }
-        RETURN_IF_ERROR(apply_one_del(del_id));
+        RETURN_IF_ERROR(_do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
+        _index_cache.update_object_size(index_entry, index.memory_usage());
+        del_plan.del_applied[del_id] = true;
     }
 
     _block_cache->update_memory_usage();
@@ -1157,6 +1151,30 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
     return Status::OK();
 }
 
+// Apply one del file to the primary index and collect the rows it shadows. Large del files written by a
+// current BE carry a pre-built tombstone sstable, which bulk_erase ingests directly; small del files and
+// pre-upgrade txn logs fall back to the memtable erase path.
+Status UpdateManager::_do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
+                                 RowsetUpdateState& state, LakePrimaryIndex& index, DeletesMap* new_deletes) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("do_delete_latency_us");
+    RETURN_IF_ERROR(state.load_delete(del_id, params));
+    DCHECK(state.deletes(del_id) != nullptr);
+
+    const auto& op_write = params.op_write;
+    const bool has_prebuilt_del_sst = op_write.del_ssts_size() == op_write.dels_meta_size() &&
+                                      op_write.del_sst_ranges_size() == op_write.dels_meta_size() &&
+                                      !op_write.del_ssts(del_id).name().empty();
+    if (has_prebuilt_del_sst) {
+        RETURN_IF_ERROR(index.bulk_erase(params.metadata, *state.deletes(del_id), new_deletes, del_rssid,
+                                         op_write.del_ssts(del_id), op_write.del_sst_ranges(del_id),
+                                         params.metadata->version()));
+    } else {
+        RETURN_IF_ERROR(index.erase(params.metadata, *state.deletes(del_id), new_deletes, del_rssid));
+    }
+    state.release_delete(del_id);
+    return Status::OK();
+}
+
 // Handles condition-based merge for a single chunk of primary keys during parallel publish.
 // This function is invoked concurrently for different chunks to compare condition column values
 // between new and existing rows, deciding which version should be retained.
@@ -1181,6 +1199,11 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
     ASSIGN_OR_RETURN(auto pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
     std::vector<uint64_t> old_rowids(pk_column->size());
     RETURN_IF_ERROR(index.get(*pk_column, &old_rowids));
+    // Same restriction as the non-SST path: a cross-published child must not resolve a sibling's key,
+    // whose location can name a rowset the split pruned away (get_column_values would fail the publish
+    // on it), and must not record either verdict for that row -- the loser branch below writes into
+    // this child's delvec, which the parent view ORs.
+    RowsetUpdateState::mask_unowned_rowids(current.owned, &old_rowids);
     // Fast path: If no existing rows found for any PK, all new rows win by default
     bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
     if (!non_old_value) {
@@ -1220,7 +1243,9 @@ Status UpdateManager::_process_single_chunk_update_with_condition(
         // STEP 3: Compare condition values and generate deletion vectors
         // For each PK conflict, compare old vs new condition values to decide winner
         for (int j = 0; j < old_column->size(); ++j) {
-            if (num_default > 0 && idxes[j] == 0) {
+            if (!current.owned.empty() && current.owned[j] == 0) {
+                // A sibling's row: neither this child's new row to delete nor its old row to displace.
+            } else if (num_default > 0 && idxes[j] == 0) {
                 // EDGE CASE: Index 0 indicates default value (no old row actually exists for this PK)
                 // WHY: plan_read_by_rssid uses index 0 as sentinel for PKs with no old values
                 // ACTION: Skip comparison, new row wins by default
@@ -1375,9 +1400,19 @@ static Status process_single_chunk_update_with_condition_no_sst(
     }
     std::vector<uint64_t> old_rowids(chunk_size);
     RETURN_IF_ERROR(index.get(*result->pk_column, &old_rowids));
-    // Fast path: no PKs in this chunk collide with the index → every new row wins.
+    // A cross-published child is handed its siblings' rows as well, and a sibling's key resolves --
+    // against the sstables this child inherited from the parent -- to a location that can name a
+    // rowset the split pruned away, which would fail get_column_values below on an unknown rssid.
+    // Blanking those answers keeps them out of the read; the walk below then skips the row outright,
+    // so it is neither upserted (claiming a key outside this child's range) nor appended to this
+    // child's delvec, which the parent view ORs -- a sibling's verdict would erase a row its owner
+    // had just decided to keep. Nothing is renumbered: chunk-local j stays segment rowid
+    // physical_rowid_offset + j for every row, owned or not.
+    RowsetUpdateState::mask_unowned_rowids(current.owned, &old_rowids);
+    // Fast path: no PKs in this chunk collide with the index → every new row wins. Only when this
+    // chunk is entirely ours; with a mask the walk below is what decides, one row at a time.
     bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int64_t id) { return -1 == id; });
-    if (non_old_value) {
+    if (non_old_value && current.owned.empty()) {
         result->winner_ranges.emplace_back(0u, static_cast<uint32_t>(chunk_size));
         return Status::OK();
     }
@@ -1413,7 +1448,15 @@ static Status process_single_chunk_update_with_condition_no_sst(
     uint32_t run_begin = 0;
     uint32_t run_step = 0;
     for (size_t j = 0; j < old_column->size(); ++j) {
-        if (num_default > 0 && idxes[j] == 0) {
+        if (!current.owned.empty() && current.owned[j] == 0) {
+            // A sibling's row: neither verdict is this child's to record. Close the run so the
+            // winners on either side of it stay contiguous.
+            if (run_step > 0) {
+                result->winner_ranges.emplace_back(run_begin, run_begin + run_step);
+            }
+            run_begin = static_cast<uint32_t>(j + 1);
+            run_step = 0;
+        } else if (num_default > 0 && idxes[j] == 0) {
             // plan_read_by_rssid uses idx 0 as sentinel for "no old row"; new row wins by default.
             run_step++;
         } else {
@@ -1470,8 +1513,8 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     // is a safe lower bound for the per-segment count: if the whole rowset is under the
     // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution &&
-        params.op_write.rowset().num_rows() >= config::pk_index_parallel_execution_min_rows) {
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    if (config::enable_pk_index_parallel_execution && params.op_write.rowset().num_rows() >= min_rows_per_task) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
@@ -1677,7 +1720,7 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
 Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
                                                         std::vector<SegmentPKIteratorPtr>& pk_iters,
                                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
-                                                        bool need_lock) {
+                                                        bool need_lock, std::vector<Filter>* owned_per_segment) {
     rss_rowids_per_segment->resize(pk_iters.size());
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
@@ -1688,7 +1731,8 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
-        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment));
+        st.update(
+                index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment, owned_per_segment));
     }));
     return st;
 }

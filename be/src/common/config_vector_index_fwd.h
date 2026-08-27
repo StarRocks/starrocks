@@ -31,7 +31,23 @@ CONF_mInt32(vector_index_cache_expire_sec, "900");
 
 // vector index
 // Enable caching index blocks for IVF-family vector indexes
-CONF_mBool(enable_vector_index_block_cache, "true");
+CONF_mBool(enable_vector_index_block_cache, "false");
+
+// On a top-level vector index cache miss, let the current query fall back to
+// brute-force search and load the index into the cache in the background.
+// A runtime update affects readers initialized after the update.
+CONF_mBool(enable_vector_index_cache_async_load_on_miss, "false");
+
+// Maximum number of workers in the vector index cache background-load pool.
+// Workers are created on demand and retire after being idle. Read once when
+// StorageEnv initializes the pool.
+CONF_Int32(vector_index_cache_async_load_threads, "8");
+
+// Maximum time each synchronous cache caller waits for an in-progress vector
+// index load. On timeout the caller returns a cache miss so query paths can
+// fall back to brute-force search; the existing loader keeps running. <= 0
+// disables waiting. A runtime update affects later waits.
+CONF_mInt32(vector_index_cache_loading_wait_timeout_ms, "5000");
 
 // Whether index build also populates the vector index cache with the index it
 // just built. Off by default: the cache is sized for the query working set, and
@@ -42,6 +58,11 @@ CONF_mBool(enable_vector_index_block_cache, "true");
 // is queried immediately, to skip the first read-back from disk/object storage.
 // Read when a builder is created, so a runtime change applies to later builds only.
 CONF_mBool(enable_vector_index_cache_on_build, "false");
+
+// Physical backend used when building cosine HNSW Flat and IVF indexes. "l2"
+// preserves the historical index format. Quantized HNSW cosine indexes always
+// use "inner_product".
+CONF_String_enum(vector_index_cosine_backend, "l2", "l2,inner_product");
 
 // concurrency of building index
 CONF_mInt32(config_vector_index_build_concurrency, "8");
@@ -75,6 +96,14 @@ CONF_mInt64(vector_adaptive_ef_baseline_rows, "300000");
 // Routing only -- both paths are exact, a mis-set value costs speed, never correctness. 0 disables the
 // ratio check; the cardinality <= k short-circuit (a logical no-op search) always applies.
 CONF_mDouble(vector_index_brute_selectivity_threshold, "0.01");
+
+// Protect top-k vector searches from underfill with exact scoring. When enabled, route queries whose
+// predicates or runtime filters must be evaluated after per-segment ANN to brute-force, and rescore
+// matched candidates if filtered ANN returns fewer rows than the candidate bitmap can supply.
+// Disabled by default because exact scoring can be expensive. The result-count gate does not apply
+// to range searches, where fewer results can legitimately mean that no more candidates satisfy the
+// requested radius. A runtime update applies to subsequent searches.
+CONF_mBool(enable_vector_index_topk_underfill_fallback, "false");
 
 // Per-builder in-memory row buffer cap before tenann does an intermediate
 // add into the faiss in-memory index. Bounds peak memory during HNSWFlat

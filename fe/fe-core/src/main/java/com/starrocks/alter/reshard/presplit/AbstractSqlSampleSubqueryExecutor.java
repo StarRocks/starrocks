@@ -32,7 +32,6 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -115,7 +114,19 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             List<String> sortKeyProjectionIdents,
             List<String> partitionProjectionIdents,
             List<Column> sortKeyColumns,
-            List<Column> partitionSourceColumns) {
+            List<Column> partitionSourceColumns,
+            long totalInputRows,
+            boolean estimateFilteredInput) {
+        public SampleSpec(
+                String fromClauseSql, String whereClauseSqlOrNull, long totalInputBytes,
+                ComputeResource computeResource, List<String> sortKeyProjectionIdents,
+                List<String> partitionProjectionIdents, List<Column> sortKeyColumns,
+                List<Column> partitionSourceColumns) {
+            this(fromClauseSql, whereClauseSqlOrNull, totalInputBytes, computeResource,
+                    sortKeyProjectionIdents, partitionProjectionIdents, sortKeyColumns,
+                    partitionSourceColumns, 0L, false);
+        }
+
         public SampleSpec {
             Objects.requireNonNull(fromClauseSql, "fromClauseSql");
             Objects.requireNonNull(computeResource, "computeResource");
@@ -125,6 +136,9 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             Objects.requireNonNull(partitionSourceColumns, "partitionSourceColumns");
             if (totalInputBytes < 0) {
                 throw new IllegalArgumentException("totalInputBytes must be non-negative, was " + totalInputBytes);
+            }
+            if (totalInputRows < 0) {
+                throw new IllegalArgumentException("totalInputRows must be non-negative, was " + totalInputRows);
             }
         }
     }
@@ -175,10 +189,28 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 samplingRate, rowLimit, request.getSeed());
         List<TResultBatch> resultBatches = runSampleQuery(
                 sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds());
-        Iterator<SampleRow> rowIterator = decodeRows(
-                resultBatches, spec.sortKeyColumns(), secondaryIndexSortKeys, spec.partitionSourceColumns())
-                .iterator();
-        return new SampleExecution(rowIterator, new Estimates(spec.totalInputBytes(), 0L));
+        List<SampleRow> rows = decodeRows(
+                resultBatches, spec.sortKeyColumns(), secondaryIndexSortKeys, spec.partitionSourceColumns());
+        Estimates estimates = estimateInput(spec, samplingRate, rowLimit, rows.size());
+        return new SampleExecution(rows.iterator(), estimates);
+    }
+
+    /**
+     * Estimates the predicate-filtered input from the Bernoulli sample. External sources expose
+     * snapshot-wide bytes/rows, while the INSERT may select only one tenant or date range. Using
+     * the observed hit ratio avoids sizing every target partition from the whole Iceberg snapshot.
+     * A sample that hits the SQL LIMIT is deliberately treated as snapshot-wide because its true
+     * selectivity is censored and under-sizing is worse than a conservative over-estimate.
+     */
+    private static Estimates estimateInput(SampleSpec spec, double samplingRate, int rowLimit, int sampledRows) {
+        if (!spec.estimateFilteredInput() || spec.totalInputRows() <= 0L || sampledRows >= rowLimit
+                || samplingRate <= 0.0) {
+            return new Estimates(spec.totalInputBytes(), spec.totalInputRows());
+        }
+        long estimatedRows = Math.min(spec.totalInputRows(), Math.max(0L, Math.round(sampledRows / samplingRate)));
+        long estimatedBytes = spec.totalInputBytes() == 0L ? 0L : Math.min(spec.totalInputBytes(),
+                Math.max(0L, Math.round((double) spec.totalInputBytes() * estimatedRows / spec.totalInputRows())));
+        return new Estimates(estimatedBytes, estimatedRows);
     }
 
     /**
@@ -292,6 +324,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         try {
             return simpleExecutor.executeDQL(sampleSql, sampleContext);
         } finally {
+            PreSplitProfile.recordSampleQueryId(priorContext, sampleContext.getQueryId());
             ConnectContext.remove();
             if (priorContext != null) {
                 priorContext.setThreadLocalInfo();

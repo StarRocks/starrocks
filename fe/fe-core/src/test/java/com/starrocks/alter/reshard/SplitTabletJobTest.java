@@ -30,6 +30,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -71,6 +72,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
@@ -162,6 +164,34 @@ public class SplitTabletJobTest {
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+    }
+
+    @Test
+    public void testPkOrderByFactoryLeavesBoundarySelectionToBePkIndex() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE pk_order_by_split "
+                + "(pk1 int not null, pk2 int not null, sort_col int not null) "
+                + "PRIMARY KEY(pk1, pk2) ORDER BY(sort_col) "
+                + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'true')");
+        OlapTable pkOrderByTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "pk_order_by_split");
+        PhysicalPartition physicalPartition = pkOrderByTable.getAllPhysicalPartitions().iterator().next();
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob job = (SplitTabletJob) new SplitTabletJobFactory(db, pkOrderByTable, clause)
+                .createTabletReshardJob();
+
+        SplittingTablet splittingTablet = job.getReshardingPhysicalPartitions().values().stream()
+                .flatMap(partition -> partition.getReshardingIndexes().values().stream())
+                .flatMap(index -> index.getReshardingTablets().stream())
+                .map(ReshardingTablet::getSplittingTablet)
+                .filter(java.util.Objects::nonNull)
+                .findFirst().orElseThrow();
+        Assertions.assertTrue(splittingTablet.getNewTabletRanges().isEmpty(),
+                "ordinary split must let BE derive PK boundaries from the cloud-native PK index");
+        Assertions.assertTrue(splittingTablet.getNewTabletIds().size() > 1);
     }
 
     @Test
@@ -731,6 +761,7 @@ public class SplitTabletJobTest {
         splitJob.endTransactionId = 5000L;
 
         Set<Long> ignoredCompactionTxnIds = Set.of(7L, 8L);
+        splitJob.addCleanupExcludedTransactionId(42L);
         AtomicReference<Set<Long>> includePartitionIdsArg = new AtomicReference<>();
         AtomicReference<Set<Long>> excludeTxnIdsArg = new AtomicReference<>();
         new MockUp<CompactionMgr>() {
@@ -754,8 +785,124 @@ public class SplitTabletJobTest {
         // the returned ignored txn ids to the wait; while the wait is unsatisfied the job stays CLEANING.
         splitJob.runCleaningJob();
         Assertions.assertEquals(splitJob.getReshardingPhysicalPartitions().keySet(), includePartitionIdsArg.get());
+        Assertions.assertEquals(Set.of(7L, 8L, 42L), excludeTxnIdsArg.get());
+        Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+
+        // Once the pre-split caller stops waiting, its transaction may start writing at any moment,
+        // so the next cleaning cycle must wait for it again.
+        splitJob.clearCleanupExcludedTransactionIds();
+        splitJob.runCleaningJob();
         Assertions.assertEquals(ignoredCompactionTxnIds, excludeTxnIdsArg.get());
         Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, splitJob.getJobState());
+    }
+
+    @Test
+    public void testCleaningClearsPlacementPreferenceBeforeFinishing() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.init();   // reserves the table: NORMAL -> TABLET_RESHARD
+        try {
+            splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            splitJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+
+            AtomicReference<List<List<Long>>> cleared = new AtomicReference<>();
+            AtomicReference<TabletReshardJob.JobState> stateAtCall = new AtomicReference<>();
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) {
+                    // Capture only; assert outside the mock so a binding failure cannot hide a
+                    // failed assertion.
+                    calls.incrementAndGet();
+                    cleared.set(new ArrayList<>(preferenceMembers));
+                    stateAtCall.set(splitJob.getJobState());
+                }
+            };
+
+            List<List<Long>> expected = new ArrayList<>();
+            for (ReshardingPhysicalPartition partition : splitJob.getReshardingPhysicalPartitions().values()) {
+                for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                    for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                        for (long oldId : tablet.getOldTabletIds()) {
+                            for (long newId : tablet.getNewTabletIds()) {
+                                expected.add(List.of(oldId, newId));
+                            }
+                        }
+                    }
+                }
+            }
+            Assertions.assertFalse(expected.isEmpty(), "test fixture must produce preference members");
+
+            splitJob.runCleaningJob();
+
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+            Assertions.assertEquals(1, calls.get(), "the finish path must clear the pin exactly once");
+            Assertions.assertEquals(expected, cleared.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, stateAtCall.get(),
+                    "the pin must be cleared before the job is marked FINISHED");
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                splitJob.replayAbortedJob();   // restores NORMAL on the shared table fixture
+            }
+        }
+    }
+
+    @Test
+    public void testCleaningStillFinishesWhenClearingPlacementPreferenceFails() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        splitJob.init();
+        try {
+            splitJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            splitJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) throws DdlException {
+                    calls.incrementAndGet();
+                    throw new DdlException("simulated StarOS failure");
+                }
+            };
+
+            // Best-effort: clearing the pin is an optimization, so a StarOS failure must not keep
+            // the job from finishing.
+            splitJob.runCleaningJob();
+
+            Assertions.assertEquals(1, calls.get(), "the failing mock must actually have been invoked");
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                splitJob.replayAbortedJob();
+            }
+        }
     }
 
     private TabletReshardJob createTabletReshardJob() throws Exception {
@@ -826,5 +973,120 @@ public class SplitTabletJobTest {
         } finally {
             table.setState(OlapTable.OlapTableState.NORMAL);
         }
+    }
+
+    /**
+     * The factory releases the table lock before the job reaches the manager, so another reshard job
+     * can complete in that gap and supersede the very index this job was built against -- the
+     * creation-time check cannot see it. init() re-checks under the write lock that reserves the
+     * table, so the job is rejected at admission instead of publishing against tablets that are no
+     * longer part of the table and then spinning in RUNNING forever.
+     */
+    @Test
+    public void testInitRejectsSupersededIndex() throws Exception {
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex sourceIndex = physicalPartition.getLatestBaseIndex();
+        MaterializedIndex supersedingIndex = new MaterializedIndex(
+                GlobalStateMgr.getCurrentState().getNextId(), sourceIndex.getMetaId(),
+                MaterializedIndex.IndexState.NORMAL, sourceIndex.getShardGroupId());
+        supersedingIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+        physicalPartition.addMaterializedIndex(supersedingIndex, true);
+        try {
+            StarRocksException e = Assertions.assertThrows(StarRocksException.class, tabletReshardJob::init);
+            Assertions.assertTrue(e.getMessage().contains("superseded by index " + supersedingIndex.getId()),
+                    e.getMessage());
+            // Rejected before the reservation, so the table is left available to whoever can still use it.
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        } finally {
+            // Tests in this class share a single static table.
+            physicalPartition.deleteMaterializedIndexByIndexId(supersedingIndex.getId());
+        }
+    }
+
+    // A publish failure is always retried, never terminal, so it must be reported WITHOUT being
+    // written into the journaled errorMessage: a job whose retry later succeeds would otherwise
+    // reach FINISHED still advertising an error, and the next state transition would persist it.
+    // getInfo() therefore renders publishFailureReason only while the job is RUNNING and has no
+    // terminal errorMessage.
+    @Test
+    public void testGetInfoReportsRetriedPublishFailureWithoutJournalingIt() {
+        Map<Long, ReshardingPhysicalPartition> partitions = new HashMap<>();
+        ReshardingPhysicalPartition p1 = new ReshardingPhysicalPartition(1L, new HashMap<>());
+        ReshardingPhysicalPartition p2 = new ReshardingPhysicalPartition(2L, new HashMap<>());
+        partitions.put(1L, p1);
+        partitions.put(2L, p2);
+        SplitTabletJob job = new SplitTabletJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), partitions);
+        job.jobState = TabletReshardJob.JobState.RUNNING;
+
+        // healthy: nothing to report
+        Assertions.assertEquals("", job.getInfo().getError_message());
+
+        // one partition is retrying a failed publish: surfaced, but errorMessage (the journaled
+        // field) stays null, and it keeps being reported for as long as that partition holds the
+        // reason -- an IN_PROGRESS retry must not blank the diagnostic after a single tick
+        p1.setPublishFailureReason("link rpc channel failed");
+        Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
+                job.getInfo().getError_message());
+        Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
+                job.getInfo().getError_message());
+        Assertions.assertNull(job.errorMessage);
+
+        // that partition recovered while the sibling is still publishing: reporting stops even
+        // though not every partition has finished
+        p1.setPublishFailureReason(null);
+        Assertions.assertEquals("", job.getInfo().getError_message());
+
+        // a failure on any partition is reported
+        p2.setPublishFailureReason("no alive node");
+        Assertions.assertEquals("publish version failed (retrying): no alive node",
+                job.getInfo().getError_message());
+
+        // only RUNNING retries a publish, so a reason left on a partition stops being reported once
+        // the job moves on -- this is what keeps a partition dropped mid-job, which runRunningJob
+        // skips so that no publish result can clear its reason, from making a finished job advertise
+        // a failure that is no longer being retried
+        for (TabletReshardJob.JobState state : TabletReshardJob.JobState.values()) {
+            job.jobState = state;
+            Assertions.assertEquals(state == TabletReshardJob.JobState.RUNNING
+                            ? "publish version failed (retrying): no alive node" : "",
+                    job.getInfo().getError_message(), "job state " + state);
+        }
+
+        // a terminal error always wins over a transient publish failure, in any state
+        job.jobState = TabletReshardJob.JobState.RUNNING;
+        job.errorMessage = "Table not found";
+        Assertions.assertEquals("Table not found", job.getInfo().getError_message());
+    }
+
+    // runRunningJob() skips a partition that has been dropped mid-job (DROP PARTITION / TRUNCATE are
+    // permitted while the table is in TABLET_RESHARD) without marking the job unfinished, so nothing
+    // would ever clear a publish failure reason that partition left behind. Clear it on the skip, so
+    // the job does not keep attributing a failure to a partition whose publish is no longer retried.
+    @Test
+    public void testRunRunningJobClearsPublishFailureReasonOfDroppedPartition() throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+
+        TabletReshardJob tabletReshardJob = createTabletReshardJob();
+        tabletReshardJob.init();
+        tabletReshardJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, tabletReshardJob.getJobState());
+
+        SplitTabletJob splitJob = (SplitTabletJob) tabletReshardJob;
+        ReshardingPhysicalPartition droppedPartition = new ReshardingPhysicalPartition(
+                GlobalStateMgr.getCurrentState().getNextId(), new HashMap<>());
+        droppedPartition.setPublishFailureReason("link rpc channel failed");
+        splitJob.getReshardingPhysicalPartitions().put(droppedPartition.getPhysicalPartitionId(), droppedPartition);
+        Assertions.assertEquals("publish version failed (retrying): link rpc channel failed",
+                splitJob.getInfo().getError_message());
+
+        // The partition id is not in the table, so the publish loop skips it -- and the skip must not
+        // leave the reason behind for the finished job to report.
+        tabletReshardJob.run();
+        Assertions.assertNull(droppedPartition.getPublishFailureReason());
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
+        Assertions.assertEquals("", splitJob.getInfo().getError_message());
     }
 }

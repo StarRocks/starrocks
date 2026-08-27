@@ -16,6 +16,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -835,6 +836,7 @@ public class CompactionSchedulerTest {
             {
                 BrpcProxy.getLakeService("192.168.0.3", 9050);
                 result = lakeService;
+                times = 2;
             }
         };
 
@@ -871,8 +873,21 @@ public class CompactionSchedulerTest {
             Assertions.assertNotNull(req.parallelConfig, "parallelConfig should be set when enabled");
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
+            Assertions.assertFalse(req.unshareSegments);
             // maxBytesPerSubtask is 0 (let BE use its own config)
             Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
+        }
+
+        CompactionTask unshareTask = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
+                PartitionStatistics.CompactionPriority.UNSHARE,
+                WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
+        AggregateCompactRequest unshareRequest = (AggregateCompactRequest) requestField.get(unshareTask);
+        for (CompactRequest req : unshareRequest.requests) {
+            Assertions.assertTrue(req.unshareSegments);
+            Assertions.assertNotNull(req.parallelConfig);
+            Assertions.assertTrue(req.parallelConfig.enableParallel);
+            Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
+            Assertions.assertFalse(req.allowPartialSuccess);
         }
     }
 
@@ -1071,8 +1086,8 @@ public class CompactionSchedulerTest {
         long tableId = 200L;
         long otherTableId = 999L;
         long endTransactionId = 2000L;
-        // Partitions 1, 2 and 5 are being resharded; 3 and 4 are not.
-        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L);
+        // Partitions 1, 2, 5 and 7 are being resharded; 3 and 4 are not.
+        Set<Long> includePartitionIds = Sets.newHashSet(1L, 2L, 5L, 7L);
 
         // Included partition, uncommitted, <= watermark -> abort the task (the scheduler thread aborts the
         // transaction later).
@@ -1091,6 +1106,15 @@ public class CompactionSchedulerTest {
         CompactionJob late = Mockito.mock(CompactionJob.class);
         Mockito.when(late.getTxnId()).thenReturn(3000L);
         compactionScheduler.getRunningCompactions().put(new PartitionIdentifier(dbId, tableId, 5), late);
+
+        // The current reshard's UNSHARE transaction can equal the watermark because the job records
+        // peekNextTransactionId() before triggering UNSHARE. It must be allowed to finish and publish.
+        CompactionJob unshareAtWatermark = Mockito.mock(CompactionJob.class);
+        Mockito.when(unshareAtWatermark.getTxnId()).thenReturn(endTransactionId);
+        Mockito.when(unshareAtWatermark.isUnshare()).thenReturn(true);
+        Mockito.when(unshareAtWatermark.transactionHasCommitted()).thenReturn(false);
+        compactionScheduler.getRunningCompactions().put(
+                new PartitionIdentifier(dbId, tableId, 7), unshareAtWatermark);
 
         // Not-included partition, uncommitted, <= watermark -> not cancelled, txn id returned.
         CompactionJob otherPartitionPrepared = Mockito.mock(CompactionJob.class);
@@ -1114,6 +1138,7 @@ public class CompactionSchedulerTest {
         Mockito.verify(prepared).abort();
         Mockito.verify(committed, Mockito.never()).abort();
         Mockito.verify(late, Mockito.never()).abort();
+        Mockito.verify(unshareAtWatermark, Mockito.never()).abort();
         Mockito.verify(otherPartitionPrepared, Mockito.never()).abort();
         Mockito.verify(otherPartitionCommitted, Mockito.never()).abort();
         Mockito.verify(otherTable, Mockito.never()).abort();
@@ -1176,5 +1201,88 @@ public class CompactionSchedulerTest {
                 times = 1;
             }
         };
+    }
+
+    /**
+     * The reshard pause is only for the shape whose split drags a full UNSHARE rewrite. An ordinary
+     * table resharding one tablet must keep compacting: the pause is table-wide, so without this scoping
+     * a single tablet's split stops compaction on every partition of a wide table for the life of the
+     * job -- collateral for every lake table, not just this feature's.
+     */
+    @Test
+    public void testReshardPauseOnlyAppliesToTheUnshareShape() {
+        final boolean[] dragsUnshareRewrite = {false};
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean splitRewritesEveryShard(OlapTable table) {
+                return dragsUnshareRewrite[0];
+            }
+        };
+        // Reaching tablet collection is what says the pause did NOT fire: it is the first thing past
+        // the guard. Asserting on nextCompactionTime instead would prove nothing, because the ordinary
+        // path re-arms the partition on its own once it finds no tablets to compact.
+        final boolean[] reachedTabletCollection = {false};
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            public Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition,
+                                                                 ComputeResource computeResource) {
+                reachedTabletCollection[0] = true;
+                return Map.of();
+            }
+        };
+
+        OlapTable table = new LakeTable();
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        PartitionStatistics statistics = new PartitionStatistics(partition);
+        statistics.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(statistics);
+        CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
+                globalStateMgr, "");
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(100, "aaa");
+            }
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                return new PhysicalPartition(123, 123, new MaterializedIndex());
+            }
+        };
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+
+        // The deferral is observable as a pushed-out nextCompactionTime, and enableCompactionAfter uses
+        // computeIfPresent -- so the partition has to be registered with the manager for either outcome
+        // to be visible at all.
+        compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(), new Quantiles(1, 2, 3));
+
+        // Ordinary reshard: the pause must not fire, so the scheduler goes on to look for tablets.
+        compactionScheduler.startCompaction(snapshot, info);
+        Assertions.assertTrue(reachedTabletCollection[0],
+                "an ordinary reshard must not pause compaction on unrelated partitions");
+
+        // The UNSHARE-dragging shape does get paused: it stops before tablet collection, drops the
+        // request, and pushes the partition out by the failure interval rather than dropping it.
+        reachedTabletCollection[0] = false;
+        dragsUnshareRewrite[0] = true;
+        long beforePause = compactionManager.getStatistics(partition).getNextCompactionTime();
+        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info),
+                "a split that drags an UNSHARE rewrite must pause ordinary compaction");
+        Assertions.assertFalse(reachedTabletCollection[0], "the pause must stop before tablet collection");
+        Assertions.assertTrue(compactionManager.getStatistics(partition).getNextCompactionTime() > beforePause,
+                "the pause must re-arm the partition rather than drop it");
     }
 }

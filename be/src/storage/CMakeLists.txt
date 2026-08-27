@@ -187,6 +187,7 @@ set(STORAGE_FILES
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/cross_publish_context.cpp
     lake/compaction_task_context.cpp
     lake/combined_txn_log_writer.cpp
     lake/tablet_parallel_compaction_manager.cpp
@@ -291,7 +292,6 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
-    index/vector/empty_index_reader.cpp
     index/vector/vector_index_cache.cpp
     index/vector/vector_index_cache_metrics.cpp
     index/vector/vector_index_builder_factory.cpp

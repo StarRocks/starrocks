@@ -319,6 +319,8 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
+    public static LongCounterMetric COUNTER_BACKUP_SNAPSHOT_CLEAN_SUCCESS;
+    public static LongCounterMetric COUNTER_BACKUP_SNAPSHOT_CLEAN_FAILED;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
 
     public static LongCounterMetric COUNTER_LOAD_ADD;
@@ -359,6 +361,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
+    // A reshard publish is retried until it succeeds (its transaction is already committed, so there is
+    // no rollback path), which means a deterministic failure never shows up as an aborted job. This
+    // counter is the only signal that a reshard job is stuck retrying, so alert on its rate.
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_PUBLISH_FAILED;
 
     // Sample-Based Tablet Pre-Split metrics. The coordinator wires the eligibility-skip,
     // post-submit hard-cap, load-abort counters and the two wait-time histograms. The
@@ -1023,6 +1029,12 @@ public final class MetricRepo {
         COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", MetricUnit.REQUESTS,
                 "current unfinished backup job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_BACKUP_JOB);
+        COUNTER_BACKUP_SNAPSHOT_CLEAN_SUCCESS = new LongCounterMetric("backup_snapshot_clean_success",
+                MetricUnit.REQUESTS, "total backup snapshots deleted by ttl cleanup or DROP SNAPSHOT");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BACKUP_SNAPSHOT_CLEAN_SUCCESS);
+        COUNTER_BACKUP_SNAPSHOT_CLEAN_FAILED = new LongCounterMetric("backup_snapshot_clean_failed",
+                MetricUnit.REQUESTS, "total failed attempts to delete a backup snapshot");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BACKUP_SNAPSHOT_CLEAN_FAILED);
         COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
@@ -1081,6 +1093,10 @@ public final class MetricRepo {
                 MetricUnit.REQUESTS, "total tablet reshard merge jobs aborted");
         COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.addLabel(new MetricLabel("type", "merge"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED);
+
+        COUNTER_TABLET_RESHARD_PUBLISH_FAILED = new LongCounterMetric("tablet_reshard_publish_failed",
+                MetricUnit.REQUESTS, "total tablet reshard publish attempts that failed and will be retried");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_PUBLISH_FAILED);
 
         COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = new LongCounterMetric(
                 "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS,

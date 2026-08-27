@@ -116,6 +116,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **説明**: ベクターインデックスのメトリックタイプ（測定関数）。有効な値:
   - `l2_distance`: ユークリッド距離。値が小さいほど、類似性が高くなります。
   - `cosine_similarity`: コサイン類似度。値が大きいほど、類似性が高くなります。
+  - `inner_product`: 内積。値が大きいほど類似性が高くなります。コサイン類似度とは異なり、内積はベクトルの大きさを保持します。正確な計算には `inner_product`、ベクターインデックスによる top-k または範囲クエリには `approx_inner_product` を使用します。
 
 ##### is_vector_normed
 
@@ -125,7 +126,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 
 ##### index_build_threshold
 
-- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/management/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
+- **デフォルト**: 10000（BE 設定項目 [`config_vector_index_default_build_threshold`](../../administration/configuration/BE_parameters/query_loading.md#config_vector_index_default_build_threshold) により決定）
 - **必須**: いいえ
 - **説明**: ベクトルインデックスの構築をトリガーする行数のしきい値。書き込まれた行数がこのしきい値未満の場合、インデックスは構築されず、検索はブルートフォーススキャンにフォールバックします。`1` 以上の整数である必要があります。IVFPQ インデックスの場合、IVFPQ の k-means 学習には少なくとも `nlist` 件のベクトルが必要なため、この値は `nlist` 以上である必要もあります。この制約に違反する DDL 文は拒否されます。
 
@@ -135,7 +136,7 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **必須**: いいえ
 - **説明**: 共有データクラスタでのインデックス構築方式です。有効な値：
   - `sync`：データ書き込み時に同期してインデックスを構築します。クエリはすぐにインデックスを使用できますが、ロード遅延が増加します。
-  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/management/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
+  - `async`：書き込み完了後にバックグラウンドでインデックスを構築します。構築が完了するまで、該当 Segment のクエリは自動的にブルートフォース検索へフォールバックします。[`lake_vector_index_build_warehouse`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vector_index_build_warehouse) で構築 Warehouse を選択し、[`lake_vi_build_load_tail_delay_ms`](../../administration/configuration/FE_parameters/shared_lake_other.md#lake_vi_build_load_tail_delay_ms) でロード末尾のディスパッチ遅延を制御できます。
 
 ##### M
 
@@ -277,18 +278,21 @@ LIMIT 10
     - `<vector_index_distance_func>` の関数名要件:
       - `metric_type` が `l2_distance` の場合、関数名は `approx_l2_distance` でなければなりません。
       - `metric_type` が `cosine_similarity` の場合、関数名は `approx_cosine_similarity` でなければなりません。
+      - `metric_type` が `inner_product` の場合、関数名は `approx_inner_product` でなければなりません。
     - `<vector_index_distance_func>` のパラメータ要件:
       - カラムのうちの一つ `constant_array` は、ベクターインデックス `dim` と一致する次元を持つ定数 `ARRAY<FLOAT>` でなければなりません。
       - もう一つのカラム `vector_column` は、ベクターインデックスに対応するカラムでなければなりません。
   - ORDER の方向要件:
     - `metric_type` が `l2_distance` の場合、順序は `ASC` でなければなりません。
     - `metric_type` が `cosine_similarity` の場合、順序は `DESC` でなければなりません。
+    - `metric_type` が `inner_product` の場合、順序は `DESC` でなければなりません。
   - `LIMIT N` 句が必要です。
 - **述語要件:**
   - すべての述語は `<vector_index_distance_func>` 式でなければならず、`AND` と比較演算子（`>` または `<`）を使用して結合されます。比較演算子の方向は `ASC`/`DESC` の順序と一致している必要があります。具体的には:
   - 要件 1:
     - `metric_type` が `l2_distance` の場合: `col_ref <= constant`。
     - `metric_type` が `cosine_similarity` の場合: `col_ref >= constant`。
+    - `metric_type` が `inner_product` の場合: `col_ref >= constant`。定数には負の値も指定できます。
     - ここで、`col_ref` は `<vector_index_distance_func>(vector_column, constant_array)` の結果を指し、`FLOAT` または `DOUBLE` 型にキャストできます。例:
       - `approx_l2_distance(v1, [1,2,3])`
       - `CAST(approx_l2_distance(v1, [1,2,3]) AS FLOAT)`

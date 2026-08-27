@@ -163,7 +163,7 @@ SELECT /*+ SET_VAR
 
 ### 设置变量为用户属性
 
-您可以通过 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
+您可以通过 [ALTER USER](./sql-statements/account-management/ALTER_USER.md) 将 Session 变量设置为用户属性该功能自 v3.3.3 起支持。
 
 示例：
 
@@ -621,7 +621,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_insert_strict
 
-* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
+* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
 
 ### max_unknown_string_meta_length (global)
@@ -647,21 +647,21 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_lake_prepared_physical_split_scan
 
-* 描述：是否为存算分离集群中的云原生表开启 prepared physical split scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。
+* 描述：是否为存算分离集群中的云原生表开启 Prepared Physical Split Scan。开启后，每个 Segment 只裁剪一次，并在同一 Tablet 的各 Split 子任务间共享裁剪后的读取状态，可加速大 Tablet 或数据倾斜 Tablet 的扫描。该优化按 Scan 节点决定是否生效，且要求表为云原生表并且未开启 Query Cache。仅在存算分离集群中生效。
 * 默认值：false
 * 类型：Boolean
 * 引入版本：v4.2
 
 ### lake_tablet_internal_parallel_skew_split_ratio
 
-* 描述：数据倾斜阈值。在 prepared physical split scan 下，即使 scan range 数量已达到 pipeline DOP，仍可据此将单个超大 lake Tablet 拆分。当某个 Tablet 的行数超过本比值乘以每 driver 的理想份额（总行数除以有效 DOP）时，该 Tablet 被视为倾斜的长尾 Tablet 并被拆分。值越大，越需要更极端的倾斜才会拆分；值越小，越倾向于拆分。必须为正且有限的数值。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 描述：数据倾斜阈值。在 Prepared Physical Split Scan 下，即使 Scan Range 数量已达到 Pipeline DOP，仍可据此将单个超大 Lake Tablet 拆分。当某个 Tablet 的行数超过本比值乘以每 Driver 的理想份额（总行数除以有效 DOP）时，该 Tablet 被视为倾斜的长尾 Tablet 并被拆分。值越大，越需要更极端的倾斜才会拆分；值越小，越倾向于拆分。必须为正且有限的数值。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
 * 默认值：1.5
 * 类型：Double
 * 引入版本：v4.2
 
 ### enable_lake_prepared_split_on_dup_table_scan
 
-* 描述：对于在同一查询中被两个及以上 Scan 算子扫描的云原生（lake）表（例如自连接，或被多次引用的表），是否允许对其使用 prepared physical split scan。默认值为 `false`，此时这类重复扫描回退为普通扫描，因为该优化按 Scan 复用的 prepared 读取状态在同一张表的多个兄弟 Scan 之间共享是不安全的。设为 `true` 可让这些扫描重新启用该优化。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
+* 描述：对于在同一查询中被两个及以上 Scan 算子扫描的云原生（lake）表（例如自连接，或被多次引用的表），是否允许对其使用 Prepared Physical Split Scan。默认值为 `false`，此时这类重复扫描回退为普通扫描，因为该优化按 Scan 复用的 Prepared 读取状态在同一张表的多个兄弟 Scan 之间共享是不安全的。设为 `true` 可让这些扫描重新启用该优化。仅对开启 `enable_lake_prepared_physical_split_scan` 的扫描生效，且仅在存算分离集群中生效。
 * 默认值：false
 * 类型：Boolean
 * 引入版本：v4.2
@@ -890,7 +890,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_scan_datacache
 
-* 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
+* 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
 * 默认值：true
 * 引入版本：v2.5
 
@@ -1228,13 +1228,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### max_pushdown_conditions_per_column
 
-* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_pushdown_conditions_per_column` 的说明。
+* 描述：该变量的具体含义请参阅 BE 配置项中 `max_pushdown_conditions_per_column` 的说明。
 * 默认值：`-1`，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 * 类型：Int
 
 ### max_scan_key_num
 
-* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_scan_key_num` 的说明。
+* 描述：该变量的具体含义请参阅 BE 配置项中 `max_scan_key_num` 的说明。
 * 默认值：`-1`，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### metadata_collect_query_timeout
@@ -1279,7 +1279,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### one_tablet_opt_max_tablet_rows
 
-* 描述：按 tablet 大小控制单 tablet 优化。当查询被裁剪到单个 tablet 时，StarRocks 可将聚合合并为一阶段并在单个节点上汇聚结果，从而跳过 shuffle。这对小 tablet 很高效，但当 tablet 很大时会把整个查询串行化到单个节点上。如果所选单个 tablet 的行数超过该阈值，则禁用该优化，改用常规的分布式（shuffle）计划。设置为 `-1` 可禁用该门控，无论 tablet 大小都始终应用单 tablet 优化。
+* 描述：按 Tablet 大小控制单 Tablet 优化。当查询被裁剪到单个 Tablet 时，StarRocks 可将聚合合并为一阶段并在单个节点上汇聚结果，从而跳过 Shuffle。这对小 Tablet 很高效，但当 Tablet 很大时会把整个查询串行化到单个节点上。如果所选单个 Tablet 的行数超过该阈值，则禁用该优化，改用常规的分布式（Shuffle）计划。设置为 `-1` 可禁用该门控，无论 Tablet 大小都始终应用单 Tablet 优化。
 * 默认值：10000000
 * 类型：Long
 * 引入版本：v4.2
@@ -1365,7 +1365,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### plan_mode
 
-* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg.md#附录-a周期性元数据刷新策略)。有效值：
   * `auto`：系统自动选择方案。
   * `local`：由 FE 在本地解析 Iceberg manifest 文件，并在解析过程中将 scan range 增量下发给 BE，无需等待所有 manifest 解析完成，可降低内存占用和首包延迟。
   * `distributed`：将 manifest 解析任务分发给多个 BE 并行处理，但 FE 需等待所有 BE 返回结果后才能下发 scan range，对于 manifest 文件较多的大表，可能导致较高内存占用和较长等待时间。仅在 FE CPU 成为瓶颈且 manifest 数量极多时建议使用。

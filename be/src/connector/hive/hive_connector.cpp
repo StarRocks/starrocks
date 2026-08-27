@@ -823,6 +823,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_init_global_dicts(&_scanner_ctx));
     _scanner_ctx.runtime_filter_collector = _runtime_filters;
+    // ConnectorChunkSource calls DataSource::set_driver_sequence() in its constructor,
+    // well before open() reaches here, so this value is already final.  See
+    // HdfsScannerContext::driver_sequence for why it is carried at all.
+    _scanner_ctx.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
     _scanner_ctx.tuple_desc = _tuple_desc;
     if (const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_scanner_ctx.hive_table)) {
         _scanner_ctx.avro_schema_json = hdfs_desc->get_avro_schema_json();
@@ -953,7 +957,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
                 serde_lib = file_desc->get_serde_lib();
             }
             if (serde_lib == OPENXJSON_SERDE_LIB) {
-                scanner = new HdfsJsonScanner();
+                // TODO: FileTableDescriptor doesn't carry serde properties from FE yet, so
+                // column name mapping ("mapping.<column>") only works for HdfsTableDescriptor.
+                scanner = hdfs_desc != nullptr ? new HdfsJsonScanner(hdfs_desc->get_serde_properties())
+                                               : new HdfsJsonScanner();
             } else {
                 scanner = new HdfsTextScanner();
             }

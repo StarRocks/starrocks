@@ -1,0 +1,194 @@
+-- name: test_range_orderby_partial_update @cloud
+-- SQL integration: partial update and condition update on a range-distributed PRIMARY KEY
+-- table whose ORDER BY differs from the primary key.
+--
+-- Two rules meet on this shape. A primary key table with a sort key already requires a
+-- row-mode partial update to carry every sort key column, because the row moves when they
+-- change. And column mode -- the mode that is allowed to leave them out, because it patches
+-- columns in place -- is refused here: its patch lives beside the segment it annotates, and
+-- the UNSHARE compaction a split of this shape drags behind it rewrites every segment
+-- wholesale without carrying patches across. So every partial update here must restate the
+-- whole sort key.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null,
+    c1 int not null,
+    c2 int not null,
+    c3 int not null,
+    c4 int not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+insert into t values
+    (1, 1, 100, 'a', 11, 12, 13, 14),
+    (2, 2, 200, 'b', 21, 22, 23, 24),
+    (3, 3, 300, 'c', 31, 32, 33, 34);
+select * from t order by k1;
+
+-- Row-mode partial update through INSERT: the sort key is restated, c2..c4 keep their values.
+set partial_update_mode = 'row';
+insert into t (k1, k2, v1, v2, c1) values (1, 1, 100, 'a', 111);
+select * from t order by k1;
+
+-- Leaving a sort key column out is refused: row mode cannot place the row without it.
+insert into t (k1, k2, c1) values (1, 1, 112);
+select * from t order by k1;
+
+-- Column mode is the mode that could leave it out, and it is refused on this table shape.
+set partial_update_mode = 'column';
+insert into t (k1, k2, v1, v2, c1) values (1, 1, 100, 'a', 113);
+select * from t order by k1;
+set partial_update_mode = 'auto';
+
+-- UPDATE with a WHERE clause is not a partial update at all -- it rewrites whole rows.
+update t set c1 = 999 where k1 = 2 and k2 = 2;
+select * from t order by k1;
+
+-- Without a WHERE clause UPDATE becomes a partial update, so the same rule applies: a set
+-- of columns that misses the sort key is refused ...
+update t set c1 = 998;
+select * from t order by k1;
+
+-- ... while a set that covers the whole sort key goes through as a row-mode partial update,
+-- leaving c1..c4 alone.
+update t set v1 = 250, v2 = 'bb';
+select * from t order by k1;
+
+-- An explicit column-mode UPDATE lands on the same refusal as the column-mode INSERT above,
+-- since this table shape has no column mode to fall back to.
+set partial_update_mode = 'column';
+update t set c1 = 997 where k1 = 3 and k2 = 3;
+select * from t order by k1;
+set partial_update_mode = 'auto';
+
+-- Row-mode partial update through stream load.
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_row_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:row" -H "columns:k1,k2,v1,v2,c1" -d "3,3,300,c,331" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select * from t order by k1;
+
+-- Column mode through stream load is refused by the same guard.
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_col_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:k1,k2,v1,v2,c1" -d "3,3,300,c,332" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select * from t order by k1;
+
+-- Auto mode without the sort key columns is refused by the storage engine.
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_auto_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "columns:k1,k2,c1" -d "3,3,333" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select * from t order by k1;
+
+-- Condition update on a sort key column: a smaller v1 must not win ...
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_old_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "columns:k1,k2,v1,v2,c1,c2,c3,c4" -d "3,3,299,z,91,92,93,94" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select * from t order by k1;
+
+-- ... and a larger one must.
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_new_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "columns:k1,k2,v1,v2,c1,c2,c3,c4" -d "3,3,301,z,91,92,93,94" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select * from t order by k1;
+
+-- Condition update combined with a partial update: the condition column is among the updated
+-- columns, the sort key is complete, and the columns left out keep their values.
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_old_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "1,1,50,a,150" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select * from t order by k1;
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_new_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "1,1,150,a,151" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select * from t order by k1;
+
+-- Condition update through INSERT takes the same path.
+insert into t properties("merge_condition" = "v1") values (2, 2, 249, 'q', 71, 72, 73, 74);
+select * from t order by k1;
+insert into t properties("merge_condition" = "v1") values (2, 2, 251, 'q', 71, 72, 73, 74);
+select * from t order by k1;
+
+drop database db_${uuid0} force;
+
+-- name: test_range_orderby_partial_update_after_split @cloud @sequential
+-- SQL integration: the same partial-update and condition-update paths, but after the table has
+-- been split. A split of this shape hands the children the parent's segments, so the owner of a
+-- row has to be decided per child before an update can read the row it patches -- the case an
+-- unsplit table, with only one owner, cannot reach.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(256) not null,
+    c1 int not null,
+    c2 int not null,
+    c3 int not null,
+    c4 int not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+-- v1 descends as the primary key ascends, so the sort order is the reverse of the routing
+-- order. The md5 padding resists compression, so the tablet really does reach the threshold.
+insert into t
+select x, x % 7, 100000 - x, repeat(md5(cast(x as varchar)), 6), x, x * 2, x * 3, x * 4
+from table(generate_series(1, 20000)) as g(x);
+
+[UC]alter table t split tablet properties('tablet_reshard_target_size' = '1024');
+
+shell: n=1; for i in $(seq 1 55); do n=$(${mysql_cmd} -Ne "select count(1) from information_schema.tablet_reshard_jobs where db_name='db_${uuid0}' and job_state not in ('FINISHED','ABORTED')" 2>/dev/null); [ "$n" = "0" ] && break; sleep 2; done; echo "pending=$n"
+
+select buckets > 1 as did_split from information_schema.partitions_meta
+    where db_name = 'db_${uuid0}' and table_name = 't';
+select count(*) from t;
+
+-- One row from the low end of the primary key range and one from the high end, so the updates
+-- below land on different children.
+select k1, k2, v1, c1, c2 from t where k1 in (5, 19000) order by k1;
+
+-- Row-mode partial update through INSERT, one row in each child. c2..c4 must survive.
+set partial_update_mode = 'row';
+insert into t (k1, k2, v1, v2, c1) values
+    (5, 5, 99995, repeat(md5(cast(5 as varchar)), 6), 555),
+    (19000, 19000 % 7, 81000, repeat(md5(cast(19000 as varchar)), 6), 190000);
+select k1, k2, v1, c1, c2 from t where k1 in (5, 19000) order by k1;
+set partial_update_mode = 'auto';
+
+-- Row-mode partial update through stream load, on the row in the low child.
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_row_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:row" -H "columns:k1,k2,v1,v2,c1" -d "5,5,99995,pad5,556" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+
+-- Column mode stays refused after the split.
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:pu_col_${uuid0}" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:k1,k2,v1,v2,c1" -d "5,5,99995,pad5,557" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+
+-- Condition update against the row's own v1 (100000 - 5): the older value loses, the newer wins.
+insert into t properties("merge_condition" = "v1") values (5, 5, 99994, 'older', 1, 1, 1, 1);
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+insert into t properties("merge_condition" = "v1") values (5, 5, 99996, 'newer', 2, 2, 2, 2);
+select k1, k2, v1, v2, c1, c2 from t where k1 = 5;
+
+-- Condition update combined with a partial update, on the row in the high child
+-- (v1 there is 100000 - 19000).
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_old_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "19000,2,80999,pad19000,7" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select k1, k2, v1, c1, c2 from t where k1 = 19000;
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label:cu_pu_new_${uuid0}" -H "column_separator:," -H "merge_condition:v1" -H "partial_update:true" -H "columns:k1,k2,v1,v2,c1" -d "19000,2,81001,pad19000,8" -XPUT ${url}/api/db_${uuid0}/t/_stream_load
+sync;
+select k1, k2, v1, c1, c2 from t where k1 = 19000;
+
+-- Rows nobody touched, and the row count, are intact.
+select k1, k2, v1, c1, c2, c3, c4 from t where k1 = 777;
+select count(*) from t;
+
+drop database db_${uuid0} force;

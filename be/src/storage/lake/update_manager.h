@@ -127,8 +127,8 @@ public:
     // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
     Status batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
                                              std::vector<SegmentPKIteratorPtr>& pk_iters,
-                                             std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
-                                             bool need_lock);
+                                             std::vector<std::vector<uint64_t>>* rss_rowids_per_segment, bool need_lock,
+                                             std::vector<Filter>* owned_per_segment = nullptr);
 
     // get column data by rssid and rowids
     Status get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,
@@ -254,6 +254,8 @@ private:
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
                       LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
+    Status _do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
+                      RowsetUpdateState& state, LakePrimaryIndex& index, DeletesMap* new_deletes);
 
     // Performs condition-based merge update using parallel chunk-level execution for segments
     // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values

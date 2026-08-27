@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -183,6 +184,18 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                                int32_t split_count, std::vector<TabletRangeInfo>* split_ranges,
                                int32_t colocate_column_count = 0);
 
+// PK-index-driven peer used when a PRIMARY KEY tablet's physical sort key differs from its PK.
+// |encoded_samples| are V2-encoded primary keys sampled from the tablet's cloud-native persistent-index
+// SSTs. The helper filters them to strict interior points of the current tablet range, chooses K-1
+// quantiles, decodes them back to full PK tuples, and emits K ranges. Exposed separately so the boundary
+// selection/decoding contract can be unit-tested without object-store I/O; the production split path
+// collects the samples from TabletMetadataPB::sstable_meta before calling it.
+Status get_tablet_split_ranges_from_pk_index_samples(TabletManager* tablet_manager,
+                                                     const TabletMetadataPtr& tablet_metadata, int32_t split_count,
+                                                     std::vector<std::string> encoded_samples,
+                                                     std::vector<TabletRangeInfo>* split_ranges,
+                                                     int32_t colocate_column_count = 0);
+
 // external-boundaries peer of get_tablet_split_ranges: produces a vector<TabletRangeInfo>
 // from FE-supplied boundaries instead of computing them from segment
 // distribution. Exposed for unit testing of the validation paths; the
@@ -213,10 +226,15 @@ struct RowsetOwnership {
 };
 
 // True iff a rowset's metadata shape permits per-segment ownership pruning:
-// (a) no partial-compaction cursor, (b) every segment has sort-key bounds. Each
-// SegmentMetadataPB is self-contained (filename/size/shared/bundle_file_offset travel
-// with it), so bundled rowsets prune uniformly with any other.
-bool can_prune_rowset_segments(const RowsetMetadataPB& rowset);
+// (a) no partial-compaction cursor, (b) every segment has sort-key bounds, (c) those bounds are at
+// |sort_key_arity|, the tablet's CURRENT sort-key arity, so they are comparable with the new
+// tablets' ranges. Each SegmentMetadataPB is self-contained
+// (filename/size/shared/bundle_file_offset travel with it), so bundled rowsets prune uniformly with
+// any other.
+//
+// |sort_key_arity| == 0 means "cannot tell" (a schema carrying no sort key at all, e.g. synthetic
+// metadata) and skips (c) rather than rejecting every rowset.
+bool can_prune_rowset_segments(const RowsetMetadataPB& rowset, size_t sort_key_arity);
 
 // Computes per-segment ownership of a pruneable rowset against the new tablets'
 // ranges. Fail-closed: returns non-OK (caller degrades the whole rowset to

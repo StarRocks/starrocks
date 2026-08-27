@@ -29,6 +29,7 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -125,6 +126,12 @@ public class InsertStmt extends DmlStmt {
     // Currently only takes effect when the SELECT source is files().
     private boolean enablePushDownSchema = false;
 
+    // The property keys the statement was written with. Snapshotted here because getProperties()
+    // stops answering "what did the user ask for?" once InsertAnalyzer#analyzeProperties fills the
+    // same map with the session defaults for max_filter_ratio / strict_mode / timeout (and consumes
+    // enable_push_down_schema out of it). A caller that runs after analysis has no other way to ask.
+    private Set<String> userSpecifiedPropertyKeys = Set.of();
+
     public InsertStmt(TableRef tableRef, PartitionRef targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
                       NodePosition pos) {
@@ -136,6 +143,7 @@ public class InsertStmt extends DmlStmt {
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
         this.properties.putAll(insertProperties);
+        this.userSpecifiedPropertyKeys = Set.copyOf(insertProperties.keySet());
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
@@ -267,6 +275,15 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isEnablePushDownSchema() {
         return enablePushDownSchema;
+    }
+
+    /**
+     * The load-property keys this statement was written with, empty when it carries no
+     * {@code PROPERTIES(...)} clause. Unlike {@link #getProperties()}, the answer does not change
+     * once the statement has been analyzed.
+     */
+    public Set<String> getUserSpecifiedPropertyKeys() {
+        return userSpecifiedPropertyKeys;
     }
 
     public QueryStatement getQueryStatement() {

@@ -37,6 +37,7 @@ package com.starrocks.backup;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
@@ -160,6 +161,12 @@ public class BackupJob extends AbstractJob {
     @SerializedName(value = "backupCatalogs")
     private List<Catalog> backupCatalogs = Lists.newArrayList();
 
+    // How long the snapshot this job produces is kept, as the user wrote it in the BACKUP property;
+    // null keeps it forever. Persisted with the job so a replayed job still writes the same
+    // retention into the repository.
+    @SerializedName(value = "ttl")
+    private String ttl;
+
     public BackupJob() {
         super(JobType.BACKUP);
     }
@@ -184,6 +191,15 @@ public class BackupJob extends AbstractJob {
         this.localJobInfoFilePath = job.localJobInfoFilePath;
         this.backupFunctions = job.backupFunctions;
         this.backupCatalogs = job.backupCatalogs;
+        this.ttl = job.ttl;
+    }
+
+    public String getTtl() {
+        return ttl;
+    }
+
+    public void setTtl(String ttl) {
+        this.ttl = ttl;
     }
 
     public void setTestPrimaryKey() {
@@ -747,6 +763,12 @@ public class BackupJob extends AbstractJob {
             // 3. save job info file
             jobInfo = BackupJobInfo.fromCatalog(createTime, label, dbName, dbId, backupMeta.getTables().values(),
                     snapshotInfos);
+
+            long finishTime = System.currentTimeMillis();
+            jobInfo.clusterId = globalStateMgr.getNodeMgr().getClusterId();
+            jobInfo.finishTime = finishTime;
+            jobInfo.ttl = Strings.emptyToNull(ttl);
+            jobInfo.expireTime = SnapshotTtl.computeExpireTime(finishTime, jobInfo.ttl);
             LOG.debug("job info: {}. {}", jobInfo, this);
             File jobInfoFile = new File(jobDir, Repository.PREFIX_JOB_INFO + createTimeStr);
             if (!jobInfoFile.createNewFile()) {

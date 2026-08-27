@@ -87,9 +87,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
 
 public class SharedDataStorageVolumeMgrTest {
     @Mocked
@@ -1663,5 +1667,236 @@ public class SharedDataStorageVolumeMgrTest {
         Assertions.assertFalse(svm.hasStorageVolumeBindAsVirtualGroup(notExistedGroupId));
 
         svm.removeStorageVolume(storageVolumeName);
+    }
+
+    // ------------------------------------------------------------------
+    // ALTER STORAGE VOLUME credential switching.
+    //
+    // ALTER merges properties into the existing set (StorageVolume.setCloudConfiguration),
+    // and AwsCloudCredential.toFileStoreInfo() picks the first match in the order
+    //   sdk_default > instance_profile > web_identity > access_key/secret_key
+    // persisting only that one credential case. The tests below pin that behavior so a
+    // change to either the merge or the ordering is caught here.
+    // ------------------------------------------------------------------
+
+    private static Map<String, String> baseParams() {
+        Map<String, String> params = new HashMap<>();
+        params.put(AWS_S3_REGION, "region");
+        params.put(AWS_S3_ENDPOINT, "endpoint");
+        params.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
+        params.put(AWS_S3_USE_INSTANCE_PROFILE, "false");
+        return params;
+    }
+
+    private static Map<String, String> webIdentityParams(String iamRoleArn, String externalId) {
+        Map<String, String> params = baseParams();
+        params.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "true");
+        if (iamRoleArn != null) {
+            params.put(AWS_S3_IAM_ROLE_ARN, iamRoleArn);
+            params.put(AWS_S3_EXTERNAL_ID, externalId);
+        }
+        return params;
+    }
+
+    private static Map<String, String> instanceProfileParams() {
+        Map<String, String> params = baseParams();
+        params.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
+        return params;
+    }
+
+    private static Map<String, String> accessKeyParams() {
+        Map<String, String> params = baseParams();
+        params.put(AWS_S3_ACCESS_KEY, "ak");
+        params.put(AWS_S3_SECRET_KEY, "sk");
+        return params;
+    }
+
+    private static StorageVolumeMgr createVolume(String svName, Map<String, String> params)
+            throws AlreadyExistsException, DdlException {
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        svm.createStorageVolume(svName, "S3", Arrays.asList("s3://abc"), params, Optional.empty(), "");
+        return svm;
+    }
+
+    /**
+     * Reads the volume back through StarOS, so the returned map is re-synthesized from the
+     * persisted credential case rather than echoed from the FE-side param map.
+     */
+    private static Map<String, String> reloadParams(StorageVolumeMgr svm, String svName) {
+        return svm.getStorageVolumeByName(svName).getProperties();
+    }
+
+    private static void alter(StorageVolumeMgr svm, String svName, Map<String, String> params)
+            throws DdlException, MetaNotFoundException {
+        svm.updateStorageVolume(svName, null, null, params, Optional.empty(), "");
+    }
+
+    @Test
+    public void testAlterWebIdentityUpdatesRoleArnAndExternalId()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_wi_update";
+        StorageVolumeMgr svm = createVolume(svName, webIdentityParams("arn:aws:iam::111:role/old", "old-ext"));
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_IAM_ROLE_ARN, "arn:aws:iam::222:role/new");
+        update.put(AWS_S3_EXTERNAL_ID, "new-ext");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        Assertions.assertEquals("arn:aws:iam::222:role/new", params.get(AWS_S3_IAM_ROLE_ARN));
+        Assertions.assertEquals("new-ext", params.get(AWS_S3_EXTERNAL_ID));
+    }
+
+    @Test
+    public void testAlterWebIdentityClearsRoleArnAndExternalId()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_wi_clear";
+        StorageVolumeMgr svm = createVolume(svName, webIdentityParams("arn:aws:iam::111:role/old", "old-ext"));
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_IAM_ROLE_ARN, "");
+        update.put(AWS_S3_EXTERNAL_ID, "");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        Assertions.assertEquals("", params.get(AWS_S3_IAM_ROLE_ARN));
+        Assertions.assertEquals("", params.get(AWS_S3_EXTERNAL_ID));
+    }
+
+    /**
+     * Setting only the lower-precedence method's properties succeeds but does not switch the
+     * credential, and the supplied properties are not persisted at all.
+     */
+    @Test
+    public void testAlterDoesNotSwitchFromWebIdentityToAccessKeyWithoutDisablingIt()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_wi_to_ak";
+        StorageVolumeMgr svm = createVolume(svName, webIdentityParams(null, null));
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_ACCESS_KEY, "ak");
+        update.put(AWS_S3_SECRET_KEY, "sk");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        Assertions.assertFalse(params.containsKey(AWS_S3_ACCESS_KEY));
+        Assertions.assertFalse(params.containsKey(AWS_S3_SECRET_KEY));
+    }
+
+    @Test
+    public void testAlterDoesNotSwitchFromInstanceProfileToWebIdentityWithoutDisablingIt()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_ip_to_wi";
+        StorageVolumeMgr svm = createVolume(svName, instanceProfileParams());
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "true");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_INSTANCE_PROFILE));
+        // The readback synthesizes "false" from the instance-profile branch, overwriting the
+        // value that was just set.
+        Assertions.assertEquals("false", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+    }
+
+    @Test
+    public void testAlterSwitchesFromWebIdentityToAccessKeyWhenDisabled()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_wi_to_ak_ok";
+        StorageVolumeMgr svm = createVolume(svName, webIdentityParams(null, null));
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
+        update.put(AWS_S3_ACCESS_KEY, "ak");
+        update.put(AWS_S3_SECRET_KEY, "sk");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("false", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        Assertions.assertEquals("ak", params.get(AWS_S3_ACCESS_KEY));
+        Assertions.assertEquals("sk", params.get(AWS_S3_SECRET_KEY));
+    }
+
+    @Test
+    public void testAlterSwitchesFromInstanceProfileToWebIdentityWhenDisabled()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_ip_to_wi_ok";
+        StorageVolumeMgr svm = createVolume(svName, instanceProfileParams());
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_USE_INSTANCE_PROFILE, "false");
+        update.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "true");
+        update.put(AWS_S3_IAM_ROLE_ARN, "arn:aws:iam::333:role/hop");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("false", params.get(AWS_S3_USE_INSTANCE_PROFILE));
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        Assertions.assertEquals("arn:aws:iam::333:role/hop", params.get(AWS_S3_IAM_ROLE_ARN));
+    }
+
+    /**
+     * Web Identity outranks Access Key and Secret Key, so enabling it is enough to switch.
+     */
+    @Test
+    public void testAlterSwitchesFromAccessKeyToWebIdentityWithSingleProperty()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_ak_to_wi";
+        StorageVolumeMgr svm = createVolume(svName, accessKeyParams());
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "true");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        Assertions.assertFalse(params.containsKey(AWS_S3_ACCESS_KEY));
+    }
+
+    /**
+     * iam_role_arn is not a use_* property, so it survives the merge and is applied to the
+     * method the volume switches to.
+     */
+    @Test
+    public void testAlterCarriesRoleArnOverToTheNewMethod()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_wi_role_residue";
+        StorageVolumeMgr svm = createVolume(svName, webIdentityParams("arn:aws:iam::444:role/leftover", "leftover-ext"));
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
+        update.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_INSTANCE_PROFILE));
+        Assertions.assertEquals("false", params.get(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE));
+        // The leftover role became the role that Instance Profile assumes.
+        Assertions.assertEquals("arn:aws:iam::444:role/leftover", params.get(AWS_S3_IAM_ROLE_ARN));
+        Assertions.assertEquals("leftover-ext", params.get(AWS_S3_EXTERNAL_ID));
+    }
+
+    @Test
+    public void testAlterClearingRoleArnAvoidsCarryOver()
+            throws AlreadyExistsException, DdlException, MetaNotFoundException {
+        String svName = "sv_wi_role_cleared";
+        StorageVolumeMgr svm = createVolume(svName, webIdentityParams("arn:aws:iam::444:role/leftover", "leftover-ext"));
+
+        Map<String, String> update = new HashMap<>();
+        update.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
+        update.put(AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, "false");
+        update.put(AWS_S3_IAM_ROLE_ARN, "");
+        update.put(AWS_S3_EXTERNAL_ID, "");
+        alter(svm, svName, update);
+
+        Map<String, String> params = reloadParams(svm, svName);
+        Assertions.assertEquals("true", params.get(AWS_S3_USE_INSTANCE_PROFILE));
+        // Instance profile without a role is stored as a profile credential, which carries no
+        // role fields at all.
+        Assertions.assertFalse(params.containsKey(AWS_S3_IAM_ROLE_ARN));
     }
 }

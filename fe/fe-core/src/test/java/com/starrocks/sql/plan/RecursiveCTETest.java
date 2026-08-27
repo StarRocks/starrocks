@@ -19,6 +19,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.recursivecte.RecursiveCTEAstCheck;
 import com.starrocks.qe.recursivecte.RecursiveCTEExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
@@ -72,6 +73,38 @@ public class RecursiveCTETest extends PlanTestBase {
                 + "FROM `test`.`cte_");
         assertContains(plan, "Outer Statement After Rewriting:\n"
                 + "SELECT `cte`.`id`, `cte`.`parent_id`");
+    }
+
+    @Test
+    public void testRecursiveCteCtasReusesInferredColumns() throws Exception {
+        String sql = "create table recursive_ctas as " +
+                "with recursive cte(s) as " +
+                "(select cast('a' as varchar(10)) " +
+                "union all select cast(concat(s, 'a') as varchar(10)) from cte where length(s) < 2) " +
+                "select s from cte";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) statement;
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+
+        RecursiveCTEExecutor executor = new RecursiveCTEExecutor(connectContext);
+        executor.splitOuterStmt(statement);
+
+        Assertions.assertEquals(1, ctas.getCreateTableStmt().getColumnDefs().size());
+        Assertions.assertEquals("varchar(10)",
+                ctas.getCreateTableStmt().getColumnDefs().get(0).getType().toSql().toLowerCase());
+    }
+
+    @Test
+    public void testRecursiveCteCtasValidatesOuterStatementBeforeSplit() {
+        String sql = "create table recursive_ctas(a, b) as " +
+                "with recursive cte(n) as " +
+                "(select 1 union all select n + 1 from cte where n < 3) " +
+                "select n from cte";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+
+        RecursiveCTEExecutor executor = new RecursiveCTEExecutor(connectContext);
+        Assertions.assertThrows(SemanticException.class, () -> executor.splitOuterStmt(statement));
     }
 
     @Test

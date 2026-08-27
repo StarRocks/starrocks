@@ -207,6 +207,7 @@ Status FlatJsonColumnCompactor::finish() {
         _subcolumn_dict_valid[sub_column_key] = sub_dict_valid;
     }
 
+    _json_meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();
 }
 

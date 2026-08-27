@@ -112,6 +112,7 @@ import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -732,6 +733,11 @@ public class OlapTable extends Table {
         }
         fullSchema = newFullSchema;
         updateSchemaIndex();
+        // The column set just changed and the cache is keyed by column NAME, so DROP COLUMN c +
+        // ADD COLUMN c would otherwise hand the new column the old one's min/max. Called on every
+        // schema-change job and on their replay; the calls from metadata load are a no-op because
+        // nothing is cached yet.
+        invalidateMinMaxStats();
         // update max column unique id
         int maxColUniqueId = getMaxColUniqueId();
         for (Column column : fullSchema) {
@@ -799,7 +805,7 @@ public class OlapTable extends Table {
             Optional<PhysicalPartition> firstPhysicalPartition = partition.getSubPartitions().stream().findFirst();
             if (firstPhysicalPartition.isPresent()) {
                 PhysicalPartition physicalPartition = firstPhysicalPartition.get();
-                return physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+                return physicalPartition.getQueryableMaterializedIndices(IndexExtState.VISIBLE);
             }
         }
         return Lists.newArrayList();
@@ -1265,12 +1271,41 @@ public class OlapTable extends Table {
         }
     }
 
+    /**
+     * Drop this table's cached column min/max values.
+     *
+     * <p>{@code ColumnMinMaxMgr} keeps them keyed by (table id, column name) and validates an entry
+     * by comparing the table-level {@code max(visibleVersionTime)} it was loaded at against the
+     * current one, accepting the entry when it is not older. Loading data is the only operation that
+     * reliably advances that stamp. DDL does not:
+     *
+     * <ul>
+     *   <li>REPLACE PARTITION and INSERT OVERWRITE move the temporary {@link Partition} object into
+     *       the formal list as it stands, so the table-level maximum goes BACKWARDS whenever that
+     *       partition was loaded before the one it replaces;</li>
+     *   <li>dropping the most recently loaded partition moves it backwards the same way;</li>
+     *   <li>RECOVER PARTITION brings data back without necessarily raising it;</li>
+     *   <li>a fast schema change does not touch partitions at all, yet DROP COLUMN c + ADD COLUMN c
+     *       gives a brand new column the previous one's cache entry, since the key is the name.</li>
+     * </ul>
+     *
+     * <p>In every one of those cases a stale entry keeps passing the version check for as long as it
+     * lives -- the cache has no TTL -- so min()/max() constant-folds to values that no longer exist.
+     * Hence the explicit invalidation, hooked into the low-level mutators below rather than into the
+     * DDL entry points: these run identically on the leader and on edit-log replay, so followers
+     * (which fold min/max from their own cache) drop the entry too.
+     */
+    private void invalidateMinMaxStats() {
+        IMinMaxStatsMgr.invalidateTable(this);
+    }
+
     public void addPartition(Partition partition) {
         idToPartition.put(partition.getId(), partition);
         nameToPartition.put(partition.getName(), partition);
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
             physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
         }
+        invalidateMinMaxStats();
     }
 
     public void removePhysicalPartition(PhysicalPartition physicalPartition) {
@@ -1303,6 +1338,7 @@ public class OlapTable extends Table {
         physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                 .stream().map(PhysicalPartition::getId)
                 .collect(Collectors.toList()));
+        invalidateMinMaxStats();
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
@@ -1697,7 +1733,7 @@ public class OlapTable extends Table {
         long rowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
-                rowCount += partition.getLatestBaseIndex().getRowCount();
+                rowCount += partition.getQueryableBaseIndex().getRowCount();
             }
         }
         return rowCount;
@@ -1901,6 +1937,10 @@ public class OlapTable extends Table {
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, dataCacheInfo);
         }
 
+        // This swaps the partition maps directly instead of going through addPartition() /
+        // removePartitionFromInnerState(), so it needs its own call.
+        invalidateMinMaxStats();
+
         return oldPartition;
     }
 
@@ -2004,7 +2044,7 @@ public class OlapTable extends Table {
         for (Partition partition : getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long version = physicalPartition.getVisibleVersion();
-                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getQueryableMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         totalCount += tablet.getRowCount(version);
                     }

@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -47,6 +48,44 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
+    }
+
+    @Test
+    public void testTimeTravelQueryIsNotRewrittenByMv() throws Exception {
+        String mvName = "mv_time_travel_guard";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                    "distributed by hash(a) " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "'replication_num' = '1'" +
+                    ") " +
+                    "as select a, b, d from iceberg0.partitioned_db.part_tbl1;");
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " with sync mode");
+
+        // Control: an ordinary read of the same table is rewritten to the MV.
+        {
+            String query = "select a, b, d from iceberg0.partitioned_db.part_tbl1";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, mvName);
+        }
+
+        // A time-travel read targets a snapshot the MV knows nothing about: the MV materializes the
+        // table's state as of its last refresh, so it must not answer the query. See StarRocksTest#11377.
+        // The plan helper wraps each query in a CREATE VIEW to check view compatibility, which
+        // AnalyzerUtils#prohibitTimeTravelQuery rejects by design, so skip that wrapper here.
+        boolean savedUnitTestView = FeConstants.unitTestView;
+        FeConstants.unitTestView = false;
+        try {
+            // A bigint literal: snapshot ids are bigints, and a small literal would parse as tinyint.
+            String query = "select a, b, d from iceberg0.partitioned_db.part_tbl1 FOR VERSION AS OF 1000000000000";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, mvName);
+            PlanTestBase.assertContains(plan, "IcebergScanNode");
+        } finally {
+            FeConstants.unitTestView = savedUnitTestView;
+        }
+
+        starRocksAssert.dropMaterializedView(mvName);
     }
 
     @Test

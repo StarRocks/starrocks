@@ -60,6 +60,7 @@ set(EXEC_FILES
         ./exec/hdfs_scan_node_test.cpp
         ./exec/lake_meta_scanner_test.cpp
         ./exec/repeat_node_test.cpp
+        ./exec/set_hash_set_test.cpp
         ./exec/sorting_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
@@ -158,6 +159,7 @@ set(EXEC_FILES
 if (NOT APPLE)
     list(APPEND EXEC_FILES
         ./gutil/sysinfo-test.cc
+        ./service/lake_service_parent_view_test.cpp
         ./service/lake_service_test.cpp
     )
 endif ()
@@ -280,6 +282,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
+    ./storage/lake/lake_primary_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
@@ -305,6 +308,7 @@ SET(DW_TEST_FILES
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp
     ./storage/lake/tablet_manager_test.cpp
+    ./storage/lake/cross_publish_context_test.cpp
     ./storage/lake/tablet_range_helper_test.cpp
     ./storage/lake/sst_seek_range_test.cpp
     ./storage/lake/tablet_parallel_compaction_manager_test.cpp
@@ -373,6 +377,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_test.cpp
+    ./storage/rowset/segment_writer_short_key_encode_test.cpp
     ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
     ./storage/rowset/series_column_iterator_test.cpp
     ./storage/rowset/struct_column_rw_test.cpp
@@ -424,6 +429,7 @@ SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-co
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
 add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
 TARGET_LINK_LIBRARIES(starrocks_dw_test SchemaScannerBuiltin ${TEST_LINK_LIBS})
+target_link_be_test_cxa_throw_wrap(starrocks_dw_test)
 STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test ${EXPR_FORCE_LOAD_LIBS})
 
 
@@ -437,6 +443,15 @@ ADD_BE_TEST(storage/lake/compaction_task_test)
 if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
+
+# paimon-cpp smoke test, a standalone binary that exists only with
+# --with-paimon-cpp, so starrocks_test never depends on libpaimon.so.
+# The paimon include path comes from the imported `paimon` target, so other
+# test sources cannot include paimon headers.
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
+    ADD_BE_TEST(connector/paimon/paimon_cpp_test)
+    target_link_libraries(paimon_cpp_test paimon)
+endif ()
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/sorting_test)

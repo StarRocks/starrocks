@@ -504,14 +504,6 @@ struct EncoderVisitor : public ColumnVisitorAdapter<EncoderVisitor> {
         return status;
     }
 
-    // Const: forward to data
-    Status do_visit(const ConstColumn& column) {
-        for (size_t i = 0; i < column.size(); i++) {
-            RETURN_IF_ERROR(column.data_column()->accept(this));
-        }
-        return Status::OK();
-    }
-
     // Strings/binary
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
@@ -600,6 +592,14 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     size_t num_rows = columns[0]->size();
     auto result = ColumnBuilder<TYPE_VARBINARY>(num_rows);
 
+    // The visitor writes one buffer per row while a ConstColumn's data column holds a single element, so a
+    // constant argument has to become a per-row column first -- otherwise only row 0 receives that key.
+    Columns key_columns;
+    key_columns.reserve(num_args);
+    for (const auto& column : columns) {
+        key_columns.emplace_back(ColumnHelper::unpack_and_duplicate_const_column(num_rows, column));
+    }
+
     std::vector<std::string> buffs(num_rows);
     detail::EncoderVisitor visitor;
     visitor.buffs = &buffs;
@@ -610,13 +610,13 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
         // For example, a nullable column that contains no null values may be converted
         // to a non-nullable column during processing. To ensure consistency in the sort key
         // encoding, we explicitly add NOT_NULL markers for every row.
-        if (!columns[j]->is_nullable()) {
+        if (!key_columns[j]->is_nullable()) {
             for (auto& buff : buffs) {
                 buff.append(NOT_NULL_MARKER, 1);
             }
         }
         visitor.is_last_field = (j + 1 == num_args);
-        RETURN_IF_ERROR(columns[j]->accept(&visitor));
+        RETURN_IF_ERROR(key_columns[j]->accept(&visitor));
 
         // Add a separator between each column
         if (j < num_args - 1) {

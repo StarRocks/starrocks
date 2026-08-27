@@ -1036,24 +1036,21 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage) {
         order[i] = (static_cast<uint64_t>(1) << 32) | i;
     }
 
+    // Build the same map on the side and measure it the way the writer does -- the btree's own
+    // bytes_used() plus the heap owned by the non-SSO keys.
     struct ExpectedEntry {
         uint64_t order;
         uint32_t rowid;
     };
-    using ExpectedMapValue = std::pair<const std::string, ExpectedEntry>;
-    using ExpectedMapAllocator = STLCountingAllocator<ExpectedMapValue>;
-    using ExpectedMap = phmap::btree_map<std::string, ExpectedEntry, std::less<>, ExpectedMapAllocator>;
-    int64_t expected_map_node_bytes = 0;
-    ExpectedMap expected_map{std::less<>(), ExpectedMapAllocator(&expected_map_node_bytes)};
+    phmap::btree_map<std::string, ExpectedEntry, std::less<>> expected_map;
     size_t expected_keys_heap_size = 0;
     for (uint32_t i = 0; i < encoded_keys.size(); ++i) {
         auto [it, inserted] = expected_map.emplace(encoded_keys[i], ExpectedEntry{order[i], i});
         ASSERT_TRUE(inserted);
         expected_keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
     }
-    EXPECT_EQ(expected_map.bytes_used(), sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes));
-    const size_t expected_map_usage =
-            sizeof(expected_map) + static_cast<size_t>(expected_map_node_bytes) + expected_keys_heap_size;
+    ASSERT_GT(expected_keys_heap_size, 0);
+    const size_t expected_map_usage = expected_keys_heap_size + expected_map.bytes_used();
 
     ASSERT_OK(w->append_sst_record(chunk, &order));
     EXPECT_EQ(expected_map_usage, w->memory_usage());
@@ -1083,6 +1080,68 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage) {
     EXPECT_LT(spill_writer->memory_usage(), expected_map_usage);
     ASSIGN_OR_ABORT(auto spill_flush_result, spill_writer->flush_sst_writer());
     EXPECT_FALSE(spill_flush_result.first.path.empty());
+}
+
+TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage_across_spills) {
+    // A segment is many fill -> spill -> refill rounds, and the reading has to come all the way back
+    // down on every spill. An accounting that leaves a residual behind bakes it into every later
+    // reading: too small a reading spills late (unbounded writer memory), and a residual large enough
+    // to swamp the bound pins is_map_full() at true and spills one tiny intermediate SST per chunk for
+    // the rest of the segment. Measuring the live map cannot drift, and this test locks that in.
+    const int64_t tablet_id = _tablet_metadata->id();
+    auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
+    constexpr int kRounds = 5;
+    constexpr int kRowsPerRound = 64;
+
+    // Fixed-width keys, long enough not to fit in the string's SSO buffer, and distinct across rounds
+    // so no round produces dedup losers. Every round therefore has the exact same footprint.
+    auto round_chunk = [&](int round) {
+        std::vector<std::pair<std::string, int>> rows;
+        rows.reserve(kRowsPerRound);
+        for (int i = 0; i < kRowsPerRound; ++i) {
+            rows.emplace_back(fmt::format("unsort_spill_key_{:0>24d}", round * kRowsPerRound + i), i);
+        }
+        return make_kv_chunk(_schema, rows);
+    };
+    auto round_order = [&](int round) {
+        std::vector<uint64_t> order(kRowsPerRound);
+        for (uint32_t i = 0; i < kRowsPerRound; ++i) {
+            order[i] = (static_cast<uint64_t>(round + 1) << 32) | i;
+        }
+        return order;
+    };
+
+    // Measure the empty and the one-round footprint with spilling effectively disabled.
+    size_t empty_usage = 0;
+    size_t one_round_usage = 0;
+    {
+        ConfigResetGuard<int64_t> no_spill_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+        auto probe = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+        ASSERT_OK(probe->reset_sst_writer(lp, _fs));
+        empty_usage = probe->memory_usage();
+        auto chunk = round_chunk(0);
+        auto order = round_order(0);
+        ASSERT_OK(probe->append_sst_record(chunk, &order));
+        one_round_usage = probe->memory_usage();
+        ASSERT_GT(one_round_usage, empty_usage);
+        ASSERT_OK(probe->flush_sst_writer().status());
+    }
+
+    // One round now reaches the bound exactly, so every round fills the map and spills it.
+    ConfigResetGuard<int64_t> spill_guard(&config::l0_max_mem_usage, static_cast<int64_t>(one_round_usage));
+    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    ASSERT_OK(w->reset_sst_writer(lp, _fs));
+    for (int round = 0; round < kRounds; ++round) {
+        auto chunk = round_chunk(round);
+        auto order = round_order(round);
+        ASSERT_OK(w->append_sst_record(chunk, &order));
+        // The append spilled, so the map is empty again and the writer is back to owning nothing but
+        // the empty map -- the same reading as before the very first append, round after round.
+        EXPECT_EQ(empty_usage, w->memory_usage()) << "after round " << round;
+    }
+    ASSIGN_OR_ABORT(auto flush_result, w->flush_sst_writer());
+    EXPECT_FALSE(flush_result.first.path.empty());
+    EXPECT_TRUE(w->take_deleted_rowids().empty());
 }
 
 TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_basic_no_dup) {

@@ -210,6 +210,8 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 option(WITH_TENANN "Build with TENANN" OFF)
 
+option(WITH_PAIMON_CPP "Build with paimon-cpp" OFF)
+
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 if (${WITH_TENANN} STREQUAL "ON")
@@ -931,10 +933,12 @@ set (TEST_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+# Several benches assert with gtest macros, so benchmarks need gtest just like tests do.
 set (BENCH_LINK_LIBS
     ${STARROCKS_LINK_LIBS}
     ${WL_START_GROUP}
     ${DIRECT_CONNECTOR_LINK_LIBS}
+    gtest
     ${WL_END_GROUP}
 )
 

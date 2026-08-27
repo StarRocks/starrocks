@@ -303,7 +303,7 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                            std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
-                           std::shared_ptr<const TabletSchema> tablet_schema)
+                           std::shared_ptr<const TabletSchema> tablet_schema, RowSourceMaskBuffer* selection_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
@@ -312,7 +312,8 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
           _is_key(is_key),
-          _mask_buffer(mask_buffer) {
+          _mask_buffer(mask_buffer),
+          _selection_buffer(selection_buffer) {
     DCHECK(_mask_buffer);
 }
 
@@ -559,6 +560,12 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
         return Status::EndOfFile("split morsel");
     }
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
+    if (_is_key && _selection_buffer != nullptr && source_masks->empty() && chunk->num_rows() > 0) {
+        // A one-child heap merge returns the child iterator directly, which does not
+        // produce source masks. UNSHARE still needs one mask per physical row so value
+        // groups can replay the selection stream.
+        source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{0, false});
+    }
     return Status::OK();
 }
 
@@ -566,6 +573,9 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
                                  std::vector<uint64_t>* rssid_rowids) {
     DCHECK(_is_vertical_merge);
     RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
+    if (_is_key && _selection_buffer != nullptr && source_masks->empty() && chunk->num_rows() > 0) {
+        source_masks->insert(source_masks->end(), chunk->num_rows(), RowSourceMask{0, false});
+    }
     return Status::OK();
 }
 
@@ -1117,7 +1127,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         // SegmentIterator  ...    SegmentIterator
         //
         if (_is_vertical_merge && !_is_key) {
-            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
         } else {
             _collect_iter = new_heap_merge_iterator(
                     seg_iters,
@@ -1178,7 +1188,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "Aggr");
 
             if (_is_vertical_merge && !_is_key) {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
             } else {
                 _collect_iter = new_heap_merge_iterator(seg_iters);
             }
@@ -1191,7 +1201,7 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
             if (_is_vertical_merge && !_is_key) {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _selection_buffer);
             } else {
                 _collect_iter = new_heap_merge_iterator(seg_iters);
             }

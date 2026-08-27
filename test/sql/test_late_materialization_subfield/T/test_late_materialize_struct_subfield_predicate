@@ -1,0 +1,40 @@
+-- name: test_late_materialize_struct_subfield_predicate
+CREATE TABLE src (
+  v1 bigint,
+  str string,
+  s1 struct<s1 int>
+) DUPLICATE KEY(v1)
+DISTRIBUTED BY HASH(v1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+insert into src values (1,'aa',named_struct('s1',1)),(2,'bb',named_struct('s1',1)),(3,'cc',named_struct('s1',1)),(4,'dd',named_struct('s1',1)),(5,'ee',named_struct('s1',1)),(6,'ff',named_struct('s1',1)),(7,'gg',named_struct('s1',1)),(8,'hh',named_struct('s1',1)),(9,'ii',named_struct('s1',1)),(10,'jj',named_struct('s1',1));
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+insert into src select * from src;
+CREATE TABLE scs (
+  v1 bigint,
+  str string,
+  s1 struct<s1 int>
+) DUPLICATE KEY(v1)
+DISTRIBUTED BY HASH(v1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- write every row in one statement: the scan reads the subfield predicate column by rowid only
+-- when the rows sit in one rowset, so loading them in twelve doubling steps does not exercise it
+insert into scs select * from src;
+select count(*) from scs;
+-- a predicate on a low-cardinality string column plus one on a struct subfield leaves the subfield
+-- column to be read by rowid as the second predicate column of the late-materialization order
+select v1 from scs where str = 'dd' and s1.s1 >= 1 order by v1 limit 3;
+select v1 from scs where str = 'dd' and s1.s1 >= 2 order by v1 limit 3;
+-- each predicate alone reads the column through the ordinary path
+select v1 from scs where str = 'dd' order by v1 limit 3;
+select v1 from scs where s1.s1 >= 1 order by v1 limit 3;
+select count(*) from scs where str = 'dd' and s1.s1 >= 1;

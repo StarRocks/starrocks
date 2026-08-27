@@ -140,6 +140,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/fluss-reader-lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
+                            <includeScope>runtime</includeScope>
                         </configuration>
                     </execution>
                 </executions>

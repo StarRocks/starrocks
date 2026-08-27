@@ -16,6 +16,7 @@
 
 #include <functional>
 
+#include "storage/lake/cross_publish_context.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/rowset_column_update_state.h"
@@ -76,6 +77,8 @@ private:
     // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
     RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
+    // Only a SPLIT child's cross publish builds one. Outlives the SegmentPKIterators that reference it.
+    CrossPublishRowSelectorPtr _row_selector;
     int64_t _upt_memory_usage_per_row = 0;
 };
 

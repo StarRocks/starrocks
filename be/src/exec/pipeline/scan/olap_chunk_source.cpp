@@ -320,6 +320,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
         }
         _params.vector_search_option->vector_range = vector_options.vector_range;
+        _params.vector_search_option->has_vector_range = vector_options.__isset.has_vector_range
+                                                                 ? vector_options.has_vector_range
+                                                                 : vector_options.vector_range >= 0;
         _params.vector_search_option->result_order = vector_options.result_order;
         _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
@@ -371,8 +374,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     }
 
     // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
-    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
-    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // candidate. Preserve that fact so the vector filter resolver can apply the configured underfill
+    // fallback policy. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
     // operator placed ABOVE this scan in the execution tree (e.g. a SELECT for a residual the optimizer
     // could not push down, such as cat+tag>50) -- detected by FragmentExecutor's tree walk. See design §7.
     _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
