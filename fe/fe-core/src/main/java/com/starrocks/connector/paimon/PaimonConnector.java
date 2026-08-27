@@ -169,6 +169,11 @@ public class PaimonConnector implements Connector {
             // snapshot/schema revisions; privilege wrapper stays outside, as in createCatalog.
             Catalog unwrapped = CatalogFactory.createUnwrappedCatalog(context,
                     CatalogFactory.class.getClassLoader());
+            if (!getPaimonOptions().get(CatalogOptions.CACHE_ENABLED)) {
+                // no cache layer, hence nothing for the background refresh to track
+                this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(unwrapped, getPaimonOptions());
+                return paimonNativeCatalog;
+            }
             CachingPaimonCatalog cachingCatalog =
                     new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions());
             this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
