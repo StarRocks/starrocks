@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive/paimon/paimon_evaluator.h"
+#include "connector/hive/paimon/paimon_predicate_converter.h"
 
 #include <gtest/gtest.h>
 #include <paimon/predicate/leaf_predicate.h>
@@ -95,11 +95,11 @@ std::shared_ptr<paimon::LeafPredicate> as_leaf_predicate(const std::shared_ptr<p
 
 } // namespace
 
-TEST(PaimonEvaluatorTest, SkipsPredicateWithNonSlotRefLeftOperand) {
+TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonSlotRefLeftOperand) {
     SlotDescriptor worldcode_id(1, "worldcode_id", TypeDescriptor(TYPE_VARCHAR));
     SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
     SlotDescriptor score(10, "_INDEX_SCORE", TypeDescriptor(TYPE_FLOAT));
-    PaimonEvaluator evaluator({&worldcode_id, &isolation, &score});
+    PaimonPredicateConverter converter({&worldcode_id, &isolation, &score});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::BOOLEAN));
     TestExpr coalesce(create_function_node(TPrimitiveType::BOOLEAN));
@@ -108,12 +108,12 @@ TEST(PaimonEvaluatorTest, SkipsPredicateWithNonSlotRefLeftOperand) {
     predicate.add_child(&false_literal);
 
     std::vector<Expr*> conjuncts{&predicate};
-    EXPECT_EQ(nullptr, evaluator.evaluate(&conjuncts));
+    EXPECT_EQ(nullptr, converter.convert(&conjuncts));
 }
 
-TEST(PaimonEvaluatorTest, ConvertsBooleanLiteralToPaimonBoolean) {
+TEST(PaimonPredicateConverterTest, ConvertsBooleanLiteralToPaimonBoolean) {
     SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
-    PaimonEvaluator evaluator({&isolation});
+    PaimonPredicateConverter converter({&isolation});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::BOOLEAN));
     ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
@@ -122,7 +122,7 @@ TEST(PaimonEvaluatorTest, ConvertsBooleanLiteralToPaimonBoolean) {
     predicate.add_child(&false_literal);
 
     std::vector<Expr*> conjuncts{&predicate};
-    auto leaf = as_leaf_predicate(evaluator.evaluate(&conjuncts));
+    auto leaf = as_leaf_predicate(converter.convert(&conjuncts));
     ASSERT_NE(nullptr, leaf);
     EXPECT_EQ("isolation", leaf->FieldName());
     EXPECT_EQ(paimon::FieldType::BOOLEAN, leaf->GetFieldType());
@@ -131,9 +131,9 @@ TEST(PaimonEvaluatorTest, ConvertsBooleanLiteralToPaimonBoolean) {
     EXPECT_FALSE(leaf->Literals()[0].GetValue<bool>());
 }
 
-TEST(PaimonEvaluatorTest, KeepsTinyintLiteralAsPaimonTinyint) {
+TEST(PaimonPredicateConverterTest, KeepsTinyintLiteralAsPaimonTinyint) {
     SlotDescriptor tinyint_slot(8, "tinyint_col", TypeDescriptor(TYPE_TINYINT));
-    PaimonEvaluator evaluator({&tinyint_slot});
+    PaimonPredicateConverter converter({&tinyint_slot});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::TINYINT));
     ColumnRef tinyint_ref(TypeDescriptor(TYPE_TINYINT), tinyint_slot.id());
@@ -142,7 +142,7 @@ TEST(PaimonEvaluatorTest, KeepsTinyintLiteralAsPaimonTinyint) {
     predicate.add_child(&tinyint_literal);
 
     std::vector<Expr*> conjuncts{&predicate};
-    auto leaf = as_leaf_predicate(evaluator.evaluate(&conjuncts));
+    auto leaf = as_leaf_predicate(converter.convert(&conjuncts));
     ASSERT_NE(nullptr, leaf);
     EXPECT_EQ(paimon::FieldType::TINYINT, leaf->GetFieldType());
     ASSERT_EQ(1, leaf->Literals().size());
@@ -150,9 +150,9 @@ TEST(PaimonEvaluatorTest, KeepsTinyintLiteralAsPaimonTinyint) {
     EXPECT_EQ(-1, leaf->Literals()[0].GetValue<int8_t>());
 }
 
-TEST(PaimonEvaluatorTest, SkipsPredicateWithNonLiteralRightOperand) {
+TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonLiteralRightOperand) {
     SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
-    PaimonEvaluator evaluator({&isolation});
+    PaimonPredicateConverter converter({&isolation});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::BOOLEAN));
     ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
@@ -161,12 +161,12 @@ TEST(PaimonEvaluatorTest, SkipsPredicateWithNonLiteralRightOperand) {
     predicate.add_child(&function_result);
 
     std::vector<Expr*> conjuncts{&predicate};
-    EXPECT_EQ(nullptr, evaluator.evaluate(&conjuncts));
+    EXPECT_EQ(nullptr, converter.convert(&conjuncts));
 }
 
-TEST(PaimonEvaluatorTest, SkipsInPredicateWithNonLiteralOperand) {
+TEST(PaimonPredicateConverterTest, SkipsInPredicateWithNonLiteralOperand) {
     SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
-    PaimonEvaluator evaluator({&isolation});
+    PaimonPredicateConverter converter({&isolation});
 
     TestExpr predicate(create_in_predicate_node(TPrimitiveType::BOOLEAN));
     ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
@@ -175,7 +175,7 @@ TEST(PaimonEvaluatorTest, SkipsInPredicateWithNonLiteralOperand) {
     predicate.add_child(&function_result);
 
     std::vector<Expr*> conjuncts{&predicate};
-    EXPECT_EQ(nullptr, evaluator.evaluate(&conjuncts));
+    EXPECT_EQ(nullptr, converter.convert(&conjuncts));
 }
 
 } // namespace starrocks

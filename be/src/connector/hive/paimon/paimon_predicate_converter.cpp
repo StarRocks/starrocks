@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "connector/hive/paimon/paimon_evaluator.h"
+#include "connector/hive/paimon/paimon_predicate_converter.h"
 
 #include <paimon/predicate/literal.h>
 
@@ -25,23 +25,23 @@
 
 namespace starrocks {
 
-PaimonEvaluator::PaimonEvaluator(const std::vector<SlotDescriptor*>& slots) : slots(slots) {}
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate(const std::vector<Expr*>* conjuncts) {
+PaimonPredicateConverter::PaimonPredicateConverter(const std::vector<SlotDescriptor*>& slots) : _slots(slots) {}
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert(const std::vector<Expr*>* conjuncts) {
     if (VLOG_ROW_IS_ON) {
-        VLOG(10) << "PaimonEvaluator evaluating " << conjuncts->size() << " conjuncts";
+        VLOG(10) << "PaimonPredicateConverter evaluating " << conjuncts->size() << " conjuncts";
         for (size_t i = 0; i < conjuncts->size(); ++i) {
             VLOG(10) << "Conjunct " << i << ": " << (*conjuncts)[i]->debug_string();
         }
     }
-    auto result = evaluate_compound(TExprOpcode::type::COMPOUND_AND, conjuncts, false);
+    auto result = convert_compound(TExprOpcode::type::COMPOUND_AND, conjuncts, false);
 
     if (VLOG_ROW_IS_ON) {
-        VLOG(10) << "PaimonEvaluator result: " << (result ? "predicate created" : "null predicate");
+        VLOG(10) << "PaimonPredicateConverter result: " << (result ? "predicate created" : "null predicate");
     }
     return result;
 }
 
-std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* conjunct, bool neg) {
+std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks::Expr* conjunct, bool neg) {
     const TExprNodeType::type& node_type = conjunct->node_type();
     if (node_type == TExprNodeType::type::RUNTIME_FILTER_MIN_MAX_EXPR) {
         return nullptr;
@@ -51,11 +51,11 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* 
 
     if (node_type == TExprNodeType::type::COMPOUND_PRED) {
         if (op_type == TExprOpcode::COMPOUND_AND || op_type == TExprOpcode::COMPOUND_OR) {
-            return evaluate_compound(op_type, &conjunct->children(), neg);
+            return convert_compound(op_type, &conjunct->children(), neg);
         }
         if (op_type == TExprOpcode::COMPOUND_NOT) {
             DCHECK(conjunct->children().size() == 1);
-            return evaluate(conjunct->get_child(0), !neg);
+            return convert(conjunct->get_child(0), !neg);
         }
     }
 
@@ -63,13 +63,13 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* 
     if (node_type == TExprNodeType::type::SLOT_REF) {
         auto* ref = down_cast<const ColumnRef*>(conjunct);
         DCHECK(conjunct->type().type == LogicalType::TYPE_BOOLEAN);
-        for (size_t i = 0; i < slots.size(); ++i) {
-            SlotDescriptor* slot = slots[i];
+        for (size_t i = 0; i < _slots.size(); ++i) {
+            SlotDescriptor* slot = _slots[i];
             if (slot->id() == ref->slot_id()) {
                 if (!_ok_to_paimon_type(slot->type())) {
                     break;
                 }
-                return evaluate_equal(i, std::string(slot->col_name()), translate_to_paimon_type(slot->type()),
+                return convert_equal(i, std::string(slot->col_name()), translate_to_paimon_type(slot->type()),
                                       ::paimon::Literal(true), neg);
             }
         }
@@ -83,8 +83,8 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* 
     Expr* left = conjunct->get_child(0);
     DCHECK(left->is_slotref());
     auto* ref = down_cast<const ColumnRef*>(left);
-    for (size_t i = 0; i < slots.size(); ++i) {
-        SlotDescriptor* slot = slots[i];
+    for (size_t i = 0; i < _slots.size(); ++i) {
+        SlotDescriptor* slot = _slots[i];
         if (slot->id() == ref->slot_id()) {
             if (!_ok_to_paimon_type(slot->type())) {
                 break;
@@ -95,11 +95,11 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* 
                 std::string null_function_name;
                 if (conjunct->is_null_scalar_function(null_function_name)) {
                     if (null_function_name == "null") {
-                        VLOG(10) << "evaluate IS_NULL " << fieldName;
-                        return evaluate_null(i, fieldName, fieldType, neg);
+                        VLOG(10) << "convert IS_NULL " << fieldName;
+                        return convert_null(i, fieldName, fieldType, neg);
                     } else if (null_function_name == "not null") {
-                        VLOG(10) << "evaluate IS_NOT_NULL " << fieldName;
-                        return evaluate_null(i, fieldName, fieldType, !neg);
+                        VLOG(10) << "convert IS_NOT_NULL " << fieldName;
+                        return convert_null(i, fieldName, fieldType, !neg);
                     }
                 }
             }
@@ -110,17 +110,17 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* 
                     switch (op_type) {
                     case TExprOpcode::EQ:
                     case TExprOpcode::EQ_FOR_NULL:
-                        return evaluate_equal(i, fieldName, fieldType, literal, neg);
+                        return convert_equal(i, fieldName, fieldType, literal, neg);
                     case TExprOpcode::NE:
-                        return evaluate_equal(i, fieldName, fieldType, literal, !neg);
+                        return convert_equal(i, fieldName, fieldType, literal, !neg);
                     case TExprOpcode::LE:
-                        return evaluate_le(i, fieldName, fieldType, literal, neg);
+                        return convert_le(i, fieldName, fieldType, literal, neg);
                     case TExprOpcode::LT:
-                        return evaluate_lt(i, fieldName, fieldType, literal, neg);
+                        return convert_lt(i, fieldName, fieldType, literal, neg);
                     case TExprOpcode::GE:
-                        return evaluate_ge(i, fieldName, fieldType, literal, neg);
+                        return convert_ge(i, fieldName, fieldType, literal, neg);
                     case TExprOpcode::GT:
-                        return evaluate_gt(i, fieldName, fieldType, literal, neg);
+                        return convert_gt(i, fieldName, fieldType, literal, neg);
                     default:
                         break;
                     }
@@ -129,7 +129,7 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* 
             if (node_type == TExprNodeType::IN_PRED && conjunct->get_num_children() > 1) {
                 std::vector<::paimon::Literal> literals;
                 translate_to_paimon_in_list_literals(conjunct, literals);
-                return evaluate_in(i, fieldName, fieldType, literals, (op_type == TExprOpcode::FILTER_NOT_IN) ^ neg);
+                return convert_in(i, fieldName, fieldType, literals, (op_type == TExprOpcode::FILTER_NOT_IN) ^ neg);
             }
         }
     }
@@ -137,12 +137,12 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate(starrocks::Expr* 
     return nullptr;
 }
 
-std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate_compound(TExprOpcode::type op_type,
+std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert_compound(TExprOpcode::type op_type,
                                                                         const std::vector<Expr*>* children, bool neg) {
     std::vector<std::shared_ptr<::paimon::Predicate>> predicates;
     predicates.reserve(children->size());
     for (const auto& item : *children) {
-        auto predicate = evaluate(item, neg);
+        auto predicate = convert(item, neg);
         if (neg ^ (op_type == TExprOpcode::type::COMPOUND_AND)) {
             if (predicate != nullptr) {
                 predicates.push_back(predicate);
@@ -167,56 +167,64 @@ std::shared_ptr<::paimon::Predicate> PaimonEvaluator::evaluate_compound(TExprOpc
     return ret.value();
 }
 
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate_null(int32_t field_index, const std::string& field_name,
-                                                                  const paimon::FieldType& fieldType, bool neg) {
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_null(int32_t field_index,
+                                                                          const std::string& field_name,
+                                                                          const paimon::FieldType& fieldType,
+                                                                          bool neg) {
     return neg ? ::paimon::PredicateBuilder::IsNotNull(field_index, field_name, fieldType)
                : ::paimon::PredicateBuilder::IsNull(field_index, field_name, fieldType);
 }
 
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate_equal(int32_t field_index, const std::string& field_name,
-                                                                   const paimon::FieldType& fieldType,
-                                                                   const paimon::Literal& literal, bool neg) {
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_equal(int32_t field_index,
+                                                                           const std::string& field_name,
+                                                                           const paimon::FieldType& fieldType,
+                                                                           const paimon::Literal& literal, bool neg) {
     return neg ? ::paimon::PredicateBuilder::NotEqual(field_index, field_name, fieldType, literal)
                : ::paimon::PredicateBuilder::Equal(field_index, field_name, fieldType, literal);
 }
 
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate_le(int32_t field_index, const std::string& field_name,
-                                                                const paimon::FieldType& fieldType,
-                                                                const paimon::Literal& literal, bool neg) {
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_le(int32_t field_index,
+                                                                        const std::string& field_name,
+                                                                        const paimon::FieldType& fieldType,
+                                                                        const paimon::Literal& literal, bool neg) {
     return neg ? ::paimon::PredicateBuilder::GreaterThan(field_index, field_name, fieldType, literal)
                : ::paimon::PredicateBuilder::LessOrEqual(field_index, field_name, fieldType, literal);
 }
 
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate_lt(int32_t field_index, const std::string& field_name,
-                                                                const paimon::FieldType& fieldType,
-                                                                const paimon::Literal& literal, bool neg) {
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_lt(int32_t field_index,
+                                                                        const std::string& field_name,
+                                                                        const paimon::FieldType& fieldType,
+                                                                        const paimon::Literal& literal, bool neg) {
     return neg ? ::paimon::PredicateBuilder::GreaterOrEqual(field_index, field_name, fieldType, literal)
                : ::paimon::PredicateBuilder::LessThan(field_index, field_name, fieldType, literal);
 }
 
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate_ge(int32_t field_index, const std::string& field_name,
-                                                                const paimon::FieldType& fieldType,
-                                                                const paimon::Literal& literal, bool neg) {
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_ge(int32_t field_index,
+                                                                        const std::string& field_name,
+                                                                        const paimon::FieldType& fieldType,
+                                                                        const paimon::Literal& literal, bool neg) {
     return neg ? ::paimon::PredicateBuilder::LessThan(field_index, field_name, fieldType, literal)
                : ::paimon::PredicateBuilder::GreaterOrEqual(field_index, field_name, fieldType, literal);
 }
 
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate_gt(int32_t field_index, const std::string& field_name,
-                                                                const paimon::FieldType& fieldType,
-                                                                const paimon::Literal& literal, bool neg) {
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_gt(int32_t field_index,
+                                                                        const std::string& field_name,
+                                                                        const paimon::FieldType& fieldType,
+                                                                        const paimon::Literal& literal, bool neg) {
     return neg ? ::paimon::PredicateBuilder::LessOrEqual(field_index, field_name, fieldType, literal)
                : ::paimon::PredicateBuilder::GreaterThan(field_index, field_name, fieldType, literal);
 }
 
-std::shared_ptr<paimon::Predicate> PaimonEvaluator::evaluate_in(int32_t field_index, const std::string& field_name,
-                                                                const ::paimon::FieldType& fieldType,
-                                                                const std::vector<::paimon::Literal>& literals,
-                                                                bool neg) {
+std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_in(int32_t field_index,
+                                                                        const std::string& field_name,
+                                                                        const ::paimon::FieldType& fieldType,
+                                                                        const std::vector<::paimon::Literal>& literals,
+                                                                        bool neg) {
     return neg ? ::paimon::PredicateBuilder::NotIn(field_index, field_name, fieldType, literals)
                : ::paimon::PredicateBuilder::In(field_index, field_name, fieldType, literals);
 }
 
-bool PaimonEvaluator::_ok_to_paimon_literal(starrocks::Expr* lit) {
+bool PaimonPredicateConverter::_ok_to_paimon_literal(starrocks::Expr* lit) {
     TExprNodeType::type node_type = lit->node_type();
     LogicalType ltype = lit->type().type;
     if (node_type == TExprNodeType::type::NULL_LITERAL) {
@@ -240,7 +248,7 @@ bool PaimonEvaluator::_ok_to_paimon_literal(starrocks::Expr* lit) {
 
 // Literal support BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, STRING, BINARY,
 // TIMESTAMP, DECIMAL, DATE
-paimon::Literal PaimonEvaluator::translate_to_paimon_literal(starrocks::Expr* lit) {
+paimon::Literal PaimonPredicateConverter::translate_to_paimon_literal(starrocks::Expr* lit) {
     TExprNodeType::type node_type = lit->node_type();
     if (node_type == TExprNodeType::type::NULL_LITERAL) {
         return ::paimon::Literal(paimon::FieldType::BOOLEAN);
@@ -278,7 +286,7 @@ paimon::Literal PaimonEvaluator::translate_to_paimon_literal(starrocks::Expr* li
     }
 }
 
-bool PaimonEvaluator::_ok_to_paimon_type(const starrocks::TypeDescriptor& type) {
+bool PaimonPredicateConverter::_ok_to_paimon_type(const starrocks::TypeDescriptor& type) {
     LogicalType ltype = type.type;
     switch (ltype) {
     case LogicalType::TYPE_BOOLEAN:
@@ -296,7 +304,7 @@ bool PaimonEvaluator::_ok_to_paimon_type(const starrocks::TypeDescriptor& type) 
     }
 }
 
-::paimon::FieldType PaimonEvaluator::translate_to_paimon_type(const starrocks::TypeDescriptor& type) {
+::paimon::FieldType PaimonPredicateConverter::translate_to_paimon_type(const starrocks::TypeDescriptor& type) {
     LogicalType ltype = type.type;
     switch (ltype) {
     case LogicalType::TYPE_BOOLEAN:
@@ -323,7 +331,7 @@ bool PaimonEvaluator::_ok_to_paimon_type(const starrocks::TypeDescriptor& type) 
     }
 }
 
-void PaimonEvaluator::translate_to_paimon_in_list_literals(starrocks::Expr* in_list_expr,
+void PaimonPredicateConverter::translate_to_paimon_in_list_literals(starrocks::Expr* in_list_expr,
                                                            std::vector<::paimon::Literal>& ret) {
     for (int i = 1; i < in_list_expr->get_num_children(); i++) {
         ret.emplace_back(translate_to_paimon_literal(in_list_expr->get_child(i)));

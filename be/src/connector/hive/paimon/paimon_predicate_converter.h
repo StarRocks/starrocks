@@ -20,34 +20,34 @@
 namespace starrocks {
 class SlotDescriptor;
 
-class PaimonEvaluator {
+class PaimonPredicateConverter {
 public:
-    PaimonEvaluator(const std::vector<SlotDescriptor*>& slots);
-    ~PaimonEvaluator() = default;
-    std::shared_ptr<paimon::Predicate> evaluate(const std::vector<Expr*>* conjuncts);
+    explicit PaimonPredicateConverter(const std::vector<SlotDescriptor*>& slots);
+    ~PaimonPredicateConverter() = default;
+    std::shared_ptr<paimon::Predicate> convert(const std::vector<Expr*>* conjuncts);
 
 private:
-    std::shared_ptr<paimon::Predicate> evaluate(Expr* conjunct, bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_compound(TExprOpcode::type op_type, const std::vector<Expr*>* children,
+    std::shared_ptr<paimon::Predicate> convert(Expr* conjunct, bool neg);
+    std::shared_ptr<paimon::Predicate> convert_compound(TExprOpcode::type op_type, const std::vector<Expr*>* children,
                                                          bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_null(int32_t field_index, const std::string& field_name,
+    std::shared_ptr<paimon::Predicate> convert_null(int32_t field_index, const std::string& field_name,
                                                      const paimon::FieldType& fieldType, bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_equal(int32_t field_index, const std::string& field_name,
+    std::shared_ptr<paimon::Predicate> convert_equal(int32_t field_index, const std::string& field_name,
                                                       const paimon::FieldType& fieldType,
                                                       const paimon::Literal& literal, bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_le(int32_t field_index, const std::string& field_name,
+    std::shared_ptr<paimon::Predicate> convert_le(int32_t field_index, const std::string& field_name,
                                                    const paimon::FieldType& fieldType, const paimon::Literal& literal,
                                                    bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_lt(int32_t field_index, const std::string& field_name,
+    std::shared_ptr<paimon::Predicate> convert_lt(int32_t field_index, const std::string& field_name,
                                                    const paimon::FieldType& fieldType, const paimon::Literal& literal,
                                                    bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_ge(int32_t field_index, const std::string& field_name,
+    std::shared_ptr<paimon::Predicate> convert_ge(int32_t field_index, const std::string& field_name,
                                                    const paimon::FieldType& fieldType, const paimon::Literal& literal,
                                                    bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_gt(int32_t field_index, const std::string& field_name,
+    std::shared_ptr<paimon::Predicate> convert_gt(int32_t field_index, const std::string& field_name,
                                                    const paimon::FieldType& fieldType, const paimon::Literal& literal,
                                                    bool neg);
-    std::shared_ptr<paimon::Predicate> evaluate_in(int32_t field_index, const std::string& field_name,
+    std::shared_ptr<paimon::Predicate> convert_in(int32_t field_index, const std::string& field_name,
                                                    const paimon::FieldType& fieldType,
                                                    const std::vector<paimon::Literal>& literals, bool neg);
     bool _ok_to_paimon_literal(Expr* lit);
@@ -55,6 +55,6 @@ private:
     paimon::Literal translate_to_paimon_literal(Expr* lit);
     paimon::FieldType translate_to_paimon_type(const TypeDescriptor& type);
     void translate_to_paimon_in_list_literals(Expr* in_list_expr, std::vector<paimon::Literal>& ret);
-    std::vector<SlotDescriptor*> slots;
+    std::vector<SlotDescriptor*> _slots;
 };
 } // namespace starrocks

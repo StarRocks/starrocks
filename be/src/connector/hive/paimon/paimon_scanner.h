@@ -42,21 +42,19 @@ public:
     void do_update_counter(HdfsScannerProfile* profile) override;
 
 private:
-    Status _next_batch();
-    Status _append_batch_to_chunk();
+    Status _next_arrow_record_batch();
+    Status _append_arrow_record_batch_to_chunk();
     Status _fill_dst_chunk(ChunkPtr* chunk);
-    bool _chunk_is_full() const;
-    bool _batch_is_exhausted() const;
+    bool _arrow_record_batch_is_exhausted() const;
 
     int64_t _max_chunk_size = 4096;
-    int64_t _batch_start_idx = 0;
-    int64_t _chunk_start_idx = 0;
+    int64_t _arrow_record_batch_start_idx = 0;
     bool _scanner_eof = false;
 
     std::shared_ptr<paimon::MemoryPool> _memory_pool;
     std::shared_ptr<PaimonFileSystem> _paimon_file_system;
     std::unique_ptr<paimon::BatchReader> _reader;
-    std::shared_ptr<arrow::RecordBatch> _arrow_batch;
+    std::shared_ptr<arrow::RecordBatch> _arrow_record_batch;
 
     ObjectPool _pool;
     std::vector<std::unique_ptr<ConvertFuncTree>> _convert_functions;

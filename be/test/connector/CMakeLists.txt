@@ -99,7 +99,7 @@ add_executable(connector_hive_test
 
 if (WITH_PAIMON_CPP)
     target_sources(connector_hive_test PRIVATE
-            hive/paimon/paimon_evaluator_test.cpp
+            hive/paimon/paimon_predicate_converter_test.cpp
             hive/paimon/paimon_file_system_test.cpp
     )
     target_link_libraries(connector_hive_test paimon)
