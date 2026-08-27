@@ -16,7 +16,9 @@
 
 #include <bthread/mutex.h>
 #include <butil/containers/linked_list.h>
+#include <gtest/gtest_prod.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "base/concurrency/blocking_queue.hpp"
@@ -246,6 +248,10 @@ public:
 
 private:
     friend class CompactionTaskCallback;
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_with_reserved);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_preserves_inflight_tokens);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_keeps_one_token);
+    FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_grow);
 
     // abort all the compaction tasks in the task queue. Only expected to be invoked during stop()
     void abort_all();
@@ -316,24 +322,23 @@ inline int16_t CompactionScheduler::Limiter::concurrency() const {
 
 inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {
     std::lock_guard l(_mtx);
-    if (new_val > _total) {
-        auto diff = new_val - _total;
-        _free += diff;
-        _total += diff;
-    } else if (new_val < _total) {
-        if (_reserved != 0) {
-            double percentage = static_cast<double>(_total) / new_val;
-            _reserved = static_cast<int16_t>(static_cast<double>(_reserved) * percentage);
-            _total = new_val;
-            _free = _total - _reserved;
-        } else {
-            _total = new_val;
-            _free = _total;
-        }
-    } else {
-        // nothing change
+    if (new_val <= 0 || new_val == _total) {
         return;
     }
+    // Tokens currently held by running compaction tasks. They will be returned via
+    // no_memory_limit_exceeded()/memory_limit_exceeded() when those tasks finish, so
+    // they must be carried over to the new accounting.
+    const int64_t in_use = _total - _reserved - _free;
+    if (new_val < _total) {
+        // Scale down the reserved tokens proportionally to the new total, and keep at
+        // least one grantable token so that the concurrency cannot be reduced to zero.
+        const double percentage = static_cast<double>(new_val) / _total;
+        _reserved = std::min<int16_t>(static_cast<int16_t>(static_cast<double>(_reserved) * percentage), new_val - 1);
+    }
+    _total = new_val;
+    // _free may become negative when the tasks in flight exceed the new concurrency: no
+    // new token can be acquired until enough running tasks have returned theirs.
+    _free = _total - _reserved - in_use;
     LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to " << _free
               << ", and _reserved value to " << _reserved;
 }
