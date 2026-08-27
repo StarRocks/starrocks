@@ -44,6 +44,32 @@
 
 namespace starrocks::lake {
 
+// Does this rowset hold any rows? The rowset-level count alone cannot answer it: a split cross
+// publish apportions that count across the siblings, so a rowset whose segments hold this tablet's
+// rows can arrive with num_rows == 0 and be mistaken for empty. The per-segment counts are not
+// apportioned, so they settle it -- and they also keep a genuinely empty write (segments written,
+// no rows in them) out, which the segment count alone would not.
+//
+// The last clause covers a legacy rowset whose segment_metas were back-filled by
+// normalize_*_after_load from the deprecated parallel arrays, which carry no per-segment count:
+// nothing proves it empty, so it is kept.
+bool rowset_holds_rows(const RowsetMetadataPB& rowset) {
+    if (rowset.num_rows() > 0) {
+        return true;
+    }
+    if (rowset.segment_metas_size() == 0) {
+        return false;
+    }
+    bool any_segment_counted = false;
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (segment_meta.num_rows() > 0) {
+            return true;
+        }
+        any_segment_counted |= segment_meta.has_num_rows();
+    }
+    return !any_segment_counted;
+}
+
 namespace {
 
 // Non-clearing archival of the tablet's current schema before a new schema is installed: map every
@@ -200,32 +226,6 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
     tablet_meta->mutable_schema()->Clear();
     new_schema->to_schema_pb(tablet_meta->mutable_schema());
     return Status::OK();
-}
-
-// Does this rowset hold any rows? The rowset-level count alone cannot answer it: a split cross
-// publish apportions that count across the siblings, so a rowset whose segments hold this tablet's
-// rows can arrive with num_rows == 0 and be mistaken for empty. The per-segment counts are not
-// apportioned, so they settle it -- and they also keep a genuinely empty write (segments written,
-// no rows in them) out, which the segment count alone would not.
-//
-// The last clause covers a legacy rowset whose segment_metas were back-filled by
-// normalize_*_after_load from the deprecated parallel arrays, which carry no per-segment count:
-// nothing proves it empty, so it is kept.
-bool rowset_holds_rows(const RowsetMetadataPB& rowset) {
-    if (rowset.num_rows() > 0) {
-        return true;
-    }
-    if (rowset.segment_metas_size() == 0) {
-        return false;
-    }
-    bool any_segment_counted = false;
-    for (const auto& segment_meta : rowset.segment_metas()) {
-        if (segment_meta.num_rows() > 0) {
-            return true;
-        }
-        any_segment_counted |= segment_meta.has_num_rows();
-    }
-    return !any_segment_counted;
 }
 
 // Build rssid_remap for DCG application during replication.

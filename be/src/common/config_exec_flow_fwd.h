@@ -113,6 +113,11 @@ CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 
+// `window_fun(... ) IGNORE NULLS` can be evaluated in streaming mode with
+// watermark-based eviction of the input buffer instead of materializing the whole partition.
+// Set to false to fall back to the legacy whole-partition materializing behavior.
+CONF_mBool(pipeline_analytic_enable_ignore_nulls_streaming, "true");
+
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 // the maximum number of connections in the connection pool for a single jdbc url

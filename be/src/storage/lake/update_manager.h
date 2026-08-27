@@ -127,8 +127,8 @@ public:
     // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
     Status batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
                                              std::vector<SegmentPKIteratorPtr>& pk_iters,
-                                             std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
-                                             bool need_lock);
+                                             std::vector<std::vector<uint64_t>>* rss_rowids_per_segment, bool need_lock,
+                                             std::vector<Filter>* owned_per_segment = nullptr);
 
     // get column data by rssid and rowids
     Status get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,

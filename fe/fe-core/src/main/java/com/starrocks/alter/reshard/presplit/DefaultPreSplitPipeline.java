@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -60,6 +61,10 @@ import java.util.stream.Collectors;
  * sampler throw propagates as {@link StarRocksException} and the coordinator
  * maps it to {@link SkipReason#SAMPLE_FAILED}.
  *
+ * <p>A pipeline built by {@link #forDerivedBoundaries} bypasses that routing
+ * entirely: a {@link DerivedBoundarySource} computes the cuts from the sort
+ * key's own domain, so neither tier is consulted and nothing is read.
+ *
  * <p>Pre-submit timeout is enforced at sampler-phase boundaries via
  * {@link #checkDeadline}. The data tier additionally caps its BE-side sample
  * sub-query at the remaining budget ({@link SampleRequest#withQueryTimeoutSeconds}),
@@ -91,6 +96,14 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
      */
     static final String TIER_LABEL_DATA_TIER = "data_tier";
 
+    /**
+     * Metric label for a derived tier success path: boundaries computed from what is known about the
+     * key's own domain ({@code derived_tier}) — no file statistics and no row sample, so nothing is read
+     * at all. Used when the sort key is a hidden row-id column whose value distribution follows from how
+     * the id is produced rather than from the data.
+     */
+    static final String TIER_LABEL_DERIVED_TIER = "derived_tier";
+
     private final MetaTierSampler metaTierSampler;
     private final Sampler dataTierSampler;
     private final TabletReshardJobMgr tabletReshardJobManager;
@@ -104,6 +117,8 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
     // (forExternalBoundaries) so pre-split shards are scheduled in the load's warehouse.
     // May be null (falls back to default).
     private final ComputeResource loadComputeResource;
+    // Non-null only for a pipeline built by forDerivedBoundaries; null for every sampled pipeline.
+    private final DerivedBoundarySource derivedBoundarySource;
 
     public DefaultPreSplitPipeline(
             MetaTierSampler metaTierSampler,
@@ -116,6 +131,22 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             Duration pollInterval,
             Clock clock,
             ComputeResource loadComputeResource) {
+        this(metaTierSampler, dataTierSampler, tabletReshardJobManager, database, table, indexTargets,
+                fileTotalBytes, pollInterval, clock, loadComputeResource, /*derivedBoundarySource=*/ null);
+    }
+
+    DefaultPreSplitPipeline(
+            MetaTierSampler metaTierSampler,
+            Sampler dataTierSampler,
+            TabletReshardJobMgr tabletReshardJobManager,
+            Database database,
+            OlapTable table,
+            List<IndexPreSplitTarget> indexTargets,
+            long fileTotalBytes,
+            Duration pollInterval,
+            Clock clock,
+            ComputeResource loadComputeResource,
+            DerivedBoundarySource derivedBoundarySource) {
         this.metaTierSampler = Objects.requireNonNull(metaTierSampler, "metaTierSampler");
         this.dataTierSampler = Objects.requireNonNull(dataTierSampler, "dataTierSampler");
         this.tabletReshardJobManager = Objects.requireNonNull(tabletReshardJobManager, "tabletReshardJobManager");
@@ -129,6 +160,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
         this.pollInterval = Objects.requireNonNull(pollInterval, "pollInterval");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.loadComputeResource = loadComputeResource;
+        this.derivedBoundarySource = derivedBoundarySource;
     }
 
     /**
@@ -187,6 +219,34 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                 DEFAULT_POLL_INTERVAL, Clock.systemUTC(), loadComputeResource);
     }
 
+    /**
+     * Build a pipeline whose boundaries come from {@code derivedBoundarySource} rather than from a
+     * sampler. {@code estimatedBytes} sizes the tablet count exactly as a sampled load's input size
+     * does; the source itself reads nothing, so there is no tier to fall back to.
+     *
+     * <p>Both samplers are installed as stubs that throw {@link IllegalStateException}. A derived
+     * pipeline must never reach one, and a routing regression that lets it through has to fail loudly
+     * instead of quietly sampling the data the derived tier exists to avoid reading.
+     */
+    static DefaultPreSplitPipeline forDerivedBoundaries(
+            Database database, OlapTable table, List<IndexPreSplitTarget> indexTargets, long estimatedBytes,
+            LoadKind loadKind, ComputeResource loadComputeResource, DerivedBoundarySource derivedBoundarySource) {
+        Objects.requireNonNull(derivedBoundarySource, "derivedBoundarySource");
+        MetaTierSampler metaTierSampler = (request, requestedTabletCount) -> {
+            throw new IllegalStateException(loadKind.displayName()
+                    + " uses the derived tier; the meta tier must not be reached");
+        };
+        Sampler dataTierSampler = request -> {
+            throw new IllegalStateException(loadKind.displayName()
+                    + " uses the derived tier; the data tier must not be reached");
+        };
+        TabletReshardJobMgr tabletReshardJobManager = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        return new DefaultPreSplitPipeline(
+                metaTierSampler, dataTierSampler, tabletReshardJobManager,
+                database, table, indexTargets, estimatedBytes,
+                DEFAULT_POLL_INTERVAL, Clock.systemUTC(), loadComputeResource, derivedBoundarySource);
+    }
+
     private static RowGroupStatisticsProvider rowGroupStatisticsProviderFor(LoadKind loadKind) {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
@@ -195,6 +255,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             // before this method is ever reached for that load kind.
             case INSERT_FROM_TABLE -> throw new IllegalStateException(
                     "INSERT_FROM_TABLE never uses the meta tier; rowGroupStatisticsProviderFor must not be called");
+            // MV_REFRESH is served by the derived tier, which is selected before any sampler is built.
+            case MV_REFRESH -> throw new IllegalStateException(
+                    "MV_REFRESH never samples; rowGroupStatisticsProviderFor must not be called");
         };
     }
 
@@ -203,6 +266,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             case INSERT_FROM_FILES -> new InsertFromFilesSampleSubqueryExecutor();
             case BROKER_LOAD -> new BrokerLoadSampleSubqueryExecutor();
             case INSERT_FROM_TABLE -> new InsertFromTableSampleSubqueryExecutor();
+            // MV_REFRESH is served by the derived tier, which is selected before any sampler is built.
+            case MV_REFRESH -> throw new IllegalStateException(
+                    "MV_REFRESH never samples; sampleSubqueryExecutorFor must not be called");
         };
     }
 
@@ -216,6 +282,9 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(timeout, "timeout");
+        if (derivedBoundarySource != null) {
+            return preSubmitDerived(activeComputeNodeCount);
+        }
         Instant deadline = clock.instant().plus(timeout);
 
         recordSamplerInvocation();
@@ -232,6 +301,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             if (outcome.result().isNoSplit()) {
                 continue;
             }
+            PreSplitProfile.recordBoundariesPlanned(outcome.result().getBoundaries().size());
             if (oldTabletIdToRanges.isEmpty()) {
                 // first index that produced cuts -> record load-level tier/boundary metrics once
                 recordTierUsed(outcome.tier());
@@ -239,6 +309,106 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
             }
             oldTabletIdToRanges.put(indexTarget.oldTabletId(), buildTabletRanges(outcome.result().getBoundaries()));
         }
+        return buildPreparedJob(oldTabletIdToRanges);
+    }
+
+    /**
+     * Submit path for a {@link DerivedBoundarySource}: the source computes its cuts from the sort key's
+     * own domain, so there is no footer read and no BE sample to bound, leaving the pre-submit deadline
+     * nothing to guard. {@link #recordSamplerInvocation()} is deliberately not called either — the
+     * derived tier is not a sampler, and counting it would make the sampler-invocation metric, and any
+     * failure ratio built on it, meaningless.
+     *
+     * <p>Anything short of a full set of usable cuts skips the whole submit and records the reason as
+     * an eligibility-skip: the source never ran a sampler, so the sampler-failure family would report
+     * failures that have no matching invocation. A skip also describes the load as a whole (its
+     * estimate, its key space) rather than one index, so the first one ends the submit instead of
+     * carving the remaining indexes on a derivation the source already declined.
+     */
+    private Optional<PreparedReshardJob> preSubmitDerived(int activeComputeNodeCount) throws StarRocksException {
+        PreSplitProfile.recordSourceTier(TIER_LABEL_DERIVED_TIER);
+        PreSplitProfile.recordEstimatedInputBytes(fileTotalBytes);
+        int requestedTabletCount = TabletPreSplitCoordinator.selectPreSplitTabletCount(
+                new Estimates(fileTotalBytes, 0L), activeComputeNodeCount);
+
+        Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
+            for (IndexPreSplitTarget indexTarget : indexTargets) {
+                DerivedBoundarySource.Result derived = derivedBoundarySource.plan(indexTarget, requestedTabletCount);
+                if (derived.skipReason() != null) {
+                    LOG.info("Sample-Based Tablet Pre-Split: derived tier produced no boundaries for table {}: {}",
+                            table.getName(), derived.skipReason());
+                    PreSplitMetrics.recordEligibilitySkip(derived.skipReason());
+                    return Optional.empty();
+                }
+                List<Tuple> boundaries = derived.boundaries().getBoundaries();
+                validateDerivedBoundaries(boundaries, indexTarget.sortKey());
+                PreSplitProfile.recordBoundariesPlanned(boundaries.size());
+                List<TabletRange> ranges = buildTabletRanges(boundaries);
+                if (oldTabletIdToRanges.isEmpty()) {
+                    // first index that produced cuts -> record load-level tier/boundary metrics once
+                    recordTierUsed(TIER_LABEL_DERIVED_TIER);
+                    recordBoundariesPlanned(boundaries.size());
+                }
+                oldTabletIdToRanges.put(indexTarget.oldTabletId(), ranges);
+            }
+        } catch (StarRocksException | RuntimeException derivationFailed) {
+            LOG.warn("Sample-Based Tablet Pre-Split: derived boundaries unusable for table {}",
+                    table.getName(), derivationFailed);
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.DERIVATION_FAILED);
+            return Optional.empty();
+        }
+        // Job construction is reported separately from derivation, because by here the cuts ARE derived:
+        // the factory rejects on table state, table type or colocate stability, none of which say anything
+        // about the boundary source. It still must not escape, though -- left to the shared sampled-path
+        // handling a StarRocksException becomes SAMPLE_FAILED, naming a sampler that never ran, and a
+        // RuntimeException reaches the hook's fail-safe with no skip recorded at all.
+        try {
+            Optional<PreparedReshardJob> preparedJob = buildPreparedJob(oldTabletIdToRanges);
+            if (preparedJob.isEmpty()) {
+                // Not "no useful cuts" -- cuts were derived. The visible-index set moved under us.
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.STALE_CATALOG_STATE);
+            }
+            return preparedJob;
+        } catch (StarRocksException | RuntimeException cannotBuildJob) {
+            LOG.warn("Sample-Based Tablet Pre-Split: derived cuts could not be turned into a job for table {}",
+                    table.getName(), cannotBuildJob);
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.SUBMIT_FAILED);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Nothing upstream has checked the cuts a derived source computes: they are not read off sorted
+     * data, and {@link BoundaryPlannerResult} only collapses adjacent duplicates. A malformed set would
+     * therefore reach range construction and be caught no earlier than the BE's fallback to an unsplit
+     * tablet. Reuses the sampler tiers' own schema check so both paths reject the same shapes, and adds
+     * the ordering check the tiers get for free from sorting their samples.
+     *
+     * @throws StarRocksException when a cut does not match {@code sortKey} or the cuts are not
+     *                            strictly increasing.
+     */
+    private static void validateDerivedBoundaries(List<Tuple> boundaries, List<Column> sortKey)
+            throws StarRocksException {
+        for (int cutIndex = 0; cutIndex < boundaries.size(); cutIndex++) {
+            Tuple cut = boundaries.get(cutIndex);
+            BoundaryPlanner.validateTupleAgainstSchema(cut, sortKey, "Derived cut " + cutIndex);
+            // Both operands are schema-checked by now (the predecessor on the previous iteration), so
+            // the comparator is comparing like with like.
+            if (cutIndex > 0 && cut.compareTo(boundaries.get(cutIndex - 1)) <= 0) {
+                throw new StarRocksException(String.format(
+                        "Derived cut %d (%s) does not exceed its predecessor (%s)",
+                        cutIndex, cut, boundaries.get(cutIndex - 1)));
+            }
+        }
+    }
+
+    /**
+     * Tail shared by both submit paths: turn the planned per-index ranges into a job, or skip.
+     */
+    private Optional<PreparedReshardJob> buildPreparedJob(Map<Long, List<TabletRange>> oldTabletIdToRanges)
+            throws StarRocksException {
         if (oldTabletIdToRanges.isEmpty()) {
             return Optional.empty();
         }
@@ -342,7 +512,16 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
 
     private TierOutcome runMetaTier(SampleRequest request, int requestedTabletCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
+        // Record the tier when it starts so a later fallback still exposes the footer work that
+        // contributed to the phase timers.
+        PreSplitProfile.recordSourceTier(TIER_LABEL_META_TIER);
+        // The production metadata sampler instruments footer-statistics fetch and boundary
+        // planning separately. Keeping a scope around this combined interface would double-count
+        // the fetch and incorrectly attribute planning work to SourceSamplingTime.
         BoundaryPlannerResult result = metaTierSampler.tryPlan(request, requestedTabletCount);
+        // Unlike the data tier, a successful footer-only plan has no SampleSet through which to
+        // expose the estimate that sized this attempt.
+        PreSplitProfile.recordEstimatedInputBytes(fileTotalBytes);
         checkDeadline(deadline);
         return new TierOutcome(result, TIER_LABEL_META_TIER);
     }
@@ -351,14 +530,24 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                                     int activeComputeNodeCount, Instant deadline)
             throws PreSplitPreSubmitTimeoutException, StarRocksException {
         checkDeadline(deadline);
+        PreSplitProfile.recordSourceTier(TIER_LABEL_DATA_TIER);
         // Cap the sample at the remaining budget (see class doc); an over-budget
         // sample is cancelled by the BE → SAMPLE_FAILED → the load proceeds.
         SampleRequest budgetedRequest = request.withQueryTimeoutSeconds(remainingBudgetSeconds(deadline));
-        SampleSet sampleSet = dataTierSampler.sample(budgetedRequest);
+        SampleSet sampleSet;
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.SOURCE_SAMPLING)) {
+            sampleSet = dataTierSampler.sample(budgetedRequest);
+        }
+        PreSplitProfile.recordSample(sampleSet);
         checkDeadline(deadline);
-        BoundaryPlannerResult result = BoundaryPlanner.planRowQuantileBoundaries(
-                sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount),
-                request.getSortKey());
+        BoundaryPlannerResult result;
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
+            result = BoundaryPlanner.planRowQuantileBoundaries(
+                    sampleSet, effectiveTabletCount(sampleSet, requestedTabletCount, activeComputeNodeCount),
+                    request.getSortKey());
+        }
         return new TierOutcome(result, TIER_LABEL_DATA_TIER);
     }
 

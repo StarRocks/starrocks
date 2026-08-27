@@ -14,14 +14,11 @@
 
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 
-#include <algorithm>
-#include <cstdlib>
 #include <sstream>
 
 #include "base/simd/simd.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
-#include "exprs/column_ref.h"
 #include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -494,23 +491,6 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
     if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
     }
-}
-
-static bool contains_dict_mapping_expr(Expr* expr) {
-    if (expr->is_dictmapping_expr()) {
-        return true;
-    }
-
-    return std::any_of(expr->children().begin(), expr->children().end(),
-                       [](Expr* child) { return contains_dict_mapping_expr(child); });
-}
-
-static bool contains_dict_mapping_expr(RuntimeFilterProbeDescriptor* probe_desc) {
-    auto* probe_expr_ctx = probe_desc->probe_expr_ctx();
-    if (probe_expr_ctx == nullptr) {
-        return false;
-    }
-    return contains_dict_mapping_expr(probe_expr_ctx->root());
 }
 
 std::string RuntimeFilterProbeCollector::debug_string() const {

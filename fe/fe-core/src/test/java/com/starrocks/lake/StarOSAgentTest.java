@@ -399,10 +399,11 @@ public class StarOSAgentTest {
         });
     }
 
-    @Test
-    public void testCreateShardsForSplitSpreadDropsWithShardPin() throws Exception {
-        // Capture the CreateShardInfo payload the agent builds for client.createShard so we can
-        // assert the per-shard placement preferences for both spreadNewShards modes.
+    /**
+     * Stubs client.createShard to record the CreateShardInfo payload the agent built, so a test can
+     * assert per-shard group ids / placement preferences. The returned list is refilled on each call.
+     */
+    private List<CreateShardInfo> installCreateShardCapture() throws StarClientException {
         List<CreateShardInfo> captured = new ArrayList<>();
         new Expectations(client) {
             {
@@ -421,6 +422,14 @@ public class StarOSAgentTest {
                 };
             }
         };
+        return captured;
+    }
+
+    @Test
+    public void testCreateShardsForSplitSpreadDropsWithShardPin() throws Exception {
+        // Capture the CreateShardInfo payload the agent builds for client.createShard so we can
+        // assert the per-shard placement preferences for both spreadNewShards modes.
+        List<CreateShardInfo> captured = installCreateShardCapture();
         Deencapsulation.setField(starosAgent, "serviceId", "1");
 
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
@@ -435,7 +444,8 @@ public class StarOSAgentTest {
         newShardIdToGroupIds.put(101L, Lists.newArrayList(spreadGroupId));
         newShardIdToGroupIds.put(102L, Lists.newArrayList(spreadGroupId));
 
-        // spreadNewShards = true (pre-split): no WITH_SHARD pin, so StarOS spreads the new shards;
+        // unpinPlacement = true (pre-split, or an ORDER BY != PK split of a small index): no
+        // WITH_SHARD pin, so StarOS spreads the new shards;
         // the (SPREAD) group ids are still carried.
         starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
                 Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, true);
@@ -446,7 +456,7 @@ public class StarOSAgentTest {
             Assertions.assertEquals(Lists.newArrayList(spreadGroupId), info.getGroupIdsList());
         }
 
-        // spreadNewShards = false (online split): the WITH_SHARD pin to the old shard is kept so the
+        // unpinPlacement = false (ordinary online split): the WITH_SHARD pin to the old shard is kept so the
         // split reuses the source worker's warm cache.
         starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
                 Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, false);
@@ -458,6 +468,77 @@ public class StarOSAgentTest {
             Assertions.assertEquals(PlacementRelationship.WITH_SHARD, pref.getPlacementRelationship());
             Assertions.assertEquals(oldShardId, pref.getRelationshipTargetId());
         }
+    }
+
+    /**
+     * A merge creates one shard per resharding tablet, and each must carry ITS OWN group list --
+     * the index SPREAD group plus the PACK shard group of the colocate range that shard's tablet
+     * belongs to. The three shards below deliberately carry three DIFFERENT PACK groups: the
+     * builder is reused across the loop, so without a per-iteration {@code clearGroupIds()} each
+     * shard would accumulate every previous shard's PACK group and this test goes red.
+     */
+    @Test
+    public void testCreateShardsForMergePerShardGroupIds() throws Exception {
+        List<CreateShardInfo> captured = installCreateShardCapture();
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        long spreadGroupId = 700L;
+        Map<Long, List<Long>> newToOldShardIds = new LinkedHashMap<>();
+        newToOldShardIds.put(201L, Lists.newArrayList(11L, 12L));
+        newToOldShardIds.put(202L, Lists.newArrayList(13L));
+        newToOldShardIds.put(203L, Lists.newArrayList(14L));
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(201L, Lists.newArrayList(spreadGroupId, 801L));
+        newShardIdToGroupIds.put(202L, Lists.newArrayList(spreadGroupId, 802L));
+        newShardIdToGroupIds.put(203L, Lists.newArrayList(spreadGroupId, 803L));
+
+        starosAgent.createShardsForMerge(newToOldShardIds, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE);
+
+        Assertions.assertEquals(3, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertEquals(newShardIdToGroupIds.get(info.getShardId()), info.getGroupIdsList(),
+                    "shard " + info.getShardId() + " must carry exactly its own group ids");
+            // Every source shard of the merge is still pinned so the output reuses a warm cache.
+            Assertions.assertEquals(newToOldShardIds.get(info.getShardId()).size(),
+                    info.getPlacementPreferencesList().size());
+            for (PlacementPreference pref : info.getPlacementPreferencesList()) {
+                Assertions.assertEquals(PlacementPolicy.PACK, pref.getPlacementPolicy());
+                Assertions.assertEquals(PlacementRelationship.WITH_SHARD, pref.getPlacementRelationship());
+            }
+        }
+    }
+
+    /**
+     * A new shard with no group assignment is refused rather than silently created group-less.
+     * The guard sits inside the method's existing catch-all, so it surfaces as a DdlException --
+     * same shape as createShardsForSplit -- which MergeTabletJob turns into a clean job abort.
+     */
+    @Test
+    public void testCreateShardsForMergeRejectsMissingOrEmptyGroupIds() {
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        Map<Long, List<Long>> newToOldShardIds = new LinkedHashMap<>();
+        newToOldShardIds.put(201L, Lists.newArrayList(11L));
+
+        DdlException missing = Assertions.assertThrows(DdlException.class,
+                () -> starosAgent.createShardsForMerge(newToOldShardIds, new LinkedHashMap<>(), pathInfo,
+                        cacheInfo, Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE),
+                "a new shard with no group assignment must be rejected");
+        Assertions.assertTrue(missing.getMessage().contains("Missing group ids for new shard 201"),
+                "expected the missing-group-ids cause, got: " + missing.getMessage());
+
+        Map<Long, List<Long>> emptyGroupIds = new LinkedHashMap<>();
+        emptyGroupIds.put(201L, Lists.newArrayList());
+        DdlException empty = Assertions.assertThrows(DdlException.class,
+                () -> starosAgent.createShardsForMerge(newToOldShardIds, emptyGroupIds, pathInfo,
+                        cacheInfo, Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE),
+                "a new shard with an empty group list must be rejected");
+        Assertions.assertTrue(empty.getMessage().contains("Missing group ids for new shard 201"),
+                "expected the missing-group-ids cause, got: " + empty.getMessage());
     }
 
     @Test

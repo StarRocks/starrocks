@@ -340,6 +340,7 @@ public class GlobalStateMgr {
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
     private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private LeaderDaemon backupSnapshotCleaner;   // To delete backup snapshots whose ttl elapsed
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
@@ -1303,6 +1304,7 @@ public class GlobalStateMgr {
 
             // 6. start task cleaner thread
             createTaskCleaner();
+            createBackupSnapshotCleaner();
             createTableKeeper();
         } catch (Exception e) {
             try {
@@ -1735,6 +1737,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        backupSnapshotCleaner.start();
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
@@ -1820,6 +1823,9 @@ public class GlobalStateMgr {
         stopOne("mvActiveChecker", () -> mvActiveChecker.stopBestEffort());
         stopOne("pipeScheduler", () -> pipeScheduler.stopBestEffort());
         stopOne("pipeListener", () -> pipeListener.stopBestEffort());
+        if (backupSnapshotCleaner != null) {
+            stopOne("backupSnapshotCleaner", () -> backupSnapshotCleaner.stopBestEffort());
+        }
         if (taskCleaner != null) {
             stopOne("taskCleaner", () -> taskCleaner.stopBestEffort());
         }
@@ -2443,6 +2449,20 @@ public class GlobalStateMgr {
             protected void runAfterLeaseValid() {
                 doTaskBackgroundJob();
                 setInterval(Config.task_check_interval_second * 1000L);
+            }
+        };
+    }
+
+    public void createBackupSnapshotCleaner() {
+        backupSnapshotCleaner = new LeaderDaemon("BackupSnapshotCleaner",
+                Config.backup_clean_check_interval_seconds * 1000L) {
+            @Override
+            protected void runAfterLeaseValid() {
+                if (Config.enable_backup_snapshot_auto_clean) {
+                    backupHandler.cleanExpiredSnapshots();
+                }
+                // Re-read each round so changing the interval takes effect without a restart.
+                setInterval(Config.backup_clean_check_interval_seconds * 1000L);
             }
         };
     }

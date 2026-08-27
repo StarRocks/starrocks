@@ -311,6 +311,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
 - Introduced in: v3.1.0
 
+### `failpoint_pause_timeout_second`
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Safety net for the failpoint pause mode. A thread parked at a failpoint armed with `ADMIN ENABLE FAILPOINT ... WITH PAUSE` resumes automatically after this many seconds even if `ADMIN DISABLE FAILPOINT` is never issued, and the failpoint is disarmed so later threads are not parked again. A forgotten pause therefore cannot block a node until it is restarted. Values below 1 are clamped to 1. The value is also sent to BEs/CNs with the arming request, so a frontend pause and a backend pause share the same timeout. Only relevant for fault-injection testing: the frontend must be started with `--failpoint`, and backend failpoints additionally require a backend compiled with `ENABLE_FAULT_INJECTION=ON`.
+- Introduced in: v4.2.0
+
 ### `gcp_gcs_impersonation_service_account`
 
 - Default: Empty string
@@ -864,6 +873,24 @@ This topic introduces the following types of FE configurations:
 - Description: The name of the attribute that identifies users in LDAP objects.
 - Introduced in: -
 
+### `backup_clean_check_interval_seconds`
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the leader FE looks for expired backup snapshots to delete. Only takes effect when `enable_backup_snapshot_auto_clean` is `true`. The new interval applies from the next round onwards, without a restart.
+- Introduced in: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- Default: 3
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many consecutive failures automatic cleanup makes on one snapshot before leaving it alone. Only the failures of automatic cleanup are counted. The count is kept in memory, so restarting the FE, a leader switch, or raising this value lets cleanup try again. DROP SNAPSHOT deletes the snapshot regardless of this value.
+- Introduced in: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - Default: 86400 * 1000
@@ -872,6 +899,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The timeout duration of a backup job. If this value is exceeded, the backup job fails.
 - Introduced in: -
+
+### `enable_backup_snapshot_auto_clean`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether expired backup snapshots are deleted from their repository automatically. A snapshot is deleted only when the job info file in the repository records this cluster as its creator and an expiration time that has passed. Snapshots created by another cluster, created before this feature existed, or whose retention cannot be read are never deleted automatically. See the `ttl` property of [BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md).
+- Introduced in: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 

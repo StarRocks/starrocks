@@ -16,7 +16,9 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
+#include "column/vectorized_fwd.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -25,6 +27,10 @@
 namespace starrocks {
 
 class ParallelPublishContext;
+// Declared here rather than included: persistent_index_parallel_publish_context.h is not
+// self-contained (it needs MutableColumnPtr and a complete Buffer<Slice>), so pulling it in from a
+// header breaks the include order. The .cpp has it.
+struct ParallelPublishSlot;
 
 namespace lake {
 
@@ -33,6 +39,15 @@ class MetaFileBuilder;
 class TabletManager;
 class LakePersistentIndexParallelCompactMgr;
 class SegmentPKIterator;
+
+struct SegmentPKChunkRef;
+
+// Turn SegmentPKChunkRef::owned -- the mask a cross publish puts on a chunk -- into the two shapes
+// PrimaryIndex::upsert accepts. Both are no-ops on an ordinary publish, where the mask is empty.
+//
+// owned_rowids_of: absolute source-segment rowids of the owned rows, in chunk order. Read it off the
+// mask BEFORE filtering the column; filtering renumbers the survivors.
+std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current);
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
@@ -119,15 +134,35 @@ public:
     // Used by column mode partial update to build the update-row-to-source-row mapping.
     // To learn each segment's physical rowid base (range_start), call
     // SegmentPKIterator::physical_rowid_base() on the iterator after this returns.
+    // |owned_per_segment|: if non-null, receives each segment's ownership mask -- the concatenation of
+    // its chunks' SegmentPKChunkRef::owned, one byte per entry of rss_rowids_per_segment[i]. A segment
+    // whose chunks carried no mask (no CrossPublishRowSelector, i.e. every publish but a SPLIT child's
+    // cross publish) leaves its entry empty, which every consumer reads as "own every row". Callers
+    // that would ACT on a missing key -- inserting the row, allocating an id for it -- need this: the
+    // rss_rowid alone cannot tell "no old row" from "a sibling's row".
     Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
                                          std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
-                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment);
+                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                         std::vector<Filter>* owned_per_segment = nullptr);
 
     // This function will be called when parallel upsert happens.
     // The process flow of parallel upsert is:
     // 1. upsert into memtable. (serialize)
     // 2. parallel get from inactive memtables and sstables. (parallel)
     // 3. Call `flush_memtable`, and flush memtable into sstable when memtable is full. (serialize)
+    // Upsert only the rows |current.owned| marks as this tablet's, each keyed to the rowid it has in
+    // the SOURCE segment rather than its position among the survivors. |slot->pk_column| holds the
+    // encoded keys and is filtered in place.
+    //
+    // Cross publish only: an ordinary publish carries an empty mask and keeps the plain overload,
+    // which needs no per-row rowid vector and works on the in-memory index too.
+    //
+    // The slot belongs to the caller: it also carries the encoded column, whose bytes the index
+    // keeps referencing after this returns when the upsert runs asynchronously. Both call sites hand
+    // over a freshly extended slot, so the append-only scratch inside it always starts empty.
+    Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
+                        ParallelPublishContext* context);
+
     Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
                            DeletesMap* new_deletes);
 

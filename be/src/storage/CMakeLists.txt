@@ -188,6 +188,7 @@ set(STORAGE_FILES
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/cross_publish_context.cpp
     lake/compaction_task_context.cpp
     lake/combined_txn_log_writer.cpp
     lake/tablet_parallel_compaction_manager.cpp

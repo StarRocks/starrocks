@@ -210,6 +210,8 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 option(WITH_TENANN "Build with TENANN" OFF)
 
+option(WITH_PAIMON_CPP "Build with paimon-cpp" OFF)
+
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 if (${WITH_TENANN} STREQUAL "ON")

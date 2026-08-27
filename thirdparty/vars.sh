@@ -94,10 +94,10 @@ LIBEVENT_SOURCE=libevent-24236aed01798303745470e6c498bf606e88724a
 LIBEVENT_MD5SUM="c6c4e7614f03754b8c67a17f68177649"
 
 # openssl
-OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz"
-OPENSSL_NAME=openssl-OpenSSL_1_1_1m.tar.gz
-OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
-OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
+OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz"
+OPENSSL_NAME=openssl-3.5.7.tar.gz
+OPENSSL_SOURCE=openssl-3.5.7
+OPENSSL_MD5SUM="36608cd5445f708d0c2200aea9682c35"
 
 # thrift
 THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.24.0/thrift-0.24.0.tar.gz"
@@ -214,10 +214,10 @@ SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
 # MIT Kerberos publishes release archives from web.mit.edu/kerberos/dist.
-KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz"
-KRB5_NAME=krb5-1.19.4.tar.gz
-KRB5_SOURCE=krb5-1.19.4
-KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
+KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.21/krb5-1.21.3.tar.gz"
+KRB5_NAME=krb5-1.21.3.tar.gz
+KRB5_SOURCE=krb5-1.21.3
+KRB5_MD5SUM="beb34d1dfc72ba0571ce72bed03e06eb"
 
 # librdkafka
 LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.11.0.tar.gz"
@@ -501,13 +501,21 @@ BENCHGEN_NAME=benchgen-26.03.11.tar.gz
 BENCHGEN_SOURCE=benchgen-26.03.11
 BENCHGEN_MD5SUM="fd97eb82eb4c629d7916b6d012c7e81d"
 
+# paimon-cpp
+# NOTE: all its third-party deps are BUNDLED and downloaded by its own cmake
+# at build time (network required when building this package)
+PAIMON_CPP_DOWNLOAD="https://github.com/apache/paimon-cpp/releases/download/v0.3.0/apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_NAME="apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_SOURCE="paimon-cpp-0.3.0"
+PAIMON_CPP_MD5SUM="e82940588fa423926cb47b2617cf21dc"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BLAKE3 BENCHGEN"
+            BLAKE3 BENCHGEN PAIMON_CPP"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

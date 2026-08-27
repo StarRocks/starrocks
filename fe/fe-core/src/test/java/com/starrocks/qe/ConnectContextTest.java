@@ -35,6 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
@@ -74,6 +75,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -185,6 +187,23 @@ public class ConnectContextTest {
 
         // clean up
         ctx.cleanup();
+    }
+
+    @Test
+    public void testPreSplitProfileLifecycle() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        Assertions.assertNull(ctx.getPreSplitProfile());
+        PreSplitProfile first = ctx.getOrCreatePreSplitProfile();
+        Assertions.assertSame(first, ctx.getPreSplitProfile());
+        Assertions.assertSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime();
+        Assertions.assertNull(ctx.getPreSplitProfile(), "a new statement must not reuse the previous profile");
+        Assertions.assertNotSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime(Instant.EPOCH);
+        Assertions.assertNull(ctx.getPreSplitProfile(), "the test start-time overload must reset the profile too");
     }
 
     @Test

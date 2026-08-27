@@ -68,7 +68,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -617,8 +616,9 @@ public class MergeTabletJobTest {
         // against the mocked synthetic warehouse and fail).
         new MockUp<StarOSAgent>() {
             @Mock
-            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
-                                             FileCacheInfo cacheInfo, long groupId, Map<String, String> properties,
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, Map<String, String> properties,
                                              ComputeResource computeResource) {
             }
         };
@@ -948,7 +948,17 @@ public class MergeTabletJobTest {
         MergeTabletClause clause = new MergeTabletClause();
         clause.setTabletReshardTargetSize(100L);
         MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
-        Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+        // An empty plan caused by STALE statistics is transient, not deterministic: a compaction
+        // publish advances visibleVersionTime without touching dataVersion, so the next statistics
+        // pass can make this very same plan non-empty. It must therefore NOT be an
+        // EmptyReshardPlanException, which TabletReshardJobMgr latches -- latching it would suppress
+        // the merge until the layout or configuration changed, which a stats refresh does not do.
+        StarRocksException thrown =
+                Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+        Assertions.assertFalse(thrown instanceof EmptyReshardPlanException,
+                "a stale-statistics empty plan must stay retriable, got: " + thrown);
+        Assertions.assertTrue(thrown.getMessage().contains("statistics are stale"),
+                "expected the stale-stats reason, got: " + thrown.getMessage());
     }
 
     /**
@@ -1019,11 +1029,10 @@ public class MergeTabletJobTest {
         ensureTabletCount(5);
         // floor = parallelismFloor(4, 1024) = max(2, min(4, 1024)) = 4; 5 tiny fresh tablets
         // => budget = 5 - 4 = 1 => exactly one adjacent pair may merge, the rest must stay split.
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 4 matters.
-                return Collections.nCopies(4, 1L);
+            public static int computeNodeCount(ComputeResource computeResource) {
+                return 4;
             }
         };
 
@@ -1062,11 +1071,10 @@ public class MergeTabletJobTest {
         ensureTabletCount(3);
         // floor = parallelismFloor(5, 1024) = max(2, min(5, 1024)) = 5 > 3 tablets
         // => budget = 3 - 5 <= 0 => nothing merges.
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 5 matters.
-                return Collections.nCopies(5, 1L);
+            public static int computeNodeCount(ComputeResource computeResource) {
+                return 5;
             }
         };
 
@@ -1090,9 +1098,9 @@ public class MergeTabletJobTest {
         ensureTabletCount(3);
         // Explicit tablet-group merges must NOT consult the warehouse CN count; even if the lookup
         // throws, the manual merge still succeeds (the floor only applies to size-based auto-merge).
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+            public static int computeNodeCount(ComputeResource computeResource) {
                 throw new RuntimeException("CN lookup must not be called for manual tablet-group merge");
             }
         };
@@ -1294,11 +1302,15 @@ public class MergeTabletJobTest {
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartition.getId()));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
+        Map<Long, List<Long>> newTabletIdToGroupIds = new HashMap<>();
+        for (long newTabletId : newToOldTabletIds.keySet()) {
+            newTabletIdToGroupIds.put(newTabletId, List.of(newIndex.getShardGroupId()));
+        }
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForMerge(
                 newToOldTabletIds,
+                newTabletIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartition.getId()),
                 table.getPartitionFileCacheInfo(physicalPartition.getId()),
-                newIndex.getShardGroupId(),
                 properties, WarehouseManager.DEFAULT_RESOURCE);
     }
 
@@ -1313,9 +1325,9 @@ public class MergeTabletJobTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public void createShardsForMerge(Map<Long, List<Long>> newToOldTabletIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
-                                             long groupId,
                                              Map<String, String> properties,
                                              ComputeResource computeResource) throws DdlException {
                 throw new DdlException("simulated StarOS failure");

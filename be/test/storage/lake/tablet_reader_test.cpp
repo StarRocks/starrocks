@@ -1354,7 +1354,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
 // through the lake reader path (TabletReader::get_segment_iterators builds RowsetReadOptions,
 // Rowset::read builds SegmentReadOptions). Before the fix, lake/tablet_reader.cpp dropped the
 // flag when copying params into RowsetReadOptions, so the whole chain delivered the default
-// (false) to SegmentIterator even when an above-iterator residual was present.
+// (false) to SegmentIterator and could not apply the configured top-k underfill fallback policy.
 TEST_F(LakeDuplicateTabletReaderTest, test_propagate_has_predicate_above_iterator) {
     std::vector<int> k0{1, 2, 3, 4, 5};
     std::vector<int> v0{2, 4, 6, 8, 10};

@@ -1,0 +1,103 @@
+-- name: test_range_orderby_add_index @cloud
+-- SQL integration: ADD INDEX / DROP INDEX on a range-distributed PRIMARY KEY table whose
+-- ORDER BY differs from the primary key.
+--
+-- The lake index fast path writes the index as a standalone .idx sidecar keyed to the segment
+-- it annotates. A split of this shape hands the children the parent's segments and then has
+-- UNSHARE compaction rewrite them wholesale without carrying sidecars across, so the index
+-- would quietly stop covering its data -- the fast path declines this shape and the alter
+-- falls back to the regular schema-change path, which builds the index into the data itself.
+-- The fallback is invisible from SQL by design: what this case pins is that the DDL still
+-- succeeds and that reads and writes stay correct around it.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null,
+    c1 int not null,
+    c2 int not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+insert into t
+select x, x % 7, 100000 - x, concat('p', x), x % 10, x
+from table(generate_series(1, 2000)) as g(x);
+select count(*), count(distinct c1) from t;
+
+alter table t add index idx_c1 (c1) using bitmap;
+function: wait_alter_table_finish()
+show index from t;
+select count(*), count(distinct c1) from t;
+select count(*) from t where c1 = 3;
+select k1, k2, c1 from t where c1 = 0 and k1 <= 20 order by k1;
+
+-- Writes after the index build have to keep it in step with the data.
+insert into t values (2001, 1, 1, 'new', 3, 2001);
+select count(*) from t where c1 = 3;
+delete from t where k1 = 2001;
+select count(*) from t where c1 = 3;
+
+drop index idx_c1 on t;
+function: wait_alter_table_finish()
+show index from t;
+select count(*) from t where c1 = 3;
+
+drop database db_${uuid0} force;
+
+-- name: test_range_orderby_add_index_after_split @cloud @sequential
+-- SQL integration: the same ADD INDEX, but on a table that has already been split -- the
+-- layout the fast path is declined for, where the children were handed the parent's segments.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(256) not null,
+    c1 int not null,
+    c2 int not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+insert into t
+select x, x % 7, 100000 - x, repeat(md5(cast(x as varchar)), 6), x % 10, x
+from table(generate_series(1, 20000)) as g(x);
+
+[UC]alter table t split tablet properties('tablet_reshard_target_size' = '1024');
+
+shell: n=1; for i in $(seq 1 55); do n=$(${mysql_cmd} -Ne "select count(1) from information_schema.tablet_reshard_jobs where db_name='db_${uuid0}' and job_state not in ('FINISHED','ABORTED')" 2>/dev/null); [ "$n" = "0" ] && break; sleep 2; done; echo "pending=$n"
+
+select buckets > 1 as did_split from information_schema.partitions_meta
+    where db_name = 'db_${uuid0}' and table_name = 't';
+
+alter table t add index idx_c1 (c1) using bitmap;
+function: wait_alter_table_finish()
+select count(*), count(distinct c1) from t;
+select count(*) from t where c1 = 3;
+select count(*) from t where c1 = 3 and v1 > 99000;
+
+-- Writes still land on the children with the index in place.
+insert into t values (999999, 1, 1, 'tail', 3, 999999);
+select count(*) from t where c1 = 3;
+select k1, k2, v1, c1 from t where k1 = 999999;
+delete from t where k1 = 999999;
+select count(*) from t where c1 = 3;
+select count(*) from t;
+
+drop index idx_c1 on t;
+function: wait_alter_table_finish()
+select count(*) from t where c1 = 3;
+
+drop database db_${uuid0} force;
