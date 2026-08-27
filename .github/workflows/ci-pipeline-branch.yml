@@ -395,6 +395,17 @@ jobs:
   be-ut:
     runs-on: [self-hosted, normal]
     needs: [be-checker, thirdparty-info]
+    # Without an explicit `if`, the default success() propagates the skip of
+    # thirdparty-update (skipped whenever thirdparty is unchanged) through
+    # thirdparty-info to this job, so BE UT was silently skipped on every
+    # release-branch PR that did not touch thirdparty. Mirror fe-ut / main's
+    # ci-pipeline.yml be-ut: run whenever BE changed (be-checker.output1) and
+    # tolerate a skipped thirdparty-info.
+    if: >
+      always() && needs.be-checker.result == 'success' &&
+      needs.be-checker.outputs.output1 == 'true' &&
+      needs.thirdparty-info.result != 'failure' &&
+      needs.thirdparty-info.result != 'cancelled'
     timeout-minutes: 180
     name: BE UT
     env:

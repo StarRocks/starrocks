@@ -164,11 +164,14 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
-    if: >
-      (!contains(needs.pr-label.outputs.labels, 'conflict') || github.event.action != 'opened') &&
-      (needs.code-checker.outputs.output1 == 'true' ||
-      needs.code-checker.outputs.output2 == 'true' ||
-      needs.code-checker.outputs.output3 == 'true')
+    # Retired: with Sync Build gone and be-ut-refactor-compile retired below,
+    # nothing consumes the thirdparty image in this workflow anymore. The
+    # general pipeline (CI PIPELINE / CI PIPELINE - BRANCH) already builds
+    # thirdparty for sync PRs. Kept as a (skipped) job so downstream needs stay
+    # valid. This matrix produces `Thirdparty Update (<distro>)` contexts, not
+    # the bare `Thirdparty Update` required on release branches (that comes from
+    # CI PIPELINE - BRANCH), so skipping it here blocks nothing.
+    if: false
     steps:
       - name: clean
         run: |
@@ -211,6 +214,11 @@ jobs:
     needs:
       - thirdparty-update
     name: Thirdparty Info
+    # Retired: its only consumers (Sync Build, be-ut-refactor-compile) are
+    # retired. Kept as a skipped job so the `Thirdparty Info` required check
+    # still reports (skipped=pass; the general pipeline produces the real one
+    # for sync PRs) and downstream needs stay valid.
+    if: false
     outputs:
       centos7_image_cache_id: ${{ steps.info.outputs.centos7_image_cache_id }}
       ubuntu_image_cache_id: ${{ steps.info.outputs.ubuntu_image_cache_id }}
@@ -316,14 +324,13 @@ jobs:
     needs: [ code-checker, thirdparty-info ]
     name: BE UT (Refactor compile-check)
     timeout-minutes: 120
-    if: >
-      !cancelled() &&
-      github.base_ref != 'main' &&
-      contains(github.event.pull_request.title, '(sync #') &&
-      startsWith(github.event.pull_request.title, '[Refactor]') &&
-      needs.code-checker.outputs.output1 == 'true' &&
-      needs.thirdparty-info.result != 'failure' &&
-      needs.thirdparty-info.result != 'cancelled'
+    # Retired: celerdata-first runs the general pipeline for sync PRs, whose
+    # BE UT (CI PIPELINE on main / CI PIPELINE - BRANCH on release branches --
+    # the latter actually runs BE UT after this PR's be-ut `if` fix) compiles
+    # and tests BE. This standalone [Refactor] compile-check is now redundant.
+    # Kept as a skipped job so its required check reports skipped=pass and
+    # downstream needs.be-ut-refactor-compile references stay valid.
+    if: false
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
