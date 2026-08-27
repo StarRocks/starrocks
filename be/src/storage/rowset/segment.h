@@ -253,11 +253,6 @@ public:
     // and are actually about to load their per-column indexes.
     void prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache);
 
-    // Size of that region, 0 on the legacy layout. Non-zero means the per-column indexes were
-    // already in memory once the footer was read, so a reader can plan the segment's data page
-    // IO without paying for the plan.
-    uint64_t small_index_region_size() const { return _small_index_region_size; }
-
     // Whether the file's last cache block already holds the whole small index region. The footer
     // sits at the very end of the file and is always read before anything else, and a block cache
     // serves that read by fetching the whole block it falls in -- so a region starting inside that
@@ -267,8 +262,9 @@ public:
                                                           uint64_t block_size);
 
     // Extent of the small index region, zero when the segment predates the layout. Non-zero means
-    // every column's ordinal index and page zone map are contiguous here, which is what lets one
-    // buffered stream serve all of them.
+    // every column's ordinal index and page zone map are contiguous here -- which is what lets one
+    // buffered stream serve all of them, and what lets a reader plan the segment's data page IO
+    // without first paying for the plan.
     uint64_t small_index_region_offset() const { return _small_index_region_offset; }
     uint64_t small_index_region_size() const { return _small_index_region_size; }
 
