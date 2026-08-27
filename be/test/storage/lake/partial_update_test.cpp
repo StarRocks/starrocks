@@ -37,11 +37,8 @@
 #include "fs/fs.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
-<<<<<<< HEAD
-#include "storage/del_vector.h"
-=======
 #include "storage/datum_variant.h"
->>>>>>> bb65dbfed5d... [BugFix] Decide condition update and partial update per owning child (#78099)
+#include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
