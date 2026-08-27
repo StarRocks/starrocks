@@ -16,6 +16,7 @@
 
 #include "exec/range_router.h"
 #include "exec/tablet_sink_index_channel.h"
+#include "exec/write_combined_txn_log.h"
 
 namespace starrocks {
 
@@ -73,6 +74,14 @@ protected:
     // how chunks are dispatched to BE nodes.
     virtual Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
     Status _write_combined_txn_log();
+
+    // For every partition this sink is about to write a combined txn log for, the set of tablets
+    // that log must cover, taken from the partition metadata the FE dispatched -- a source
+    // independent of the collected logs themselves. Partitions with no dispatched metadata here
+    // (e.g. dropped from _partition_params by remove_partitions() on the immutable-partition
+    // path) are left out, so they stay unchecked rather than being judged against a guess.
+    // Partitions brought in by an incremental open do have metadata here and are checked.
+    ExpectedTabletsByPartition _expected_tablets_by_partition() const;
     void _mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool _is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
     bool _has_intolerable_failure() {
