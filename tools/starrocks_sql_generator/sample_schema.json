@@ -1,0 +1,109 @@
+{
+  "database": "prod_models_demo",
+  "tables": [
+    {
+      "name": "dim_user",
+      "columns": [
+        {"name": "user_id", "type": "BIGINT", "nullable": false},
+        {"name": "user_name", "type": "VARCHAR(128)"},
+        {"name": "phone", "type": "VARCHAR(32)"},
+        {"name": "email", "type": "VARCHAR(128)"},
+        {"name": "city_id", "type": "INT"},
+        {"name": "register_time", "type": "DATETIME"},
+        {"name": "status", "type": "TINYINT"},
+        {"name": "update_time", "type": "DATETIME"}
+      ]
+    },
+    {
+      "name": "dim_product",
+      "columns": [
+        {"name": "product_id", "type": "BIGINT", "nullable": false},
+        {"name": "sku_id", "type": "BIGINT"},
+        {"name": "product_name", "type": "VARCHAR(256)"},
+        {"name": "category_id", "type": "INT"},
+        {"name": "brand_id", "type": "INT"},
+        {"name": "list_price", "type": "DECIMAL(18,2)"},
+        {"name": "is_active", "type": "BOOLEAN"},
+        {"name": "update_time", "type": "DATETIME"}
+      ]
+    },
+    {
+      "name": "dim_store",
+      "columns": [
+        {"name": "store_id", "type": "BIGINT", "nullable": false},
+        {"name": "store_name", "type": "VARCHAR(128)"},
+        {"name": "region", "type": "VARCHAR(64)"},
+        {"name": "city_id", "type": "INT"},
+        {"name": "open_date", "type": "DATE"},
+        {"name": "status", "type": "TINYINT"},
+        {"name": "update_time", "type": "DATETIME"}
+      ]
+    },
+    {
+      "name": "fact_order",
+      "columns": [
+        {"name": "order_id", "type": "BIGINT", "nullable": false},
+        {"name": "order_date", "type": "DATE", "nullable": false},
+        {"name": "order_time", "type": "DATETIME"},
+        {"name": "user_id", "type": "BIGINT"},
+        {"name": "store_id", "type": "BIGINT"},
+        {"name": "pay_method", "type": "TINYINT"},
+        {"name": "order_status", "type": "TINYINT"},
+        {"name": "total_amount", "type": "DECIMAL(18,2)"},
+        {"name": "total_discount", "type": "DECIMAL(18,2)"},
+        {"name": "update_time", "type": "DATETIME"}
+      ]
+    },
+    {
+      "name": "fact_order_item",
+      "columns": [
+        {"name": "order_id", "type": "BIGINT", "nullable": false},
+        {"name": "order_date", "type": "DATE", "nullable": false},
+        {"name": "item_id", "type": "BIGINT", "nullable": false},
+        {"name": "product_id", "type": "BIGINT"},
+        {"name": "quantity", "type": "INT"},
+        {"name": "item_price", "type": "DECIMAL(18,2)"},
+        {"name": "item_discount", "type": "DECIMAL(18,2)"},
+        {"name": "update_time", "type": "DATETIME"}
+      ]
+    },
+    {
+      "name": "agg_daily_sales",
+      "columns": [
+        {"name": "sales_date", "type": "DATE", "nullable": false},
+        {"name": "store_id", "type": "BIGINT", "nullable": false},
+        {"name": "product_id", "type": "BIGINT", "nullable": false},
+        {"name": "order_cnt", "type": "BIGINT"},
+        {"name": "item_cnt", "type": "BIGINT"},
+        {"name": "gross_amount", "type": "DECIMAL(18,2)"},
+        {"name": "discount_amount", "type": "DECIMAL(18,2)"},
+        {"name": "pay_amount", "type": "DECIMAL(18,2)"}
+      ]
+    },
+    {
+      "name": "user_activity_log",
+      "columns": [
+        {"name": "event_time", "type": "DATETIME", "nullable": false},
+        {"name": "user_id", "type": "BIGINT"},
+        {"name": "session_id", "type": "VARCHAR(64)"},
+        {"name": "page_id", "type": "VARCHAR(128)"},
+        {"name": "event_type", "type": "VARCHAR(32)"},
+        {"name": "event_properties", "type": "JSON"},
+        {"name": "device_type", "type": "VARCHAR(32)"},
+        {"name": "ip_address", "type": "VARCHAR(64)"}
+      ]
+    },
+    {
+      "name": "inventory_snapshot",
+      "columns": [
+        {"name": "store_id", "type": "BIGINT", "nullable": false},
+        {"name": "product_id", "type": "BIGINT", "nullable": false},
+        {"name": "snapshot_date", "type": "DATE", "nullable": false},
+        {"name": "on_hand_qty", "type": "INT"},
+        {"name": "reserved_qty", "type": "INT"},
+        {"name": "available_qty", "type": "INT"},
+        {"name": "update_time", "type": "DATETIME"}
+      ]
+    }
+  ]
+}
