@@ -54,6 +54,10 @@ import java.util.Optional;
 //   a(String)
 //
 public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
+    // IEEE-754 significand widths: binary32 is exact up to 2^24, binary64 up to 2^53
+    private static final int FLOAT_MANTISSA_BITS = 24;
+    private static final int DOUBLE_MANTISSA_BITS = 53;
+
     @Override
     public ScalarOperator visitCastOperator(CastOperator operator, ScalarOperatorRewriteContext context) {
         if (SPMFunctions.isSPMFunctions(operator.getChild(0))) {
@@ -159,11 +163,8 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return false;
         }
 
-        // A floating point -> integral/boolean cast discards the fractional part, so the middle cast
-        // carries a value change that the size check below cannot see: PrimitiveType.getTypeSize()
-        // reports 8 bytes for FLOAT, DOUBLE and BIGINT alike, so no narrowing is detected.
-        // e.g. cast(cast(100 / 3 as bigint) as varchar) must stay '33', not '33.333333333333336'
-        if (grandChild.isFloatingPointType() && !child.isFloatingPointType()) {
+        // the size check below misses this: getTypeSize() reports 8 bytes for FLOAT, DOUBLE and BIGINT
+        if (isValueChangingCast(grandChild, child)) {
             return false;
         }
 
@@ -176,6 +177,32 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         Type childCompatibleType = TypeManager.getAssignmentCompatibleType(grandChild, child, true);
         Type parentCompatibleType = TypeManager.getAssignmentCompatibleType(child, parent, true);
         return childCompatibleType != InvalidType.INVALID && parentCompatibleType != InvalidType.INVALID;
+    }
+
+    // float -> integral truncates; integral -> float and double -> float round.
+    // e.g. cast(cast(100 / 3 as bigint) as varchar) must stay '33', not '33.333333333333336'
+    private static boolean isValueChangingCast(Type from, Type to) {
+        if (from.isFloatingPointType()) {
+            return !to.isFloatingPointType() || mantissaBits(from) > mantissaBits(to);
+        }
+        if (to.isFloatingPointType()) {
+            return exactValueBits(from) > mantissaBits(to);
+        }
+        return false;
+    }
+
+    private static int mantissaBits(Type type) {
+        return type.isFloat() ? FLOAT_MANTISSA_BITS : DOUBLE_MANTISSA_BITS;
+    }
+
+    // value bits from the stored width, minus the sign bit: BIGINT is 8 bytes, so 63
+    private static int exactValueBits(Type type) {
+        int slotSize = type.getPrimitiveType().getSlotSize();
+        if (slotSize <= 0) {
+            // no width to compare, assume lossy
+            return Integer.MAX_VALUE;
+        }
+        return (slotSize << 3) - 1;
     }
 
     private ScalarOperator inheritVarcharLengthAfterReduceCast(CastOperator operator) {
