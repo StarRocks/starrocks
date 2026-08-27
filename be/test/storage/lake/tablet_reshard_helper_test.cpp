@@ -806,6 +806,61 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(malformed_type_desc, co_range(0, 100)));
     EXPECT_EQ(RangeOverlap::kUnknown,
               classify_rowset_range_overlap(malformed_type_desc, co_range(std::nullopt, std::nullopt)));
+
+    auto write_raw_scalar = [](TuplePB* tuple_pb, TPrimitiveType::type type, std::string value,
+                               std::optional<int> len = std::nullopt, std::optional<int> precision = std::nullopt,
+                               std::optional<int> scale = std::nullopt) {
+        auto* variant = tuple_pb->add_values();
+        auto* node = variant->mutable_type()->add_types();
+        node->set_type(TTypeNodeType::SCALAR);
+        auto* scalar = node->mutable_scalar_type();
+        scalar->set_type(type);
+        if (len.has_value()) scalar->set_len(*len);
+        if (precision.has_value()) scalar->set_precision(*precision);
+        if (scale.has_value()) scalar->set_scale(*scale);
+        variant->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        variant->set_value(std::move(value));
+    };
+
+    // DECIMAL128 cannot represent precision/scale above 38 even though the family-wide maximum is 76.
+    RowsetMetadataPB invalid_decimal128;
+    auto* invalid_decimal128_segment = invalid_decimal128.add_segment_metas();
+    write_raw_scalar(invalid_decimal128_segment->mutable_sort_key_min(), TPrimitiveType::DECIMAL128, "0", std::nullopt,
+                     76, 76);
+    write_raw_scalar(invalid_decimal128_segment->mutable_sort_key_max(), TPrimitiveType::DECIMAL128, "0", std::nullopt,
+                     76, 76);
+    EXPECT_EQ(RangeOverlap::kUnknown,
+              classify_rowset_range_overlap(invalid_decimal128, co_range(std::nullopt, std::nullopt)));
+
+    // FLOAT/DOUBLE are not totally ordered tablet-key representations (NaN in particular), so they
+    // must never participate in pruning comparisons.
+    RowsetMetadataPB float_nan;
+    auto* float_nan_segment = float_nan.add_segment_metas();
+    write_raw_scalar(float_nan_segment->mutable_sort_key_min(), TPrimitiveType::FLOAT, "nan");
+    write_raw_scalar(float_nan_segment->mutable_sort_key_max(), TPrimitiveType::FLOAT, "nan");
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(float_nan, co_range(std::nullopt, std::nullopt)));
+
+    // Segment TypeInfo serializes VARCHAR with the maximum length, whereas FE tablet bounds retain
+    // the declared length. Length is not part of the comparison representation.
+    RowsetMetadataPB varchar_segment;
+    auto* varchar_segment_meta = varchar_segment.add_segment_metas();
+    write_raw_scalar(varchar_segment_meta->mutable_sort_key_min(), TPrimitiveType::VARCHAR, "m",
+                     TypeDescriptor::MAX_VARCHAR_LENGTH);
+    write_raw_scalar(varchar_segment_meta->mutable_sort_key_max(), TPrimitiveType::VARCHAR, "z",
+                     TypeDescriptor::MAX_VARCHAR_LENGTH);
+    TabletRangePB varchar_left;
+    write_raw_scalar(varchar_left.mutable_lower_bound(), TPrimitiveType::VARCHAR, "a", 32);
+    varchar_left.set_lower_bound_included(true);
+    write_raw_scalar(varchar_left.mutable_upper_bound(), TPrimitiveType::VARCHAR, "m", 32);
+    varchar_left.set_upper_bound_included(false);
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(varchar_segment, varchar_left));
+
+    TabletRangePB varchar_owner;
+    write_raw_scalar(varchar_owner.mutable_lower_bound(), TPrimitiveType::VARCHAR, "m", 32);
+    varchar_owner.set_lower_bound_included(true);
+    write_raw_scalar(varchar_owner.mutable_upper_bound(), TPrimitiveType::VARCHAR, "zz", 32);
+    varchar_owner.set_upper_bound_included(false);
+    EXPECT_EQ(RangeOverlap::kContainsBoth, classify_rowset_range_overlap(varchar_segment, varchar_owner));
 }
 
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_contiguous_overlap_interval) {

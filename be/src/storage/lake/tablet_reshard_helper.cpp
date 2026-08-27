@@ -21,10 +21,12 @@
 #include <roaring/roaring.hh>
 #include <unordered_set>
 
+#include "base/decimal_types.h"
 #include "base/uid_util.h"
 #include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
+#include "storage_primitive/key_coder.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -630,9 +632,16 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
         return RangeOverlap::kUnknown;
     }
 
+    struct ComparisonType {
+        LogicalType type;
+        int precision = -1;
+        int scale = -1;
+
+        bool operator==(const ComparisonType&) const = default;
+    };
     struct ValidatedTuple {
         VariantTuple values;
-        std::vector<TypeDescriptor> types;
+        std::vector<ComparisonType> types;
     };
     auto decode_tuple = [](const TuplePB& tuple_pb, ValidatedTuple* tuple) {
         if (tuple_pb.values_size() == 0) return false;
@@ -647,7 +656,7 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
             }
             const auto& scalar_type = node.scalar_type();
             const auto logical_type = thrift_to_type(static_cast<TPrimitiveType::type>(scalar_type.type()));
-            if (!is_scalar_logical_type(logical_type)) return false;
+            if (!is_scalar_logical_type(logical_type) || get_key_coder(logical_type) == nullptr) return false;
             if ((logical_type == TYPE_CHAR || logical_type == TYPE_VARCHAR) &&
                 (!scalar_type.has_len() || scalar_type.len() <= 0 ||
                  (logical_type == TYPE_CHAR && scalar_type.len() > TypeDescriptor::MAX_CHAR_LENGTH) ||
@@ -656,23 +665,34 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
             }
             if (logical_type == TYPE_DECIMAL || logical_type == TYPE_DECIMALV2 ||
                 is_decimalv3_field_type(logical_type)) {
+                int max_precision = TypeDescriptor::MAX_PRECISION;
+                if (logical_type == TYPE_DECIMAL32) {
+                    max_precision = TypeDescriptor::MAX_DECIMAL4_PRECISION;
+                } else if (logical_type == TYPE_DECIMAL64) {
+                    max_precision = TypeDescriptor::MAX_DECIMAL8_PRECISION;
+                } else if (logical_type == TYPE_DECIMAL128) {
+                    max_precision = decimal_precision_limit<int128_t>;
+                } else if (logical_type == TYPE_DECIMAL256) {
+                    max_precision = decimal_precision_limit<int256_t>;
+                }
                 if (!scalar_type.has_precision() || !scalar_type.has_scale() || scalar_type.precision() <= 0 ||
-                    scalar_type.precision() > TypeDescriptor::MAX_PRECISION || scalar_type.scale() < 0 ||
+                    scalar_type.precision() > max_precision || scalar_type.scale() < 0 ||
                     scalar_type.scale() > scalar_type.precision()) {
                     return false;
                 }
-                if ((logical_type == TYPE_DECIMAL32 &&
-                     scalar_type.precision() > TypeDescriptor::MAX_DECIMAL4_PRECISION) ||
-                    (logical_type == TYPE_DECIMAL64 &&
-                     scalar_type.precision() > TypeDescriptor::MAX_DECIMAL8_PRECISION)) {
-                    return false;
-                }
             }
-            auto type = TypeDescriptor::from_protobuf(variant.type());
-            if (get_type_info(type) == nullptr) return false;
-            tuple->types.emplace_back(std::move(type));
+            ComparisonType comparison_type{logical_type};
+            if (logical_type == TYPE_DECIMAL || logical_type == TYPE_DECIMALV2 ||
+                is_decimalv3_field_type(logical_type)) {
+                comparison_type.precision = scalar_type.precision();
+                comparison_type.scale = scalar_type.scale();
+            }
+            DatumVariant value;
+            if (!value.from_proto(variant).ok()) return false;
+            tuple->values.append(std::move(value));
+            tuple->types.emplace_back(comparison_type);
         }
-        return tuple->values.from_proto(tuple_pb).ok();
+        return true;
     };
     auto same_shape = [](const ValidatedTuple& lhs, const ValidatedTuple& rhs) { return lhs.types == rhs.types; };
 
@@ -713,9 +733,9 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
         }
     }
 
-    // Compare only identical scalar descriptors, including decimal precision/scale. Besides
-    // DatumVariant::compare's same-type precondition, incompatible descriptors can compare different
-    // physical representations and turn malformed metadata into a false kNo.
+    // Match the comparison representation: logical type plus decimal precision/scale. Declared
+    // CHAR/VARCHAR length is validated above but intentionally excluded because segment TypeInfo
+    // serializes it at the maximum while FE tablet bounds retain the schema's declared length.
     if ((!range.is_minimum() && !same_shape(envelope_min, range_lower)) ||
         (!range.is_maximum() && !same_shape(envelope_min, range_upper)) || range.is_empty()) {
         return RangeOverlap::kUnknown;
