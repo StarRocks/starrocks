@@ -142,9 +142,14 @@ public class ExecuteSqlAction extends RestBaseAction {
                 // process this request
                 HttpConnectProcessor connectProcessor = new HttpConnectProcessor(context);
                 connectProcessor.processOnce();
+            } catch (StarRocksHttpException e) {
+                if (SERVICE_UNAVAILABLE.equals(e.getCode())) {
+                    throw e;
+                }
+                throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, e.getMessage());
             } catch (Exception e) {
                 // just for safe. most Exception is handled in execute(), and set error code in context
-                throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+                throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, e.getMessage());
             } finally {
                 ConnectContext.remove();
             }
@@ -237,7 +242,11 @@ public class ExecuteSqlAction extends RestBaseAction {
 
         // now register this request in connectScheduler
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-        context.setConnectionId(connectScheduler.getNextConnectionId());
+        try {
+            context.setConnectionId(connectScheduler.getNextConnectionId());
+        } catch (ConnectScheduler.ConnectionIdExhaustedException e) {
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, e.getMessage());
+        }
         context.resetConnectionStartTime();
 
         // mark as registered
