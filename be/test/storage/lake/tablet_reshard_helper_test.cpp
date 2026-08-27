@@ -17,6 +17,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -466,10 +467,11 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to
     EXPECT_EQ(1, child.num_dels());
 }
 
-// kYes carries no special apportionment: the appliers key a rowset's presence off its segments, so a
-// sibling that may own rows is not harmed by drawing a zero share of a counter. This used to round up
-// to 1 to keep the rowset alive, which over-counted by up to split_count - 1 rows.
-TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset_apportions_plainly) {
+// An interior sibling retains the legacy singleton virtual-share allocation. The appliers key a
+// rowset's presence off its segments, so a sibling that may own rows is not harmed by drawing a zero
+// share of a counter. This used to round up to 1 to keep the rowset alive, which over-counted by up
+// to split_count - 1 rows.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_interior_rowset_apportions_plainly) {
     // 1 row split 4 ways: index 0 gets the row, indexes 1..3 get zero, and the sum stays exact.
     RowsetMetadataPB rowset;
     rowset.set_num_rows(1);
@@ -479,7 +481,7 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset
     int64_t total_rows = 0;
     for (int i = 0; i < 4; ++i) {
         RowsetMetadataPB child = rowset;
-        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kYes);
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kInterior);
         rows.push_back(child.num_rows());
         total_rows += child.num_rows();
     }
@@ -510,7 +512,7 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_drops_a_non_overla
     EXPECT_EQ(0, child.num_dels());
 }
 
-// ... but a kYes sibling keeps every segment: the envelope only proves "may own", so the data stays
+// ... but an overlapping sibling keeps every segment: the envelope only proves "may own", so the data stays
 // and the tablet range decides at read time.
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset_keeps_segments) {
     RowsetMetadataPB rowset;
@@ -519,7 +521,7 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_overlapping_rowset
     rowset.add_segment_metas()->set_filename("seg_b");
 
     RowsetMetadataPB child = rowset;
-    update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/3, RangeOverlap::kYes);
+    update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/3, RangeOverlap::kInterior);
     EXPECT_EQ(2, child.segment_metas_size());
 }
 
@@ -539,8 +541,7 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_unknown_overlap_ke
     EXPECT_THAT(rows, ::testing::ElementsAre(1, 0, 0, 0));
 }
 
-// The apportionment conserves exactly: the siblings' shares sum to the source, for every overlap
-// classification.
+// Interior apportionment conserves exactly: the siblings' shares sum to the source.
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_when_rows_exceed_split_count) {
     RowsetMetadataPB rowset;
     rowset.set_num_rows(10);
@@ -550,7 +551,7 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_when_row
     int64_t total_size = 0;
     for (int i = 0; i < 4; ++i) {
         RowsetMetadataPB child = rowset;
-        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kYes);
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i, RangeOverlap::kInterior);
         total_rows += child.num_rows();
         total_size += child.data_size();
     }
@@ -668,37 +669,55 @@ void add_segment_span(RowsetMetadataPB* rowset, int lo, int hi) {
 
 } // namespace
 
+// A rowset wholly in the right child must fold the pruned left child's virtual
+// share into the child that retains its segments. Otherwise the persisted
+// sibling statistics undercount even though read-time pruning is correct.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_with_pruned_siblings) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(1000);
+    rowset.set_data_size(10000);
+    add_segment_span(&rowset, 70, 80);
+
+    std::array<TabletRangePB, 2> ranges = {co_range(0, 50), co_range(50, 100)};
+    std::array<RowsetMetadataPB, 2> children;
+    for (int i = 0; i < 2; ++i) {
+        children[i] = rowset;
+        update_rowset_data_stats(&children[i], /*split_count=*/2, /*split_index=*/i,
+                                 classify_rowset_range_overlap(children[i], ranges[i]));
+    }
+
+    EXPECT_EQ(0, children[0].segment_metas_size());
+    EXPECT_EQ(1, children[1].segment_metas_size());
+    EXPECT_EQ(1000, children[0].num_rows() + children[1].num_rows());
+    EXPECT_EQ(10000, children[0].data_size() + children[1].data_size());
+}
+
 TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     // A single-key rowset (min == max) lands in exactly one of a set of disjoint ranges.
     RowsetMetadataPB one_key;
     add_segment_span(&one_key, 42, 42);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(one_key, co_range(40, 50)));
+    EXPECT_EQ(RangeOverlap::kContainsBoth, classify_rowset_range_overlap(one_key, co_range(40, 50)));
     EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(std::nullopt, 40)));
     EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(one_key, co_range(50, std::nullopt)));
 
-    // Boundary cases: lower bound is inclusive, upper bound is exclusive.
-    RowsetMetadataPB at_lower;
-    add_segment_span(&at_lower, 40, 40);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(at_lower, co_range(40, 50)));
-    RowsetMetadataPB at_upper;
-    add_segment_span(&at_upper, 50, 50);
-    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(at_upper, co_range(40, 50)));
+    // Each endpoint belongs to exactly one closed-open sibling range.
+    RowsetMetadataPB span;
+    add_segment_span(&span, 40, 90);
+    EXPECT_EQ(RangeOverlap::kContainsLower, classify_rowset_range_overlap(span, co_range(40, 50)));
+    EXPECT_EQ(RangeOverlap::kInterior, classify_rowset_range_overlap(span, co_range(50, 60)));
+    EXPECT_EQ(RangeOverlap::kContainsUpper, classify_rowset_range_overlap(span, co_range(60, 91)));
+    EXPECT_EQ(RangeOverlap::kNo, classify_rowset_range_overlap(span, co_range(91, 100)));
 
-    // A span straddling the range overlaps it.
-    RowsetMetadataPB straddling;
-    add_segment_span(&straddling, 10, 90);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(straddling, co_range(40, 50)));
-
-    // The envelope spans every segment, so a rowset with keys on both sides overlaps the middle.
+    // The envelope spans every segment, so a rowset with keys on both sides is interior to the middle.
     RowsetMetadataPB two_segments;
     add_segment_span(&two_segments, 1, 2);
     add_segment_span(&two_segments, 98, 99);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(two_segments, co_range(40, 50)));
+    EXPECT_EQ(RangeOverlap::kInterior, classify_rowset_range_overlap(two_segments, co_range(40, 50)));
 
     // (-inf, +inf) contains everything.
     RowsetMetadataPB any;
     add_segment_span(&any, 7, 7);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(any, co_range(std::nullopt, std::nullopt)));
+    EXPECT_EQ(RangeOverlap::kContainsBoth, classify_rowset_range_overlap(any, co_range(std::nullopt, std::nullopt)));
 
     // Undecidable inputs -> kUnknown (legacy apportionment).
     RowsetMetadataPB no_segments;
@@ -715,9 +734,48 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(partial_bounds, co_range(40, 50)));
 }
 
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_contiguous_overlap_interval) {
+    for (int32_t split_count = 2; split_count <= 8; ++split_count) {
+        const std::vector<int64_t> source_values = {0, 1, split_count - 1, split_count, split_count + 1, 1000, 1003};
+        for (int32_t first = 0; first < split_count; ++first) {
+            for (int32_t last = first; last < split_count; ++last) {
+                for (int64_t source_value : source_values) {
+                    RowsetMetadataPB rowset;
+                    rowset.set_num_rows(source_value);
+                    rowset.set_data_size(source_value * 10);
+                    rowset.add_segment_metas()->set_filename("segment.dat");
+
+                    int64_t total_rows = 0;
+                    int64_t total_size = 0;
+                    for (int32_t split_index = 0; split_index < split_count; ++split_index) {
+                        const RangeOverlap overlap = split_index < first || split_index > last ? RangeOverlap::kNo
+                                                     : split_index == first && split_index == last
+                                                             ? RangeOverlap::kContainsBoth
+                                                     : split_index == first ? RangeOverlap::kContainsLower
+                                                     : split_index == last  ? RangeOverlap::kContainsUpper
+                                                                            : RangeOverlap::kInterior;
+                        RowsetMetadataPB child = rowset;
+                        update_rowset_data_stats(&child, split_count, split_index, overlap);
+
+                        if (overlap == RangeOverlap::kNo) {
+                            EXPECT_EQ(0, child.segment_metas_size());
+                        } else {
+                            EXPECT_EQ(1, child.segment_metas_size());
+                        }
+                        total_rows += child.num_rows();
+                        total_size += child.data_size();
+                    }
+                    EXPECT_EQ(source_value, total_rows);
+                    EXPECT_EQ(source_value * 10, total_size);
+                }
+            }
+        }
+    }
+}
+
 // KNOWN LIMITATION, pinned deliberately: the envelope is [min, max] over the segments, so a rowset
 // whose keys are SPARSE -- present in two distant sub-ranges and absent from the ones between --
-// still classifies every intervening sibling as kYes. Such a sibling then gets num_rows >= 1 even
+// still classifies every intervening sibling as kInterior. Such a sibling then gets num_rows >= 1 even
 // though its range filter yields no rows.
 //
 // That is the conservative direction (kNo must be a proof, never a guess), and it is not a new state:
@@ -730,7 +788,7 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap_sparse_envelo
     RowsetMetadataPB sparse;
     add_segment_span(&sparse, 1, 2);
     add_segment_span(&sparse, 98, 99);
-    EXPECT_EQ(RangeOverlap::kYes, classify_rowset_range_overlap(sparse, co_range(40, 50)))
+    EXPECT_EQ(RangeOverlap::kInterior, classify_rowset_range_overlap(sparse, co_range(40, 50)))
             << "the envelope spans the gap, so an intervening sibling cannot be proven empty";
 
     // A sibling strictly outside the envelope is still proven empty, which is the case that matters

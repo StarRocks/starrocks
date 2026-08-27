@@ -168,16 +168,22 @@ const TabletRangePB& effective_old_tablet_local_range(const RowsetMetadataPB& ro
 // count therefore loses the rows of whichever sibling was apportioned 0.
 //
 // Classifying the rowset's key envelope against the sibling's range fixes that without inventing
-// row counts: a sibling that provably owns nothing gets a true 0 (and is correctly dropped), and a
-// sibling that may own rows is never handed 0.
+// row counts: a sibling that provably owns nothing gets a true 0 (and is correctly dropped), while
+// endpoint ownership lets an overlapping sibling absorb the virtual shares of pruned outer siblings.
 enum class RangeOverlap {
     // The envelope could not be determined -- a segment without sort-key bounds, or bounds whose
     // arity does not match the range's. Callers keep the legacy index-based apportionment.
     kUnknown,
     // The envelope lies entirely outside the range: this sibling owns none of the rowset's rows.
     kNo,
-    // The envelope intersects the range: this sibling may own rows, so it must not be zeroed.
-    kYes,
+    // The envelope intersects the range but neither endpoint belongs to this sibling.
+    kInterior,
+    // This sibling contains only the envelope's lower endpoint.
+    kContainsLower,
+    // This sibling contains only the envelope's upper endpoint.
+    kContainsUpper,
+    // This sibling contains both envelope endpoints.
+    kContainsBoth,
 };
 
 // Classify |rowset|'s key envelope (min/max over its segments' sort_key_min/sort_key_max) against

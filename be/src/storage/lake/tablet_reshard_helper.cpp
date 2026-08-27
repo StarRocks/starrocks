@@ -633,7 +633,7 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
     }
     if (range.is_all()) {
         // (-inf, +inf) contains every key.
-        return RangeOverlap::kYes;
+        return RangeOverlap::kContainsBoth;
     }
 
     VariantTuple envelope_min;
@@ -675,7 +675,12 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
     if (range.less_than(envelope_min) || range.greater_than(envelope_max)) {
         return RangeOverlap::kNo;
     }
-    return RangeOverlap::kYes;
+    const bool contains_lower = range.contains(envelope_min);
+    const bool contains_upper = range.contains(envelope_max);
+    if (contains_lower && contains_upper) return RangeOverlap::kContainsBoth;
+    if (contains_lower) return RangeOverlap::kContainsLower;
+    if (contains_upper) return RangeOverlap::kContainsUpper;
+    return RangeOverlap::kInterior;
 }
 
 void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index,
@@ -706,12 +711,21 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
         return;
     }
 
-    // kYes / kUnknown: spread the source's counters over the siblings. These are statistics only --
-    // the appliers decide a rowset's presence from its segments, so a zero here costs accuracy in
-    // compaction scoring and `SHOW`, never data.
-    auto apportion = [split_count, split_index](int64_t value) {
-        return value / split_count + (split_index < value % split_count ? 1 : 0);
+    // Every sibling starts with its original virtual share. Boundary siblings also absorb the
+    // shares assigned to pruned outer siblings, so the overlapping interval conserves the source's
+    // persisted statistics without requiring family-wide context.
+    int32_t share_begin = split_index;
+    int32_t share_end = split_index + 1;
+    if (overlap == RangeOverlap::kContainsLower || overlap == RangeOverlap::kContainsBoth) {
+        share_begin = 0;
+    }
+    if (overlap == RangeOverlap::kContainsUpper || overlap == RangeOverlap::kContainsBoth) {
+        share_end = split_count;
+    }
+    auto prefix = [split_count](int64_t value, int32_t end) {
+        return (value / split_count) * end + std::min<int64_t>(end, value % split_count);
     };
+    auto apportion = [&](int64_t value) { return prefix(value, share_end) - prefix(value, share_begin); };
 
     if (rowset->has_num_rows()) {
         rowset->set_num_rows(apportion(rowset->num_rows()));
@@ -720,9 +734,7 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
         rowset->set_data_size(apportion(rowset->data_size()));
     }
     if (rowset->has_num_dels()) {
-        int64_t num_dels = rowset->num_dels();
-        int64_t scaled_num_dels = num_dels / split_count + (split_index < num_dels % split_count ? 1 : 0);
-        rowset->set_num_dels(std::min<int64_t>(scaled_num_dels, rowset->num_rows()));
+        rowset->set_num_dels(std::min<int64_t>(apportion(rowset->num_dels()), rowset->num_rows()));
     }
 }
 
