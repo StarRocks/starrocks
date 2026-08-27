@@ -15,14 +15,18 @@
 package com.starrocks.metric;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang3.StringUtils;
@@ -35,6 +39,15 @@ import java.util.List;
 import java.util.Set;
 
 public class MetricRepoTest extends PlanTestBase {
+
+    private ConnectContext createConnectContextForUser(String qualifiedUser, int connectionId) {
+        ConnectContext context = new ConnectContext();
+        context.setQualifiedUser(qualifiedUser);
+        context.setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setConnectionId(connectionId);
+        return context;
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -78,6 +91,84 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testConnectionTotalUsesLiveMapSize() {
+        ExecuteEnv.setup();
+        ConnectScheduler scheduler = ExecuteEnv.getInstance().getScheduler();
+        ConnectContext original = createConnectContextForUser("metric_user_1", 10001);
+        ConnectContext collision = createConnectContextForUser("metric_user_2", 10001);
+        try {
+            Assertions.assertTrue(scheduler.registerConnection(original).first);
+            Assertions.assertFalse(scheduler.registerConnection(collision).first);
+
+            SimpleCoreMetricVisitor visitor = new SimpleCoreMetricVisitor("starrocks_fe");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(false, false, false, false, false);
+            String output = MetricRepo.getMetric(visitor, params);
+            Assertions.assertEquals(1, scheduler.getCurrentConnectionMap().size());
+            Assertions.assertEquals(1, scheduler.getConnectionNum());
+            Assertions.assertTrue(output.contains("starrocks_fe_connection_total LONG 1"), output);
+        } finally {
+            scheduler.unregisterConnection(collision);
+            scheduler.unregisterConnection(original);
+        }
+    }
+
+    @Test
+
+    public void testSPMMetricsExposure() {
+        MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
+        MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("spm_baseline_count"));
+        Assertions.assertTrue(output.contains("spm_rewrite_total"));
+        Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
+        Assertions.assertTrue(output.contains("result=\"hit\""));
+        Assertions.assertTrue(output.contains("result=\"captured\""));
+    }
+
+    @Test
+    public void testAlterColumnMetricsExposure() {
+        // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
+        // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
+        AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
+        registry.updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
+        registry.updateAlterDuration(AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("alter_operation_total{"), output);
+        Assertions.assertTrue(output.contains("alter_duration_ms"), output);
+        Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
+    }
+  
+    public void testPlanAdvisorMetricsExposure() {
+        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
+        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
+        MetricRepo.COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL.increase(3L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("plan_advisor_guide_generated_total"));
+        Assertions.assertTrue(output.contains("plan_advisor_guide_applied_total"));
+        Assertions.assertTrue(output.contains("plan_advisor_optimization_duration_ms_total"));
+        Assertions.assertTrue(output.contains("operator_type=\"join\""));
+        Assertions.assertTrue(output.contains("operator_type=\"agg\""));
+    }
+
+    @Test
+>>>>>>> d053949 ([BugFix] Prevent FE connection ID collisions after wrap (#78217))
     public void testLeaderAwarenessMetric() {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
 
