@@ -425,6 +425,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
 - 導入バージョン: -
 
+### enable_segment_shared_small_index_stream
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether every column's small index reads in a segment -- its ordinal index and page zone map -- share a single buffered stream, so that the tail index region (see `enable_segment_tail_index_region`) is fetched once for the segment instead of once per column. This is what makes the region pay off for a query that does not use the data cache, such as one run with `skip_local_disk_cache` or against a table with `datacache.enable` set to false: `enable_segment_tail_index_prefetch` helps only by warming the cache, so it has nothing to offer such a query, which still spends one request per column on indexes that are now next to each other. Sharing one stream turns the first column's read into the only remote one and serves the rest from its buffer. Has no effect on segments written without a tail index region, where the indexes are too far apart for one buffer to span. Data pages and the large optional indexes (bloom filter, bitmap, inverted, vector) are unaffected and keep reading through their own column's file.
+- Introduced in: v4.2.0
+
 ### enable_segment_tail_index_prefetch
 
 - デフォルト: true
@@ -964,6 +973,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: レプリケーションに使用される最大スレッド数。`0` は、スレッド数を BE CPU コア数の 4 倍に設定することを示します。
 - 導入バージョン: v3.3.5
+
+### segment_shared_small_index_stream_max_buffer_bytes
+
+- Default: 4194304
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum buffer size for the shared small index stream enabled by `enable_segment_shared_small_index_stream`. The buffer is normally sized to the segment's tail index region so that one fill covers it; a region larger than this gets a buffer of this size instead, so it is read in a few requests rather than one per column.
+- Introduced in: v4.2.0
 
 ### segment_tail_index_prefetch_max_bytes
 

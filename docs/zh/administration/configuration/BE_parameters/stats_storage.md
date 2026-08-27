@@ -532,6 +532,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：是否检查 Rowset 的正确性。开启后，会在 Compaction、Schema Change 后检查生成的 Rowset 的正确性。
 - 引入版本：-
 
+### enable_segment_shared_small_index_stream
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether every column's small index reads in a segment -- its ordinal index and page zone map -- share a single buffered stream, so that the tail index region (see `enable_segment_tail_index_region`) is fetched once for the segment instead of once per column. This is what makes the region pay off for a query that does not use the data cache, such as one run with `skip_local_disk_cache` or against a table with `datacache.enable` set to false: `enable_segment_tail_index_prefetch` helps only by warming the cache, so it has nothing to offer such a query, which still spends one request per column on indexes that are now next to each other. Sharing one stream turns the first column's read into the only remote one and serves the rest from its buffer. Has no effect on segments written without a tail index region, where the indexes are too far apart for one buffer to span. Data pages and the large optional indexes (bloom filter, bitmap, inverted, vector) are unaffected and keep reading through their own column's file.
+- Introduced in: v4.2.0
+
 ### enable_segment_tail_index_prefetch
 
 - 默认值：true
@@ -1098,6 +1107,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 是否动态：是
 - 描述：用于同步的最大线程数。0 表示将线程数设置为 BE CPU 内核数的四倍。
 - 引入版本：v3.3.5
+
+### segment_shared_small_index_stream_max_buffer_bytes
+
+- Default: 4194304
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum buffer size for the shared small index stream enabled by `enable_segment_shared_small_index_stream`. The buffer is normally sized to the segment's tail index region so that one fill covers it; a region larger than this gets a buffer of this size instead, so it is read in a few requests rather than one per column.
+- Introduced in: v4.2.0
 
 ### segment_tail_index_prefetch_max_bytes
 

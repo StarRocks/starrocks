@@ -32,6 +32,7 @@
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "storage/chunk_helper.h"
+#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
@@ -91,9 +92,13 @@ protected:
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _saved_region = config::enable_segment_tail_index_region;
+        _saved_shared_stream = config::enable_segment_shared_small_index_stream;
     }
 
-    void TearDown() override { config::enable_segment_tail_index_region = _saved_region; }
+    void TearDown() override {
+        config::enable_segment_tail_index_region = _saved_region;
+        config::enable_segment_shared_small_index_stream = _saved_shared_stream;
+    }
 
     static std::shared_ptr<TabletSchema> make_schema() {
         return TabletSchemaHelper::create_tablet_schema(
@@ -195,6 +200,7 @@ protected:
     const std::string kSegmentDir = "/segment_tail_index_region_test";
     std::shared_ptr<MemoryFileSystem> _fs;
     bool _saved_region = false;
+    bool _saved_shared_stream = false;
 };
 
 // With the region on, every small index sits between the last data page and the footer, and the
@@ -365,6 +371,40 @@ TEST_F(SegmentTailIndexRegionTest, RealSmallSegmentRegionIsCovered) {
 
     EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(result.footer.small_index_region_offset(),
                                                                    result.file_size, 1024 * 1024));
+}
+
+// Small index reads are routed to a shared stream only when one was supplied; everything else
+// keeps reading through the column's own file, as it always has.
+TEST_F(SegmentTailIndexRegionTest, IndexFileFallsBackToTheColumnFile) {
+    // Distinct non-null addresses are enough: index_file() only chooses between them.
+    auto* column_file = reinterpret_cast<io::SeekableInputStream*>(0x1000);
+    auto* shared_file = reinterpret_cast<io::SeekableInputStream*>(0x2000);
+
+    ColumnIteratorOptions opts;
+    opts.read_file = column_file;
+    EXPECT_EQ(column_file, opts.index_file());
+
+    opts.index_read_file = shared_file;
+    EXPECT_EQ(shared_file, opts.index_file());
+    EXPECT_EQ(column_file, opts.read_file) << "data pages must not follow the small indexes";
+}
+
+// Serving every column's small indexes from one buffered stream must not change what is read.
+// Both layouts, both settings: the shared stream is an IO consolidation, not a format.
+TEST_F(SegmentTailIndexRegionTest, SharedSmallIndexStreamReadsTheSameRows) {
+    auto tablet_schema = make_schema();
+
+    for (bool region : {true, false}) {
+        config::enable_segment_tail_index_region = region;
+        const std::string base = kSegmentDir + (region ? "/shared_region_on" : "/shared_region_off");
+
+        for (bool shared : {true, false}) {
+            config::enable_segment_shared_small_index_stream = shared;
+            const std::string file_name = base + (shared ? "_shared" : "_percolumn");
+            (void)write_horizontal(file_name, tablet_schema);
+            verify_all_rows(file_name, tablet_schema);
+        }
+    }
 }
 
 } // namespace starrocks
