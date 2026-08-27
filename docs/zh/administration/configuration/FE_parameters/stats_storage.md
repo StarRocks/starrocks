@@ -569,8 +569,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在创建表或物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。
+- 描述: 在创建表时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。未指定 `DISTRIBUTED BY` 子句的物化视图还需同时启用 `enable_mv_range_distribution`。
 - 引入版本: v4.1.0
+
+### `enable_mv_range_distribution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在创建异步物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的数据分布方式。该配置不影响表。仅当该配置与 `enable_range_distribution` 同时为 `true` 且处于存算分离模式时，默认分布才会选择 Range-based Distribution 语意；否则物化视图使用此前的默认分布行为（增量维护的物化视图默认按其 Key 列使用 hash 分布，其他物化视图默认使用 random 分布），即使同一集群中的表会使用 Range 分布。
+- 引入版本: v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 

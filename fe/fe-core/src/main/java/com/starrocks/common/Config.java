@@ -4808,6 +4808,24 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = true;
 
     /**
+     * Whether to use range distribution as the default distribution of an asynchronous materialized
+     * view created without an explicit DISTRIBUTED BY clause. This is the materialized view half of
+     * enable_range_distribution, split off so that a cluster can adopt range-distributed tables
+     * without changing how its materialized views are distributed.
+     * <p>
+     * The default selects range distribution only when this config and enable_range_distribution are
+     * both true, in shared-data mode. Otherwise a materialized view created without a DISTRIBUTED BY
+     * clause uses the previous default distribution behavior (incrementally refreshed -> hash over
+     * its key columns, otherwise random), even where a table would be range-distributed. Range
+     * distribution has no DISTRIBUTED BY syntax, so with this config off the INVISIBLE session
+     * variable enable_range_distribution is the only remaining way to ask for it.
+     */
+    @ConfField(mutable = true, comment = "Whether to use range distribution as the default "
+            + "materialized view distribution in shared-data mode. Takes effect only when "
+            + "enable_range_distribution is also true. Has no effect in shared-nothing mode.")
+    public static boolean enable_mv_range_distribution = false;
+
+    /**
      * The default scheduler interval for tablet reshard jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs. "
