@@ -2048,9 +2048,9 @@ public class ExpressionStatisticsCalculatorTest {
         final double minEpoch = getLongFromDateTime(minDt);
         final double maxEpoch = getLongFromDateTime(maxDt);
 
-        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
-        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
-        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, Type.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, Type.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, Type.VARCHAR, "to_tz", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2075,7 +2075,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(toTzNdv)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(dtCol, fromTzCol, toTzCol));
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
@@ -2086,16 +2086,16 @@ public class ExpressionStatisticsCalculatorTest {
         assertConvertTzStatRangeCovers(actual, "Pacific/Kiritimati", "Etc/GMT+12", minDt, maxDt);
         Assertions.assertEquals(nullsFraction, actual.getNullsFraction(), 0.001);
         Assertions.assertEquals(4, actual.getDistinctValuesCount(), 0.001); // min(100*(1-0.1), 2*1*2)
-        Assertions.assertEquals(DateType.DATETIME.getTypeSize(), actual.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(Type.DATETIME.getTypeSize(), actual.getAverageRowSize(), 0.001);
         Assertions.assertNull(actual.getHistogram());
     }
 
     @Test
     public void testConvertTzCapsDistinctValuesAtRowCount() {
         final int rowCount = 5;
-        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
-        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
-        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, Type.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, Type.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, Type.VARCHAR, "to_tz", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2120,7 +2120,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(dtCol, fromTzCol, toTzCol));
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
@@ -2132,9 +2132,9 @@ public class ExpressionStatisticsCalculatorTest {
     public void testConvertTzCapsDistinctValuesAtNonNullRowCount() {
         final int rowCount = 10;
         final double dtNulls = 0.4;
-        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
-        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
-        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, Type.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, Type.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, Type.VARCHAR, "to_tz", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(rowCount)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2159,7 +2159,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(dtCol, fromTzCol, toTzCol));
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
@@ -2177,9 +2177,9 @@ public class ExpressionStatisticsCalculatorTest {
         final double toTzNulls = 0.4;
         final double expectedNulls = 1.0 - (1.0 - dtNulls) * (1.0 - fromTzNulls) * (1.0 - toTzNulls);
 
-        final ColumnRefOperator dtCol = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
-        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "from_tz", true);
-        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "to_tz", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(1, Type.DATETIME, "dt", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(2, Type.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(3, Type.VARCHAR, "to_tz", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(100)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2204,7 +2204,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(dtCol, fromTzCol, toTzCol));
 
         final ColumnStatistic actual = ExpressionStatisticCalculator.calculate(convertTz, statistics);
@@ -2217,7 +2217,7 @@ public class ExpressionStatisticsCalculatorTest {
     public void testConvertTzNullsFractionWithConstantTimezonesUsesOnlyDatetimeNulls() {
         // Constant timezones have nullsFraction 0, so result nulls = dt nulls.
         final double dtNulls = 0.3;
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2228,7 +2228,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(
                         dtCol,
                         ConstantOperator.createVarchar("UTC"),
@@ -2247,7 +2247,7 @@ public class ExpressionStatisticsCalculatorTest {
         final String dt2 = "2024-01-15 14:45:00";
         final Map<String, Long> inputMcv = Map.of(dt1, 100L, dt2, 200L);
 
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
         final ColumnStatistic dtStat = ColumnStatistic.builder()
                 .setMinValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30)))
                 .setMaxValue(getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0)))
@@ -2260,7 +2260,7 @@ public class ExpressionStatisticsCalculatorTest {
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, dtStat)
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(
                         dtCol,
                         ConstantOperator.createVarchar(fromTz),
@@ -2291,7 +2291,7 @@ public class ExpressionStatisticsCalculatorTest {
         final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
         final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
 
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2302,7 +2302,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(
                         dtCol,
                         ConstantOperator.createVarchar(fromTz),
@@ -2323,7 +2323,7 @@ public class ExpressionStatisticsCalculatorTest {
         final LocalDateTime minDt = LocalDateTime.of(2024, 10, 27, 0, 30, 0);
         final LocalDateTime maxDt = LocalDateTime.of(2024, 10, 27, 1, 30, 0);
 
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2334,7 +2334,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(3)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(
                         dtCol,
                         ConstantOperator.createVarchar(fromTz),
@@ -2352,7 +2352,7 @@ public class ExpressionStatisticsCalculatorTest {
         final LocalDateTime minDt = LocalDateTime.of(2024, 1, 15, 10, 20, 30);
         final LocalDateTime maxDt = LocalDateTime.of(2024, 1, 15, 14, 45, 0);
 
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2363,7 +2363,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(
                         dtCol,
                         ConstantOperator.createVarchar(fromTz),
@@ -2380,7 +2380,7 @@ public class ExpressionStatisticsCalculatorTest {
         final double minValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 10, 20, 30));
         final double maxValue = getLongFromDateTime(LocalDateTime.of(2024, 1, 15, 14, 45, 0));
 
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2391,7 +2391,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(
                         dtCol,
                         ConstantOperator.createVarchar("Not/AZone"),
@@ -2406,7 +2406,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testConvertTzKeepsWidenedRangeWhenChildRangeIsInfinite() {
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
         final Statistics statistics = Statistics.builder()
                 .setOutputRowCount(1000)
                 .addColumnStatistic(dtCol, ColumnStatistic.builder()
@@ -2417,7 +2417,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .setDistinctValuesCount(2)
                         .build())
                 .build();
-        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final CallOperator convertTz = new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(
                         dtCol,
                         ConstantOperator.createVarchar("UTC"),
@@ -2449,10 +2449,10 @@ public class ExpressionStatisticsCalculatorTest {
 
     private static String convertTzMcvKey(String datetime, String fromTz, String toTz) {
         final ConstantOperator converted = ScalarOperatorFunctions.convert_tz(
-                ConstantOperator.createVarchar(datetime).castTo(DateType.DATETIME).get(),
+                ConstantOperator.createVarchar(datetime).castTo(Type.DATETIME).get(),
                 ConstantOperator.createVarchar(fromTz),
                 ConstantOperator.createVarchar(toTz));
-        return converted.castTo(VarcharType.VARCHAR).get().getVarchar();
+        return converted.castTo(Type.VARCHAR).get().getVarchar();
     }
 
     private static double convertTzDateTimeValue(double dateTimeValue, String fromTz, String toTz) {

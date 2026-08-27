@@ -16,13 +16,12 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
-import com.starrocks.type.DateType;
-import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -203,8 +202,8 @@ public class ConvertTzStatisticUtilsTest {
 
     @Test
     public void testTransformHistogramEmptyWhenTimezonesNotConstant() {
-        final ColumnRefOperator fromTzCol = new ColumnRefOperator(1, VarcharType.VARCHAR, "from_tz", true);
-        final ColumnRefOperator toTzCol = new ColumnRefOperator(2, VarcharType.VARCHAR, "to_tz", true);
+        final ColumnRefOperator fromTzCol = new ColumnRefOperator(1, Type.VARCHAR, "from_tz", true);
+        final ColumnRefOperator toTzCol = new ColumnRefOperator(2, Type.VARCHAR, "to_tz", true);
         final ColumnStatistic childStats = ColumnStatistic.builder()
                 .setDistinctValuesCount(1)
                 .setHistogram(new Histogram(Collections.emptyList(), Map.of("2024-01-15 10:20:30", 100L)))
@@ -246,16 +245,16 @@ public class ConvertTzStatisticUtilsTest {
     }
 
     private static CallOperator convertTzCall(ScalarOperator fromTz, ScalarOperator toTz) {
-        final ColumnRefOperator dtCol = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
-        return new CallOperator(FunctionSet.CONVERT_TZ, DateType.DATETIME,
+        final ColumnRefOperator dtCol = new ColumnRefOperator(0, Type.DATETIME, "dt", true);
+        return new CallOperator(FunctionSet.CONVERT_TZ, Type.DATETIME,
                 Lists.newArrayList(dtCol, fromTz, toTz));
     }
 
     private static String convertTzMcvKey(String datetime, String fromTz, String toTz) {
         final ConstantOperator converted = ScalarOperatorFunctions.convert_tz(
-                ConstantOperator.createVarchar(datetime).castTo(DateType.DATETIME).get(),
+                ConstantOperator.createVarchar(datetime).castTo(Type.DATETIME).get(),
                 ConstantOperator.createVarchar(fromTz),
                 ConstantOperator.createVarchar(toTz));
-        return converted.castTo(VarcharType.VARCHAR).get().getVarchar();
+        return converted.castTo(Type.VARCHAR).get().getVarchar();
     }
 }

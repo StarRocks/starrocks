@@ -14,13 +14,12 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
-import com.starrocks.type.Type;
-import com.starrocks.type.VarcharType;
 
 import java.time.DateTimeException;
 import java.time.Instant;
@@ -142,7 +141,7 @@ public final class ConvertTzStatisticUtils {
                 return Optional.empty();
             }
 
-            Optional<ConstantOperator> keyString = converted.castTo(VarcharType.VARCHAR);
+            Optional<ConstantOperator> keyString = converted.castTo(Type.VARCHAR);
             if (keyString.isEmpty()) {
                 return Optional.empty();
             }
