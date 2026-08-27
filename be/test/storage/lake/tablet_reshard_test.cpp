@@ -309,10 +309,12 @@ protected:
 
     Status publish_resharding_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet,
                                     int64_t base_version, int64_t new_version, int64_t txn_id,
-                                    std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas) {
+                                    std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
+                                    const std::function<void()>& before_merge = {}) {
         for (const auto& source : sources) {
             RETURN_IF_ERROR(put_tablet_metadata(source));
         }
+        if (before_merge) before_merge();
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
         for (const auto& source : sources) {
@@ -363,7 +365,6 @@ protected:
         prepare_tablet_dirs(source_a_id);
         prepare_tablet_dirs(source_b_id);
         prepare_tablet_dirs(target_id);
-        if (before_publish) before_publish(source_a_id, source_b_id, target_id);
 
         const bool old_tde = config::enable_transparent_data_encryption;
         config::enable_transparent_data_encryption = enable_tde;
@@ -491,7 +492,9 @@ protected:
 
         std::unordered_map<int64_t, TabletMetadataPtr> published;
         RETURN_IF_ERROR(
-                publish_resharding_merge(sources, target_id, base_version, target_version, next_id(), published));
+                publish_resharding_merge(sources, target_id, base_version, target_version, next_id(), published, [&] {
+                    if (before_publish) before_publish(source_a_id, source_b_id, target_id);
+                }));
 
         MetadataOnlyMergeResult result;
         result.target_tablet_id = target_id;
