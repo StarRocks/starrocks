@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>This class intentionally has no {@code @BeforeEach} / {@code @AfterEach}
  * so it runs cleanly in every test environment.
  */
-public class ResourceGroupMgrShowTest {
+class ResourceGroupMgrShowTest {
 
     // -------------------------------------------------------------------------
     // Helpers
@@ -64,7 +64,7 @@ public class ResourceGroupMgrShowTest {
      * <p>Both {@code byName} and {@code byId} are populated so that the full
      * snapshot is consistent; {@code byClassifier} is left empty.
      */
-    private void injectMap(ResourceGroupMgr mgr, Object... namesAndGroups) throws Exception {
+    private void injectMap(ResourceGroupMgr mgr, Object... namesAndGroups) {
         Map<String, ResourceGroup> byName = new LinkedHashMap<>();
         Map<Long, ResourceGroup>   byId   = new HashMap<>();
         for (int i = 0; i < namesAndGroups.length; i += 2) {
@@ -87,7 +87,7 @@ public class ResourceGroupMgrShowTest {
      * read lock-free and every group's rows appear in the result.
      */
     @Test
-    public void testShowAllResourceGroupsListAll() throws Exception {
+    void testShowAllResourceGroupsListAll() {
         ResourceGroupMgr mgr = new ResourceGroupMgr();
         ResourceGroup rgA = buildGroup("rg_show_a", 1001L);
         ResourceGroup rgB = buildGroup("rg_show_b", 1002L);
@@ -112,7 +112,7 @@ public class ResourceGroupMgrShowTest {
      * the per-user visibility path executes (lines 265-271).
      */
     @Test
-    public void testShowAllResourceGroupsPerUserBranch() throws Exception {
+    void testShowAllResourceGroupsPerUserBranch() {
         ResourceGroupMgr mgr = new ResourceGroupMgr();
         ResourceGroup rg = buildGroup("rg_show_user", 2001L);
         injectMap(mgr, "rg_show_user", rg);
@@ -143,7 +143,7 @@ public class ResourceGroupMgrShowTest {
      * the not-found path (lines 278-279) returns an empty list.
      */
     @Test
-    public void testShowOneResourceGroupFoundAndNotFound() throws Exception {
+    void testShowOneResourceGroupFoundAndNotFound() {
         ResourceGroupMgr mgr = new ResourceGroupMgr();
         ResourceGroup rg = buildGroup("rg_show_one", 3001L);
         injectMap(mgr, "rg_show_one", rg);
