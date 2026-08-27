@@ -435,19 +435,21 @@ protected:
     void wait_for_one_async_memtable_flush(LakePersistentIndex* index) {
         std::promise<Status> flushed;
         auto future = flushed.get_future();
-        std::atomic<bool> notified = false;
+        std::atomic<int> callback_count = 0;
         SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::run:after_flush", [&](void* arg) {
-            if (!notified.exchange(true)) {
+            if (callback_count.fetch_add(1) == 0) {
                 flushed.set_value(*static_cast<Status*>(arg));
             }
         });
         SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp clear_callback([]() {
+            SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::run:after_flush");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
         ASSERT_OK(index->flush_memtable(true));
         ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds(10)));
         ASSERT_OK(future.get());
-        EXPECT_EQ(1, notified.load());
-        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::run:after_flush");
-        SyncPoint::GetInstance()->DisableProcessing();
+        EXPECT_EQ(1, callback_count.load());
     }
 
     std::vector<IndexValue> cold_reload_values(const TabletMetadataPtr& metadata, int64_t version,
@@ -2625,9 +2627,8 @@ TEST_F(LakePersistentIndexTest, test_cold_reload_preserves_non_monotonic_rssid_t
         ASSERT_OK(index->commit(&builder));
     }
 
-    ASSERT_GT(checkpointed->sstable_meta().sstables_size(), 0);
-    EXPECT_GE(checkpointed->sstable_meta().sstables().rbegin()->max_rss_rowid(),
-              static_cast<uint64_t>(kEarlierHighRssid) << 32);
+    ASSERT_EQ(1, checkpointed->sstable_meta().sstables_size());
+    EXPECT_EQ(static_cast<uint64_t>(kEarlierHighRssid) << 32, checkpointed->sstable_meta().sstables(0).max_rss_rowid());
 
     auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
     ASSERT_OK(reloaded->init(checkpointed));
