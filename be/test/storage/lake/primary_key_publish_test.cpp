@@ -39,6 +39,7 @@
 #include "common/logging.h"
 #include "fs/bundle_file.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
@@ -59,6 +60,7 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
@@ -184,6 +186,222 @@ public:
     int64_t read_rows(int64_t tablet_id, int64_t version) {
         auto chunk = read(tablet_id, version);
         return chunk.value()->num_rows();
+    }
+
+    MutableTabletMetadataPtr new_cloud_native_pk_tablet() {
+        auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        metadata->set_id(next_id());
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(1);
+        metadata->clear_rowsets();
+        metadata->clear_delvec_meta();
+        metadata->clear_sstable_meta();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+        return metadata;
+    }
+
+    void append_physical_rowset(TabletMetadata* metadata, int32_t key, int32_t value, uint32_t rowset_id,
+                                int64_t version) {
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(metadata->id()));
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+        ASSERT_OK(writer->open());
+        auto keys = Int32Column::create();
+        auto values = Int32Column::create();
+        keys->append(key);
+        values->append(value);
+        Chunk chunk({std::move(keys), std::move(values)}, _schema);
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_version(version);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(writer->num_rows());
+        rowset->set_data_size(writer->data_size());
+        for (uint32_t i = 0; i < writer->segments().size(); ++i) {
+            writer->segments()[i].to_proto(i, rowset->add_segment_metas());
+        }
+        writer->close();
+    }
+
+    int64_t write_single_upsert_txn(int64_t tablet_id, int32_t key, int32_t value) {
+        auto keys = Int32Column::create();
+        auto values = Int32Column::create();
+        auto ops = Int8Column::create();
+        keys->append(key);
+        values->append(value);
+        ops->append(TOpType::UPSERT);
+        auto chunk =
+                std::make_shared<Chunk>(Columns{std::move(keys), std::move(values), std::move(ops)}, _slot_cid_map);
+        std::vector<uint32_t> indexes = {0};
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        CHECK_OK(writer->open());
+        CHECK_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(writer->finish_with_txnlog());
+        writer->close();
+        return txn_id;
+    }
+
+    TabletMetadataPtr build_non_monotonic_partial_checkpoint_history(bool append_post_frontier) {
+        constexpr int32_t kHighKey = 1000;
+        constexpr int32_t kHighValue = 10'000;
+        constexpr int32_t kLowKey = 50;
+        constexpr int32_t kOldLowValue = 500;
+        auto metadata = new_cloud_native_pk_tablet();
+        metadata->set_version(2);
+        append_physical_rowset(metadata.get(), kHighKey, kHighValue, 100, 2);
+        metadata->set_next_rowset_id(50);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+        Tablet tablet(_tablet_mgr.get(), metadata->id());
+        MetaFileBuilder builder(tablet, metadata);
+        _update_mgr->lock_shard_pk_index_shard(metadata->id());
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
+        ASSIGN_OR_ABORT(auto* entry, _update_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard));
+        CHECK_EQ(2, entry->get_ref());
+        CHECK_OK(entry->value().sync_flush_persistent_index(10'000'000));
+        CHECK_OK(entry->value().commit(metadata, &builder));
+        write_guard.reset();
+        _update_mgr->release_primary_index_cache(entry);
+        _update_mgr->unlock_shard_pk_index_shard(metadata->id());
+        CHECK(_update_mgr->TEST_check_primary_index_cache_ref(metadata->id(), 1));
+        CHECK_GT(metadata->sstable_meta().sstables_size(), 0);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+        CHECK_OK(publish_single_version(metadata->id(), 3,
+                                        write_single_upsert_txn(metadata->id(), kLowKey, kOldLowValue))
+                         .status());
+        ASSIGN_OR_ABORT(auto version3, _tablet_mgr->get_tablet_metadata(metadata->id(), 3));
+        CHECK_EQ(50, version3->rowsets(version3->rowsets_size() - 1).id());
+        if (!append_post_frontier) {
+            return version3;
+        }
+
+        auto mutable_version3 = std::make_shared<TabletMetadata>(*version3);
+        mutable_version3->set_next_rowset_id(101);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*mutable_version3));
+        CHECK_OK(publish_single_version(metadata->id(), 4, write_single_upsert_txn(metadata->id(), 1010, 10'100))
+                         .status());
+        CHECK_OK(publish_single_version(metadata->id(), 5, write_single_upsert_txn(metadata->id(), 1020, 10'200))
+                         .status());
+        ASSIGN_OR_ABORT(auto version5, _tablet_mgr->get_tablet_metadata(metadata->id(), 5));
+        CHECK_GT(version5->next_rowset_id(), 102);
+        CHECK_EQ(101, version5->rowsets(version5->rowsets_size() - 2).id());
+        CHECK_EQ(102, version5->rowsets(version5->rowsets_size() - 1).id());
+        return version5;
+    }
+
+    IndexValue prepare_and_point_get(const TabletMetadataPtr& metadata, int64_t version, int32_t key) {
+        Tablet tablet(_tablet_mgr.get(), metadata->id());
+        auto mutable_metadata = std::make_shared<TabletMetadata>(*metadata);
+        MetaFileBuilder builder(tablet, mutable_metadata);
+        _update_mgr->lock_shard_pk_index_shard(metadata->id());
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
+        ASSIGN_OR_ABORT(auto* entry,
+                        _update_mgr->prepare_primary_index(metadata, &builder, version, version, write_guard));
+        EXPECT_EQ(2, entry->get_ref());
+        auto keys = Int32Column::create();
+        keys->append(key);
+        std::vector<uint64_t> values(keys->size(), NullIndexValue);
+        EXPECT_OK(entry->value().get(*keys, &values));
+        EXPECT_EQ(1, values.size());
+        const IndexValue result(values.empty() ? NullIndexValue : values[0]);
+        write_guard.reset();
+        _update_mgr->release_primary_index_cache(entry);
+        _update_mgr->unlock_shard_pk_index_shard(metadata->id());
+        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(metadata->id(), 1));
+        return result;
+    }
+
+    IndexValue cached_point_get(int64_t tablet_id, int32_t key) {
+        auto* entry = _update_mgr->index_cache().get(tablet_id);
+        CHECK(entry != nullptr);
+        CHECK_EQ(2, entry->get_ref());
+        auto guard = entry->value().fetch_guard();
+        auto keys = Int32Column::create();
+        keys->append(key);
+        std::vector<uint64_t> values(keys->size(), NullIndexValue);
+        CHECK_OK(entry->value().get(*keys, &values));
+        CHECK_EQ(1, values.size());
+        const IndexValue result(values[0]);
+        guard.reset();
+        _update_mgr->release_primary_index_cache(entry);
+        CHECK(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        return result;
+    }
+
+    int64_t raw_pk_occurrences(const TabletMetadataPtr& metadata, int32_t key) {
+        int64_t occurrences = 0;
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(_test_dir));
+        for (const auto& rowset : metadata->rowsets()) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment_meta = rowset.segment_metas(i);
+                FileInfo file_info{.path = _tablet_mgr->segment_location(metadata->id(), segment_meta.filename())};
+                if (segment_meta.has_size()) {
+                    file_info.size = segment_meta.size();
+                }
+                if (segment_meta.has_encryption_meta()) {
+                    file_info.encryption_meta = segment_meta.encryption_meta();
+                }
+                ASSIGN_OR_ABORT(auto segment, Segment::open(fs, std::move(file_info), rowset.id() + i, _tablet_schema));
+                OlapReaderStatistics stats;
+                SegmentReadOptions options;
+                options.fs = fs;
+                options.stats = &stats;
+                options.tablet_id = metadata->id();
+                options.rowset_id = rowset.id();
+                options.version = metadata->version();
+                options.chunk_size = 64;
+                options.tablet_schema = _tablet_schema;
+                ASSIGN_OR_ABORT(auto iterator, segment->new_iterator(*_schema, options));
+                while (true) {
+                    auto chunk = ChunkFactory::new_chunk(*_schema, 64);
+                    auto st = iterator->get_next(chunk.get());
+                    if (st.is_end_of_file()) {
+                        break;
+                    }
+                    CHECK_OK(st);
+                    for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                        occurrences += chunk->get(row)[0].get_int32() == key;
+                    }
+                }
+                iterator->close();
+            }
+        }
+        return occurrences;
+    }
+
+    struct VisibleOracle {
+        int64_t row_count = 0;
+        int64_t pk_occurrences = 0;
+        std::set<int32_t> distinct_keys;
+        std::optional<int32_t> target_value;
+    };
+
+    VisibleOracle visible_oracle(int64_t tablet_id, int64_t version, int32_t key) {
+        ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+        VisibleOracle oracle;
+        oracle.row_count = chunk->num_rows();
+        for (size_t row = 0; row < chunk->num_rows(); ++row) {
+            const auto pk = chunk->get(row)[0].get_int32();
+            oracle.distinct_keys.insert(pk);
+            if (pk == key) {
+                ++oracle.pk_occurrences;
+                oracle.target_value = chunk->get(row)[1].get_int32();
+            }
+        }
+        return oracle;
     }
 
 protected:
@@ -3579,6 +3797,119 @@ TEST_P(LakePrimaryKeyPublishTest, test_light_compaction_publish_loads_segments_u
 
     // Segments were loaded (flag on) and none was lost, so every row survives the compaction.
     EXPECT_EQ(240, read_rows(tablet_id, version));
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_non_monotonic_partial_checkpoint_publish_delvec_and_visibility) {
+    constexpr int32_t kLowKey = 50;
+    constexpr int32_t kNewLowValue = 501;
+    constexpr uint32_t kOldRssid = 50;
+    constexpr uint32_t kNewRssid = 103;
+    constexpr uint32_t kOldRowid = 0;
+    constexpr uint32_t kNewRowid = 0;
+    constexpr int64_t kBaseVersion = 5;
+    constexpr int64_t kPublishVersion = 6;
+    const IndexValue expected_old_value((uint64_t{kOldRssid} << 32) | kOldRowid);
+    const IndexValue expected_new_rss_rowid((uint64_t{kNewRssid} << 32) | kNewRowid);
+
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    ConfigResetGuard<int32_t> ratio_guard(&config::pk_index_parallel_rebuild_mem_ratio, 100);
+    ASSERT_FALSE(RuntimeEnv::GetInstance()->update_mem_tracker()->limit_exceeded_by_ratio(
+            config::pk_index_parallel_rebuild_mem_ratio));
+
+    for (bool parallel : {false, true}) {
+        SCOPED_TRACE(parallel ? "parallel" : "serial");
+        ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, parallel);
+        auto metadata = build_non_monotonic_partial_checkpoint_history(true);
+        const auto tablet_id = metadata->id();
+        ASSERT_EQ(kBaseVersion, metadata->version());
+        ASSERT_GT(metadata->next_rowset_id(), 102);
+        _update_mgr->unload_and_remove_primary_index(tablet_id);
+
+        std::atomic<int> parallel_callbacks = 0;
+        std::atomic<int> serial_callbacks = 0;
+        SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:parallel",
+                                              [&](void*) { ++parallel_callbacks; });
+        SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:serial",
+                                              [&](void*) { ++serial_callbacks; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp clear_callbacks([&]() {
+            SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:parallel");
+            SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:serial");
+            SyncPoint::GetInstance()->DisableProcessing();
+            _update_mgr->unload_and_remove_primary_index(tablet_id);
+        });
+
+        const auto old_value = prepare_and_point_get(metadata, kBaseVersion, kLowKey);
+        EXPECT_EQ(expected_old_value, old_value);
+        EXPECT_EQ(parallel ? 1 : 0, parallel_callbacks.load());
+        EXPECT_EQ(parallel ? 0 : 1, serial_callbacks.load());
+
+        ASSERT_OK(publish_single_version(tablet_id, kPublishVersion,
+                                         write_single_upsert_txn(tablet_id, kLowKey, kNewLowValue))
+                          .status());
+        ASSIGN_OR_ABORT(auto published, _tablet_mgr->get_tablet_metadata(tablet_id, kPublishVersion));
+        ASSERT_EQ(kNewRssid, published->rowsets(published->rowsets_size() - 1).id());
+
+        DelVector dv;
+        ASSERT_OK(_update_mgr->get_del_vec_in_meta(TabletSegmentId{tablet_id, kOldRssid}, kPublishVersion, true, &dv));
+        EXPECT_EQ(1, dv.cardinality());
+        EXPECT_NE(nullptr, dv.roaring());
+        EXPECT_TRUE(dv.roaring() != nullptr && dv.roaring()->contains(kOldRowid));
+
+        const auto raw_occurrences = raw_pk_occurrences(published, kLowKey);
+        EXPECT_EQ(2, raw_occurrences);
+        auto visible = visible_oracle(tablet_id, kPublishVersion, kLowKey);
+        EXPECT_EQ(1, visible.pk_occurrences);
+        EXPECT_EQ(visible.row_count, visible.distinct_keys.size());
+        EXPECT_EQ(std::optional<int32_t>(kNewLowValue), visible.target_value);
+        EXPECT_EQ(expected_new_rss_rowid, cached_point_get(tablet_id, kLowKey));
+
+        _update_mgr->unload_and_remove_primary_index(tablet_id);
+        ASSIGN_OR_ABORT(auto latest, _tablet_mgr->get_tablet_metadata(tablet_id, kPublishVersion));
+        const auto cold_point_value = prepare_and_point_get(latest, kPublishVersion, kLowKey);
+        EXPECT_EQ(expected_new_rss_rowid, cold_point_value);
+        EXPECT_EQ(parallel ? 2 : 0, parallel_callbacks.load());
+        EXPECT_EQ(parallel ? 0 : 2, serial_callbacks.load());
+        auto restarted_visible = visible_oracle(tablet_id, kPublishVersion, kLowKey);
+        EXPECT_EQ(1, restarted_visible.pk_occurrences);
+        EXPECT_EQ(restarted_visible.row_count, restarted_visible.distinct_keys.size());
+        EXPECT_EQ(std::optional<int32_t>(kNewLowValue), restarted_visible.target_value);
+    }
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_row_delvec_and_visibility) {
+    constexpr int32_t kLowKey = 50;
+    constexpr int32_t kNewLowValue = 501;
+    constexpr uint32_t kOldRssid = 50;
+    constexpr uint32_t kNewRssid = 51;
+    constexpr uint32_t kOldRowid = 0;
+    constexpr int64_t kBaseVersion = 3;
+    constexpr int64_t kPublishVersion = 4;
+    const IndexValue expected_old_value((uint64_t{kOldRssid} << 32) | kOldRowid);
+    const IndexValue expected_new_value(uint64_t{kNewRssid} << 32);
+
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    auto metadata = build_non_monotonic_partial_checkpoint_history(false);
+    const auto tablet_id = metadata->id();
+    DeferOp cleanup([&]() { _update_mgr->unload_and_remove_primary_index(tablet_id); });
+    ASSERT_EQ(expected_old_value, prepare_and_point_get(metadata, kBaseVersion, kLowKey));
+
+    ASSERT_OK(publish_single_version(tablet_id, kPublishVersion,
+                                     write_single_upsert_txn(tablet_id, kLowKey, kNewLowValue))
+                      .status());
+    ASSIGN_OR_ABORT(auto published, _tablet_mgr->get_tablet_metadata(tablet_id, kPublishVersion));
+    ASSERT_EQ(kNewRssid, published->rowsets(published->rowsets_size() - 1).id());
+    DelVector dv;
+    ASSERT_OK(_update_mgr->get_del_vec_in_meta(TabletSegmentId{tablet_id, kOldRssid}, kPublishVersion, true, &dv));
+    EXPECT_EQ(1, dv.cardinality());
+    ASSERT_NE(nullptr, dv.roaring());
+    EXPECT_TRUE(dv.roaring()->contains(kOldRowid));
+    EXPECT_EQ(2, raw_pk_occurrences(published, kLowKey));
+    auto visible = visible_oracle(tablet_id, kPublishVersion, kLowKey);
+    EXPECT_EQ(1, visible.pk_occurrences);
+    EXPECT_EQ(visible.row_count, visible.distinct_keys.size());
+    EXPECT_EQ(std::optional<int32_t>(kNewLowValue), visible.target_value);
+    EXPECT_EQ(expected_new_value, cached_point_get(tablet_id, kLowKey));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
