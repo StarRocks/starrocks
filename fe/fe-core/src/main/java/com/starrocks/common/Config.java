@@ -1978,6 +1978,27 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int backup_job_default_timeout_ms = 86400 * 1000; // 1 day
 
+    /**
+     * Whether expired backup snapshots are deleted from their repository automatically.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_backup_snapshot_auto_clean = true;
+
+    /**
+     * How often expired backup snapshots are looked for.
+     */
+    @ConfField(mutable = true)
+    public static long backup_clean_check_interval_seconds = 3600;
+
+    /**
+     * How many consecutive failures automatic cleanup makes on one snapshot before leaving it alone.
+     * Only the cleaner's own failures are counted. The count is kept in memory, so a restart, a
+     * leader switch, or raising this limit lets cleanup try again; DROP SNAPSHOT deletes the
+     * snapshot regardless of it.
+     */
+    @ConfField(mutable = true)
+    public static int backup_clean_retry_limit = 3;
+
     // Set runtime locale when exec some cmds
     @ConfField
     public static String locale = "zh_CN.UTF-8";
