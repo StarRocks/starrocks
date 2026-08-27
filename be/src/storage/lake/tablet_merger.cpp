@@ -2858,6 +2858,9 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // rebuild).
     merge_schemas(merge_contexts, new_tablet_metadata.get());
 
+    ASSIGN_OR_RETURN(uint32_t recovery_next_rowset_id, compute_supported_next_rowset_id(*new_tablet_metadata));
+    new_tablet_metadata->set_next_rowset_id(recovery_next_rowset_id);
+
     // Synthesize the per-target gap bitmaps once (PK only). The same specs drive
     // both DCG coverage-acceptance (merge_dcg_meta) and delvec masking
     // (merge_delvecs), so the two paths cannot diverge. For non-PK tables the
