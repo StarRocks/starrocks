@@ -2627,8 +2627,9 @@ TEST_F(LakePersistentIndexTest, test_cold_reload_preserves_non_monotonic_rssid_t
         ASSERT_OK(index->commit(&builder));
     }
 
-    ASSERT_EQ(1, checkpointed->sstable_meta().sstables_size());
+    ASSERT_EQ(2, checkpointed->sstable_meta().sstables_size());
     EXPECT_EQ(static_cast<uint64_t>(kEarlierHighRssid) << 32, checkpointed->sstable_meta().sstables(0).max_rss_rowid());
+    EXPECT_EQ(static_cast<uint64_t>(kEarlierHighRssid) << 32, checkpointed->sstable_meta().sstables(1).max_rss_rowid());
 
     auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
     ASSERT_OK(reloaded->init(checkpointed));
