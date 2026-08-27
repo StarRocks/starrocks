@@ -89,11 +89,6 @@ set(STORAGE_FILES
     utils.cpp
     compaction_utils.cpp
     rowset/alp_page.cpp
-    ../thirdparty/alp/src/falp.cpp
-    ../thirdparty/alp/src/fastlanes_ffor.cpp
-    ../thirdparty/alp/src/fastlanes_unffor.cpp
-    ../thirdparty/alp/src/fastlanes_generated_ffor.cpp
-    ../thirdparty/alp/src/fastlanes_generated_unffor.cpp
     rowset/array_column_iterator.cpp
     rowset/array_column_writer.cpp
     rowset/binary_plain_page.cpp
@@ -333,15 +328,8 @@ ADD_BE_LIB(Storage
 target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)
 target_link_libraries(Storage PRIVATE Runtime)
 
-# Vendored cwida/ALP (be/src/thirdparty/alp) used by rowset/alp_page.cpp.
-# SYSTEM silences third-party header warnings; -w does the same for its
-# translation units, which are built with upstream defaults.
-target_include_directories(Storage SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/alp/include)
-set_source_files_properties(
-    ../thirdparty/alp/src/falp.cpp
-    ../thirdparty/alp/src/fastlanes_ffor.cpp
-    ../thirdparty/alp/src/fastlanes_unffor.cpp
-    ../thirdparty/alp/src/fastlanes_generated_ffor.cpp
-    ../thirdparty/alp/src/fastlanes_generated_unffor.cpp
-    PROPERTIES COMPILE_FLAGS "-w" SKIP_PRECOMPILE_HEADERS ON)
+# Thirdparty cwida/ALP headers (built into ${THIRDPARTY_DIR}/lib/libalp.a by
+# thirdparty/build-thirdparty.sh), used by rowset/alp_page.cpp. SYSTEM
+# silences third-party header warnings.
+target_include_directories(Storage SYSTEM PRIVATE ${THIRDPARTY_DIR}/include/alp)
 set_source_files_properties(rowset/alp_page.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)

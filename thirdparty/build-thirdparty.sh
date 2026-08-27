@@ -1077,6 +1077,25 @@ build_bitshuffle() {
     cp $TP_SOURCE_DIR/$BITSHUFFLE_SOURCE/src/bitshuffle_core.h $PREFIX/include/bitshuffle/bitshuffle_core.h
 }
 
+# alp (Adaptive Lossless floating-Point compression, cwida/ALP), used by the
+# ALP_ENCODING column encoding for FLOAT/DOUBLE data pages. Header-heavy
+# library with five translation units; built with the portable global flags
+# (its scalar falp kernels dominate and need no arch-specific build).
+build_alp() {
+    check_if_source_exist $ALP_SOURCE
+    cd $TP_SOURCE_DIR/$ALP_SOURCE
+    PREFIX=$TP_INSTALL_DIR
+    rm -f libalp.a ./*.o
+    local alp_srcs="falp fastlanes_ffor fastlanes_unffor fastlanes_generated_ffor fastlanes_generated_unffor"
+    for alp_src in $alp_srcs; do
+        ${CXX:-g++} $CXXFLAGS -std=c++17 -w -Iinclude -c src/${alp_src}.cpp -o ${alp_src}.o
+    done
+    ar rs libalp.a falp.o fastlanes_ffor.o fastlanes_unffor.o fastlanes_generated_ffor.o fastlanes_generated_unffor.o
+    mkdir -p $PREFIX/lib $PREFIX/include/alp
+    cp libalp.a $PREFIX/lib/
+    cp -r include/. $PREFIX/include/alp/
+}
+
 # croaring bitmap
 # If open AVX512 default, current version will be compiled failed on some machine, so close AVX512 default,
 # When this problem is solved, a switch will be added to control.
