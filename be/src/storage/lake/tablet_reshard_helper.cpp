@@ -25,6 +25,8 @@
 #include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
+#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
 
@@ -627,52 +629,95 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
     if (rowset.segment_metas_size() == 0) {
         return RangeOverlap::kUnknown;
     }
+
+    struct ValidatedTuple {
+        VariantTuple values;
+        std::vector<TypeDescriptor> types;
+    };
+    auto decode_tuple = [](const TuplePB& tuple_pb, ValidatedTuple* tuple) {
+        if (tuple_pb.values_size() == 0) return false;
+        tuple->types.reserve(tuple_pb.values_size());
+        for (const auto& variant : tuple_pb.values()) {
+            if (!variant.has_type() || variant.type().types_size() != 1 || !variant.type().IsInitialized()) {
+                return false;
+            }
+            const auto& node = variant.type().types(0);
+            if (static_cast<TTypeNodeType::type>(node.type()) != TTypeNodeType::SCALAR || !node.has_scalar_type()) {
+                return false;
+            }
+            const auto& scalar_type = node.scalar_type();
+            const auto logical_type = thrift_to_type(static_cast<TPrimitiveType::type>(scalar_type.type()));
+            if (!is_scalar_logical_type(logical_type)) return false;
+            if ((logical_type == TYPE_CHAR || logical_type == TYPE_VARCHAR) &&
+                (!scalar_type.has_len() || scalar_type.len() <= 0 ||
+                 (logical_type == TYPE_CHAR && scalar_type.len() > TypeDescriptor::MAX_CHAR_LENGTH) ||
+                 (logical_type == TYPE_VARCHAR && scalar_type.len() > TypeDescriptor::MAX_VARCHAR_LENGTH))) {
+                return false;
+            }
+            if (logical_type == TYPE_DECIMAL || logical_type == TYPE_DECIMALV2 ||
+                is_decimalv3_field_type(logical_type)) {
+                if (!scalar_type.has_precision() || !scalar_type.has_scale() || scalar_type.precision() <= 0 ||
+                    scalar_type.precision() > TypeDescriptor::MAX_PRECISION || scalar_type.scale() < 0 ||
+                    scalar_type.scale() > scalar_type.precision()) {
+                    return false;
+                }
+                if ((logical_type == TYPE_DECIMAL32 &&
+                     scalar_type.precision() > TypeDescriptor::MAX_DECIMAL4_PRECISION) ||
+                    (logical_type == TYPE_DECIMAL64 &&
+                     scalar_type.precision() > TypeDescriptor::MAX_DECIMAL8_PRECISION)) {
+                    return false;
+                }
+            }
+            auto type = TypeDescriptor::from_protobuf(variant.type());
+            if (get_type_info(type) == nullptr) return false;
+            tuple->types.emplace_back(std::move(type));
+        }
+        return tuple->values.from_proto(tuple_pb).ok();
+    };
+    auto same_shape = [](const ValidatedTuple& lhs, const ValidatedTuple& rhs) { return lhs.types == rhs.types; };
+
+    ValidatedTuple range_lower;
+    ValidatedTuple range_upper;
+    if ((range_pb.has_lower_bound() && !decode_tuple(range_pb.lower_bound(), &range_lower)) ||
+        (range_pb.has_upper_bound() && !decode_tuple(range_pb.upper_bound(), &range_upper))) {
+        return RangeOverlap::kUnknown;
+    }
     TabletRange range;
     if (!range.from_proto(range_pb).ok()) {
         return RangeOverlap::kUnknown;
     }
-    auto same_shape = [](const VariantTuple& lhs, const VariantTuple& rhs) {
-        if (lhs.size() != rhs.size()) return false;
-        for (size_t i = 0; i < lhs.size(); ++i) {
-            if (lhs[i].type()->type() != rhs[i].type()->type()) return false;
-        }
-        return true;
-    };
 
-    VariantTuple envelope_min;
-    VariantTuple envelope_max;
+    ValidatedTuple envelope_min;
+    ValidatedTuple envelope_max;
     for (const auto& segment_meta : rowset.segment_metas()) {
         if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
             return RangeOverlap::kUnknown;
         }
-        VariantTuple segment_min;
-        VariantTuple segment_max;
-        if (!segment_min.from_proto(segment_meta.sort_key_min()).ok() ||
-            !segment_max.from_proto(segment_meta.sort_key_max()).ok()) {
+        ValidatedTuple segment_min;
+        ValidatedTuple segment_max;
+        if (!decode_tuple(segment_meta.sort_key_min(), &segment_min) ||
+            !decode_tuple(segment_meta.sort_key_max(), &segment_max)) {
             return RangeOverlap::kUnknown;
         }
-        if (segment_min.empty() || segment_max.empty()) {
+        if (!same_shape(segment_min, segment_max) || segment_min.values.compare(segment_max.values) > 0) {
             return RangeOverlap::kUnknown;
         }
-        if (!same_shape(segment_min, segment_max) || segment_min.compare(segment_max) > 0) {
+        if (!envelope_min.values.empty() && !same_shape(envelope_min, segment_min)) {
             return RangeOverlap::kUnknown;
         }
-        if (!envelope_min.empty() && !same_shape(envelope_min, segment_min)) {
-            return RangeOverlap::kUnknown;
-        }
-        if (envelope_min.empty() || segment_min.compare(envelope_min) < 0) {
+        if (envelope_min.values.empty() || segment_min.values.compare(envelope_min.values) < 0) {
             envelope_min = segment_min;
         }
-        if (envelope_max.empty() || segment_max.compare(envelope_max) > 0) {
+        if (envelope_max.values.empty() || segment_max.values.compare(envelope_max.values) > 0) {
             envelope_max = segment_max;
         }
     }
 
-    // Compare only tuples with identical arity and logical types. Besides DatumVariant::compare's
-    // same-type precondition, a shorter prefix-equal tuple sorts below its longer form and can turn
-    // an arity mismatch into a false kNo. Malformed or empty ranges likewise stay on the legacy path.
-    if ((!range.is_minimum() && !same_shape(envelope_min, range.lower_bound())) ||
-        (!range.is_maximum() && !same_shape(envelope_min, range.upper_bound())) || range.is_empty()) {
+    // Compare only identical scalar descriptors, including decimal precision/scale. Besides
+    // DatumVariant::compare's same-type precondition, incompatible descriptors can compare different
+    // physical representations and turn malformed metadata into a false kNo.
+    if ((!range.is_minimum() && !same_shape(envelope_min, range_lower)) ||
+        (!range.is_maximum() && !same_shape(envelope_min, range_upper)) || range.is_empty()) {
         return RangeOverlap::kUnknown;
     }
 
@@ -683,11 +728,11 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
 
     // [envelope_min, envelope_max] is a superset of the rowset's keys, so "the range sits entirely
     // outside the envelope" proves the sibling owns none of them.
-    if (range.less_than(envelope_min) || range.greater_than(envelope_max)) {
+    if (range.less_than(envelope_min.values) || range.greater_than(envelope_max.values)) {
         return RangeOverlap::kNo;
     }
-    const bool contains_lower = range.contains(envelope_min);
-    const bool contains_upper = range.contains(envelope_max);
+    const bool contains_lower = range.contains(envelope_min.values);
+    const bool contains_upper = range.contains(envelope_max.values);
     if (contains_lower && contains_upper) return RangeOverlap::kContainsBoth;
     if (contains_lower) return RangeOverlap::kContainsLower;
     if (contains_upper) return RangeOverlap::kContainsUpper;

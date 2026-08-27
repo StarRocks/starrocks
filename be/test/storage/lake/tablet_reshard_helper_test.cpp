@@ -774,6 +774,38 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     TabletRangePB mismatched_range_type = co_range(40, 50);
     write_bigint(mismatched_range_type.mutable_upper_bound(), 50);
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(one_key, mismatched_range_type));
+
+    // Decimal values with the same physical LogicalType but different scales have incompatible
+    // unscaled representations and must not be compared.
+    auto write_decimal64 = [](TuplePB* tuple_pb, int precision, int scale, int64_t unscaled_value) {
+        VariantTuple tuple;
+        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_DECIMAL64, precision, scale), Datum(unscaled_value)));
+        tuple.to_proto(tuple_pb);
+    };
+    RowsetMetadataPB decimal_segment;
+    auto* decimal_segment_meta = decimal_segment.add_segment_metas();
+    write_decimal64(decimal_segment_meta->mutable_sort_key_min(), 10, 0, 70);
+    write_decimal64(decimal_segment_meta->mutable_sort_key_max(), 10, 0, 80);
+    TabletRangePB decimal_scale_mismatch;
+    write_decimal64(decimal_scale_mismatch.mutable_lower_bound(), 10, 2, 7500);
+    decimal_scale_mismatch.set_lower_bound_included(true);
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(decimal_segment, decimal_scale_mismatch));
+
+    // Empty type-node trees are not safe inputs to TypeDescriptor::from_protobuf. They must
+    // degrade for bounded and fully unbounded siblings before VariantTuple decoding.
+    RowsetMetadataPB malformed_type_desc;
+    auto* malformed_segment = malformed_type_desc.add_segment_metas();
+    auto add_malformed_bound = [](TuplePB* tuple_pb) {
+        auto* value = tuple_pb->add_values();
+        value->mutable_type();
+        value->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        value->set_value("1");
+    };
+    add_malformed_bound(malformed_segment->mutable_sort_key_min());
+    add_malformed_bound(malformed_segment->mutable_sort_key_max());
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(malformed_type_desc, co_range(0, 100)));
+    EXPECT_EQ(RangeOverlap::kUnknown,
+              classify_rowset_range_overlap(malformed_type_desc, co_range(std::nullopt, std::nullopt)));
 }
 
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_contiguous_overlap_interval) {
