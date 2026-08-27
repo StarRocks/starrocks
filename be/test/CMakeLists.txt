@@ -319,6 +319,7 @@ SET(DW_TEST_FILES
     ./storage/lake/delete_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
+    ./storage/lake/lake_pk_delvec_loss_78224_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
     ./storage/lake/txn_log_applier_idg_test.cpp
     ./storage/lake/vacuum_test.cpp

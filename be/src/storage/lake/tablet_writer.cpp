@@ -84,6 +84,9 @@ Status TabletWriter::merge_other_writers(const std::vector<std::unique_ptr<Table
 }
 
 Status TabletWriter::merge_other_writer(const TabletWriter* other_writer) {
+    // Number of segments this writer held before this batch, i.e. the number of _ssts entries that must
+    // already be present for the batch appended below to land at the right index (see the padding note).
+    const size_t segments_before = _segments.size();
     // merge other writer's files into current writer
     _segments.insert(_segments.end(), other_writer->_segments.begin(), other_writer->_segments.end());
     // Assign each consolidated del file an op_offset that places it right after THIS batch's segments
@@ -103,6 +106,23 @@ Status TabletWriter::merge_other_writer(const TabletWriter* other_writer) {
         _del_ssts.push_back(i < other_writer->_del_ssts.size() ? other_writer->_del_ssts[i] : FileInfo{});
         _del_sst_ranges.push_back(i < other_writer->_del_sst_ranges.size() ? other_writer->_del_sst_ranges[i]
                                                                            : PersistentIndexSstableRangePB{});
+    }
+    // _ssts, _sst_ranges and _seg_delvecs must stay positionally aligned with _segments: publish reads
+    // op_write.ssts(i) / sst_ranges(i) by SEGMENT index (UpdateManager::publish_primary_key_tablet), so a
+    // batch that contributed segments without an eager PK-index SST must not shift the following batches'
+    // entries left -- that would map a segment's rows to another segment's keys in the primary index, and
+    // the index would then miss the rows that are actually there. THIS writer can hold such segments: the
+    // spill sink's single-flush fast path (write_single_flush) writes a plain segment and clears the
+    // eager-build flag, while merge_blocks_to_segments turns it back on for the cloned merge writers,
+    // whose segments do carry SSTs. Pad up to segments_before with an empty FileInfo / range, which
+    // publish reads as "this segment has no eager SST" and upserts into the index instead of ingesting
+    // one. Same discipline as _del_ssts vs _dels above.
+    if (!_ssts.empty() || !other_writer->_ssts.empty()) {
+        while (_ssts.size() < segments_before) {
+            _ssts.emplace_back();
+            _sst_ranges.emplace_back();
+            _seg_delvecs.emplace_back();
+        }
     }
     _ssts.insert(_ssts.end(), other_writer->_ssts.begin(), other_writer->_ssts.end());
     _sst_ranges.insert(_sst_ranges.end(), other_writer->_sst_ranges.begin(), other_writer->_sst_ranges.end());

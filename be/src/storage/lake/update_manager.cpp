@@ -452,6 +452,17 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // When too many sst files, we need to compact them early.
     int32_t current_fileset_start_idx = index.current_fileset_index();
     AsyncCompactCBPtr async_compact_cb;
+    // op_write.ssts / sst_ranges are read by SEGMENT index, and a segment need not have an eager
+    // PK-index SST: the writer appends an empty FileInfo placeholder for one that has none (see
+    // TabletWriter::merge_other_writer), and a txn log written before that padding existed can simply
+    // carry fewer ssts than segments. Decide per segment, not per transaction -- a segment whose keys
+    // are in no ingested sstable must go through the index-writing parallel_upsert instead of the
+    // read-only lookup, otherwise its rows never enter the index at all and the delete marks for the
+    // rows they supersede are never generated (issue #78224). Mirrors the del_ssts guard in _do_delete.
+    auto segment_has_eager_sst = [&op_write](uint32_t local_id) {
+        return local_id < static_cast<uint32_t>(op_write.ssts_size()) &&
+               local_id < static_cast<uint32_t>(op_write.sst_ranges_size()) && !op_write.ssts(local_id).name().empty();
+    };
     // Check if parallel row-mode partial update is applicable.
     int32_t condition_column = _get_condition_column(op_write, *tablet_schema);
     const bool has_condition_update = (condition_column >= 0);
@@ -539,8 +550,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             DCHECK(state.upserts(local_id) != nullptr);
             if (!has_condition_update) {
                 RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
-                                           op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
-            } else if (op_write.ssts_size() > 0) {
+                                           segment_has_eager_sst(local_id), use_cloud_native_pk_index(*metadata)));
+            } else if (segment_has_eager_sst(local_id)) {
                 RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
                                                                    condition_column, state.upserts(local_id), index,
                                                                    &new_deletes));
@@ -566,7 +577,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             _index_cache.update_object_size(index_entry, index.memory_usage());
             state.release_segment(local_id);
             _update_state_cache.update_object_size(state_entry, state.memory_usage());
-            if (op_write.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
+            if (segment_has_eager_sst(local_id) && use_cloud_native_pk_index(*metadata)) {
                 DelvecPagePB delvec_page_pb = builder->delvec_page(rowset_id + global_segment_id);
                 delvec_page_pb.set_version(metadata->version());
                 RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),

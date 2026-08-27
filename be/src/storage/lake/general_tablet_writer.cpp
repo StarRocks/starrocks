@@ -207,7 +207,12 @@ void HorizontalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // merge_other_writer appends an empty FileInfo placeholder for a segment with no eager PK-index
+        // SST, to keep _ssts aligned with _segments; skip those, they name no file.
         for (const auto& f : _ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
             std::string path;
             if (_location_provider) {
                 path = _location_provider->sst_location(_tablet_id, f.path);
@@ -557,7 +562,12 @@ void VerticalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // merge_other_writer appends an empty FileInfo placeholder for a segment with no eager PK-index
+        // SST, to keep _ssts aligned with _segments; skip those, they name no file.
         for (const auto& f : _ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
             std::string path;
             if (_location_provider) {
                 path = _location_provider->sst_location(_tablet_id, f.path);
