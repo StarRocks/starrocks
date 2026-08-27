@@ -1552,7 +1552,6 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts, Tab
     std::map<uint32_t, std::vector<IndexDeltaGroupEntryPB>> work_by_target;
     // target rssid -> (.idx filename -> index into work_by_target[target]).
     std::map<uint32_t, std::unordered_map<std::string, size_t>> seen_files_by_target;
-    const auto target_live_rssids = collect_live_rssids(*new_metadata);
 
     for (const auto& context : merge_contexts) {
         if (!context.metadata()->has_idg_meta()) continue;
@@ -1562,7 +1561,7 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts, Tab
                 continue; // stale idg entry: segment no longer in this source's rowsets
             }
             ASSIGN_OR_RETURN(uint32_t target_rssid, context.map_rssid(segment_id));
-            if (!target_live_rssids.contains(target_rssid)) {
+            if (!target_rssid_shared.contains(target_rssid)) {
                 continue; // defensive: target not a live merged segment
             }
             auto& entries = work_by_target[target_rssid];
