@@ -882,16 +882,20 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_con
                     int64_t total_size = 0;
                     for (int32_t split_index = 0; split_index < split_count; ++split_index) {
                         const TabletRangePB child_range =
-                                split_index == 0                 ? co_range(std::nullopt, 100)
-                                : split_index == split_count - 1 ? co_range(100 * split_index, std::nullopt)
-                                                                 : co_range(100 * split_index, 100 * (split_index + 1));
+                                split_index == 0 ? co_range(std::nullopt, 100)
+                                                 : split_index == split_count - 1
+                                                           ? co_range(100 * split_index, std::nullopt)
+                                                           : co_range(100 * split_index, 100 * (split_index + 1));
                         const RangeOverlap overlap = classify_rowset_range_overlap(rowset, child_range);
-                        const RangeOverlap expected = split_index < first || split_index > last ? RangeOverlap::kNo
-                                                      : split_index == first && split_index == last
-                                                              ? RangeOverlap::kContainsBoth
-                                                      : split_index == first ? RangeOverlap::kContainsLower
-                                                      : split_index == last  ? RangeOverlap::kContainsUpper
-                                                                             : RangeOverlap::kInterior;
+                        const RangeOverlap expected =
+                                split_index < first || split_index > last
+                                        ? RangeOverlap::kNo
+                                        : split_index == first && split_index == last
+                                                  ? RangeOverlap::kContainsBoth
+                                                  : split_index == first
+                                                            ? RangeOverlap::kContainsLower
+                                                            : split_index == last ? RangeOverlap::kContainsUpper
+                                                                                  : RangeOverlap::kInterior;
                         EXPECT_EQ(expected, overlap) << "split_count=" << split_count << " first=" << first
                                                      << " last=" << last << " split_index=" << split_index;
                         RowsetMetadataPB child = rowset;
