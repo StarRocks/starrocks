@@ -275,7 +275,7 @@ public:
         return std::string(reinterpret_cast<const char*>(visitor.result()), encoded->type_size());
     }
 
-    TabletMetadataPtr build_non_monotonic_cache_only_history(bool append_post_frontier) {
+    TabletMetadataPtr build_non_monotonic_cache_only_history() {
         constexpr int32_t kHighKey = 1000;
         constexpr int32_t kHighValue = 10'000;
         constexpr int32_t kLowKey = 50;
@@ -306,22 +306,7 @@ public:
                          .status());
         ASSIGN_OR_ABORT(auto version3, _tablet_mgr->get_tablet_metadata(metadata->id(), 3));
         CHECK_EQ(50, version3->rowsets(version3->rowsets_size() - 1).id());
-        if (!append_post_frontier) {
-            return version3;
-        }
-
-        auto mutable_version3 = std::make_shared<TabletMetadata>(*version3);
-        mutable_version3->set_next_rowset_id(101);
-        CHECK_OK(_tablet_mgr->put_tablet_metadata(*mutable_version3));
-        CHECK_OK(publish_single_version(metadata->id(), 4, write_single_upsert_txn(metadata->id(), 1010, 10'100))
-                         .status());
-        CHECK_OK(publish_single_version(metadata->id(), 5, write_single_upsert_txn(metadata->id(), 1020, 10'200))
-                         .status());
-        ASSIGN_OR_ABORT(auto version5, _tablet_mgr->get_tablet_metadata(metadata->id(), 5));
-        CHECK_GT(version5->next_rowset_id(), 102);
-        CHECK_EQ(101, version5->rowsets(version5->rowsets_size() - 2).id());
-        CHECK_EQ(102, version5->rowsets(version5->rowsets_size() - 1).id());
-        return version5;
+        return version3;
     }
 
     TabletMetadataPtr build_non_monotonic_complete_checkpoint_history() {
@@ -3963,7 +3948,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_same_cache_second_upsert_preserves_old_ro
     const IndexValue expected_new_value(uint64_t{kNewRssid} << 32);
 
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
-    auto metadata = build_non_monotonic_cache_only_history(false);
+    auto metadata = build_non_monotonic_cache_only_history();
     const auto tablet_id = metadata->id();
     DeferOp cleanup([&]() { _update_mgr->unload_and_remove_primary_index(tablet_id); });
     ASSERT_EQ(expected_old_value, prepare_and_point_get(metadata, kBaseVersion, kLowKey));
