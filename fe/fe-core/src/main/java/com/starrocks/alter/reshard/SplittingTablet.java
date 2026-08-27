@@ -148,7 +148,8 @@ public class SplittingTablet implements ReshardingTablet {
         List<Long> tabletIdsSnapshot = newTabletIds;
         Preconditions.checkState(!tabletIdsSnapshot.isEmpty());
         // Publish IDs first and ranges second. Readers snapshot ranges before IDs,
-        // so this order prevents a reader from pairing one ID with stale ranges.
+        // so observing cleared ranges guarantees singleton IDs; singleton IDs with stale ranges
+        // are safe because toProto() chooses identical and ignores ranges.
         newTabletIds = List.of(tabletIdsSnapshot.get(0));
         // Drop stale FE-supplied ranges. After BE's identical fallback there is
         // a single inherited new tablet, not the K originally requested, so
