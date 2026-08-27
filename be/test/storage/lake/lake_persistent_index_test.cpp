@@ -18,12 +18,16 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <future>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -426,6 +430,131 @@ protected:
         }
         RETURN_IF_ERROR(iterator->status());
         return entries;
+    }
+
+    void wait_for_one_async_memtable_flush(LakePersistentIndex* index) {
+        std::promise<Status> flushed;
+        auto future = flushed.get_future();
+        std::atomic<bool> notified = false;
+        SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::run:after_flush", [&](void* arg) {
+            if (!notified.exchange(true)) {
+                flushed.set_value(*static_cast<Status*>(arg));
+            }
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds(10)));
+        ASSERT_OK(future.get());
+        EXPECT_EQ(1, notified.load());
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::run:after_flush");
+        SyncPoint::GetInstance()->DisableProcessing();
+    }
+
+    std::vector<IndexValue> cold_reload_values(const TabletMetadataPtr& metadata, int64_t version,
+                                               const std::vector<std::string>& keys) {
+        Tablet tablet(_tablet_mgr.get(), metadata->id());
+        auto reloaded_metadata = std::make_shared<TabletMetadata>();
+        reloaded_metadata->CopyFrom(*metadata);
+        MetaFileBuilder builder(tablet, reloaded_metadata);
+        auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+        CHECK_OK(reloaded->init(metadata));
+        CHECK_OK(reloaded->load_from_lake_tablet(_tablet_mgr.get(), metadata, version, &builder));
+        std::vector<Slice> slices;
+        slices.reserve(keys.size());
+        for (const auto& key : keys) {
+            slices.emplace_back(key);
+        }
+        std::vector<IndexValue> values(keys.size());
+        CHECK_OK(reloaded->get(keys.size(), slices.data(), values.data()));
+        return values;
+    }
+
+    void run_complete_checkpoint_cache_only_tail(bool parallel) {
+        constexpr uint32_t kEarlierHighRssid = 100;
+        constexpr uint32_t kLaterLowRssid = 50;
+        constexpr uint32_t kPostFrontierRssid1 = 101;
+        constexpr uint32_t kPostFrontierRssid2 = 102;
+        constexpr int64_t kFirstCommitVersion = 3;
+        constexpr int64_t kLaterCommitVersion = 5;
+
+        auto md = make_varchar_pk_metadata();
+        md->set_version(kFirstCommitVersion);
+        md->set_next_rowset_id(kPostFrontierRssid2 + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+
+        std::vector<std::string> high_keys;
+        std::vector<std::string> low_keys;
+        std::vector<std::string> post_keys1;
+        std::vector<std::string> post_keys2;
+        append_cold_rowset(md.get(), 0, 1, kEarlierHighRssid, &high_keys);
+        append_cold_rowset(md.get(), 100, 1, kLaterLowRssid, &low_keys);
+        md->mutable_rowsets(0)->set_version(2);
+        md->mutable_rowsets(1)->set_version(3);
+
+        ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+        ASSERT_OK(index->init(md));
+
+        const Slice high_key(high_keys[0]);
+        const Slice low_key(low_keys[0]);
+        const IndexValue high_value(uint64_t{kEarlierHighRssid} << 32);
+        const IndexValue low_value(uint64_t{kLaterLowRssid} << 32);
+        ASSERT_OK(index->insert(1, &high_key, &high_value, 2));
+        ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+        ASSERT_OK(index->insert(1, &low_key, &low_value, 3));
+
+        Tablet tablet(_tablet_mgr.get(), md->id());
+        auto checkpointed = std::make_shared<TabletMetadata>(*md);
+        MetaFileBuilder first_builder(tablet, checkpointed);
+        ASSERT_OK(index->commit(&first_builder));
+        ASSERT_GT(checkpointed->sstable_meta().sstables_size(), 0);
+
+        append_cold_rowset(checkpointed.get(), 200, 1, kPostFrontierRssid1, &post_keys1);
+        append_cold_rowset(checkpointed.get(), 300, 1, kPostFrontierRssid2, &post_keys2);
+        checkpointed->mutable_rowsets(2)->set_version(4);
+        checkpointed->mutable_rowsets(3)->set_version(5);
+        checkpointed->set_version(kLaterCommitVersion);
+        checkpointed->set_next_rowset_id(kPostFrontierRssid2 + 1);
+
+        std::array<Slice, 2> post_slices = {Slice(post_keys1[0]), Slice(post_keys2[0])};
+        std::array<IndexValue, 2> post_values = {IndexValue(uint64_t{kPostFrontierRssid1} << 32),
+                                                 IndexValue(uint64_t{kPostFrontierRssid2} << 32)};
+        ASSERT_OK(index->insert(post_slices.size(), post_slices.data(), post_values.data(), kLaterCommitVersion));
+
+        const auto first_sst_meta = checkpointed->sstable_meta().SerializeAsString();
+        const auto first_inventory = sst_inventory(md->id());
+        auto cache_only = std::make_shared<TabletMetadata>(*checkpointed);
+        MetaFileBuilder later_builder(tablet, cache_only);
+        ASSERT_OK(index->commit(&later_builder));
+        EXPECT_EQ(first_sst_meta, cache_only->sstable_meta().SerializeAsString());
+        EXPECT_EQ(first_inventory, sst_inventory(md->id()));
+        index.reset();
+
+        ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, parallel);
+        ConfigResetGuard<int32_t> ratio_guard(&config::pk_index_parallel_rebuild_mem_ratio, 100);
+        ASSERT_FALSE(RuntimeEnv::GetInstance()->update_mem_tracker()->limit_exceeded_by_ratio(
+                config::pk_index_parallel_rebuild_mem_ratio));
+        std::atomic<int> parallel_callbacks = 0;
+        std::atomic<int> serial_callbacks = 0;
+        SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:parallel",
+                                              [&](void*) { ++parallel_callbacks; });
+        SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:serial",
+                                              [&](void*) { ++serial_callbacks; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp clear_callbacks([&]() {
+            SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:parallel");
+            SyncPoint::GetInstance()->ClearCallBack("LakePersistentIndex::load_from_lake_tablet:serial");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        const std::vector<std::string> keys = {high_keys[0], low_keys[0], post_keys1[0], post_keys2[0]};
+        auto values = cold_reload_values(cache_only, kLaterCommitVersion, keys);
+        EXPECT_EQ(parallel ? 1 : 0, parallel_callbacks.load());
+        EXPECT_EQ(parallel ? 0 : 1, serial_callbacks.load());
+        EXPECT_EQ(high_value, values[0]);
+        EXPECT_EQ(low_value, values[1]);
+        EXPECT_EQ(post_values[0], values[2]);
+        EXPECT_EQ(post_values[1], values[3]);
     }
 };
 
@@ -2496,8 +2625,9 @@ TEST_F(LakePersistentIndexTest, test_cold_reload_preserves_non_monotonic_rssid_t
         ASSERT_OK(index->commit(&builder));
     }
 
-    ASSERT_EQ(1, checkpointed->sstable_meta().sstables_size());
-    EXPECT_EQ(static_cast<uint64_t>(kEarlierHighRssid) << 32, checkpointed->sstable_meta().sstables(0).max_rss_rowid());
+    ASSERT_GT(checkpointed->sstable_meta().sstables_size(), 0);
+    EXPECT_GE(checkpointed->sstable_meta().sstables().rbegin()->max_rss_rowid(),
+              static_cast<uint64_t>(kEarlierHighRssid) << 32);
 
     auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
     ASSERT_OK(reloaded->init(checkpointed));
@@ -2511,6 +2641,262 @@ TEST_F(LakePersistentIndexTest, test_cold_reload_preserves_non_monotonic_rssid_t
     ASSERT_OK(reloaded->get(keys.size(), keys.data(), after_reload.data()));
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(kEarlierHighRssid) << 32), after_reload[0]);
     EXPECT_EQ(IndexValue(static_cast<uint64_t>(kLaterLowRssid) << 32), after_reload[1]);
+}
+
+TEST_F(LakePersistentIndexTest, test_complete_checkpoint_parallel_reload_with_cache_only_post_frontier_rowsets) {
+    run_complete_checkpoint_cache_only_tail(true);
+}
+
+TEST_F(LakePersistentIndexTest, test_complete_checkpoint_serial_reload_with_cache_only_post_frontier_rowsets) {
+    run_complete_checkpoint_cache_only_tail(false);
+}
+
+TEST_F(LakePersistentIndexTest, test_complete_checkpoint_drains_inactive_and_active_lower_tails) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(4);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    std::vector<std::string> high_keys;
+    std::vector<std::string> inactive_keys;
+    std::vector<std::string> active_keys;
+    append_cold_rowset(md.get(), 0, 1, 100, &high_keys);
+    append_cold_rowset(md.get(), 100, 1, 50, &inactive_keys);
+    append_cold_rowset(md.get(), 200, 1, 51, &active_keys);
+    for (int i = 0; i < md->rowsets_size(); ++i) {
+        md->mutable_rowsets(i)->set_version(i + 2);
+    }
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    const Slice high_key(high_keys[0]);
+    const Slice inactive_key(inactive_keys[0]);
+    const Slice active_key(active_keys[0]);
+    const IndexValue high_value(uint64_t{100} << 32);
+    const IndexValue inactive_value(uint64_t{50} << 32);
+    const IndexValue active_value(uint64_t{51} << 32);
+    ASSERT_OK(index->insert(1, &high_key, &high_value, 2));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    ASSERT_OK(index->insert(1, &inactive_key, &inactive_value, 3));
+    wait_for_one_async_memtable_flush(index.get());
+    ASSERT_OK(index->insert(1, &active_key, &active_value, 4));
+
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto committed = std::make_shared<TabletMetadata>(*md);
+    MetaFileBuilder builder(tablet, committed);
+    ASSERT_OK(index->commit(&builder));
+    index.reset();
+
+    auto values = cold_reload_values(committed, 4, {high_keys[0], inactive_keys[0], active_keys[0]});
+    EXPECT_EQ(high_value, values[0]);
+    EXPECT_EQ(inactive_value, values[1]);
+    EXPECT_EQ(active_value, values[2]);
+}
+
+TEST_F(LakePersistentIndexTest, test_complete_checkpoint_drains_completed_inactive_tail_with_empty_active) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    std::vector<std::string> high_keys;
+    std::vector<std::string> inactive_keys;
+    append_cold_rowset(md.get(), 0, 1, 100, &high_keys);
+    append_cold_rowset(md.get(), 100, 1, 50, &inactive_keys);
+    md->mutable_rowsets(0)->set_version(2);
+    md->mutable_rowsets(1)->set_version(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    const Slice high_key(high_keys[0]);
+    const Slice inactive_key(inactive_keys[0]);
+    const IndexValue high_value(uint64_t{100} << 32);
+    const IndexValue inactive_value(uint64_t{50} << 32);
+    ASSERT_OK(index->insert(1, &high_key, &high_value, 2));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    ASSERT_OK(index->insert(1, &inactive_key, &inactive_value, 3));
+    wait_for_one_async_memtable_flush(index.get());
+
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto committed = std::make_shared<TabletMetadata>(*md);
+    MetaFileBuilder builder(tablet, committed);
+    ASSERT_OK(index->commit(&builder));
+    index.reset();
+
+    auto values = cold_reload_values(committed, 3, {high_keys[0], inactive_keys[0]});
+    EXPECT_EQ(high_value, values[0]);
+    EXPECT_EQ(inactive_value, values[1]);
+}
+
+TEST_F(LakePersistentIndexTest, test_complete_checkpoint_gate_runs_after_rebuild_threshold_flush) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    std::vector<std::string> high_keys;
+    std::vector<std::string> low_keys;
+    append_cold_rowset(md.get(), 0, 1, 100, &high_keys);
+    append_cold_rowset(md.get(), 100, 1, 50, &low_keys);
+    md->mutable_rowsets(0)->set_version(2);
+    md->mutable_rowsets(1)->set_version(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    ConfigResetGuard<int32_t> files_guard(&config::cloud_native_pk_index_rebuild_files_threshold, 0);
+    ConfigResetGuard<int64_t> rows_guard(&config::cloud_native_pk_index_rebuild_rows_threshold, 0);
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    const Slice high_key(high_keys[0]);
+    const Slice low_key(low_keys[0]);
+    const IndexValue high_value(uint64_t{100} << 32);
+    const IndexValue low_value(uint64_t{50} << 32);
+    ASSERT_OK(index->insert(1, &high_key, &high_value, 2));
+    wait_for_one_async_memtable_flush(index.get());
+
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto preloaded = std::make_shared<TabletMetadata>(*md);
+    MetaFileBuilder preload_builder(tablet, preloaded);
+    ASSERT_OK(index->commit(&preload_builder));
+    ASSERT_EQ(0, preloaded->sstable_meta().sstables_size());
+
+    config::cloud_native_pk_index_rebuild_files_threshold = 1;
+    ASSERT_OK(index->insert(1, &low_key, &low_value, 3));
+    auto committed = std::make_shared<TabletMetadata>(*preloaded);
+    MetaFileBuilder builder(tablet, committed);
+    ASSERT_OK(index->commit(&builder));
+    ASSERT_GT(committed->sstable_meta().sstables_size(), 0);
+    // The pre-fix threshold path leaves the low tail in an asynchronous inactive memtable. Drain the
+    // test object's runtime state only after snapshotting |committed| so teardown cannot race its file.
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    index.reset();
+
+    auto values = cold_reload_values(committed, 3, {high_keys[0], low_keys[0]});
+    EXPECT_EQ(high_value, values[0]);
+    EXPECT_EQ(low_value, values[1]);
+}
+
+TEST_F(LakePersistentIndexTest, test_empty_sst_metadata_and_filesets_keep_native_cache_only_path) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    std::vector<std::string> keys;
+    append_cold_rowset(md.get(), 0, 1, 10, &keys);
+    md->mutable_rowsets(0)->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    const auto before_meta = md->sstable_meta().SerializeAsString();
+    const auto before_inventory = sst_inventory(md->id());
+
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    ConfigResetGuard<int32_t> files_guard(&config::cloud_native_pk_index_rebuild_files_threshold, 0);
+    ConfigResetGuard<int64_t> rows_guard(&config::cloud_native_pk_index_rebuild_rows_threshold, 0);
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    const Slice key(keys[0]);
+    const IndexValue value(uint64_t{10} << 32);
+    ASSERT_OK(index->insert(1, &key, &value, 2));
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto committed = std::make_shared<TabletMetadata>(*md);
+    MetaFileBuilder builder(tablet, committed);
+    ASSERT_OK(index->commit(&builder));
+
+    EXPECT_EQ(0, committed->sstable_meta().sstables_size());
+    EXPECT_EQ(before_meta, committed->sstable_meta().SerializeAsString());
+    EXPECT_EQ(before_inventory, sst_inventory(md->id()));
+}
+
+TEST_F(LakePersistentIndexTest, test_existing_sst_does_not_force_safe_later_active_entry) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    std::vector<std::string> high_keys;
+    append_cold_rowset(md.get(), 0, 1, 100, &high_keys);
+    md->mutable_rowsets(0)->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    const Slice high_key(high_keys[0]);
+    const IndexValue high_value(uint64_t{100} << 32);
+    ASSERT_OK(index->insert(1, &high_key, &high_value, 2));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto first = std::make_shared<TabletMetadata>(*md);
+    MetaFileBuilder first_builder(tablet, first);
+    ASSERT_OK(index->commit(&first_builder));
+    const auto first_meta = first->sstable_meta().SerializeAsString();
+    const auto first_inventory = sst_inventory(md->id());
+
+    std::vector<std::string> later_keys;
+    append_cold_rowset(first.get(), 100, 1, 101, &later_keys);
+    first->mutable_rowsets(1)->set_version(3);
+    first->set_version(3);
+    const Slice later_key(later_keys[0]);
+    const IndexValue later_value(uint64_t{101} << 32);
+    ASSERT_OK(index->insert(1, &later_key, &later_value, 3));
+    auto second = std::make_shared<TabletMetadata>(*first);
+    MetaFileBuilder second_builder(tablet, second);
+    ASSERT_OK(index->commit(&second_builder));
+    EXPECT_EQ(first_meta, second->sstable_meta().SerializeAsString());
+    EXPECT_EQ(first_inventory, sst_inventory(md->id()));
+    index.reset();
+
+    auto values = cold_reload_values(second, 3, {high_keys[0], later_keys[0]});
+    EXPECT_EQ(high_value, values[0]);
+    EXPECT_EQ(later_value, values[1]);
+}
+
+TEST_F(LakePersistentIndexTest, test_first_fileset_with_empty_memtables_creates_no_redundant_sst) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    std::vector<std::string> keys;
+    append_cold_rowset(md.get(), 0, 1, 100, &keys);
+    md->mutable_rowsets(0)->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    const Slice key(keys[0]);
+    const IndexValue value(uint64_t{100} << 32);
+    ASSERT_OK(index->insert(1, &key, &value, 2));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    const auto before_inventory = sst_inventory(md->id());
+    ASSERT_EQ(1, before_inventory.size());
+
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto committed = std::make_shared<TabletMetadata>(*md);
+    MetaFileBuilder builder(tablet, committed);
+    ASSERT_OK(index->commit(&builder));
+    EXPECT_EQ(1, committed->sstable_meta().sstables_size());
+    EXPECT_EQ(before_inventory, sst_inventory(md->id()));
+}
+
+TEST_F(LakePersistentIndexTest, test_cold_rebuild_rejects_unmasked_duplicate_primary_keys) {
+    auto md = make_varchar_pk_metadata();
+    md->set_version(3);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+    std::vector<std::string> first_keys;
+    std::vector<std::string> duplicate_keys;
+    append_cold_rowset(md.get(), 0, 1, 100, &first_keys);
+    append_cold_rowset(md.get(), 0, 1, 50, &duplicate_keys);
+    md->mutable_rowsets(0)->set_version(2);
+    md->mutable_rowsets(1)->set_version(3);
+    ASSERT_EQ(first_keys[0], duplicate_keys[0]);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+
+    ConfigResetGuard<bool> consistency_guard(&config::experimental_lake_ignore_pk_consistency_check, false);
+    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto reload_metadata = std::make_shared<TabletMetadata>(*md);
+    MetaFileBuilder builder(tablet, reload_metadata);
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(index->init(md));
+    auto st = index->load_from_lake_tablet(_tablet_mgr.get(), md, 3, &builder);
+    EXPECT_TRUE(st.is_already_exist()) << st;
 }
 
 // A del file that did NOT originate from the rebuilt rowset must run get()+filter and drop deletes
