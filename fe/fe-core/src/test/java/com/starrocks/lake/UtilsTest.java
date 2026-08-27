@@ -15,12 +15,9 @@
 package com.starrocks.lake;
 
 import com.starrocks.common.StarRocksException;
-<<<<<<< HEAD
 import com.starrocks.epack.lake.StarOSAgentEpack;
-=======
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
->>>>>>> ccb5c7129a6... [Enhancement] FE: schedule an ORDER BY range split and keep the parent readable (#77872)
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
