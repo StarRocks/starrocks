@@ -1,3 +1,9 @@
+---
+displayed_sidebar: docs
+sidebar_position: 100
+description: "如何使用 Apache Airflow 的 DAG、SQLExecuteQueryOperator 和 MySQLHook 编排和调度 StarRocks 数据工作流。"
+---
+
 # Apache Airflow
 
 通过使用 DAG（有向无环图）和 SQL 操作符来实现与 StarRocks 的数据工作流编排和调度。使用 Airflow 进行数据导入和转换时，可以使用 `SQLExecuteQueryOperator` 和 `MySQLHook`，无需任何实现或复杂配置。

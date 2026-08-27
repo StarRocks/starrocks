@@ -230,7 +230,7 @@ public class PipeManagerTest {
         pm.clear();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        new UtFrameUtils.PseudoImage();
         long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
@@ -336,7 +336,7 @@ public class PipeManagerTest {
 
     private void mockPollError(int errorCount) {
         // poll error
-        MockUp<HdfsUtil> mockHdfs = new MockUp<HdfsUtil>() {
+        new MockUp<HdfsUtil>() {
             private int count = 0;
 
             @Mock
@@ -1052,7 +1052,7 @@ public class PipeManagerTest {
         pm.clear();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        new UtFrameUtils.PseudoImage();
         long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 

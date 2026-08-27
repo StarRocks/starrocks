@@ -14,32 +14,39 @@
 
 #include "storage/lake/lake_primary_index.h"
 
-#include <bvar/bvar.h>
+#include <utility>
+#include <vector>
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
-#include "column/chunk_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
-#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/rowset.h"
 #include "storage/lake/rowset_update_state.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/persistent_index_parallel_publish_context.h"
-#include "storage/primitive/primary_key_encoder.h"
-#include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
 
-static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
+// A cross-published chunk carries this tablet's rows AND its siblings'. SegmentPKChunkRef::owned
+// marks which are ours, as a mask over the chunk rather than a filtered copy, so row i keeps its
+// source-segment rowid physical_rowid_offset + i. These two turn that mask into the shapes the
+// primary index takes, and neither is entered at all on an ordinary publish, where `owned` is empty
+// and every row belongs here.
 
-LakePrimaryIndex::~LakePrimaryIndex() {
-    if (!_enable_persistent_index && _persistent_index != nullptr) {
-        auto st = LocalPkIndexManager::clear_persistent_index(_tablet_id);
-        LOG_IF(WARNING, !st.ok()) << "Fail to clear pk index from local disk: " << st.to_string();
+// Absolute source-segment rowids of the owned rows, in chunk order. Must be read off the mask BEFORE
+// the column is filtered -- filtering renumbers the survivors and the correspondence is lost.
+std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current) {
+    std::vector<uint32_t> rowids;
+    rowids.reserve(current.owned.size());
+    for (size_t i = 0; i < current.owned.size(); ++i) {
+        if (current.owned[i]) {
+            rowids.push_back(current.physical_rowid_offset + static_cast<uint32_t>(i));
+        }
     }
+    return rowids;
 }
 
 Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
@@ -76,8 +83,6 @@ bool LakePrimaryIndex::is_load(int64_t base_version) {
 
 Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                        int64_t base_version, const MetaFileBuilder* builder) {
-    MonotonicStopWatch watch;
-    watch.start();
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -87,136 +92,35 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     _set_schema(pkey_schema);
 
-    // load persistent index if enable persistent index meta
-
-    if (metadata->enable_persistent_index()) {
-        DCHECK(_persistent_index == nullptr);
-
-        switch (metadata->persistent_index_type()) {
-        case PersistentIndexTypePB::LOCAL: {
-            // Even if `enable_persistent_index` is enabled,
-            // it may not take effect if is as compute node without any storage path.
-            if (StorageEngine::instance()->get_persistent_index_store(metadata->id()) == nullptr) {
-                LOG(WARNING) << "lake_persistent_index_type of LOCAL will not take effect when as cn without any "
-                                "storage path";
-                return Status::InternalError(
-                        "lake_persistent_index_type of LOCAL will not take effect when as cn without any storage "
-                        "path");
-            }
-            std::string path = strings::Substitute(
-                    "$0/$1/",
-                    StorageEngine::instance()->get_persistent_index_store(metadata->id())->get_persistent_index_path(),
-                    metadata->id());
-
-            RETURN_IF_ERROR(StorageEngine::instance()
-                                    ->get_persistent_index_store(metadata->id())
-                                    ->create_dir_if_path_not_exists(path));
-            _persistent_index = std::make_shared<LakeLocalPersistentIndex>(path);
-            set_enable_persistent_index(true);
-            return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
-                    ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
-        }
-        case PersistentIndexTypePB::CLOUD_NATIVE: {
-            _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
-            set_enable_persistent_index(true);
-            auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-            RETURN_IF_ERROR(lake_persistent_index->init(metadata));
-            return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
-        }
-        default:
-            return Status::InternalError("Unsupported lake_persistent_index_type " +
-                                         PersistentIndexTypePB_Name(metadata->persistent_index_type()));
-        }
-    }
-
-    OlapReaderStatistics stats;
-    MutableColumnPtr pk_column;
-    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
-    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
-        // more than one key column or V2 encoding
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
-    }
-    vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
-    // 2. scan all rowsets and segments to build primary index
-    auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
-    // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
-    // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
-    for (auto& rowset : rowsets) {
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
-        if (!res.ok()) {
-            return res.status();
-        }
-        auto& itrs = res.value();
-        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
-        for (size_t i = 0; i < itrs.size(); i++) {
-            auto itr = itrs[i].get();
-            if (itr == nullptr) {
-                continue;
-            }
-            while (true) {
-                chunk->reset();
-                rowids.clear();
-                auto st = itr->get_next(chunk, &rowids);
-                if (st.is_end_of_file()) {
-                    break;
-                } else if (!st.ok()) {
-                    return st;
-                } else {
-                    const Column* pkc = nullptr;
-                    if (pk_column) {
-                        pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
-                                                  pk_encoding_type);
-                        pkc = pk_column.get();
-                    } else {
-                        pkc = chunk->columns()[0].get();
-                    }
-                    uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
-                    RETURN_IF_ERROR(insert(rssid, rowids, *pkc));
-                }
-            }
-            itr->close();
-        }
-    }
-    auto cost_ns = watch.elapsed_time();
-    g_load_pk_index_latency << cost_ns / 1000;
-    LOG_IF(INFO, cost_ns >= /*10ms=*/10 * 1000 * 1000)
-            << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
-    return Status::OK();
+    // Shared-data primary-key tablets support only the cloud-native persistent index. The
+    // metadata is normalized to enabled + CLOUD_NATIVE at load time (see
+    // normalize_tablet_metadata_after_load), so the in-memory index and the LOCAL persistent
+    // index are never used here.
+    DCHECK(_persistent_index == nullptr);
+    _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    RETURN_IF_ERROR(lake_persistent_index->init(metadata));
+    return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
 }
 
 Status LakePrimaryIndex::apply_opcompaction(const TabletMetadataPtr& metadata,
                                             const TxnLogPB_OpCompaction& op_compaction) {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return Status::OK();
     }
 
-    switch (metadata->persistent_index_type()) {
-    case PersistentIndexTypePB::LOCAL: {
-        return Status::OK();
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->apply_opcompaction(metadata, op_compaction);
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
-    case PersistentIndexTypePB::CLOUD_NATIVE: {
-        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-        if (lake_persistent_index != nullptr) {
-            return lake_persistent_index->apply_opcompaction(metadata, op_compaction);
-        } else {
-            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
-        }
-    }
-    default:
-        return Status::InternalError("Unsupported lake_persistent_index_type " +
-                                     PersistentIndexTypePB_Name(metadata->persistent_index_type()));
-    }
-    return Status::OK();
 }
 
 Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range,
                                     uint32_t rssid, int64_t version, const DelvecPagePB& delvec_page,
                                     DelVectorPtr delvec) {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return Status::OK();
     }
 
@@ -228,43 +132,23 @@ Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const Persistent
     }
 }
 
-Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder) {
+Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
+                                int64_t generation_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return Status::OK();
     }
 
-    switch (metadata->persistent_index_type()) {
-    case PersistentIndexTypePB::LOCAL: {
-        // only take affect in local persistent index
-        PersistentIndexMetaPB index_meta;
-        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(_tablet_id);
-        RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, _tablet_id, &index_meta));
-        RETURN_IF_ERROR(PrimaryIndex::commit(&index_meta));
-        RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, _tablet_id, index_meta));
-        RETURN_IF_ERROR(on_commited());
-        set_local_pk_index_write_amp_score(PersistentIndex::major_compaction_score(index_meta));
-        // Call `on_commited` here, which will be safe to remove old files.
-        // Because if version publishing fails after `on_commited`, index will be rebuild.
-        return Status::OK();
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        return lake_persistent_index->commit(builder, generation_version);
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
-    case PersistentIndexTypePB::CLOUD_NATIVE: {
-        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-        if (lake_persistent_index != nullptr) {
-            return lake_persistent_index->commit(builder);
-        } else {
-            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
-        }
-    }
-    default:
-        return Status::InternalError("Unsupported lake_persistent_index_type " +
-                                     PersistentIndexTypePB_Name(metadata->persistent_index_type()));
-    }
-    return Status::OK();
 }
 
 Status LakePrimaryIndex::sync_flush_persistent_index(int64_t wait_timeout_us) {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return Status::OK();
     }
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
@@ -275,7 +159,7 @@ Status LakePrimaryIndex::sync_flush_persistent_index(int64_t wait_timeout_us) {
 }
 
 double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return 0.0;
     }
     auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
@@ -286,7 +170,7 @@ double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
 }
 
 void LakePrimaryIndex::set_local_pk_index_write_amp_score(double score) {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return;
     }
     auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
@@ -304,40 +188,49 @@ static void old_values_to_deletes(const std::vector<uint64_t>& old_values, Delet
 }
 
 Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
-                               uint32_t rowset_id) {
+                               uint32_t del_rssid) {
     // No need to setup rebuild point for in-memory index and local persistent index,
     // so keep using previous erase interface.
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return PrimaryIndex::erase(pks, deletes);
     }
 
-    switch (metadata->persistent_index_type()) {
-    case PersistentIndexTypePB::LOCAL: {
-        return PrimaryIndex::erase(pks, deletes);
-    }
-    case PersistentIndexTypePB::CLOUD_NATIVE: {
-        auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-        if (lake_persistent_index != nullptr) {
-            Buffer<Slice> keys;
-            std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-            ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
-            // Cloud native index need to setup rowset id as rebuild point when erase.
-            RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
-                                                         reinterpret_cast<IndexValue*>(old_values.data()), rowset_id));
-            old_values_to_deletes(old_values, deletes);
-            return Status::OK();
-        } else {
-            return Status::InternalError("Persistent index is not a LakePersistentIndex.");
-        }
-    }
-    default:
-        return Status::InternalError("Unsupported lake_persistent_index_type " +
-                                     PersistentIndexTypePB_Name(metadata->persistent_index_type()));
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index != nullptr) {
+        Buffer<Slice> keys;
+        std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
+        ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+        // Cloud native index needs the delete's rssid as the rebuild point when erasing.
+        RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
+                                                     reinterpret_cast<IndexValue*>(old_values.data()), del_rssid));
+        old_values_to_deletes(old_values, deletes);
+        return Status::OK();
+    } else {
+        return Status::InternalError("Persistent index is not a LakePersistentIndex.");
     }
 }
 
+Status LakePrimaryIndex::bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
+                                    uint32_t del_rssid, const FileMetaPB& del_sst_meta,
+                                    const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
+    // Shared-data primary-key tablets always use LakePersistentIndex. Keep the cast defensive so a broken
+    // initialization invariant fails explicitly instead of dereferencing the wrong implementation.
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index == nullptr) {
+        return Status::InternalError("bulk_erase requires a cloud-native LakePersistentIndex.");
+    }
+    Buffer<Slice> keys;
+    std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
+    ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    RETURN_IF_ERROR(lake_persistent_index->bulk_erase(pks.size(), vkeys,
+                                                      reinterpret_cast<IndexValue*>(old_values.data()), del_rssid,
+                                                      del_sst_meta, del_sst_range, version));
+    old_values_to_deletes(old_values, deletes);
+    return Status::OK();
+}
+
 int32_t LakePrimaryIndex::current_fileset_index() const {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return -1;
     }
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
@@ -351,7 +244,7 @@ int32_t LakePrimaryIndex::current_fileset_index() const {
 StatusOr<AsyncCompactCBPtr> LakePrimaryIndex::early_sst_compact(
         lake::LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
         const TabletMetadataPtr& metadata, int32_t fileset_start_idx) {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return nullptr;
     }
     auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
@@ -363,7 +256,7 @@ StatusOr<AsyncCompactCBPtr> LakePrimaryIndex::early_sst_compact(
 }
 
 Status LakePrimaryIndex::flush_memtable(bool force) {
-    if (!_enable_persistent_index) {
+    if (_persistent_index == nullptr) {
         return Status::OK();
     }
 
@@ -376,19 +269,19 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
 }
 
 void LakePrimaryIndex::reset_publish_sst_stats() {
-    if (!_enable_persistent_index) return;
+    if (_persistent_index == nullptr) return;
     auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     if (idx != nullptr) idx->reset_publish_sst_stats();
 }
 
 int32_t LakePrimaryIndex::publish_sst_flush_count() const {
-    if (!_enable_persistent_index) return 0;
+    if (_persistent_index == nullptr) return 0;
     auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     return idx != nullptr ? idx->publish_sst_flush_count() : 0;
 }
 
 int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
-    if (!_enable_persistent_index) return 0;
+    if (_persistent_index == nullptr) return 0;
     auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
     return idx != nullptr ? idx->publish_sst_flush_bytes() : 0;
 }
@@ -415,6 +308,29 @@ int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
 // - Each task allocates its own slot to avoid data races during parallel execution
 // - Shared state (deletes, status) is protected by mutex when updated
 // - Errors are accumulated and checked after all tasks complete
+Status LakePrimaryIndex::upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
+                                      ParallelPublishContext* context) {
+    DCHECK(!current.owned.empty());
+    // Off the mask before filtering: filtering renumbers what survives, and these have to stay the
+    // rows' positions in the source segment.
+    auto owned_rowids = owned_rowids_of(current);
+    slot->pk_column->filter(current.owned);
+    if (owned_rowids.empty()) {
+        return Status::OK();
+    }
+    // One call for the whole chunk, never one per contiguous run of owned rows: ownership of a
+    // segment ordered by a separate sort key is scattered row by row, so runs degenerate towards one
+    // per row and each call redoes the inactive-memtable and SST lookup and the flush check.
+    RETURN_IF_ERROR(upsert(rssid, owned_rowids, *slot->pk_column, nullptr /* stat */, context));
+    if (context->token == nullptr) {
+        // With no token LakePersistentIndex::upsert resolves the replaced locations inline but does
+        // not drain them into context->deletes -- in the parallel case that is the submitted lambda's
+        // job, so it only happens there.
+        old_values_to_deletes(slot->old_values, context->deletes);
+    }
+    return Status::OK();
+}
+
 Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
                                       DeletesMap* new_deletes) {
     // Prepare parallel execution infrastructure if enabled
@@ -445,8 +361,16 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             if (pk_column_st.ok()) {
                 // Query index for existing rows with these primary keys
                 slot->pk_column = std::move(pk_column_st.value());
+                // Drop the siblings' keys first. Their old locations would otherwise reach
+                // old_values_to_deletes below and be marked deleted in THIS child's delvec, and the
+                // parent view ORs the children's delvecs -- so a sibling's lookup would erase a row
+                // its owner kept. Only the values matter downstream, never their positions, so
+                // filtering in place needs no index mapping.
+                if (!current.owned.empty()) {
+                    slot->pk_column->filter(current.owned);
+                }
                 slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
-                st = get(*slot->pk_column, &slot->old_values);
+                st = slot->pk_column->empty() ? Status::OK() : get(*slot->pk_column, &slot->old_values);
             } else {
                 st = pk_column_st.status();
             }
@@ -455,14 +379,8 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
             std::lock_guard<std::mutex> l(*context_ptr->mutex);
             context_ptr->status->update(st);
 
-            // Collect rows to delete: extract segment ID and row ID from old_values
-            // Format: old_value = (segment_id << 32) | row_id
             if (context_ptr->status->ok()) {
-                for (unsigned long old : slot->old_values) {
-                    if (old != NullIndexValue) {
-                        (*context_ptr->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    }
-                }
+                old_values_to_deletes(slot->old_values, context_ptr->deletes);
             }
         };
 
@@ -493,15 +411,22 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
 // Submits chunks from all segments to a single shared thread pool token, enabling
 // cross-segment parallelism.
 Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
-                                                       std::vector<SegmentPKIteratorPtr>& pk_iters,
-                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
+                                                       std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
+                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                                       std::vector<Filter>* owned_per_segment) {
     const uint32_t num_segments = pk_iters.size();
     rss_rowids_per_segment->resize(num_segments);
+    if (owned_per_segment != nullptr) {
+        owned_per_segment->assign(num_segments, Filter{});
+    }
 
     struct RssRowidSlot {
         size_t begin_rowid = 0;
         size_t count = 0;
         std::vector<uint64_t> values;
+        // Moved off the chunk ref before the lookup task runs, so the merge below can concatenate the
+        // segment's mask in chunk order. Empty when this chunk carried none.
+        Filter owned;
     };
 
     std::mutex mutex;
@@ -519,6 +444,7 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
             auto slot = std::make_unique<RssRowidSlot>();
             slot->begin_rowid = segment_logical_offset;
             slot->count = current.chunk->num_rows();
+            slot->owned = current.owned;
             segment_logical_offset += slot->count;
             per_segment_slots[seg_idx].push_back(std::move(slot));
             auto* slot_ptr = per_segment_slots[seg_idx].back().get();
@@ -570,6 +496,24 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
         output.resize(total);
         for (auto& slot : slots) {
             memcpy(output.data() + slot->begin_rowid, slot->values.data(), slot->count * sizeof(uint64_t));
+        }
+        if (owned_per_segment == nullptr) {
+            continue;
+        }
+        // Only materialize a mask for a segment that actually has one; leaving it empty is what tells
+        // the consumer "own every row", and is what every non-cross publish produces.
+        const bool has_mask =
+                std::any_of(slots.begin(), slots.end(), [](const auto& slot) { return !slot->owned.empty(); });
+        if (!has_mask) {
+            continue;
+        }
+        auto& owned_output = (*owned_per_segment)[seg_idx];
+        owned_output.assign(total, 1);
+        for (auto& slot : slots) {
+            if (slot->owned.empty()) {
+                continue;
+            }
+            memcpy(owned_output.data() + slot->begin_rowid, slot->owned.data(), slot->count * sizeof(uint8_t));
         }
     }
 
@@ -623,9 +567,13 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
                 // Store pk_column in this task's slot to avoid data races
                 slot->pk_column = std::move(pk_column_st.value());
 
-                // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
-                // them in the context (not used for upsert, only for parallel_get)
-                st = upsert(rssid, current.physical_rowid_offset, *slot->pk_column, nullptr /* stat */, &context);
+                if (!current.owned.empty()) {
+                    st = upsert_owned(rssid, current, slot, &context);
+                } else {
+                    // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
+                    // them in the context (not used for upsert, only for parallel_get)
+                    st = upsert(rssid, current.physical_rowid_offset, *slot->pk_column, nullptr /* stat */, &context);
+                }
                 TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
             } else {
                 st = pk_column_st.status();
@@ -639,7 +587,22 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
         } else {
             // Serial mode: Execute inline with direct error propagation
             ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
-            RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *pk_column, context.deletes));
+            if (current.owned.empty()) {
+                // No slot here, unlike the branch below: this overload takes the DeletesMap directly
+                // and knows nothing about a context, so it buffers internally. Only the rowid-vector
+                // overload needs one -- it was written for the parallel path, where the scratch has
+                // to outlive the call in storage the context owns.
+                RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *pk_column, context.deletes));
+            } else {
+                // A fresh slot per chunk, as in the parallel branch. The scratch inside it is
+                // append-only (build_persistent_keys and _build_persistent_values both emplace_back,
+                // and old_values is resized without re-initialising what is already there), so
+                // reusing one would need explicit clearing; a new slot is simply always empty.
+                context.extend_slots();
+                auto* slot = context.slots.back().get();
+                slot->pk_column = std::move(pk_column);
+                RETURN_IF_ERROR(upsert_owned(rssid, current, slot, &context));
+            }
         }
     }
     // Synchronize parallel execution if enabled

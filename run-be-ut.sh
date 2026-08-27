@@ -64,6 +64,7 @@ Usage: $0 <options>
      --without-connector-benchmark  build without the benchgen-backed benchmark connector
      --without-connector-elasticsearch
                                     build without the Elasticsearch connector
+     --without-connector-jdbc       build without the JDBC connector
      --without-connector-mysql
                                     build without the MySQL connector
      --excluding-test-suit          don't run cases of specific suit
@@ -75,6 +76,7 @@ Usage: $0 <options>
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
      --without-tenann               build without tenann (vector index library); default is ON on Linux
+     --with-paimon-cpp              build with paimon-cpp library; default is OFF, not supported on macOS
      -j                             build parallel
 
   Eg.
@@ -121,16 +123,17 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-bench' \
   -l 'without-connector-benchmark' \
   -l 'without-connector-elasticsearch' \
+  -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'build-target:' \
   -l 'without-starcache' \
-  -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
   -l 'without-tenann' \
+  -l 'with-paimon-cpp' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -154,6 +157,7 @@ USE_STAROS=OFF
 WITH_GCOV=OFF
 WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
@@ -168,6 +172,7 @@ if starrocks_is_darwin; then
 else
     WITH_TENANN=ON
 fi
+WITH_PAIMON_CPP=OFF
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
@@ -188,6 +193,7 @@ while true; do
         --with-dynamic) WITH_DYNAMIC=ON; shift ;;
         --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
         --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+        --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
         --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
@@ -196,6 +202,7 @@ while true; do
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         --without-tenann) WITH_TENANN=OFF; shift ;;
+        --with-paimon-cpp) WITH_PAIMON_CPP=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -205,6 +212,11 @@ done
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
 fi
 
 if [ ${HELP} -eq 1 ]; then
@@ -315,9 +327,11 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
             -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+            -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC} \
             -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_TENANN=${WITH_TENANN} \
+            -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
@@ -338,7 +352,7 @@ export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
 split_debug_symbol() {
     local bin="$1"
     local symbol="${bin}.debuginfo"
-    echo -n "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    echo "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
     objcopy --only-keep-debug "$bin" "$symbol"
     strip --strip-debug "$bin"
     objcopy --add-gnu-debuglink="$symbol" "$bin"
@@ -378,6 +392,7 @@ append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shar
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib"
 
 while IFS= read -r runtime_lib_dir; do
     append_runtime_library_path "${runtime_lib_dir}"

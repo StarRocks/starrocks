@@ -111,7 +111,10 @@ FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialPara
 
   :::note
 
-  要通过 `file://` 协议访问 NFS 中的文件，您需要将 NAS 设备挂载为 NFS，并放置在每个 BE 或 CN 节点的相同目录下。
+  要通过 `file://` 协议访问 NFS(NAS)，请将同一 NAS 设备作为 NFS 挂载到需要访问该路径的节点上的相同目录下：
+
+  - 对于读写操作，需要挂载到每个 FE 节点以及每个 BE 或 CN 节点。FE 节点会列举文件并推断文件 Schema，BE/CN 节点会读取数据。
+  - 对于仅写操作，需要挂载到每个 BE 或 CN 节点。
 
   :::
 
@@ -386,7 +389,7 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 | `aws.s3.access_key`           | 否       | 您的 IAM 用户的访问密钥。如果您选择 IAM 用户作为访问 AWS S3 的凭证方法，您必须指定此参数。 |
 | `aws.s3.secret_key`           | 否       | 您的 IAM 用户的密钥。如果您选择 IAM 用户作为访问 AWS S3 的凭证方法，您必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ###### AWS STS 区域终端节点
 

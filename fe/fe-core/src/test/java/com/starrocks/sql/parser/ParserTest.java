@@ -177,7 +177,7 @@ class ParserTest {
                 "from tbl left anti join t1 on ture left semi join t2 on false full join t3 on true minus select * from tbl";
         SessionVariable sessionVariable = new SessionVariable();
         try {
-            QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
+            SqlParser.parse(sql, sessionVariable).get(0);
         } catch (Exception e) {
             fail("sql should success. errMsg: " + e.getMessage());
         }
@@ -214,6 +214,38 @@ class ParserTest {
                 "select t.`variant` from t",
                 "select cast(c as struct<variant int, other varchar(10)>) from t",
                 "select cast(c as struct<`variant` int, other varchar(10)>) from t");
+        for (String sql : sqls) {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should succeed: " + sql + " errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void testFloorCeilAsIdentifier() {
+        // FLOOR and CEIL are non-reserved keywords (the time_slice/date_slice boundary argument).
+        // They must remain usable as ordinary identifiers (column / table names) and must not be
+        // parsed as a UnitBoundary literal in expression position. Regression for:
+        // "class com.starrocks.sql.ast.UnitBoundary cannot be cast to ...ast.expression.Expr".
+        SessionVariable sessionVariable = new SessionVariable();
+        List<String> sqls = Lists.newArrayList(
+                // bare keyword as a column reference (the originally reported failure)
+                "select floor from t",
+                "select ceil from t",
+                "select floor, ceil from t",
+                "select floor + 1 as c from t",
+                "select * from t where floor > 1 and ceil < 2",
+                "select floor as f from t group by floor order by floor",
+                // back-quoted / qualified / as a table name
+                "select `floor` from t",
+                "select t.floor from t",
+                "select * from floor",
+                // the time_slice/date_slice boundary keyword must still parse
+                "select time_slice(th, interval 1 year, floor) from t",
+                "select time_slice(th, interval 1 year, CEIL) from t",
+                "select date_slice(th, interval 1 year, ceil) from t");
         for (String sql : sqls) {
             try {
                 SqlParser.parse(sql, sessionVariable).get(0);
@@ -932,5 +964,35 @@ class ParserTest {
                     exception.getMessage().contains("Unsupported operation alter db properties under external catalog"),
                     exception.getMessage());
         }
+    }
+
+    @Test
+    public void testPartitionByDateArithmeticFunction() {
+        // date_add and its siblings are rewritten into a TimestampArithmeticExpr while being parsed,
+        // so the partition paths that cast a function call to FunctionCallExpr used to leak a
+        // ClassCastException to the client instead of reporting an unsupported partition expression.
+        List<String> sqls = Lists.newArrayList(
+                // CREATE TABLE, single expression
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY date_add(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY adddate(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY date_sub(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY subdate(d, 1)",
+                "CREATE TABLE t(id bigint, d datetime) PARTITION BY days_sub(d, 1)",
+                // CREATE TABLE, expression inside a multi-column partition list
+                "CREATE TABLE t(id bigint, d datetime, e datetime) PARTITION BY (e, date_add(d, 1))",
+                // CREATE TABLE AS SELECT reaches the same casts through visitPartitionDesc
+                "CREATE TABLE t PARTITION BY date_add(d, 1) AS SELECT id, d FROM src",
+                "CREATE TABLE t PARTITION BY (e, date_add(d, 1)) AS SELECT id, d, e FROM src");
+
+        for (String sql : sqls) {
+            ParsingException exception = Assertions.assertThrows(ParsingException.class,
+                    () -> SqlParser.parse(sql, new SessionVariable()), sql);
+            Assertions.assertTrue(exception.getMessage().contains("PARTITION BY"),
+                    sql + " => " + exception.getMessage());
+        }
+
+        // a genuine function call of the same shape still parses
+        SqlParser.parse("CREATE TABLE t(id bigint, d datetime) PARTITION BY days_add(d, 1)", new SessionVariable());
+        SqlParser.parse("CREATE TABLE t(id bigint, d date) PARTITION BY years_add(d, 1)", new SessionVariable());
     }
 }

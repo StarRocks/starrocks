@@ -41,6 +41,7 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
@@ -52,13 +53,13 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 
@@ -582,9 +583,16 @@ TEST_F(SegmentReaderWriterTest, TestCheckColumnUniqueIdUniqueness) {
 
     PFailPointTriggerMode trigger_mode;
     trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
-    // enable hook_publish_primary_key_tablet
     auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("ingest_duplicate_column_unique_id");
     fp->setMode(trigger_mode);
+    // The failpoint is process-global, so turn it back off on every exit path: left enabled, it makes
+    // every later Segment::open() in the test binary fail with "Duplicate column id found in tablet
+    // schema".
+    DeferOp disable_fp([&]() {
+        PFailPointTriggerMode disable_mode;
+        disable_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(disable_mode);
+    });
 
     static int seg_id = 0;
     std::string filename = strings::Substitute("$0/seg_$1.dat", kSegmentDir, seg_id++);

@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you read data in bulk from a..."
 ---
@@ -33,10 +34,10 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Prerequisites
 
@@ -83,7 +84,7 @@ Flink has been deployed. If Flink has not been deployed, follow these steps to d
    Starting taskexecutor daemon on host.
    ```
 
-You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-stable/docs/try-flink/local_installation/).
+You can also deploy Flink by following the instructions provided in [Flink documentation](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/getting-started/local_installation/#option-b-local-installation).
 
 ## Before you begin
 
@@ -103,7 +104,7 @@ Follow these steps to deploy the Flink connector:
 
 ### Network configuration
 
-Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (default: `8030`) and [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port) (default: `9060`).
 
 ## Parameters
 

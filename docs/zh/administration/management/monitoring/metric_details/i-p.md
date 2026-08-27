@@ -4,6 +4,8 @@ hide_table_of_contents: true
 description: "Alphabetical i - p"
 ---
 
+import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
+
 # 指标 i 到 p
 
 :::note
@@ -13,9 +15,11 @@ description: "Alphabetical i - p"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../monitoring.md)。
 
 :::
+
+<MetricsIP />
 
 ## `iceberg_compaction_duration_ms_total`
 
@@ -52,36 +56,41 @@ description: "Alphabetical i - p"
 - 标签：`compaction_type` (`manual` 或 `auto`)
 - 描述：Iceberg 压缩 (`rewrite_data_files`) 任务的总数。
 
-## `iceberg_delete_bytes`
+## `iceberg_merge_bytes`
 
 - 单位：字节
 - 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，这表示已删除数据文件的大小。对于 `position` 删除，这表示创建的位置删除文件的大小。
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务写入的总字节数，按文件类型拆分。`data` 表示新数据文件（更新后的行和插入的行）的大小；`position_delete` 表示标记被命中旧行的位置删除文件大小。
 
-## `iceberg_delete_duration_ms_total`
+## `iceberg_merge_duration_ms_total`
 
 - 单位：毫秒
 - 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务的总执行时间（毫秒）。每个任务的持续时间在其结束后添加。`delete_type` 区分两种删除方法。
+- 描述：Iceberg `MERGE INTO` 任务的总执行时间（毫秒）。每个任务的耗时在其结束后累加。
 
-## `iceberg_delete_rows`
+## `iceberg_merge_files`
+
+- 单位：计数
+- 类型：累积
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务写入的文件总数，按文件类型拆分。`data` 统计新数据文件个数，`position_delete` 统计位置删除文件个数。
+
+## `iceberg_merge_rows`
 
 - 单位：行
 - 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，这表示已删除数据文件中的行数。对于 `position` 删除，这表示创建的位置删除数。
+- 标签：`file_type`（`data` 或 `position_delete`）
+- 描述：Iceberg `MERGE INTO` 任务处理的总行数，按文件类型拆分。`position_delete` 统计被 UPDATE 或 DELETE 命中的目标行（写为位置删除）；`data` 统计写入的数据行（更新的行加上插入的行）。
 
-## `iceberg_delete_total`
+## `iceberg_merge_total`
 
 - 单位：计数
 - 类型：累积
 - 标签：
-  - `status` (`success` 或 `failed`)
-  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
-  - `delete_type` (`position` 或 `metadata`)
-- 描述：针对 Iceberg 表的 `DELETE` 任务总数。无论任务成功或失败，每当任务结束时，该指标都会增加 1。`delete_type` 区分两种删除方法：`position`（生成位置删除文件）和 `metadata`（元数据级别删除）。
+  - `status`（`success` 或 `failed`）
+  - `reason`（`none`、`timeout`、`oom`、`access_denied`、`unknown`）
+- 描述：目标表为 Iceberg 的 `MERGE INTO` 任务总数。无论任务成功还是失败，每当任务结束时该指标都会加 1。Iceberg MERGE INTO 采用 V2 Merge-On-Read 模型，在单个 snapshot 中原子写入数据文件和位置删除文件。
 
 ## `iceberg_metadata_table_query_total`
 
@@ -205,6 +214,11 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：应用程序分配的总字节数。
 
+## `jemalloc_dirty_bytes`
+
+- 单位：字节
+- 描述：未使用的脏页（dirty page）中的总字节数。这些页面尚未通过 madvise 归还给操作系统，可直接复用于新的内存分配而不会触发缺页中断。
+
 ## `jemalloc_mapped_bytes`
 
 - 单位：字节
@@ -220,6 +234,11 @@ description: "Alphabetical i - p"
 - 单位：计数
 - 描述：用于元数据的透明巨页数量。
 
+## `jemalloc_muzzy_bytes`
+
+- 单位：字节
+- 描述：未使用的 muzzy 页中的总字节数。muzzy 是脏页与保留页（retained）之间的中间衰减状态，页面已通过 madvise（例如 MADV_FREE）处理，但地址映射仍被保留。
+
 ## `jemalloc_resident_bytes`
 
 - 单位：字节
@@ -234,6 +253,37 @@ description: "Alphabetical i - p"
 
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
+
+## `lake_compaction_failed`
+
+- 单位：计数
+- 描述：失败的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_partial_success`
+
+- 单位：计数
+- 描述：部分成功的存算分离（lake）压缩任务计数。
+
+## `lake_compaction_running`
+
+- 单位：计数
+- 描述：当前正在运行的存算分离（lake）压缩作业数量（每个分区一个作业）。
+
+## `lake_compaction_running_tasks`
+
+- 单位：计数
+- 描述：所有正在运行的存算分离（lake）压缩作业中当前正在被压缩的 tablet 数量。该数量与调度器通过 `lake_compaction_max_tasks` 配置进行限流时所用的单位一致，比统计压缩作业数量（每个分区一个）的 `lake_compaction_running` 更细粒度——单个作业会按 tablet 拆分为一个个 tablet 级任务。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_score_at_trigger`
+
+- 单位：分数
+- 类型：Gauge
+- 描述：最近一次触发存算分离（lake）压缩任务的分区的压缩分数，四舍五入为整数。取值为该分区下各 Tablet 分数的 *最大值*（`Quantiles.getMax()`），与调度器选择压缩分区所用的判据一致。每次触发每个分区更新一次；Gauge 持有最近一次更新的值。该 Gauge 不会衰减：在 Leader FE 上，当没有压缩任务运行时，它会保留上一次触发的值（不会重置为 0）。该值是进程本地的（Leader 上的内存计数器，不会持久化），因此当 FE Leader 发生故障切换后，新当选的 Leader 会从 0 开始，并在其首次触发压缩之前一直报告 0——不会继承前一个 Leader 的值。应将其与 `lake_compaction_running > 0` 结合起来设置告警，而非单独读取该指标。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出并返回 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
+## `lake_compaction_success`
+
+- 单位：计数
+- 描述：成功的存算分离（lake）压缩任务计数。
 
 ## `lake_vacuum_del_file_batch_size_minute`
 
@@ -273,6 +323,12 @@ description: "Alphabetical i - p"
 - 描述：RPC 线程池的当前大小，用于处理 Routine Load 和通过表函数加载。默认值为 10，最大值为 1000。此值根据线程池的使用情况动态调整。
 
 ## `local_column_pool_bytes (Deprecated)`
+
+## `low_cardinality_dict_cache_bytes`
+
+- 单位：字节
+- 类型：Gauge
+- 描述：当前 FE 上低基数全局字典缓存（`CacheDictManager`）中缓存的字典数据总字节数。由缓存精确统计（非采样），统计的是序列化后的字典数据大小，是实际堆内存占用的下界。该缓存以此字节大小为上界，由配置项 `low_cardinality_dict_cache_max_bytes` 控制。
 
 ## `max_disk_io_util_percent`
 
@@ -528,7 +584,7 @@ description: "Alphabetical i - p"
 
 - 类型：计数器
 - 单位：计数
-- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败时增加。
+- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败，或 Compaction 读取输入 SST 文件时检测到数据损坏时增加。
 
 ## `pk_index_sst_write_error_total`
 

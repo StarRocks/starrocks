@@ -576,6 +576,11 @@ public class ResourceGroupMgr implements Writable {
                     alterResourceGroupLog.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 
+                Double memUsedPctLimit = changedProperties.getMemUsedPctLimit();
+                if (memUsedPctLimit != null) {
+                    alterResourceGroupLog.setMemUsedPctLimit(memUsedPctLimit);
+                }
+
                 warehouses = changedProperties.getWarehouses();
                 if (warehouses != null) {
                     alterResourceGroupLog.setWarehouses(warehouses);
@@ -654,6 +659,9 @@ public class ResourceGroupMgr implements Writable {
         }
         if (log.getSpillMemLimitThreshold() != null) {
             wg.setSpillMemLimitThreshold(log.getSpillMemLimitThreshold());
+        }
+        if (log.getMemUsedPctLimit() != null) {
+            wg.setMemUsedPctLimit(log.getMemUsedPctLimit());
         }
         if (log.getWarehouses() != null) {
             wg.setWarehouses(log.getWarehouses());
@@ -762,6 +770,9 @@ public class ResourceGroupMgr implements Writable {
      * @return the TWorkGroupOp that may be marked as inactive
      */
     private TWorkGroupOp setInactiveOp(TWorkGroupOp op, String warehouseName) {
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(op.getWorkgroup().getName())) {
+            return op;
+        }
         List<String> warehouses = op.getWorkgroup().getWarehouses();
         if (warehouseName == null || warehouses == null || warehouses.isEmpty() || warehouses.contains(warehouseName)) {
             return op;
@@ -833,11 +844,22 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public TWorkGroup chooseResourceGroupByName(String wgName) {
+    private boolean isResourceGroupMatchWarehouse(ResourceGroup rg, String warehouseName) {
+        if (ResourceGroup.BUILTIN_WG_NAMES.contains(rg.getName())) {
+            return true;
+        }
+        List<String> warehouses = rg.getWarehouses();
+        return warehouses == null || warehouses.isEmpty() || warehouses.contains(warehouseName);
+    }
+
+    public TWorkGroup chooseResourceGroupByName(ConnectContext ctx, String wgName) {
         readLock();
         try {
             ResourceGroup rg = resourceGroupMap.get(wgName);
             if (rg == null) {
+                return null;
+            }
+            if (ctx != null && !isResourceGroupMatchWarehouse(rg, ctx.getCurrentWarehouseName())) {
                 return null;
             }
             return rg.toThrift();
@@ -846,11 +868,14 @@ public class ResourceGroupMgr implements Writable {
         }
     }
 
-    public TWorkGroup chooseResourceGroupByID(long wgID) {
+    public TWorkGroup chooseResourceGroupByID(ConnectContext ctx, long wgID) {
         readLock();
         try {
             ResourceGroup rg = id2ResourceGroupMap.get(wgID);
             if (rg == null) {
+                return null;
+            }
+            if (ctx != null && !isResourceGroupMatchWarehouse(rg, ctx.getCurrentWarehouseName())) {
                 return null;
             }
             return rg.toThrift();
@@ -866,15 +891,21 @@ public class ResourceGroupMgr implements Writable {
         try {
             String user = getUnqualifiedUser(ctx);
             String remoteIp = ctx.getRemoteIP();
+            String warehouseName = ctx.getCurrentWarehouseName();
             final double planCpuCost = ctx.getAuditEventBuilder().build().planCpuCosts;
             final double planMemCost = CostPredictor.getServiceBasedCostPredictor().isAvailable() ?
                     ctx.getAuditEventBuilder().build().predictMemBytes :
                     ctx.getAuditEventBuilder().build().planMemCosts;
+            Set<Long> candidateGroupIds = resourceGroupMap.values().stream()
+                    .filter(rg -> isResourceGroupMatchWarehouse(rg, warehouseName))
+                    .map(ResourceGroup::getId)
+                    .collect(Collectors.toSet());
 
             // check short query first
             if (shortQueryResourceGroup != null) {
                 List<ResourceGroupClassifier> shortQueryClassifierList = shortQueryResourceGroup.classifiers.stream()
-                        .filter(f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases, planCpuCost, planMemCost))
+                        .filter(f -> f.isSatisfied(candidateGroupIds, user, activeRoles, queryType, remoteIp,
+                                databases, planCpuCost, planMemCost))
                         .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                         .collect(Collectors.toList());
                 if (!shortQueryClassifierList.isEmpty()) {
@@ -884,8 +915,8 @@ public class ResourceGroupMgr implements Writable {
 
             List<ResourceGroupClassifier> classifierList =
                     classifierMap.values().stream()
-                            .filter(f -> f.isSatisfied(user, activeRoles, queryType, remoteIp, databases, planCpuCost,
-                                    planMemCost))
+                            .filter(f -> f.isSatisfied(candidateGroupIds, user, activeRoles, queryType,
+                                    remoteIp, databases, planCpuCost, planMemCost))
                             .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
                             .collect(Collectors.toList());
             if (classifierList.isEmpty()) {

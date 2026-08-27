@@ -48,12 +48,12 @@
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/dict_page.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 
@@ -413,6 +413,15 @@ Status ScalarColumnIterator::next_batch_with_filter(const SparseRange<>& range, 
 }
 
 Status ScalarColumnIterator::_load_next_page(bool* eos) {
+    // The page iterator is already past the last data page: a previous call
+    // consumed the final page and reported eos. Re-entering here is legal --
+    // a caller that got a short read may issue one more next_batch() -- so
+    // report eos again instead of stepping the ordinal page index out of
+    // bounds (DCHECK_LT in OrdinalPageIndexIterator::next()).
+    if (!_page_iter.valid()) {
+        *eos = true;
+        return Status::OK();
+    }
     _page_iter.next();
     if (!_page_iter.valid()) {
         *eos = true;

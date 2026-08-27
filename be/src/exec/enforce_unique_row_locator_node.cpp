@@ -18,12 +18,6 @@
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/pipeline_builder_operators.h"
-#include "exprs/column_ref.h"
-#include "exprs/expr_context.h"
-#include "gen_cpp/PlanNodes_types.h"
-#include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -54,30 +48,6 @@ StatusOr<pipeline::OpFactories> EnforceUniqueRowLocatorNode::decompose_to_pipeli
     using namespace pipeline;
 
     ASSIGN_OR_RETURN(auto ops, _children[0]->decompose_to_pipeline(context));
-
-    // Self-sufficient within-BE check: locally shuffle by the (_file, _pos) row-locator
-    // key so all matches of one target row reach the same operator instance, regardless of
-    // how the child pipeline distributes chunks across drivers (e.g. a post-probe
-    // passthrough the join adds when hash_join_interpolate_passthrough is on). Cross-BE
-    // co-location is still provided by the FE-pinned shuffle merge join. maybe_interpolate
-    // is a no-op / cheap when the input is already locally key-partitioned. NULL-key rows
-    // (NOT-MATCHED inserts) are exempt from the check and may land on any driver.
-    // ExprContexts are left unprepared: the PartitionExchanger prepares/opens/closes them.
-    // Use context->runtime_state(): this PipelineNode's prepare() never runs, so
-    // ExecNode::runtime_state() is null.
-    RuntimeState* state = context->runtime_state();
-    std::vector<ExprContext*> partition_ctxs;
-    partition_ctxs.reserve(_unique_key_slot_ids.size());
-    for (SlotId slot_id : _unique_key_slot_ids) {
-        SlotDescriptor* slot_desc = state->desc_tbl().get_slot_descriptor(slot_id);
-        if (slot_desc == nullptr) {
-            return Status::InternalError("EnforceUniqueRowLocatorNode: row-locator slot " + std::to_string(slot_id) +
-                                         " not found in the descriptor table");
-        }
-        auto* col_ref = _pool->add(new ColumnRef(slot_desc));
-        partition_ctxs.push_back(_pool->add(new ExprContext(col_ref)));
-    }
-    ops = pipeline::builder::maybe_interpolate_local_shuffle_exchange(context, state, id(), ops, partition_ctxs);
 
     auto factory = std::make_shared<EnforceUniqueRowLocatorOperatorFactory>(context->next_operator_id(), id(),
                                                                             _unique_key_slot_ids);

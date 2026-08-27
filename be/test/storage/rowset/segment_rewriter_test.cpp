@@ -32,7 +32,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
@@ -40,6 +39,7 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 

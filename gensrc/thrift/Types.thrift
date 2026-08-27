@@ -124,6 +124,13 @@ struct TScalarType {
     // Only set for DECIMAL
     3: optional i32 precision
     4: optional i32 scale
+
+    // Only meaningful for DATETIME read from lake formats that distinguish
+    // timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    // as metadata and does NOT affect type identity. Default (false) means the value is a
+    // UTC instant that must be shifted into the session timezone (Hive/Iceberg/Paimon LTZ);
+    // Paimon TIMESTAMP sets it to true so the reader keeps the wall clock unshifted.
+    5: optional bool datetime_is_ntz
 }
 
 // Represents a field in a STRUCT type.
@@ -396,6 +403,9 @@ struct TFunction {
   35: optional string input_type
   36: optional string content
   37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+  // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects
+  // to this external worker instead of spawning a local one (see CREATE FUNCTION "service_url").
+  38: optional string service_url
 }
 
 enum TLoadJobState {
@@ -413,35 +423,44 @@ enum TEtlState {
     UNKNOWN
 }
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TTableType {
-    MYSQL_TABLE,
-    OLAP_TABLE,
-    SCHEMA_TABLE,
-    KUDU_TABLE, // Deprecated
-    BROKER_TABLE,
-    ES_TABLE,
-    HDFS_TABLE,
-    ICEBERG_TABLE,
-    HUDI_TABLE,
-    JDBC_TABLE,
-    PAIMON_TABLE,
+    MYSQL_TABLE = 0,
+    OLAP_TABLE = 1,
+    SCHEMA_TABLE = 2,
+    KUDU_TABLE = 3, // Deprecated
+    BROKER_TABLE = 4,
+    ES_TABLE = 5,
+    HDFS_TABLE = 6,
+    ICEBERG_TABLE = 7,
+    HUDI_TABLE = 8,
+    JDBC_TABLE = 9,
+    PAIMON_TABLE = 10,
     VIEW = 20,
-    MATERIALIZED_VIEW,
-    FILE_TABLE,
-    DELTALAKE_TABLE,
-    TABLE_FUNCTION_TABLE,
-    ODPS_TABLE,
-    LOGICAL_ICEBERG_METADATA_TABLE,
-    ICEBERG_REFS_TABLE,
-    ICEBERG_HISTORY_TABLE,
-    ICEBERG_METADATA_LOG_ENTRIES_TABLE,
-    ICEBERG_SNAPSHOTS_TABLE,
-    ICEBERG_MANIFESTS_TABLE,
-    ICEBERG_FILES_TABLE,
-    ICEBERG_PARTITIONS_TABLE,
-    BENCHMARK_TABLE,
-    ICEBERG_PROPERTIES_TABLE,
-    LANCE_TABLE
+    MATERIALIZED_VIEW = 21,
+    FILE_TABLE = 22,
+    DELTALAKE_TABLE = 23,
+    TABLE_FUNCTION_TABLE = 24,
+    ODPS_TABLE = 25,
+    LOGICAL_ICEBERG_METADATA_TABLE = 26,
+    ICEBERG_REFS_TABLE = 27,
+    ICEBERG_HISTORY_TABLE = 28,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE = 29,
+    ICEBERG_SNAPSHOTS_TABLE = 30,
+    ICEBERG_MANIFESTS_TABLE = 31,
+    ICEBERG_FILES_TABLE = 32,
+    ICEBERG_PARTITIONS_TABLE = 33,
+    BENCHMARK_TABLE = 34,
+    ICEBERG_PROPERTIES_TABLE = 35,
+    LANCE_TABLE = 36,
+    FLUSS_TABLE = 37
 }
 
 enum TKeysType {
@@ -597,6 +616,14 @@ enum TIcebergFileContent {
     EQUALITY_DELETES,
 }
 
+// Extension point for TIcebergDataFile. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TIcebergDataFile
+// fields belong on TIcebergDataFile itself, whose remaining numbers are free.
+struct TIcebergDataFileExt {
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -608,6 +635,7 @@ struct TIcebergDataFile {
     8: optional string partition_null_fingerprint;
     9: optional TIcebergFileContent file_content;
     10: optional string referenced_data_file;
+    11: optional TIcebergDataFileExt ext;
 }
 
 struct THiveFileInfo {
@@ -615,6 +643,14 @@ struct THiveFileInfo {
     2: optional string partition_path
     4: optional i64 record_count
     5: optional i64 file_size_in_bytes
+}
+
+// Extension point for TSinkCommitInfo. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TSinkCommitInfo
+// fields belong on TSinkCommitInfo itself, whose remaining numbers are free.
+struct TSinkCommitInfoExt {
 }
 
 struct TSinkCommitInfo {
@@ -625,6 +661,7 @@ struct TSinkCommitInfo {
     100: optional bool is_overwrite;
     101: optional string staging_dir
     102: optional bool is_rewrite;
+    103: optional TSinkCommitInfoExt ext;
 }
 
 struct TSnapshotInfo {

@@ -14,6 +14,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -219,6 +220,35 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
     }
 
     @Test
+    public void testShadowRewriteTxnApplyLogsDoNotTouchPartitionVersion() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        // Shadow-rewrite txns are now identified by LoadJobSourceType.SHADOW_REWRITE on the txn.
+        TransactionState state = new TransactionState(dbId, Lists.newArrayList(tableId), nextTxnId++,
+                "label_shadow", null, TransactionState.LoadJobSourceType.SHADOW_REWRITE, null, 0, 60_000);
+        state.setTransactionStatus(TransactionStatus.COMMITTED);
+
+        // PartitionCommitInfo uses sentinel version -1; no per-partition isShadowRewrite marker needed.
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, -1, 0);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        long vis0 = table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion();
+        long next0 = table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion();
+
+        // applyCommitLog must not bump nextVersion for a shadow-rewrite txn.
+        applier.applyCommitLog(state, tableCommitInfo);
+        Assertions.assertEquals(vis0, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(next0, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+
+        // applyVisibleLog must not advance visibleVersion for a shadow-rewrite txn.
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+        Assertions.assertEquals(vis0, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(next0, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+    }
+
+    @Test
     public void testApplyCommitLogWithDroppedPartition() {
         LakeTable table = buildLakeTable();
         LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
@@ -236,5 +266,43 @@ public class LakeTableTxnLogApplierTest extends LakeTableTestHelper {
         applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
         Assertions.assertEquals(1, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getNextVersion());
+    }
+
+    @Test
+    public void testApplyVisibleLogRecordsLastUpdateTimeForUserWrite() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        // A routine-load (user write) visible txn must advance lastUpdateTime on the shared-data path.
+        TransactionState state = newTransactionState();
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        long versionTime = System.currentTimeMillis();
+        partitionCommitInfo.setVersionTime(versionTime);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+        Assertions.assertEquals(versionTime,
+                table.getPartition(partitionId).getDefaultPhysicalPartition().getLastUpdateTime());
+    }
+
+    @Test
+    public void testApplyVisibleLogSkipsLastUpdateTimeForCompaction() {
+        LakeTable table = buildLakeTable();
+        LakeTableTxnLogApplier applier = new LakeTableTxnLogApplier(table);
+        // Compaction is not a user write: it advances the visible version but must NOT touch
+        // lastUpdateTime, which must stay 0 (its initial value).
+        TransactionState state = newCompactionTransactionState();
+        state.setTxnCommitAttachment(new CompactionTxnCommitAttachment(true));
+        state.setTransactionStatus(TransactionStatus.VISIBLE);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId, 2, 0);
+        partitionCommitInfo.setVersionTime(System.currentTimeMillis());
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+
+        applier.applyVisibleLog(state, tableCommitInfo, /*unused*/null);
+        Assertions.assertEquals(2, table.getPartition(partitionId).getDefaultPhysicalPartition().getVisibleVersion());
+        Assertions.assertEquals(0L,
+                table.getPartition(partitionId).getDefaultPhysicalPartition().getLastUpdateTime());
     }
 }

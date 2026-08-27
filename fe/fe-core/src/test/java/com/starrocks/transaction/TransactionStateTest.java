@@ -36,6 +36,7 @@ import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnPrepareMode;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
@@ -72,10 +73,14 @@ public class TransactionStateTest {
                 3000, "label123", UUIDUtil.genTUniqueId(),
                 LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
                 60 * 1000L);
+        transactionState.setReason("persistent reason");
+        transactionState.setTemporaryReason("temporary reason");
 
         String json = GsonUtils.GSON.toJson(transactionState);
         TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
         Assertions.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
+        Assertions.assertEquals("persistent reason", readTransactionState.getReason());
+        Assertions.assertFalse(json.contains("temporary reason"));
     }
 
     @Test
@@ -262,6 +267,15 @@ public class TransactionStateTest {
             assertFalse(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L));
             assertTrue(txn.isTimeout(2000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
 
+            txn.setPreparedTimeAndTimeout(3000, 0);
+            assertEquals(Config.prepared_transaction_default_timeout_second * 1000L, txn.getPreparedTimeoutMs());
+            assertFalse(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L));
+            assertTrue(txn.isTimeout(3000 + Config.prepared_transaction_default_timeout_second * 1000L + 10));
+
+            txn.setPreparedTimeAndTimeout(4000, 10_000, TxnPrepareMode.INTERNAL_ONE_PHASE);
+            assertEquals(txn.getPrepareTime() + txn.getTimeoutMs(), txn.getTimeoutDeadlineMs());
+            assertTrue(txn.isTimeout(txn.getPrepareTime() + txn.getTimeoutMs() + 1));
+
             txn.setTransactionStatus(TransactionStatus.COMMITTED);
             assertFalse(txn.isTimeout(4000));
         }
@@ -307,6 +321,25 @@ public class TransactionStateTest {
         assertEquals(2, ids.size());
         assertEquals(id1, ids.get(0));
         assertEquals(id2, ids.get(1));
+    }
+
+    @Test
+    public void testShadowRewriteViaSourceType() {
+        // isShadowRewrite() is now driven solely by LoadJobSourceType.SHADOW_REWRITE on the txn.
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_shadow", null,
+                LoadJobSourceType.SHADOW_REWRITE, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertTrue(txn.isShadowRewrite());
+
+        TransactionState normal = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label_normal", null,
+                LoadJobSourceType.INSERT_STREAMING, new TxnCoordinator(TxnSourceType.FE, "127.0.0.1"), 0L, 60_000L);
+        assertFalse(normal.isShadowRewrite());
+
+        // Verify sourceType round-trips through GSON (it is serialized as "st" on TransactionState).
+        String json = GsonUtils.GSON.toJson(txn);
+        TransactionState replayed = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        assertTrue(replayed.isShadowRewrite());
     }
 
     @Test

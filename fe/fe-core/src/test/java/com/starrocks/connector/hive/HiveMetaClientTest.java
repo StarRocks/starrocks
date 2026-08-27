@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
 import mockit.Mock;
@@ -107,7 +108,7 @@ public class HiveMetaClientTest {
         try {
             client.getAllDatabaseNames();
         } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("Invalid port 90303"));
+            Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(e).contains("Invalid port 90303"));
         }
     }
 

@@ -46,6 +46,11 @@ class ReflectionTableDefaults(ReflectionDefaults):
 
         # for following properties, they won't explicitly set in the 'properties' field of the table.
         'enable_persistent_index': 'true',
+        # tables_config only records this when explicitly set to false; absent means true.
+        # Must be 'true' here: ALTER SET true clears the override (→ absent) → decodes back
+        # to 'true', converging. Also in _SKIP_IMPLICIT_RESET_PROPERTIES so an unmanaged
+        # DB value never triggers a spurious reset.
+        'enable_statistic_collect_on_first_load': 'true',
         # 'bloom_filter_columns': None,
         # 'colocate_with': None,
     }
@@ -56,6 +61,13 @@ class ReflectionTableDefaults(ReflectionDefaults):
     _DEFAULT_PROPERTIES_SHARED_DATA = {**{
         'replication_num': '1',  # Different for shared-data
     }, **_DEFAULT_PROPERTIES}
+
+    # Properties never implicitly reset when absent from metadata. Needed for properties
+    # whose DB representation is asymmetric (e.g. only stored when false), so a missing
+    # metadata entry should leave the DB value alone rather than reset it to the default.
+    _SKIP_IMPLICIT_RESET_PROPERTIES: frozenset = frozenset({
+        'enable_statistic_collect_on_first_load',
+    })
 
     # Default table options
     # engine -> key -> comment -> partition -> distribution -> order by -> properties
@@ -121,6 +133,13 @@ class ReflectionTableDefaults(ReflectionDefaults):
         else:
             return cls._DEFAULT_PROPERTIES_SHARED_NOTHING
 
+    @classmethod
+    def skip_implicit_reset_properties(cls) -> set:
+        """Property names (lowercase) that must never be implicitly reset to their default
+        when absent from the metadata. See ``_SKIP_IMPLICIT_RESET_PROPERTIES``.
+        """
+        return cls._SKIP_IMPLICIT_RESET_PROPERTIES
+
 
 class ReflectionViewDefaults(ReflectionTableDefaults):
     """Central place for view reflection default values and normalization."""
@@ -176,6 +195,26 @@ class ReflectionMVDefaults(ReflectionViewDefaults):
     _DEFAULT_PROPERTIES_SHARED_DATA = {**{
         'replication_num': '1',  # Different for shared-data
     }, **_DEFAULT_PROPERTIES}
+
+    # Properties that information_schema.tables_config omits for materialized views, and which
+    # must therefore be read from the PROPERTIES clause of the CREATE MATERIALIZED VIEW ddl.
+    # Without this, such a property looks absent on the reflected side while being present in
+    # the metadata, so autogenerate reports the same phantom change on every run.
+    #
+    # Keep this an explicit allowlist rather than merging the whole ddl PROPERTIES clause:
+    # SHOW CREATE MATERIALIZED VIEW also prints effective values that tables_config leaves out
+    # on purpose (e.g. replicated_storage), and those have no entry in _DEFAULT_PROPERTIES, so
+    # merging them in would warn about an unmanaged database value on every autogenerate.
+    _DDL_ONLY_PROPERTY_KEYS: frozenset = frozenset({
+        'colocate_with',
+    })
+
+    @classmethod
+    def ddl_only_property_keys(cls) -> frozenset:
+        """Property names (lowercase) to take from the MV ddl instead of tables_config.
+        See ``_DDL_ONLY_PROPERTY_KEYS``.
+        """
+        return cls._DDL_ONLY_PROPERTY_KEYS
 
     @classmethod
     def apply(cls, *, name: str, definition: str, comment: Union[str, None] = None, security: Union[str, None] = None) -> ReflectedMVState:

@@ -51,6 +51,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -93,6 +94,10 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE,
             StatsConstants.INIT_SAMPLE_STATS_JOB,
 
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP,
+
             //Deprecated , just not throw exception
             StatsConstants.PRO_SAMPLE_RATIO,
             StatsConstants.PROP_UPDATE_INTERVAL_SEC_KEY,
@@ -104,6 +109,21 @@ public class AnalyzeStmtAnalyzer {
                     StatsConstants.HISTOGRAM_BUCKET_NUM,
                     StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
+
+    // Properties that must parse as a long. Validated with the same parser the collector uses (Long.parseLong),
+    // so accepted-but-unparseable inputs (e.g. "1e9", "1.0", an overflowing integer) are rejected here instead
+    // of silently falling back to the global config default at collection time.
+    private static final List<String> LONG_PROP_KEY_LIST = Lists.newArrayList(
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP);
+
+    // Properties that only take effect for external-table statistics collection. Setting them on an internal
+    // (OLAP) table has no effect, so we reject them up front instead of silently ignoring the value.
+    private static final List<String> EXTERNAL_ONLY_PROPERTIES = Lists.newArrayList(
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_BYTES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_FILES_CAP,
+            StatsConstants.EXTERNAL_ANALYZE_SCAN_ROWS_CAP);
 
     public static boolean isSupportedHistogramAnalyzeTableType(Table table) {
         return table.isNativeTableOrMaterializedView() || table.isHiveTable();
@@ -191,27 +211,41 @@ public class AnalyzeStmtAnalyzer {
             // ANALYZE TABLE xxx PREDICATE COLUMNS
             if (statement.isUsePredicateColumns()) {
                 // check if the table type is supported
-                if (!analyzeTable.isNativeTableOrMaterializedView()) {
-                    throw new SemanticException("Only OLAP table can support ANALYZE PREDICATE COLUMNS");
+                if (!analyzeTable.isNativeTableOrMaterializedView() && !analyzeTable.isAnalyzableExternalTable()) {
+                    throw new SemanticException("Only analyzable table can support ANALYZE PREDICATE COLUMNS");
                 }
 
                 List<String> targetColumns = Lists.newArrayList();
 
-                TableName tableNameForPredicate = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                        tableRef.getTableName(), tableRef.getPos());
-                List<ColumnUsage> predicateColumns =
-                        PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
-                for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
-                    Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
-                    if (realColumn != null) {
-                        targetColumns.add(realColumn.getName());
+                if (analyzeTable.isNativeTableOrMaterializedView()) {
+                    TableName tableNameForPredicate = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                            tableRef.getTableName(), tableRef.getPos());
+                    List<ColumnUsage> predicateColumns =
+                            PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
+                    for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
+                        Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
+                        if (realColumn != null) {
+                            targetColumns.add(realColumn.getName());
+                        }
+                    }
+                } else {
+                    for (ExternalColumnUsage col : ListUtils.emptyIfNull(
+                            PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(analyzeTable))) {
+                        Column realColumn = analyzeTable.getColumn(col.getColumnName());
+                        if (realColumn != null) {
+                            targetColumns.add(realColumn.getName());
+                        }
+                    }
+                    if (targetColumns.isEmpty()) {
+                        throw new SemanticException("No predicate columns found for external table '%s'",
+                                analyzeTable.getName());
                     }
                 }
 
                 statement.setColumnNames(targetColumns);
             }
 
-            analyzeProperties(statement.getProperties());
+            analyzeProperties(statement.getProperties(), analyzeTable);
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getCatalogName())) {
@@ -233,6 +267,9 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
             TableRef tableRef = statement.getTableRef();
+            // Resolved target table when the job targets a single table; stays null for database/catalog-wide
+            // jobs. Used to validate table-scoped properties (see analyzeProperties).
+            Table analyzeJobTable = null;
             if (tableRef != null) {
                 tableRef = AnalyzerUtils.normalizedTableRef(tableRef, session);
                 statement.setTableRef(tableRef);
@@ -250,6 +287,7 @@ public class AnalyzeStmtAnalyzer {
                     String dbName = tableRef.getDbName();
                     TableName tableName = new TableName(catalogName, dbName, tableRef.getTableName(), tableRef.getPos());
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, tableName);
+                    analyzeJobTable = analyzeTable;
                     if (!analyzeTable.isAnalyzableExternalTable()) {
                         throw new SemanticException("Analyze external table only support hive, iceberg, deltalake, " +
                                 "paimon and odps table", tableName.toString());
@@ -296,6 +334,7 @@ public class AnalyzeStmtAnalyzer {
                 TableName tableName = new TableName(statement.getCatalogName(), statement.getDbName(),
                         statement.getTableName(), tablePos);
                 Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, tableName);
+                analyzeJobTable = analyzeTable;
 
                 if (analyzeTable.isTemporaryTable()) {
                     throw new SemanticException("Don't support create analyze job for temporary table");
@@ -334,21 +373,42 @@ public class AnalyzeStmtAnalyzer {
                             session.getCurrentCatalog());
                 }
             }
-            analyzeProperties(statement.getProperties());
+            analyzeProperties(statement.getProperties(), analyzeJobTable);
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
             return null;
         }
 
-        private void analyzeProperties(Map<String, String> properties) {
+        private void analyzeProperties(Map<String, String> properties, Table analyzeTable) {
             for (String property : properties.keySet()) {
                 if (!VALID_PROPERTIES.contains(property)) {
                     throw new SemanticException("Property '%s' is not valid", property);
                 }
             }
 
+            // Reject external-only properties on internal (OLAP) tables so an unsupported knob fails loudly
+            // rather than being silently dropped. When analyzeTable is null (e.g. a database/catalog-wide
+            // analyze job) there is no single table to validate against, so this check is skipped.
+            if (analyzeTable != null && !analyzeTable.isAnalyzableExternalTable()) {
+                for (String key : EXTERNAL_ONLY_PROPERTIES) {
+                    if (properties.containsKey(key)) {
+                        throw new SemanticException("Property '%s' is only supported for external tables", key);
+                    }
+                }
+            }
+
             for (String key : NUMBER_PROP_KEY_LIST) {
                 if (properties.containsKey(key) && !NumberUtils.isCreatable(properties.get(key))) {
                     throw new SemanticException("Property '%s' value must be numeric", key);
+                }
+            }
+
+            for (String key : LONG_PROP_KEY_LIST) {
+                if (properties.containsKey(key)) {
+                    try {
+                        Long.parseLong(properties.get(key).trim());
+                    } catch (NumberFormatException e) {
+                        throw new SemanticException("Property '%s' value must be an integer", key);
+                    }
                 }
             }
 
@@ -398,12 +458,26 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException("Can't create histogram statistics on table type is %s",
                             analyzeTable.getType().name());
                 }
+                // Explicitly-listed columns: reject unsupported types outright.
                 for (Expr column : columns) {
-                    if (column.getType().isComplexType()
-                            || column.getType().isJsonType()
-                            || column.getType().isOnlyMetricType()) {
+                    if (StatisticUtils.isUnsupportedHistogramColumnType(column.getType())) {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
+                    }
+                }
+
+                // Filters out unsupported types from the list of columns to analyze, if no columns were explicitly listed.
+                if (columns.isEmpty() && statement instanceof AnalyzeStmt) {
+                    AnalyzeStmt analyzeStmt = (AnalyzeStmt) statement;
+                    if (CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                        List<String> supported = analyzeStmt.getColumnNames().stream()
+                                .filter(name -> {
+                                    Column col = analyzeTable.getColumn(name);
+                                    return col != null && !StatisticUtils.isUnsupportedHistogramColumnType(col.getType());
+                                })
+                                .collect(Collectors.toList());
+
+                        analyzeStmt.setColumnNames(supported);
                     }
                 }
 

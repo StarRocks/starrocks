@@ -1,0 +1,52 @@
+-- name: test_histogram_batch_insert @sequential
+
+CREATE DATABASE analyze_histogram_batch_${uuid0};
+USE analyze_histogram_batch_${uuid0};
+
+CREATE TABLE histogram_batch_insert (
+    k1 INT,
+    k2 BIGINT,
+    k3 VARCHAR(20)
+)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO histogram_batch_insert VALUES
+    (1, 10, 'a'),
+    (1, 20, 'a'),
+    (2, 20, 'b'),
+    (3, 30, 'c'),
+    (NULL, NULL, NULL);
+
+-- All three rows fit in one histogram statistics INSERT.
+ADMIN SET FRONTEND CONFIG ('enable_batch_insert_histogram_statistics' = 'true');
+ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
+
+ANALYZE TABLE histogram_batch_insert UPDATE HISTOGRAM ON k1, k2, k3
+PROPERTIES ('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '1');
+
+SELECT column_name, IF(buckets IS NULL, 'NULL', 'SET'), mcv
+FROM _statistics_.histogram_statistics
+WHERE table_name = 'analyze_histogram_batch_${uuid0}.histogram_batch_insert'
+ORDER BY column_name;
+
+-- Force each oversized row to flush separately, and verify every row is replaced.
+ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '1');
+
+ANALYZE TABLE histogram_batch_insert UPDATE HISTOGRAM ON k1, k2, k3
+PROPERTIES ('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '0');
+
+SELECT column_name, IF(buckets IS NULL, 'NULL', 'SET'), IF(mcv IS NULL, 'NULL', 'SET')
+FROM _statistics_.histogram_statistics
+WHERE table_name = 'analyze_histogram_batch_${uuid0}.histogram_batch_insert'
+ORDER BY column_name;
+
+ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
+DROP DATABASE analyze_histogram_batch_${uuid0};
+
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ('enable_batch_insert_histogram_statistics' = 'true');
+    ADMIN SET FRONTEND CONFIG ('histogram_batch_insert_buffer_size' = '20971520');
+    DROP DATABASE IF EXISTS analyze_histogram_batch_${uuid0};
+} END CLEANUP

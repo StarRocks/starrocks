@@ -27,10 +27,10 @@
 #include "compute_env/sorting/sort_cursor.h"
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
-#include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks::pipeline {
 
@@ -128,8 +128,7 @@ public:
                        const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
                        bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
                        const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset, int64_t limit,
-                       const std::string& sort_keys, const std::vector<OrderByType>& order_by_types,
-                       bool has_outer_join_child,
+                       const std::string& sort_keys, bool has_outer_join_child,
                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters);
 
     SortContextPtr create(int32_t idx);

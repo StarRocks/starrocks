@@ -247,6 +247,9 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | SubmitTaskTime | タスクの送信にかかった時間。 |
 | PeakIOTasks | IOタスクのピーク数。 |
 | PeakScanTaskQueueSize | IOタスクキューのピークサイズ。 |
+| RuntimeFilterEvalTime | Parquetリーダー内でデコード済みの行に対してJoin Runtime Filterを評価するのにかかった時間。 |
+| RuntimeFilterInputRows | ParquetリーダーのJoin Runtime Filter評価に入力された行数。 |
+| RuntimeFilterOutputRows | ParquetリーダーのJoin Runtime Filter評価を通過した行数。`RuntimeFilterInputRows` との差が大きいほど、Lazy列がマテリアライズされる前に多くの行がフィルタリングされたことを意味します。 |
 
 ### エクスチェンジオペレーター
 
@@ -277,7 +280,8 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | BytesPassThrough | 宛先ノードが現在のノードである場合、データはネットワーク経由で転送されません。これをパススルーデータと呼びます。このメトリックはそのパススルーデータのサイズを示します。パススルーは`enable_exchange_pass_through`によって制御されます。 |
 | PassThroughBufferPeakMemoryUsage | パススルーバッファのピークメモリ使用量。 |
 | CompressTime | 圧縮時間。 |
-| CompressedBytes | 圧縮データのサイズ。 |
+| CompressedInputBytes | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。アダプティブ圧縮戦略によってスキップされた chunk は含まれません。`CompressedInputBytes / CompressedBytes` が圧縮率であり、`SerializedBytes - CompressedInputBytes` が圧縮されなかったデータのサイズです。 |
+| CompressedBytes | 圧縮データのサイズ。実際に圧縮された chunk のみが対象です。 |
 | OverallThroughput | スループット率。 |
 | NetworkTime | データパケット転送にかかった時間（受信後の処理時間を除く）。 |
 | NetworkBandwidth | 推定ネットワーク帯域幅。 |

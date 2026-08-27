@@ -77,6 +77,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
@@ -180,6 +181,117 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    // init() plans the sink during the load, before an explicit transaction (multi-statement stream
+    // load / BEGIN..COMMIT) is upserted into the DatabaseTransactionMgr. getTransactionState then
+    // returns null, so init() must fall back to the explicit transaction registry to observe the
+    // combined-txn-log decision; otherwise write_txn_log stays at the per-tablet default and publish
+    // (which expects combined logs) wedges.
+    @Test
+    public void testInitFallsBackToExplicitTxnStateForCombinedTxnLog(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitState);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getExplicitTxnState(anyLong);
+                result = explicitTxnState;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // The explicit-txn fallback must NOT apply to INSERT_STREAMING (SQL BEGIN..COMMIT): that source
+    // emits per-load-id txn logs that publish reads via the load_ids branch (which takes precedence
+    // over combined_txn_log), so honoring the combined flag here would make BE skip those logs and
+    // drop data. write_txn_log must stay at the per-tablet/per-load-id default (false).
+    @Test
+    public void testInitDoesNotFallBackForInsertStreaming(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitState);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = null;
+                globalTransactionMgr.getExplicitTxnState(anyLong);
+                result = explicitTxnState;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
     @Test
@@ -935,6 +1047,63 @@ public class OlapTableSinkTest {
     }
 
     @Test
+    public void testFindPrimaryReplicaSkipDecommission() throws StarRocksException {
+        Backend be1 = new Backend(2001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(2002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(2003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+
+        //be1 hosts the fewest primaries, so without the DECOMMISSION check it would be selected
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 0L);
+        bePrimaryMap.put(be2.getId(), 1L);
+        bePrimaryMap.put(be3.getId(), 2L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.a replica being decommissioned must not be selected while other candidates exist
+        Replica decommissioned = new Replica(55L, be1.getId(), Replica.ReplicaState.DECOMMISSION, 1, 0);
+        Replica normal1 = new Replica(66L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica normal2 = new Replica(77L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        decommissioned.setLastWriteFail(false);
+        normal1.setLastWriteFail(false);
+        normal2.setLastWriteFail(false);
+        List<Replica> replicaList = new ArrayList<>();
+        replicaList.add(decommissioned);
+        replicaList.add(normal1);
+        replicaList.add(normal2);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, replicaList);
+        Assertions.assertEquals(normal1.getId(), replicaList.get(lowUsageIndex1).getId());
+        Assertions.assertEquals(be2.getId(), replicaList.get(lowUsageIndex1).getBackendId());
+
+        //2.fall back to the decommissioned replica when it is the only candidate
+        List<Replica> onlyDecommissionedList = new ArrayList<>();
+        onlyDecommissionedList.add(decommissioned);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, onlyDecommissionedList);
+        Assertions.assertEquals(decommissioned.getId(), onlyDecommissionedList.get(lowUsageIndex2).getId());
+    }
+
+    @Test
     public void testCreateLocationWithSharedDataMode(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
         SystemInfoService sysInfoService = new SystemInfoService();
         MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
@@ -1491,5 +1660,114 @@ public class OlapTableSinkTest {
                         1L, dstTable, tuple, false, 0, Lists.newArrayList(900L), null, absentIndexId));
         Assertions.assertTrue(e.getMessage().contains("not found in partition"),
                 "missing target index must fail with a 'not found in partition' message, got: " + e.getMessage());
+    }
+
+    // Verify that setTargetWriteIndexId() on the sink — which InsertPlanner calls when
+    // insertStmt.getTargetWriteIndexId() is non-null — causes createSchema to emit only the
+    // target index. The OlapTableSinkTest harness does not run a full InsertPlanner pipeline,
+    // so this test exercises the sink-side forwarding contract that InsertPlanner depends on.
+    @Test
+    public void testInsertPlannerForwardsTargetWriteIndexIdToSink() {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Simulate what InsertPlanner does: create the sink and call setTargetWriteIndexId.
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(900L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.setTargetWriteIndexId(TARGET_ROLLUP_INDEX_ID);
+
+        // Verify that the schema emitted via createSchema (which complete() delegates to) is
+        // restricted to the single target index — the invariant the BE relies on.
+        TOlapTableSchemaParam schema2 =
+                OlapTableSink.createSchema(TARGET_TABLE_ID, dstTable, tuple, TARGET_ROLLUP_INDEX_ID);
+        Assertions.assertEquals(1, schema2.getIndexes().size(),
+                "schema must contain exactly one index when targetWriteIndexId is set");
+        Assertions.assertEquals(TARGET_ROLLUP_INDEX_ID, schema2.getIndexes().get(0).getId(),
+                "the single index in the schema must be the target write index");
+    }
+
+    // Verify that a SHADOW index whose MaterializedIndexMeta carries a reordered sort key emits
+    // distributed_exprs over the NEW key order, so range-routing for double-writes uses the new key.
+    //
+    // Scenario: base sort key is (k1, k2) (sortKeyIdxes=[0,1]); shadow sort key is (k2, k1)
+    // (sortKeyIdxes=[1,0]). The output tuple carries shadow-prefixed columns whose slot-binding key
+    // is the column name (isShadowColumn() == true → getName()). We verify:
+    //   1. MetaUtils.getRangeDistributionColumns returns (shadow_k2, shadow_k1) for the shadow meta.
+    //   2. The TOlapTableIndexSchema for the shadow index has distributed_exprs set.
+    //   3. The exprs have 2 slot-refs in shadow-key order: first points to shadow_k2, second to shadow_k1.
+    @Test
+    public void testShadowIndexEmitsDistributedExprsForNewSortKeyOrder() {
+        // Shadow columns: prefix mirrors SchemaChangeHandler.SHADOW_NAME_PREFIX = "__starrocks_shadow_"
+        String shadowPrefix = "__starrocks_shadow_";
+        Column shadowK1 = new Column(shadowPrefix + "k1", IntegerType.INT, true, null, false, null, "");
+        Column shadowK2 = new Column(shadowPrefix + "k2", IntegerType.INT, true, null, false, null, "");
+        Column v1 = new Column("v1", IntegerType.INT, false, null, true, null, "");
+        // Schema order: [shadowK1(0), shadowK2(1), v1(2)].
+        // sortKeyIdxes=[1,0] → sort key is (shadowK2, shadowK1), i.e. the reordered/permuted new key.
+        List<Column> schema = Lists.newArrayList(shadowK1, shadowK2, v1);
+        long shadowMetaId = 300L;
+        MaterializedIndexMeta shadowMeta = new MaterializedIndexMeta(shadowMetaId, schema, 0, 0, (short) 2,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, Lists.newArrayList(1, 0));
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(shadowMetaId, shadowMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = shadowMetaId;
+                dstTable.getIndexMetaByMetaId(shadowMetaId);
+                result = shadowMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        // 1. Verify MetaUtils returns the new key order: (shadowK2, shadowK1).
+        List<Column> routingCols = MetaUtils.getRangeDistributionColumns(dstTable, shadowMetaId);
+        Assertions.assertEquals(2, routingCols.size());
+        Assertions.assertEquals(shadowPrefix + "k2", routingCols.get(0).getName(),
+                "first routing column must be shadow_k2 (the reordered new key)");
+        Assertions.assertEquals(shadowPrefix + "k1", routingCols.get(1).getName(),
+                "second routing column must be shadow_k1");
+
+        // 2 & 3. Verify createSchema emits distributed_exprs with slot-refs in the new key order.
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        Assertions.assertEquals(1, schemaParam.getIndexes().size());
+        TOlapTableIndexSchema indexSchema = schemaParam.getIndexes().get(0);
+        Assertions.assertTrue(indexSchema.isSetDistributed_exprs(),
+                "shadow range-distribution index must carry distributed_exprs");
+        List<TExpr> exprs = indexSchema.getDistributed_exprs();
+        Assertions.assertEquals(2, exprs.size(), "one routing expr per new sort-key column");
+
+        // Resolve slot_id → column name via the schema param's slot descriptors.
+        Map<Integer, String> slotIdToColName = Maps.newHashMap();
+        for (TSlotDescriptor slotDesc : schemaParam.getSlot_descs()) {
+            slotIdToColName.put(slotDesc.getId(), slotDesc.getColName());
+        }
+
+        // First expr must point to shadow_k2; second to shadow_k1 (the new key order, not the schema order).
+        for (TExpr expr : exprs) {
+            Assertions.assertEquals(1, expr.getNodes().size(), "each routing expr is a single slot-ref node");
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, expr.getNodes().get(0).getNode_type());
+        }
+        int slotId0 = exprs.get(0).getNodes().get(0).getSlot_ref().getSlot_id();
+        int slotId1 = exprs.get(1).getNodes().get(0).getSlot_ref().getSlot_id();
+        Assertions.assertEquals(shadowPrefix + "k2", slotIdToColName.get(slotId0),
+                "first distributed_expr slot must resolve to shadow_k2 (new key order)");
+        Assertions.assertEquals(shadowPrefix + "k1", slotIdToColName.get(slotId1),
+                "second distributed_expr slot must resolve to shadow_k1 (new key order)");
     }
 }

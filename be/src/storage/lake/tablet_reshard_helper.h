@@ -22,7 +22,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/primitive/range.h" // Range<rowid_t>, rowid_t
+#include "storage_primitive/range.h" // Range<rowid_t>, rowid_t
 
 namespace roaring {
 class Roaring;
@@ -93,6 +93,11 @@ void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_d
 // ownership propagation (private for an exclusive segment).
 void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
 
+// Peer of set_dcg_shared for Index Delta Groups: mark every .idx entry in an IDG version
+// list shared / private. Used by set_non_segment_files_shared (shared) and tablet split's
+// per-segment ownership propagation (private for an exclusive segment).
+void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
+
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range);
@@ -152,8 +157,41 @@ Status reconcile_windows_with_gap(const std::vector<DcgRowWindow>& sorted_contri
 const TabletRangePB& effective_old_tablet_local_range(const RowsetMetadataPB& rowset,
                                                       const TabletMetadataPB& ctx_metadata);
 
-void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index);
-void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index);
+// Where a cross-published rowset's keys sit relative to one sibling's range.
+//
+// The stat apportionment below splits a rowset's num_rows/data_size by SPLIT INDEX and knows
+// nothing about which sub-range the rows occupy. That is fine as an estimate -- read-time range
+// filtering decides what a sibling actually returns -- except that num_rows == 0 is load bearing:
+// both txn log appliers DROP a rowset whose num_rows is 0 (NonPrimaryKeyTxnLogApplier::
+// apply_write_log requires num_rows > 0 || has_delete_predicate; PrimaryKeyTxnLogApplier::
+// apply_write_log returns early on the same condition). A rowset with fewer rows than the split
+// count therefore loses the rows of whichever sibling was apportioned 0.
+//
+// Classifying the rowset's key envelope against the sibling's range fixes that without inventing
+// row counts: a sibling that provably owns nothing gets a true 0 (and is correctly dropped), and a
+// sibling that may own rows is never handed 0.
+enum class RangeOverlap {
+    // The envelope could not be determined -- a segment without sort-key bounds, or bounds whose
+    // arity does not match the range's. Callers keep the legacy index-based apportionment.
+    kUnknown,
+    // The envelope lies entirely outside the range: this sibling owns none of the rowset's rows.
+    kNo,
+    // The envelope intersects the range: this sibling may own rows, so it must not be zeroed.
+    kYes,
+};
+
+// Classify |rowset|'s key envelope (min/max over its segments' sort_key_min/sort_key_max) against
+// |range_pb|. Never fails: a missing bound, a decode error, or an arity that does not match the
+// range yields kUnknown. Since [min, max] is a superset of the rowset's actual keys, kNo is a
+// sound "owns nothing" proof.
+RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const TabletRangePB& range_pb);
+
+void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index,
+                              RangeOverlap overlap = RangeOverlap::kUnknown);
+// |sibling_range| is the range of the tablet being published to; when non-null each rowset is
+// classified against it (see RangeOverlap). Passing nullptr keeps the legacy apportionment.
+void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index,
+                               const TabletRangePB* sibling_range = nullptr);
 
 // Collect full storage paths of output-side files produced by compaction in
 // |txn_log|, resolved under |txn_log.tablet_id()| (the tablet where the
@@ -166,12 +204,15 @@ void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t s
 //
 // Only output-side files are collected. Input rowsets/sstables are deliberately
 // excluded — they have been absorbed into the merged tablet by the preceding
-// merge publish and remain live; deleting them would corrupt data.
+// merge publish and remain live; deleting them would corrupt data. Output
+// sstables that alias an input sstable (persistent-index "full contain / only
+// do move" reuse, which keeps the same physical file and only re-stamps the
+// fileset_id) are likewise excluded, since they are the live input file itself.
 //
 // No dedup is performed — lake file names are UUID-based per tablet/txn, so
 // collisions are not expected in practice. Matches the no-dedup style of
 // transactions.cpp::collect_files_in_log.
-std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager);
+std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log, TabletManager* tablet_manager);
 
 // Allocate `total` across `out->size()` buckets in proportion to
 // weights[i] / Σweights using the largest-remainder (Hare-Niemeyer) method,

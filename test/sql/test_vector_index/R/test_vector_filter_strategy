@@ -1,9 +1,10 @@
 -- name: test_vector_filter_strategy @sequential @native
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "true");
--- result:
--- !result
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 -- result:
+-- !result
+function: update_be_config("enable_vector_index_topk_underfill_fallback", "true")
+-- result:
+None
 -- !result
 CREATE TABLE vt (
     id   bigint        NOT NULL,
@@ -138,9 +139,10 @@ None
 DROP TABLE vt_pk;
 -- result:
 -- !result
-ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
+function: update_be_config("enable_vector_index_topk_underfill_fallback", "false")
 -- result:
+None
 -- !result
-ADMIN SET FRONTEND CONFIG ("enable_experimental_vector" = "false");
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
 -- result:
 -- !result

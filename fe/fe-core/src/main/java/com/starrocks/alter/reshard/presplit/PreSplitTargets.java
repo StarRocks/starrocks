@@ -17,11 +17,16 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.sql.common.MetaUtils;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -42,8 +47,10 @@ import java.util.List;
  * <p><b>Two slices</b>:
  * <ul>
  *   <li>{@link #findEligibleTable} — table-only structural gate (range
- *       distribution, NORMAL state, no MV/rollup, supported sort key) used
- *       by the multi-partition coordinator's defensive re-check. Returns the
+ *       distribution, NORMAL state, every visible index has a supported sort
+ *       key) used by the multi-partition coordinator's defensive re-check.
+ *       A visible rollup no longer disqualifies the table by itself; its own
+ *       sort key must still be non-empty and scalar. Returns the
  *       failing {@link SkipReason}, or {@code null} when the table is eligible;
  *       the caller records it. The multi-partition coordinator does
  *       per-partition checks on its own under a short READ lock after
@@ -61,10 +68,17 @@ final class PreSplitTargets {
     }
 
     /**
-     * Resolved single-partition single-tablet target bundle. Both hooks pass
-     * this through to the coordinator as one value.
+     * Resolved single-partition target bundle: one {@link IndexPreSplitTarget} per
+     * visible index (base index first), all sharing the same partition. Both hooks
+     * pass this through to the coordinator as one value.
      */
-    record EligibleTarget(Database database, OlapTable olapTable, long partitionId, long oldTabletId) {
+    record EligibleTarget(Database database, OlapTable olapTable, long partitionId,
+                          List<IndexPreSplitTarget> indexTargets) {
+
+        /** The base index's old tablet id -- derived so existing single-tablet read sites keep compiling. */
+        long oldTabletId() {
+            return indexTargets.get(0).oldTabletId();
+        }
     }
 
     /**
@@ -94,19 +108,18 @@ final class PreSplitTargets {
         if (table.getState() != OlapTable.OlapTableState.NORMAL) {
             return SkipReason.TABLE_NOT_NORMAL;
         }
-        if (table.getVisibleIndexMetas().size() != 1) {
-            return SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP;
-        }
-        // Mirrors TabletPreSplitCoordinator.areSortKeyColumnsSupported: every
-        // sort-key column must be scalar; deeper per-column validation runs
-        // at plan time.
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
-        if (sortKeyColumns.isEmpty()) {
-            return SkipReason.UNSUPPORTED_SORT_KEY;
-        }
-        for (Column column : sortKeyColumns) {
-            if (!column.getType().isScalarType()) {
+        // Every visible index (base or rollup) must have its own supported sort key.
+        // Mirrors TabletPreSplitCoordinator.areSortKeyColumnsSupported: every sort-key
+        // column must be scalar; deeper per-column validation runs at plan time.
+        for (MaterializedIndexMeta meta : table.getVisibleIndexMetas()) {
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, meta.getIndexMetaId());
+            if (sortKeyColumns.isEmpty()) {
                 return SkipReason.UNSUPPORTED_SORT_KEY;
+            }
+            for (Column column : sortKeyColumns) {
+                if (!column.getType().isScalarType()) {
+                    return SkipReason.UNSUPPORTED_SORT_KEY;
+                }
             }
         }
         return null;
@@ -130,7 +143,9 @@ final class PreSplitTargets {
      *         missing — records {@link SkipReason#METADATA_NOT_RESOLVED} (e.g. an
      *         alter raced the load); or when the partition has zero or multiple
      *         base-index tablets — records {@link SkipReason#MULTIPLE_BASE_INDEX_TABLETS}
-     *         (the common case on a re-load against an already-split partition).
+     *         (the common case on a re-load against an already-split partition); or when
+     *         a visible rollup fails per-index resolution (multi-tablet, empty, or
+     *         non-scalar sort key) -- records {@link SkipReason#HAS_MATERIALIZED_VIEW_OR_ROLLUP}.
      */
     static EligibleTarget findEligibleTarget(Database database, OlapTable olapTable) {
         PhysicalPartition uniquePartition = findUniquePhysicalPartition(olapTable);
@@ -138,18 +153,128 @@ final class PreSplitTargets {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
         }
-        MaterializedIndex baseIndex = uniquePartition.getIndex(olapTable.getBaseIndexMetaId());
+        return resolveFromPhysicalPartition(database, olapTable, uniquePartition);
+    }
+
+    /**
+     * Sibling of {@link #findEligibleTarget} for a static {@code INSERT OVERWRITE}, whose write
+     * lands in a temporary partition rather than in the table's visible partition. Applies the
+     * same per-partition slice (one physical partition, one base tablet) to the temporary
+     * partition named {@code tempPartitionName} and records the same {@link SkipReason}s, so the
+     * two gates cannot drift.
+     *
+     * @return the resolved {@link EligibleTarget} whose {@code partitionId} is the temporary
+     *         partition's physical partition id, or {@code null} after recording the failing
+     *         {@link SkipReason} -- the same reasons {@link #findEligibleTarget} records for the
+     *         same situations.
+     */
+    static EligibleTarget findEligibleTemporaryTarget(Database database, OlapTable olapTable, String tempPartitionName) {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        try {
+            // Resolve through the temp-scoped by-name accessor: it is the only lookup that cannot
+            // return a live partition. OlapTable.getPartition(long) and getPhysicalPartition(long)
+            // search both the visible and the temporary namespace, and getPartition(String) searches
+            // only the visible one, so an id-based or unscoped lookup could resolve a partition that
+            // is still serving queries -- and resharding that one is never what the overwrite asked for.
+            Partition partition = olapTable.getPartition(tempPartitionName, true);
+            if (partition == null) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            // Same single-physical-partition contract findUniquePhysicalPartition applies on the
+            // visible side; taking the default sub-partition would silently ignore the others.
+            Collection<PhysicalPartition> physicalPartitions = partition.getSubPartitions();
+            if (physicalPartitions.size() != 1) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
+                return null;
+            }
+            return resolveFromPhysicalPartition(database, olapTable, physicalPartitions.iterator().next());
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(database.getId(), olapTable.getId(), LockType.READ);
+        }
+    }
+
+    /**
+     * The per-partition slice both resolvers apply once they have a physical partition: one base-index
+     * tablet, and every visible index resolvable. Shared rather than repeated so the visible-partition
+     * and temporary-partition gates cannot drift apart — they must accept and reject the same shapes for
+     * the same recorded reasons, or an operator reading the skip metric would be told different stories
+     * about the same table.
+     */
+    private static EligibleTarget resolveFromPhysicalPartition(
+            Database database, OlapTable olapTable, PhysicalPartition partition) {
+        MaterializedIndex baseIndex = partition.getIndex(olapTable.getBaseIndexMetaId());
         if (baseIndex == null) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.METADATA_NOT_RESOLVED);
             return null;
         }
-        List<Tablet> baseTablets = baseIndex.getTablets();
-        if (baseTablets.size() != 1) {
+        if (baseIndex.getTablets().size() != 1) {
             PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
             return null;
         }
-        long baseTabletId = baseTablets.get(0).getId();
-        return new EligibleTarget(database, olapTable, uniquePartition.getId(), baseTabletId);
+        List<IndexPreSplitTarget> indexTargets = resolveVisibleIndexTargets(olapTable, partition);
+        if (indexTargets == null) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+            return null;
+        }
+        return new EligibleTarget(database, olapTable, partition.getId(), indexTargets);
+    }
+
+    /**
+     * Resolves every visible index of {@code table}'s {@code partition} into an
+     * {@link IndexPreSplitTarget}, base index first.
+     *
+     * @return the base-first list, or {@code null} when any visible index (base or
+     *         rollup) has other-than-one tablet, an empty sort key, or a non-scalar
+     *         sort-key column. Row-count emptiness is intentionally NOT checked here --
+     *         that stays a separate per-partition gate the caller applies on its own.
+     */
+    static List<IndexPreSplitTarget> resolveVisibleIndexTargets(OlapTable table, PhysicalPartition partition) {
+        List<MaterializedIndex> visibleIndices =
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        IndexPreSplitTarget baseTarget = null;
+        List<IndexPreSplitTarget> rollupTargets = new ArrayList<>();
+        for (MaterializedIndex index : visibleIndices) {
+            IndexPreSplitTarget target = resolveIndexTarget(table, index);
+            if (target == null) {
+                return null;
+            }
+            if (index.getMetaId() == table.getBaseIndexMetaId()) {
+                baseTarget = target;
+            } else {
+                rollupTargets.add(target);
+            }
+        }
+        if (baseTarget == null) {
+            return null;
+        }
+        List<IndexPreSplitTarget> orderedTargets = new ArrayList<>(1 + rollupTargets.size());
+        orderedTargets.add(baseTarget);
+        orderedTargets.addAll(rollupTargets);
+        return orderedTargets;
+    }
+
+    /**
+     * Resolves one visible index into an {@link IndexPreSplitTarget}, or {@code null}
+     * when it has other-than-one tablet, an empty sort key, or a non-scalar sort-key
+     * column.
+     */
+    private static IndexPreSplitTarget resolveIndexTarget(OlapTable table, MaterializedIndex index) {
+        List<Tablet> tablets = index.getTablets();
+        if (tablets.size() != 1) {
+            return null;
+        }
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table, index.getMetaId());
+        if (sortKeyColumns.isEmpty()) {
+            return null;
+        }
+        for (Column column : sortKeyColumns) {
+            if (!column.getType().isScalarType()) {
+                return null;
+            }
+        }
+        return new IndexPreSplitTarget(index.getMetaId(), tablets.get(0).getId(), sortKeyColumns);
     }
 
     /**

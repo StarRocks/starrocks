@@ -19,9 +19,9 @@
 
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/column_predicate_factory.h"
 #include "storage/tablet.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 
@@ -31,7 +31,6 @@ class OlapTableLocationParam;
 class StarRocksNodesInfo;
 class LocalTabletReader;
 class PInternalService_RecoverableStub;
-class RowDescriptor;
 
 namespace serde {
 struct ProtobufChunkMeta;
@@ -136,7 +135,6 @@ private:
     std::unique_ptr<OlapTablePartitionParam> _partition_param;
     std::unique_ptr<OlapTableLocationParam> _location_param;
     std::unique_ptr<StarRocksNodesInfo> _nodes_info;
-    std::unique_ptr<RowDescriptor> _row_desc;
 };
 
 } // namespace starrocks

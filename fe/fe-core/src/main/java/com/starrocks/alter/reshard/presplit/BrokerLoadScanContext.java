@@ -38,12 +38,18 @@ import java.util.Objects;
  * <p>The {@code brokerDesc} may be {@code null} for HDFS-style direct loads
  * that don't go through a broker — matching the same nullability rule the
  * load planner already follows.
+ *
+ * <p>{@code loadTimeZone} is the load session timezone (the same value the BE
+ * query globals use). The meta-tier readers use it to reproduce the BE's
+ * offset for a UTC-adjusted / TIMESTAMP_INSTANT value; a non-fixed / null
+ * zone -> data tier.
  */
 public record BrokerLoadScanContext(
         BrokerDesc brokerDesc,
         List<BrokerFileGroup> fileGroups,
         List<List<TBrokerFileStatus>> fileStatusesPerGroup,
-        ComputeResource computeResource) implements ScanContext {
+        ComputeResource computeResource,
+        String loadTimeZone) implements ScanContext {
 
     public BrokerLoadScanContext {
         Objects.requireNonNull(fileGroups, "fileGroups");

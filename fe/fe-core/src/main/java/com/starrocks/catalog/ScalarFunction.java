@@ -66,10 +66,12 @@ public class ScalarFunction extends Function {
     // isolated/shared
     @SerializedName(value = "isolated")
     private boolean isolationType = true;
-    @SerializedName(value = "inputType")
-    private String inputType;
     @SerializedName(value = "content")
     private String content;
+    // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects to
+    // this external worker instead of spawning a local one. The user owns its lifecycle/isolation.
+    @SerializedName(value = "serviceUrl")
+    private String serviceUrl;
 
     // Only used for serialization
     protected ScalarFunction() {
@@ -105,8 +107,8 @@ public class ScalarFunction extends Function {
         prepareFnSymbol = other.prepareFnSymbol;
         closeFnSymbol = other.closeFnSymbol;
         isolationType = other.isolationType;
-        inputType = other.inputType;
         content = other.content;
+        serviceUrl = other.serviceUrl;
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,
@@ -223,12 +225,16 @@ public class ScalarFunction extends Function {
         this.isolationType = isolationType;
     }
 
-    public void setInputType(String inputType) {
-        this.inputType = inputType;
-    }
-
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public void setServiceUrl(String serviceUrl) {
+        this.serviceUrl = serviceUrl;
+    }
+
+    public String getServiceUrl() {
+        return serviceUrl;
     }
 
     @Override
@@ -261,8 +267,11 @@ public class ScalarFunction extends Function {
         if (!Strings.isEmpty(getSymbolName())) {
             props.put(CreateFunctionStmt.SYMBOL_KEY, getSymbolName());
         }
-        if (!Strings.isEmpty(inputType)) {
-            props.put(CreateFunctionStmt.INPUT_TYPE, inputType);
+        if (!Strings.isEmpty(getInputType())) {
+            props.put(CreateFunctionStmt.INPUT_TYPE, getInputType());
+        }
+        if (!Strings.isEmpty(getServiceUrl())) {
+            props.put(CreateFunctionStmt.SERVICE_URL_KEY, getServiceUrl());
         }
         // Default isolation is isolated (true); only emit the property when explicitly shared.
         if (!isolationType) {
@@ -284,11 +293,11 @@ public class ScalarFunction extends Function {
         }
         fn.setScalar_fn(scalarFunction);
         fn.setIsolated(isolationType);
-        if (inputType != null) {
-            fn.setInput_type(inputType);
-        }
         if (content != null) {
             fn.setContent(content);
+        }
+        if (serviceUrl != null) {
+            fn.setService_url(serviceUrl);
         }
         return fn;
     }
@@ -327,6 +336,7 @@ public class ScalarFunction extends Function {
         boolean isolation;
         String inputType;
         String content;
+        String serviceUrl;
 
         private ScalarFunctionBuilder(TFunctionBinaryType binaryType) {
             this.binaryType = binaryType;
@@ -381,6 +391,11 @@ public class ScalarFunction extends Function {
             return this;
         }
 
+        public ScalarFunction.ScalarFunctionBuilder serviceUrl(String serviceUrl) {
+            this.serviceUrl = serviceUrl;
+            return this;
+        }
+
         public ScalarFunction build() {
             ScalarFunction scalarFunction = new ScalarFunction(name, argTypes, retType, hasVarArgs);
             scalarFunction.setBinaryType(binaryType);
@@ -388,6 +403,7 @@ public class ScalarFunction extends Function {
             scalarFunction.setIsolationType(isolation);
             scalarFunction.setInputType(inputType);
             scalarFunction.setContent(content);
+            scalarFunction.setServiceUrl(serviceUrl);
             if (objectFile != null) {
                 scalarFunction.setLocation(new HdfsURI(objectFile));
             }

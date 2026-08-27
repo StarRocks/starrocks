@@ -240,7 +240,7 @@ public class ColocateTableIndexTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         OlapTable table =
                 (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(goodDb.getFullName(), "goodTable");
-        ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId());
+        GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId());
 
         // create a bad db
         long badDbId = 4000;

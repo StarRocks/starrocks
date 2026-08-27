@@ -18,8 +18,8 @@ SHOW DYNAMIC PARTITION TABLES [FROM <db_name>]
 
 ## 示例
 
-1. 展示数据库 database 的所有设置过动态分区属性的分区表状态。
+1. 展示数据库 `db_test` 的所有设置过动态分区属性的分区表状态。
 
 ```sql
-SHOW DYNAMIC PARTITION TABLES FROM database;
+SHOW DYNAMIC PARTITION TABLES FROM db_test;
 ```

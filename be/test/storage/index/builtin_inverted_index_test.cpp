@@ -20,16 +20,17 @@
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "exec/exec_env.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "roaring/roaring.hh"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/index/inverted/builtin/builtin_inverted_index_iterator.h"
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
 #include "storage/index/inverted/builtin/builtin_inverted_writer.h"
 #include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_common.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/tablet_index.h"
 #include "storage/types.h"
@@ -657,11 +658,67 @@ TEST_F(BuiltinInvertedIndexTest, test_iterator_unsupported_ops) {
     ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
 
     roaring::Roaring bitmap;
-    ASSERT_TRUE(iter->read_null("c0", &bitmap).is_internal_error());
+    ASSERT_OK(iter->read_null("c0", &bitmap));
+    ASSERT_TRUE(bitmap.isEmpty());
 
     Slice query("test");
     ASSERT_TRUE(iter->read_from_inverted_index("c0", &query, static_cast<InvertedIndexQueryType>(-1), &bitmap)
                         .is_invalid_argument());
+
+    delete iter;
+}
+
+// Test BuiltinInvertedIndexIterator::read_null returns exactly the NULL rowids.
+TEST_F(BuiltinInvertedIndexTest, test_iterator_read_null) {
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+
+    std::string file_name = kTestDir + "/read_null";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+
+        // Interleave values and NULLs so NULL rows land at rowids 2 and 4:
+        //   rowid 0,1 -> "apple","banana"; rowid 2 -> NULL; rowid 3 -> "cherry"; rowid 4 -> NULL.
+        std::vector<std::string> head = {"apple", "banana"};
+        std::vector<Slice> head_slices;
+        for (auto& v : head) {
+            head_slices.emplace_back(v.data(), v.size());
+        }
+        writer->add_values(head_slices.data(), head_slices.size());
+        writer->add_nulls(1);
+        std::string tail = "cherry";
+        Slice tail_slice(tail.data(), tail.size());
+        writer->add_values(&tail_slice, 1);
+        writer->add_nulls(1);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = 5;
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    roaring::Roaring bitmap;
+    ASSERT_OK(iter->read_null("c0", &bitmap));
+    ASSERT_EQ(2, bitmap.cardinality());
+    ASSERT_TRUE(bitmap.contains(2));
+    ASSERT_TRUE(bitmap.contains(4));
+    ASSERT_FALSE(bitmap.contains(0));
+    ASSERT_FALSE(bitmap.contains(1));
+    ASSERT_FALSE(bitmap.contains(3));
 
     delete iter;
 }
@@ -906,7 +963,7 @@ TEST_F(BuiltinInvertedIndexTest, test_complex_wildcard_query) {
 // Verify that BuiltinInvertedReader correctly tracks memory via the builtin_inverted_index_mem_tracker.
 // The tracker balance should be zero after the reader is destroyed.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     std::vector<std::string> values = {"alpha", "beta", "gamma"};
@@ -968,7 +1025,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance) {
 
 // Verify that load failure does not cause a tracker imbalance.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_load_failure) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     {
@@ -992,7 +1049,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_load_failure) {
 // does not cause a tracker imbalance. This covers the error path in load() where
 // _bitmap_index->load() fails and _bitmap_index is reset.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_balance_on_bitmap_load_failure) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     {
@@ -1087,7 +1144,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_usage_before_and_after_load) {
 // Verify that multiple BuiltinInvertedReaders cumulatively track their memory,
 // and that the tracker returns to baseline after all readers are destroyed.
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_multiple_readers) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     std::vector<std::string> values = {"x", "y", "z"};
@@ -1164,7 +1221,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_multiple_readers) {
 
 // Verify memory tracking works correctly with the English parser path (tokenized index).
 TEST_F(BuiltinInvertedIndexTest, test_mem_tracker_english_parser) {
-    auto* tracker = GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     std::vector<std::string> values = {"hello world", "foo bar baz"};
@@ -1239,6 +1296,28 @@ TEST_F(BuiltinInvertedIndexTest, test_simple_analyzer) {
 
     analyzer2.tokenize(nullptr, 0, tokens);
     ASSERT_TRUE(tokens.empty());
+}
+
+TEST_F(BuiltinInvertedIndexTest, test_is_builtin_inverted_index) {
+    {
+        TabletIndex tablet_index;
+        ASSERT_FALSE(is_builtin_inverted_index(tablet_index));
+    }
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_CLUCENE);
+        ASSERT_FALSE(is_builtin_inverted_index(tablet_index));
+    }
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_common_properties(INVERTED_IMP_KEY, TYPE_BUILTIN);
+        ASSERT_TRUE(is_builtin_inverted_index(tablet_index));
+    }
+    {
+        TabletIndex tablet_index;
+        tablet_index.add_common_properties(INVERTED_IMP_KEY, "invalid");
+        ASSERT_FALSE(is_builtin_inverted_index(tablet_index));
+    }
 }
 
 } // namespace starrocks

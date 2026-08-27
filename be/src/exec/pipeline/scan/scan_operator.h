@@ -19,12 +19,12 @@
 #include "compute_env/pipeline/driver_scan_operator.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/chunk_source.h"
-#include "exec/pipeline/scan/split_morsel_ticket_checker.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/topn_runtime_filter_back_pressure.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/scan/split_morsel_ticket_checker.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "exprs/chunk_predicate_evaluator.h"
 
 namespace starrocks {
@@ -34,6 +34,7 @@ class ScanNode;
 
 namespace pipeline {
 
+class RFScanWaitTimeout;
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 class ScanOperator : public SourceOperator, public DriverScanOperator {
@@ -108,6 +109,18 @@ public:
     bool has_full_events() { return get_chunk_buffer().limiter()->has_full_events(); }
     virtual bool need_notify_all() { return true; }
 
+    // Wake the single consumer driver that owns chunk-buffer slot `buffer_index` -- the slot a
+    // just-produced chunk was written to (the return value of BalancedChunkBuffer::put). In
+    // shared scan the round-robin buffer routes a chunk to an arbitrary sibling driver's slot,
+    // so the producer must wake that specific driver; doing it per-slot avoids fanning out to
+    // every sibling on every chunk. For non-shared (kDirect) scan the slot is the producer's
+    // own, so this just wakes itself. `buffer_index < 0` means nothing was produced.
+    void notify_chunk_buffer_consumer(int buffer_index) {
+        if (buffer_index >= 0) {
+            _source_factory()->notify_source_observer(buffer_index);
+        }
+    }
+
     template <class NotifyAll>
     auto defer_notify(NotifyAll notify_all) {
         return DeferOp([this, notify_all]() {
@@ -127,6 +140,24 @@ protected:
     virtual void attach_chunk_source(int32_t source_index) = 0;
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
+    struct ReusableChunkSourceLookup {
+        ChunkSourcePtr reusable_chunk_source = nullptr;
+        ChunkSourcePtr stale_chunk_source = nullptr;
+    };
+    enum class ReusableChunkSourceEvent { CANDIDATE, HIT, MISS, STALE_CLOSE, FAILURE };
+    virtual bool _can_reuse_chunk_source_for(Morsel& morsel) const { return false; }
+    virtual void _record_reusable_chunk_source_event(ReusableChunkSourceEvent /*event*/) {}
+    virtual bool _is_empty_slot_for_new_morsel(int /*chunk_source_index*/) const { return false; }
+    virtual ReusableChunkSourceLookup _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                                                  Morsel& morsel) {
+        return {};
+    }
+    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                              ChunkSourcePtr chunk_source) {
+        if (chunk_source != nullptr) {
+            chunk_source->close(state);
+        }
+    }
 
     virtual BalancedChunkBuffer& get_chunk_buffer() const = 0;
 
@@ -292,6 +323,21 @@ private:
 
     RuntimeMembershipFilterEvalContext _topn_filter_eval_context;
     std::unique_ptr<TopnRfBackPressure> _topn_filter_back_pressure = nullptr;
+    // Scans self-enable TopN back-pressure whenever a TopN RF targets them, even when the FE flag is
+    // off (e.g. topn_filter_back_pressure_mode=0). Gated by the enable_topn_filter_back_pressure
+    // session variable (read from TQueryOptions, default true); applies to both shared-nothing olap
+    // and shared-data lake/connector scans.
+    bool _self_enable_topn_back_pressure(RuntimeState* state) const;
+    // Arm/refresh the event-scheduler wakeup timer for the current back-pressure throttle window.
+    void _arm_back_pressure_throttle_timer() const;
+    // True once a TopN (stream-build) runtime filter has been received by this scan probe collector.
+    // Back-pressure releases on this: throttling only exists to wait for the filter to arrive, and the
+    // selectivity-based release goes stale once storage zonemap pruning empties the pulled chunks.
+    bool _topn_runtime_filter_arrived() const;
+    // Wakes this driver when the throttle window ends; without it a throttled driver is only re-checked
+    // by the fallback poller (the throttle was never wired into the event scheduler). Re-armed per window.
+    mutable std::shared_ptr<RFScanWaitTimeout> _bp_throttle_timer;
+    mutable int64_t _bp_throttle_timer_deadline = -1;
 
     DECLARE_RACE_DETECTOR(race_pull_chunk)
 };

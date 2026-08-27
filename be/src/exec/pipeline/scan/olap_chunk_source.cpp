@@ -31,18 +31,18 @@
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/query_runtime_state.h"
+#include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/catalog_scan_metrics.h"
+#include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
-#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
-#include "exec/pipeline/scan/scan_morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
-#include "exec/query_scan_metrics.h"
-#include "exec/runtime/query_runtime_state.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
@@ -53,7 +53,6 @@
 #include "runtime/chunk_helper.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -61,10 +60,10 @@
 #include "storage/flat_json_metrics.h"
 #include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/vector_search_option.h"
 #include "storage/storage_engine.h"
 #include "storage/virtual_column_utils.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/vector_search_option.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
@@ -178,11 +177,31 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     const std::string segment_init_name = "SegmentInit";
     _seg_init_timer = ADD_CHILD_TIMER(_runtime_profile, segment_init_name, IO_TASK_EXEC_TIMER_NAME);
     _bi_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexFilter", segment_init_name);
+
+    const std::string vector_index_name = "VectorIndex";
+    const std::string vector_index_load_name = "VectorIndexLoad";
+    const std::string vector_index_cache_lookup_name = "VectorIndexCacheLookup";
+    const std::string vector_index_search_name = "VectorIndexSearch";
+    _vector_index_timer = ADD_CHILD_TIMER(_runtime_profile, vector_index_name, segment_init_name);
+    _vector_index_load_timer = ADD_CHILD_TIMER(_runtime_profile, vector_index_load_name, vector_index_name);
     _get_row_ranges_by_vector_index_timer =
-            ADD_CHILD_TIMER(_runtime_profile, "GetVectorRowRangesTime", segment_init_name);
-    _vector_search_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorSearchTime", segment_init_name);
+            ADD_CHILD_TIMER(_runtime_profile, vector_index_search_name, vector_index_name);
+    _vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_runtime_profile, vector_index_cache_lookup_name, vector_index_load_name);
+    _vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileOpenAndGetSize", vector_index_load_name);
+    _vector_index_read_file_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorIndexFileRead", vector_index_load_name);
+    _vector_index_init_index_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexDeserialize", vector_index_load_name);
+    _vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "VectorIndexSearcherCreate", vector_index_load_name);
+    _vector_index_cache_hit_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheHit", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_index_cache_miss_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexCacheMiss", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_search_timer = ADD_CHILD_TIMER(_runtime_profile, "VectorANNSearch", vector_index_search_name);
     _process_vector_distance_and_id_timer =
-            ADD_CHILD_TIMER(_runtime_profile, "ProcessVectorDistanceAndIdTime", segment_init_name);
+            ADD_CHILD_TIMER(_runtime_profile, "VectorResultProcess", vector_index_search_name);
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
 
@@ -211,7 +230,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _vector_index_filtered_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexFilterRows", TUnit::UNIT, segment_init_name);
+            ADD_CHILD_COUNTER(_runtime_profile, "VectorIndexFilterRows", TUnit::UNIT, vector_index_search_name);
     _sk_filtered_counter =
             ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT,
                                            _get_counter_min_max_type("ShortKeyFilterRows"), segment_init_name);
@@ -301,6 +320,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
         }
         _params.vector_search_option->vector_range = vector_options.vector_range;
+        _params.vector_search_option->has_vector_range = vector_options.__isset.has_vector_range
+                                                                 ? vector_options.has_vector_range
+                                                                 : vector_options.vector_range >= 0;
         _params.vector_search_option->result_order = vector_options.result_order;
         _params.vector_search_option->refine_distance = _refine_distance;
         _params.vector_search_option->k_factor = _runtime_state->query_options().k_factor;
@@ -352,8 +374,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     }
 
     // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
-    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
-    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // candidate. Preserve that fact so the vector filter resolver can apply the configured underfill
+    // fallback policy. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
     // operator placed ABOVE this scan in the execution tree (e.g. a SELECT for a residual the optimizer
     // could not push down, such as cat+tag>50) -- detected by FragmentExecutor's tree walk. See design §7.
     _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||
@@ -832,7 +854,17 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_vector_index_timer,
+                   _reader->stats().vector_index_load_ns + _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_load_timer, _reader->stats().vector_index_load_ns);
     COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
+    COUNTER_UPDATE(_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
+    COUNTER_UPDATE(_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
+    COUNTER_UPDATE(_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
+    COUNTER_UPDATE(_vector_index_cache_miss_counter, _reader->stats().vector_index_cache_miss_count);
     COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
     COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
@@ -887,8 +919,10 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", IO_TASK_EXEC_TIMER_NAME);
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_runtime_profile, "DeleteFilterRows", TUnit::UNIT);
+        RuntimeProfile::Counter* c3 = ADD_COUNTER(_runtime_profile, "DeleteZoneMapPrunedRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+        COUNTER_UPDATE(c3, _reader->stats().rows_del_predicate_zone_map_pruned);
     }
 
     if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {

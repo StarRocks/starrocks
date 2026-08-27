@@ -181,7 +181,6 @@ public class StreamLoadMgr implements MemoryTrackable {
                                           TransactionResult resp, ComputeResource computeResource) throws StarRocksException {
         AbstractStreamLoadTask task = null;
         Database db = checkDbName(dbName);
-        long dbId = db.getId();
         // if task is already created, return directly
         readLock();
         try {
@@ -223,7 +222,6 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws StarRocksException {
         AbstractStreamLoadTask task = null;
         Database db = checkDbName(dbName);
-        long dbId = db.getId();
         Table table = checkMeta(db, tableName);
 
         writeLock();

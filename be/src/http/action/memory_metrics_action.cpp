@@ -17,28 +17,32 @@
 
 #include "http/action/memory_metrics_action.h"
 
-#include <runtime/exec_env.h>
+#include <exec/exec_env.h>
 #include <runtime/mem_tracker.h>
 
 #include "common/tracer.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "runtime/env/global_env.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
+
+bool MemoryMetricsAction::need_auth() const {
+    return true;
+}
 
 void MemoryMetricsAction::handle(HttpRequest* req) {
     LOG(INFO) << "Start collect memory metrics.";
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_memory_metrics"));
-    MemTracker* process_mem_tracker = _global_env.process_mem_tracker();
+    MemTracker* process_mem_tracker = _runtime_env.process_mem_tracker();
     std::stringstream result;
     result << "[";
     getMemoryMetricTree(process_mem_tracker, result, process_mem_tracker->consumption());
     result << ",";
-    getMemoryMetricTree(_global_env.metadata_mem_tracker(), result, process_mem_tracker->consumption());
+    getMemoryMetricTree(_runtime_env.metadata_mem_tracker(), result, process_mem_tracker->consumption());
     result << ",";
-    getMemoryMetricTree(_global_env.update_mem_tracker(), result, process_mem_tracker->consumption());
+    getMemoryMetricTree(_runtime_env.update_mem_tracker(), result, process_mem_tracker->consumption());
     result << "]";
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
     LOG(INFO) << "End collect memory metrics. " << result.str();

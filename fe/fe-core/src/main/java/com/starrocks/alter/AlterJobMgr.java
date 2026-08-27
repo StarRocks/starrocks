@@ -49,6 +49,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
@@ -95,6 +96,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -143,23 +145,24 @@ public class AlterJobMgr {
     }
 
     /**
-     * Coordinated stop for leader demotion: drain each handler so onStopped() runs and the
-     * worker threads exit cleanly. Wraps each handler call in its own try-catch so a
-     * misbehaving handler cannot abort the remaining handlers' drain.
+     * Fire-and-forget stop for leader demotion: request stop on each handler without joining, so the
+     * single state-change thread is not blocked. Each handler's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence. Each handler call is
+     * wrapped in its own try-catch so a misbehaving handler cannot abort the remaining handlers' stop.
      */
-    public void stopGracefully(long timeoutMs) {
+    public void stopBestEffort() {
         try {
-            schemaChangeHandler.stopGracefully(timeoutMs);
+            schemaChangeHandler.stopBestEffort();
         } catch (Throwable t) {
             LOG.warn("stop schemaChangeHandler failed", t);
         }
         try {
-            materializedViewHandler.stopGracefully(timeoutMs);
+            materializedViewHandler.stopBestEffort();
         } catch (Throwable t) {
             LOG.warn("stop materializedViewHandler failed", t);
         }
         try {
-            clusterHandler.stopGracefully(timeoutMs);
+            clusterHandler.stopBestEffort();
         } catch (Throwable t) {
             LOG.warn("stop clusterHandler failed", t);
         }
@@ -347,6 +350,11 @@ public class AlterJobMgr {
         // Try to parse and analyze the creation sql
         List<StatementBase> statementBaseList = SqlParser.parse(createMvSql, context.getSessionVariable());
         CreateMaterializedViewStatement createStmt = (CreateMaterializedViewStatement) statementBaseList.get(0);
+        // RANGE is omission-only SQL, so reconstructed DDL cannot carry its persisted target type.
+        // Preserve it explicitly before re-analysis, independent of the current selection switch.
+        if (materializedView.getDefaultDistributionInfo() instanceof RangeDistributionInfo) {
+            createStmt.setDistributionDesc(new RangeDistributionDesc());
+        }
         Analyzer.analyze(createStmt, context);
 
         // validate the schema
@@ -692,6 +700,11 @@ public class AlterJobMgr {
                 view.setOriginalViewDef(originalViewDef);
                 view.setNewFullSchema(alterViewInfo.getNewFullSchema());
                 view.setComment(alterViewInfo.getComment());
+                // CREATE OR REPLACE VIEW persists the redefined SQL SECURITY characteristic atomically with the
+                // definition.
+                if (alterViewInfo.isUpdateSecurity()) {
+                    view.setSecurity(alterViewInfo.getSecurity());
+                }
             });
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(view.getName()));
@@ -713,6 +726,9 @@ public class AlterJobMgr {
             view.setOriginalViewDef(alterViewInfo.getOriginalViewDef());
             view.setNewFullSchema(alterViewInfo.getNewFullSchema());
             view.setComment(alterViewInfo.getComment());
+            if (alterViewInfo.isUpdateSecurity()) {
+                view.setSecurity(alterViewInfo.getSecurity());
+            }
             LOG.info("modify view[{}] definition to {}", view.getName(), alterViewInfo.getInlineViewDef());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);

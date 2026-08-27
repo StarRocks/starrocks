@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FileScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.FlussScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
@@ -183,12 +184,6 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.Aggr
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
-import com.starrocks.sql.optimizer.rule.tvr.TvrAggregateRule;
-import com.starrocks.sql.optimizer.rule.tvr.TvrFilterRule;
-import com.starrocks.sql.optimizer.rule.tvr.TvrJoinRule;
-import com.starrocks.sql.optimizer.rule.tvr.TvrProjectRule;
-import com.starrocks.sql.optimizer.rule.tvr.TvrTableScanRule;
-import com.starrocks.sql.optimizer.rule.tvr.TvrUnionAllRule;
 
 import java.util.List;
 
@@ -205,6 +200,7 @@ public class RuleSet {
             new OdpsScanImplementationRule(),
             new IcebergMetadataScanImplementationRule(),
             new KuduScanImplementationRule(),
+            new FlussScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -457,16 +453,6 @@ public class RuleSet {
                     new IvmVersionIcebergScanRule(),
                     new IvmVersionFilterRule(),
                     new IvmVersionProjectRule()
-            ));
-
-    public static final Rule TVR_REWRITE_RULES =
-            new CombinationRule(RuleType.GP_TVR_REWRITE, ImmutableList.of(
-                    new TvrTableScanRule(),
-                    new TvrProjectRule(),
-                    new TvrFilterRule(),
-                    new TvrJoinRule(),
-                    new TvrAggregateRule(),
-                    new TvrUnionAllRule()
             ));
 
     public RuleSet() {

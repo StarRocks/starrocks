@@ -668,7 +668,7 @@ public class JoinTest extends PlanTestBase {
                 "        INNER JOIN test_all_type AS ref_2 ON (subq_0.c3 = ref_2.id_datetime)\n" +
                 "WHERE\n" +
                 "        ref_2.t1a >= ref_1.t1a";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
     }
 
     @Test
@@ -723,7 +723,7 @@ public class JoinTest extends PlanTestBase {
                 "    1.38432132E8, \"1969-12-20 10:26:22\"\n" +
                 "HAVING (COUNT(NULL))\n" +
                 "IN(- 1210205071)\n";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         // Just make sure we can get the final plan, and not crashed because of stats calculator error.
         System.out.println(sql);
     }

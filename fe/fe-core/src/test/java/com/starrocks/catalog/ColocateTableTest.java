@@ -141,6 +141,57 @@ public class ColocateTableTest {
         Assertions.assertEquals(1, groupSchema.getReplicationNum());
     }
 
+    // OlapTable.hasColocateGroup() must stay equivalent to ColocateTableIndex.isColocateTable(id) for a
+    // live table across create / ALTER-set / ALTER-unset, since callers replace the index boolean with the
+    // property read.
+    @Test
+    public void testHasColocateGroupMatchesIndex() throws Exception {
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullDbName);
+
+        // A freshly created colocate table: property and index agree (both true).
+        createTable("create table " + dbName + "." + tableName1 + " (\n" +
+                " `k1` int NULL,\n" +
+                " `k2` varchar(10) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\", \"colocate_with\" = \"" + groupName + "\");");
+        OlapTable colocateTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName1);
+        Assertions.assertTrue(colocateTable.hasColocateGroup());
+        Assertions.assertEquals(index.isColocateTable(colocateTable.getId()), colocateTable.hasColocateGroup());
+
+        // A non-colocate table: property and index agree (both false).
+        createTable("create table " + dbName + "." + tableName2 + " (\n" +
+                " `k1` int NULL,\n" +
+                " `k2` varchar(10) NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        OlapTable plainTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName2);
+        Assertions.assertFalse(plainTable.hasColocateGroup());
+        Assertions.assertEquals(index.isColocateTable(plainTable.getId()), plainTable.hasColocateGroup());
+
+        // ALTER SET colocate_with joins the group: property and index flip to true together.
+        starRocksAssert.alterTableProperties("alter table " + dbName + "." + tableName2
+                + " set (\"colocate_with\" = \"" + groupName + "\")");
+        plainTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName2);
+        Assertions.assertTrue(plainTable.hasColocateGroup());
+        Assertions.assertEquals(index.isColocateTable(plainTable.getId()), plainTable.hasColocateGroup());
+
+        // ALTER SET colocate_with = "" leaves the group: property and index flip to false together.
+        starRocksAssert.alterTableProperties("alter table " + dbName + "." + tableName1
+                + " set (\"colocate_with\" = \"\")");
+        colocateTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName1);
+        Assertions.assertFalse(colocateTable.hasColocateGroup());
+        Assertions.assertEquals(index.isColocateTable(colocateTable.getId()), colocateTable.hasColocateGroup());
+    }
+
     @Test
     public void testCreateTwoTableWithSameGroup() throws Exception {
         createTable("create table " + dbName + "." + tableName1 + " (\n" +

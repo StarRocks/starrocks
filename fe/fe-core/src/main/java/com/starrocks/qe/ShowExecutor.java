@@ -116,6 +116,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
+import com.starrocks.failpoint.FailPointExecutor;
 import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
@@ -237,6 +238,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -273,7 +275,7 @@ import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TAuthInfo;
@@ -302,7 +304,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -422,6 +423,25 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowStatement(ShowStmt statement, ConnectContext context) {
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), EMPTY_SET);
+        }
+
+        @Override
+        public ShowResultSet visitShowWarningStatement(ShowWarningStmt statement, ConnectContext context) {
+            // `SHOW WARNINGS` returns all diagnostics of the previous statement; `SHOW ERRORS`
+            // returns only the Error-level ones. Both keywords parse to ShowWarningStmt. The
+            // optional WHERE / LIMIT are applied by the ShowExecutor.execute() pipeline (ORDER BY
+            // parses but takes effect only together with WHERE, a pre-existing limitation of
+            // ShowStmtAnalyzer.analyzeShowPredicateClause, which returns before building the
+            // order-by pairs when there is no predicate).
+            boolean onlyErrors = statement.isShowErrors();
+            List<List<String>> rows = Lists.newArrayList();
+            for (QueryWarning warning : context.getWarnings()) {
+                if (onlyErrors && !warning.isError()) {
+                    continue;
+                }
+                rows.add(Lists.newArrayList(warning.getLevel(), warning.getCode(), warning.getMessage()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
 
         @Override
@@ -1560,13 +1580,26 @@ public class ShowExecutor {
                 throw new SemanticException(e.getMessage());
             }
 
+            // The first load property is emitted without a leading comma; the grammar is
+            // `ON table (loadProperty (',' loadProperty)*)`, so a comma before the first clause is a
+            // syntax error. JSON/Avro jobs have no COLUMNS TERMINATED BY, so the first clause is often
+            // INCLUDE METADATA or COLUMNS.
+            boolean hasLoadProperty = false;
             if (routineLoadJob.getColumnSeparator() != null) {
                 createRoutineLoadSql.append("\n COLUMNS TERMINATED BY ")
                         .append(routineLoadJob.getColumnSeparator().toSql(true));
+                hasLoadProperty = true;
+            }
+
+            if (routineLoadJob.getMetadata() != null && routineLoadJob.getMetadata().getItems() != null
+                    && !routineLoadJob.getMetadata().getItems().isEmpty()) {
+                createRoutineLoadSql.append(hasLoadProperty ? ",\n" : "\n").append(routineLoadJob.getMetadata().toSql());
+                hasLoadProperty = true;
             }
 
             if (routineLoadJob.getColumnDescs() != null) {
-                createRoutineLoadSql.append(",\nCOLUMNS (");
+                createRoutineLoadSql.append(hasLoadProperty ? ",\nCOLUMNS (" : "\nCOLUMNS (");
+                hasLoadProperty = true;
                 List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
                 for (int i = 0; i < descs.size(); i++) {
                     ImportColumnDesc desc = descs.get(i);
@@ -1581,14 +1614,17 @@ public class ShowExecutor {
                         createRoutineLoadSql.append(", ");
                     }
                 }
+                hasLoadProperty = true;
             }
             if (routineLoadJob.getPartitions() != null) {
-                createRoutineLoadSql.append(",\n");
+                createRoutineLoadSql.append(hasLoadProperty ? ",\n" : "\n");
                 createRoutineLoadSql.append(routineLoadJob.getPartitions().toString());
+                hasLoadProperty = true;
             }
             if (routineLoadJob.getWhereExpr() != null) {
-                createRoutineLoadSql.append(",\nWHERE ");
+                createRoutineLoadSql.append(hasLoadProperty ? ",\nWHERE " : "\nWHERE ");
                 createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
+                hasLoadProperty = true;
             }
 
             createRoutineLoadSql.append("\nPROPERTIES\n").append(routineLoadJob.jobPropertiesToSql());
@@ -1875,7 +1911,7 @@ public class ShowExecutor {
                         long indexReplicaCount = 0;
                         long indexRowCount = 0;
                         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                            MaterializedIndex mIndex = partition.getLatestIndex(indexMetaId);
+                            MaterializedIndex mIndex = partition.getQueryableIndex(indexMetaId);
                             indexSize += mIndex.getDataSize();
                             indexReplicaCount += mIndex.getReplicaCount();
                             indexRowCount += mIndex.getRowCount();
@@ -2379,8 +2415,9 @@ public class ShowExecutor {
                 throw new SemanticException("Repository " + statement.getRepoName() + " does not exist");
             }
 
-            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(), statement.getTimestamp(),
-                    statement.getSnapshotNames());
+            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(),
+                    statement.getTimestamp(), statement.getSnapshotNames(),
+                    GlobalStateMgr.getCurrentState().getBackupHandler().getRetentionCache());
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), snapshotInfos);
         }
 
@@ -3199,51 +3236,31 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
                         CaseSensibility.VARIABLES.getCaseSensibility());
             }
-            List<Backend> backends = new LinkedList<>();
-            if (statement.getBackends() == null) {
-                List<Long> backendIds = clusterInfoService.getBackendIds(true);
-                if (backendIds == null) {
-                    throw new SemanticException("No alive backends");
-                }
-                for (long backendId : backendIds) {
-                    Backend backend = clusterInfoService.getBackend(backendId);
-                    if (backend == null) {
-                        continue;
-                    }
-                    backends.add(backend);
-                }
-            } else {
-                for (String backendAddr : statement.getBackends()) {
-                    String[] tmp = backendAddr.split(":");
-                    if (tmp.length != 2) {
-                        throw new SemanticException("invalid backend addr");
-                    }
-                    Backend backend = clusterInfoService.getBackendWithBePort(tmp[0], Integer.parseInt(tmp[1]));
-                    if (backend == null) {
-                        throw new SemanticException("cannot find backend with addr " + backendAddr);
-                    }
-                    backends.add(backend);
-                }
+            List<ComputeNode> nodes;
+            try {
+                nodes = FailPointExecutor.resolveNodes(clusterInfoService, statement.getBackends());
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
             }
             // send request
-            List<Pair<Backend, Future<PListFailPointResponse>>> futures = Lists.newArrayList();
-            for (Backend backend : backends) {
+            List<Pair<ComputeNode, Future<PListFailPointResponse>>> futures = Lists.newArrayList();
+            for (ComputeNode node : nodes) {
                 try {
-                    futures.add(Pair.create(backend,
-                            BackendServiceClient.getInstance().listFailPointAsync(backend.getBrpcAddress(), request)));
+                    futures.add(Pair.create(node,
+                            BackendServiceClient.getInstance().listFailPointAsync(node.getBrpcAddress(), request)));
                 } catch (RpcException e) {
                     throw new SemanticException("sending list failpoint request fails");
                 }
             }
             // handle response
             List<List<String>> rows = Lists.newArrayList();
-            for (Pair<Backend, Future<PListFailPointResponse>> future : futures) {
+            for (Pair<ComputeNode, Future<PListFailPointResponse>> future : futures) {
                 try {
-                    final Backend backend = future.first;
+                    final ComputeNode node = future.first;
                     final PListFailPointResponse result = future.second.get(10, TimeUnit.SECONDS);
                     if (result != null && result.status.statusCode != TStatusCode.OK.getValue()) {
-                        String errMsg = String.format("list failpoint status failed, backend: %s:%d, error: %s",
-                                backend.getHost(), backend.getBePort(), result.status.errorMsgs.get(0));
+                        String errMsg = String.format("list failpoint status failed, node: %s:%d, error: %s",
+                                node.getHost(), node.getBePort(), result.status.errorMsgs.get(0));
                         LOG.warn(errMsg);
                         throw new SemanticException(errMsg);
                     }
@@ -3254,17 +3271,28 @@ public class ShowExecutor {
                         if (matcher != null && !matcher.match(name)) {
                             continue;
                         }
+                        // pause and both counters are optional on the wire: a BE built before them
+                        // sends null, so never dereference a boxed value here.
+                        boolean paused = Boolean.TRUE.equals(triggerMode.pause);
                         List<String> row = Lists.newArrayList();
                         row.add(failPointInfo.name);
-                        row.add(triggerMode.mode.toString());
-                        if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
+                        // A pause is sent as DISABLE + pause=true so old backends degrade safely;
+                        // report what it actually means.
+                        row.add(paused ? "PAUSE" : triggerMode.mode.toString());
+                        if (paused) {
+                            row.add("");
+                        } else if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
                             row.add(Integer.toString(triggerMode.nTimes));
                         } else if (triggerMode.mode == FailPointTriggerModeType.PROBABILITY_ENABLE) {
                             row.add(Double.toString(triggerMode.probability));
                         } else {
                             row.add("");
                         }
-                        row.add(String.format("%s:%d", backend.getHost(), backend.getBePort()));
+                        row.add(String.format("%s:%d", node.getHost(), node.getBePort()));
+                        row.add(Long.toString(failPointInfo.triggerCount == null
+                                ? 0L : failPointInfo.triggerCount));
+                        row.add(Long.toString(failPointInfo.pausedThreadCount == null
+                                ? 0L : failPointInfo.pausedThreadCount));
                         rows.add(row);
                     }
                 } catch (InterruptedException e) {

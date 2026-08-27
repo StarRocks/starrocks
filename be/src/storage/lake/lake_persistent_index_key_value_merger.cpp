@@ -15,11 +15,11 @@
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 
 #include "base/debug/trace.h"
+#include "column/serde/column_array_serde.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
-#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
@@ -29,11 +29,11 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -50,7 +50,11 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     IndexValuesWithVerPB& index_value_ver = _merge_pb_scratch;
     index_value_ver.Clear();
     if (!index_value_ver.ParseFromArray(value.data, value.size)) {
-        return Status::InternalError("Failed to parse index value ver");
+        // These bytes were written as a serialized IndexValuesWithVerPB into the SST
+        // data block, so a parse failure means the persisted content is corrupted
+        // (usually a bad local cache copy). Compaction callers key their
+        // drop-corrupted-cache handling off is_corruption().
+        return Status::Corruption("Failed to parse index value ver");
     }
     if (index_value_ver.values_size() == 0) {
         return Status::OK();

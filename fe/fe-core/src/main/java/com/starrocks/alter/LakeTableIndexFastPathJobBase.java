@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
@@ -64,7 +65,7 @@ import java.util.Optional;
  * column flags) in a single write lock.
  *
  * <p>Subclasses plug in two concrete pieces via the hook methods
- * {@link #populateAlterRequest(AlterReplicaTask)} and
+ * {@link #populateAlterRequest(AlterReplicaTask, long, MaterializedIndexMeta, OlapTable)} and
  * {@link #applyCatalogMutation(OlapTable)}. Everything else — txn watershed,
  * replica task dispatch, timeout, publish, persist/replay — is shared.
  *
@@ -122,6 +123,21 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         super(type);
     }
 
+    @Override
+    protected void resetTransientState() {
+        // BOTH WAITING_TXN and RUNNING are in-memory only for this job family; PENDING is the
+        // only durable predecessor (its same-state re-log carries the watershed and the
+        // tablet snapshot, and the watershedTxnId != -1 guard makes the re-run idempotent).
+        if (jobState == JobState.WAITING_TXN || jobState == JobState.RUNNING) {
+            jobState = JobState.PENDING;
+        }
+        // runRunningJob dispatches ONLY behind a null guard - a stale batch would silently
+        // suppress the re-send and wedge the job until timeout. Null the field so the re-run
+        // re-dispatches. No AgentTaskQueue cleanup needed: the demotion drain
+        // (abandonInFlightAgentTasks) already emptied the queue before this hook runs.
+        batchTask = null;
+    }
+
     protected LakeTableIndexFastPathJobBase(long jobId, JobType jobType, long dbId, long tableId, String tableName,
                                             long timeoutMs) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
@@ -143,7 +159,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
      * Flag the task with the appropriate fast-path payload. Called once per
      * AlterReplicaTask before the task is added to the batch.
      */
-    protected abstract void populateAlterRequest(AlterReplicaTask task);
+    protected abstract void populateAlterRequest(AlterReplicaTask task, long indexMetaId,
+                                                 MaterializedIndexMeta indexMeta, OlapTable table);
 
     /**
      * Mutate the FE catalog to reflect the applied index change. Runs
@@ -176,12 +193,14 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (table == null) {
                 throw new AlterCancelException("table does not exist, tableId: " + tableId);
             }
-            // Collect every live tablet under every physical partition.
+            // Collect every latest visible tablet under every physical partition.
             // Snapshot is immutable for the remainder of the job.
+            partitionToTablets.clear();
+            tabletToIndexMetaId.clear();
             for (PhysicalPartition pp : table.getAllPhysicalPartitions()) {
                 List<Long> tabletIds = new ArrayList<>();
-                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    long indexMetaId = idx.getId();
+                for (MaterializedIndex idx : pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                    long indexMetaId = idx.getMetaId();
                     for (Tablet tablet : idx.getTablets()) {
                         tabletIds.add(tablet.getId());
                         tabletToIndexMetaId.put(tablet.getId(), indexMetaId);
@@ -228,8 +247,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     @Override
     protected void runRunningJob() throws AlterCancelException {
         if (batchTask == null) {
-            batchTask = new AgentBatchTask();
-            dispatchAllTasks();
+            batchTask = dispatchAllTasks();
         }
         if (!batchTask.isFinished()) {
             // Cancel promptly when BE reports a permanent failure for any
@@ -356,6 +374,15 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             txnInfo.combinedTxnLog = false;
             txnInfo.commitTime = System.currentTimeMillis() / 1000;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
+            // A file-bundling table stores each version's tablet metadata in a
+            // single bundle file ({0}_{version}.meta) written by the aggregate
+            // publish path -- exactly like loads and metadata-alter jobs. The
+            // metadata vacuum for such a table only reclaims bundle-named files,
+            // so this fast path must publish the same way; publishing per-tablet
+            // ({tablet}_{version}.meta) instead leaves metadata the bundling
+            // vacuum never cleans up. Keyed on the table's current format,
+            // matching this class's cancel path (lakePublishVersionWithSkip).
+            boolean useAggregatePublish = table.isFileBundling();
             for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
                 PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
                 if (pp == null) {
@@ -363,14 +390,26 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     return false;
                 }
                 long commitVersion = e.getValue();
-                // dispatchAllTasks() iterates pp.getAllMaterializedIndices(VISIBLE)
-                // so every base + rollup + sync-MV tablet has an in-flight alter
-                // task. Publish must mirror that set or non-base indexes get left
-                // on stale visible versions while FE/base advance, eventually
-                // causing read/planning inconsistencies on those indexes.
-                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                    Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
-                            commitVersion, computeResource, false);
+                // Task dispatch and publish both iterate every latest visible
+                // logical index, so base + rollup + sync-MV tablets advance
+                // together without republishing retained physical generations.
+                // For a file-bundling table all latest index tablets in the
+                // partition must land in ONE aggregate publish: BE
+                // truncate-overwrites the bundle, so a per-index aggregate call
+                // would drop earlier indexes' tablets.
+                List<Tablet> tablets = new ArrayList<>();
+                for (MaterializedIndex idx : pp.getLatestMaterializedIndices(
+                        MaterializedIndex.IndexExtState.VISIBLE)) {
+                    if (useAggregatePublish) {
+                        tablets.addAll(idx.getTablets());
+                    } else {
+                        Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
+                                commitVersion, computeResource, false);
+                    }
+                }
+                if (useAggregatePublish) {
+                    Utils.publishVersion(tablets, txnInfo, commitVersion - 1,
+                            commitVersion, computeResource, true);
                 }
             }
             return true;
@@ -488,9 +527,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     /**
      * No-op publish for the CANCEL ALTER TABLE ... FORCE escape hatch. Sends a
      * publish_version RPC with {@code TxnInfoPB.no_op_publish=true} at the
-     * alter's reserved commitVersion for every tablet the job published over
-     * ({@code getAllMaterializedIndices(VISIBLE)} per partition in
-     * {@code commitVersionMap}). BE short-circuits the txn-log apply path and
+     * alter's reserved commitVersion for every latest logical index tablet in
+     * {@code commitVersionMap}. BE short-circuits the txn-log apply path and
      * writes V-1 content tagged as version V, so the partition version chain
      * advances past the cancelled alter without including any of its changes.
      *
@@ -528,7 +566,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     continue;
                 }
                 List<Tablet> tablets = new ArrayList<>();
-                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (MaterializedIndex idx : pp.getLatestMaterializedIndices(
+                        MaterializedIndex.IndexExtState.VISIBLE)) {
                     tablets.addAll(idx.getTablets());
                 }
                 tabletsByPartition.put(ppId, tablets);
@@ -575,12 +614,13 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     }
 
     /**
-     * The lake ADD/DROP INDEX fast path is provably safe against concurrent partition
-     * creation: the owned tablet set is snapshotted once at runPendingJob and every later
-     * phase iterates only that snapshot ({@link #partitionToTablets}); no table-level shadow
-     * meta is registered before FINISHED; the catalog flip at FINISHED is an idempotent,
-     * table-level-only change; and cancel performs FE-only cleanup with no per-partition work.
-     * A partition created after the snapshot is simply outside the job's scope.
+     * The lake ADD/DROP INDEX fast path is safe against concurrent partition creation:
+     * runPendingJob snapshots the owned partition/tablet set for task dispatch, and the
+     * FINISHED_REWRITING transition derives {@link #commitVersionMap} from those partition IDs.
+     * Normal and force publish resolve the latest logical indexes only inside that fixed partition
+     * set. No table-level shadow metadata is registered before FINISHED, and the catalog flip at
+     * FINISHED is an idempotent table-level change. A partition created after the snapshot is
+     * therefore outside the job's task, version, publish, and cancellation scope.
      */
     @Override
     public boolean allowConcurrentPartitionCreation() {
@@ -718,7 +758,30 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // Internals
     // ---------------------------------------------------------------------
 
-    private void dispatchAllTasks() throws AlterCancelException {
+    private AgentBatchTask dispatchAllTasks() throws AlterCancelException {
+        List<AgentTask> registeredTasks = new ArrayList<>();
+        try {
+            AgentBatchTask newBatchTask = buildAllTasks();
+            for (AgentTask task : newBatchTask.getAllTasks()) {
+                if (!AgentTaskQueue.addTask(task)) {
+                    throw new AlterCancelException("failed to register alter task for tablet " + task.getTabletId());
+                }
+                registeredTasks.add(task);
+            }
+            AgentTaskExecutor.submit(newBatchTask);
+            LOG.info("index fast-path job {} dispatched {} AlterReplicaTasks", jobId, newBatchTask.getTaskNum());
+            return newBatchTask;
+        } catch (AlterCancelException e) {
+            removeRegisteredTasks(registeredTasks);
+            throw e;
+        } catch (RuntimeException e) {
+            removeRegisteredTasks(registeredTasks);
+            throw new AlterCancelException("failed to dispatch index fast-path job " + jobId + ": " + e.getMessage());
+        }
+    }
+
+    private AgentBatchTask buildAllTasks() throws AlterCancelException {
+        AgentBatchTask newBatchTask = new AgentBatchTask();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new AlterCancelException("database does not exist, dbId: " + dbId);
@@ -750,28 +813,33 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     }
                     Long indexMetaId = tabletToIndexMetaId.get(tabletId);
                     Preconditions.checkNotNull(indexMetaId, tabletId);
+                    MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
+                    MaterializedIndex latestIndex = pp.getLatestIndex(indexMetaId);
+                    if (indexMeta == null || latestIndex == null || latestIndex.getTablet(tabletId) == null) {
+                        throw new AlterCancelException("latest index metadata not found for tablet " + tabletId);
+                    }
                     TTabletSchema readSchema = schemaCache.computeIfAbsent(indexMetaId, id ->
-                            SchemaInfo.fromMaterializedIndex(table, id, table.getIndexMetaByMetaId(id))
+                            SchemaInfo.fromMaterializedIndex(table, id, indexMeta)
                                     .toTabletSchema());
                     // For the fast path, shadow tablet == origin tablet and
                     // shadow index == origin index (no shadow created).
                     AlterReplicaTask task = AlterReplicaTask.alterLakeTablet(cn.getId(), dbId, tableId, ppId,
-                            indexMetaId, tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
+                            latestIndex.getId(), tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
                             /*generatedColumnReq=*/ null, readSchema);
-                    populateAlterRequest(task);
-                    batchTask.addTask(task);
+                    populateAlterRequest(task, indexMetaId, indexMeta, table);
+                    newBatchTask.addTask(task);
                 }
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
-        // Register tasks in AgentTaskQueue *before* submitting so that
-        // LeaderImpl.finishTask() can find them when CNs report back.
-        // Without this, CN reports arrive as "cannot find task" warnings and
-        // the batchTask never transitions to finished.
-        AgentTaskQueue.addBatchTask(batchTask);
-        AgentTaskExecutor.submit(batchTask);
-        LOG.info("index fast-path job {} dispatched {} AlterReplicaTasks", jobId, batchTask.getTaskNum());
+        return newBatchTask;
+    }
+
+    private static void removeRegisteredTasks(List<AgentTask> registeredTasks) {
+        for (AgentTask task : registeredTasks) {
+            AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+        }
     }
 
     private void updateNextVersion(OlapTable table) {

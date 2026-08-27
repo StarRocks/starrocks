@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "JWT 認証と一時的な資格情報を使用した、Iceberg REST Catalog のセキュアなアクセス設定。"
 ---
@@ -29,7 +30,7 @@ Iceberg REST Catalog を StarRocks と統合することで、JWT (JSON Web Toke
 
 ### ステップ 1. JWT 認証の設定
 
-StarRocks で、**[JWT ベースのセキュリティ統合](../../../administration/user_privs/authentication/security_integration.md#create-a-security-integration-with-jwt)** を設定するか、[JWT 認証を使用してユーザーを作成](https://docs.starrocks.io/en/docs/administration/user_privs/authentication/jwt_authentication/)します。
+StarRocks で、**[JWT ベースのセキュリティ統合](../../../administration/user_privs/authentication/security_integration.md#create-a-security-integration-with-jwt)** を設定するか、[JWT 認証を使用してユーザーを作成](../../../administration/user_privs/authentication/jwt_authentication.md) します。
 
 ### ステップ 2. Iceberg REST Catalog を作成し、セキュリティ設定を構成
 

@@ -30,8 +30,6 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/kv_store.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -43,12 +41,27 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
 class GetUsePkIndexTest : public testing::Test {
 public:
     using Row = std::vector<Datum>;
+
+    void TearDown() override { drop_current_tablet(); }
+
+    // Every helper call below replaces _tablet, and the test binary shares one StorageEngine, so a
+    // tablet that is not dropped stays a live update-compaction candidate for all later suites (it
+    // then wins TabletManager::find_best_tablet_to_do_update_compaction() over their own tablets).
+    void drop_current_tablet() {
+        if (_tablet != nullptr) {
+            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
+            _tablet.reset();
+        }
+    }
+
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const std::vector<std::vector<Row>>& segments,
                                   SegmentsOverlapPB overlap) {
         RowsetWriterContext writer_context;
@@ -270,6 +283,7 @@ public:
                   << ", multi_column_pk=" << multi_column_pk << ", sort_key=" << sort_key << ", "
                   << "num_row=" << num_row << ", num_get=" << num_get;
         srand(GetCurrentTimeMicros());
+        drop_current_tablet();
         _tablet = create_tablet(rand(), rand(), multi_column_pk, sort_key);
         std::vector<std::vector<Row>> segments;
         std::srand(seed);
@@ -294,6 +308,7 @@ public:
                   << ", multi_column_pk=" << multi_column_pk << ", sort_key=" << sort_key << ", "
                   << "num_row=" << num_row << ", num_get=" << num_get;
         srand(GetCurrentTimeMicros());
+        drop_current_tablet();
         _tablet = create_tablet(rand(), rand(), multi_column_pk, sort_key);
         std::srand(seed);
         std::vector<std::vector<Row>> segments1;

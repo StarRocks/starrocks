@@ -17,65 +17,14 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
-add_subdirectory(rowset)
-
-ADD_BE_LIB(StoragePrimitive
-    primitive/aggregate_type.cpp
-    primitive/chunk_iterator.cpp
-    primitive/column_and_predicate.cpp
-    primitive/column_expr_predicate.cpp
-    primitive/column_in_predicate.cpp
-    primitive/column_not_in_predicate.cpp
-    primitive/column_or_predicate.cpp
-    primitive/column_null_predicate.cpp
-    primitive/column_placeholder_predicate.cpp
-    primitive/column_predicate_cmp.cpp
-    primitive/column_predicate_dict_conjuct.cpp
-    primitive/column_value_range.cpp
-    primitive/conjunctive_predicates.cpp
-    primitive/disjunctive_predicates.cpp
-    primitive/edit_version.cpp
-    primitive/empty_iterator.cpp
-    primitive/flat_json_config.cpp
-    primitive/key_coder.cpp
-    primitive/projection_iterator.cpp
-    primitive/range.cpp
-    primitive/predicate_parser.cpp
-    primitive/primary_key_encoder.cpp
-    primitive/schema_helper.cpp
-    primitive/predicate_tree/predicate_tree.cpp
-    primitive/storage_define.cpp
-    primitive/storage_ids.cpp
-    primitive/tablet_column.cpp
-    primitive/tablet_info.cpp
-    primitive/tablet_column_util.cpp
-    primitive/tablet_column_type_utils.cpp
-    primitive/union_iterator.cpp
-)
-
-target_link_libraries(StoragePrimitive PUBLIC
-    ExprCore
-    RuntimeCore
-    ChunkCore
-    ColumnCore
-    Types
-    Common
-    Base
-    Gutil
-    StarRocksGen
-)
-
 ADD_BE_LIB(StorageBase
-    base/merge_iterator.cpp
-    base/row_source_mask.cpp
     base/short_key_index.cpp
 )
 
 target_link_libraries(StorageBase PUBLIC
     ComputeEnv
     StoragePrimitive
-    Serde
-    RuntimeCore
+    Runtime
     ColumnSortCore
     ChunkCore
     ColumnCore
@@ -97,6 +46,7 @@ set(STORAGE_FILES
     segment_flush_executor.cpp
     segment_replicate_executor.cpp
     metadata_util.cpp
+    non_closing_chunk_iterator.cpp
     kv_store.cpp
     local_tablet_reader.cpp
     olap_server.cpp
@@ -190,7 +140,6 @@ set(STORAGE_FILES
     rowset/horizontal_update_rowset_writer.cpp
     rowset/bitmap_index_evaluator.cpp
     rowset/metadata_cache.cpp
-    aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
     chunk_variant_helper.cpp
@@ -210,9 +159,8 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
+    full_sort_key_codec.cpp
     unique_iterator.cpp
-    column_aggregate_func.cpp
-    chunk_aggregator.cpp
     delta_writer.cpp
     memtable.cpp
     base_compaction.cpp
@@ -239,7 +187,9 @@ set(STORAGE_FILES
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
+    lake/cross_publish_context.cpp
     lake/compaction_task_context.cpp
+    lake/combined_txn_log_writer.cpp
     lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
@@ -249,6 +199,7 @@ set(STORAGE_FILES
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp
+    lake/pk_tablet_unsort_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
@@ -292,8 +243,6 @@ set(STORAGE_FILES
     lake/persistent_index_sstable_fileset.cpp
     lake/lake_persistent_index_key_value_merger.cpp
     lake/tablet_internal_parallel_merge_task.cpp
-    load_spill_block_manager.cpp
-    load_chunk_spiller.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp
@@ -334,8 +283,8 @@ set(STORAGE_FILES
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
-    load_spill_pipeline_merge_iterator.cpp
-    load_spill_pipeline_merge_context.cpp
+    lake/load_spill_pipeline_merge_iterator.cpp
+    lake/load_spill_pipeline_merge_context.cpp
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
@@ -343,8 +292,8 @@ set(STORAGE_FILES
     index/inverted/clucene/clucene_inverted_writer.cpp
     index/inverted/clucene/clucene_inverted_reader.cpp
     index/inverted/clucene/match_operator.cpp
-    index/vector/empty_index_reader.cpp
     index/vector/vector_index_cache.cpp
+    index/vector/vector_index_cache_metrics.cpp
     index/vector/vector_index_builder_factory.cpp
     index/vector/vector_index_writer.cpp
     index/vector/vector_index_builder.cpp
@@ -360,7 +309,12 @@ set(STORAGE_FILES
     index/inverted/builtin/builtin_inverted_reader.cpp
     index/inverted/builtin/builtin_inverted_index_iterator.cpp
     index/inverted/builtin/builtin_simple_analyzer.cpp
-    manual_compaction.cpp)
+    manual_compaction.cpp
+    rowset/unique_rowset_id_generator.cpp
+    rowset/rowset.cpp
+    rowset/rowset_factory.cpp
+    rowset/rowset_meta_manager.cpp
+    rowset/rowset_writer.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
@@ -370,4 +324,5 @@ ADD_BE_LIB(Storage
     ${STORAGE_FILES}
 )
 
-target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Serde Platform Cache)
+target_link_libraries(Storage PUBLIC StorageBase StoragePrimitive ExecPrimitive ComputeEnv Platform Cache)
+target_link_libraries(Storage PRIVATE Runtime)

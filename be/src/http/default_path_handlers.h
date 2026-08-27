@@ -23,18 +23,18 @@
 
 namespace starrocks {
 
-class GlobalEnv;
+class RuntimeEnv;
 class MemTracker;
 
-// Adds a set of default path handlers to the webserver to display
+// Adds a set of default path handlers to the HTTP service to display
 // logs and configuration flags
-void add_default_path_handlers(WebPageHandler* web_page_handler, const GlobalEnv& global_env);
+void add_default_path_handlers(WebPageHandler* web_page_handler, const RuntimeEnv& runtime_env);
 
 void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
 
 class MemTrackerWebPageHandler {
 public:
-    static void handle(const GlobalEnv& global_env, MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args,
+    static void handle(const RuntimeEnv& runtime_env, MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args,
                        std::stringstream* output);
 };
 } // namespace starrocks

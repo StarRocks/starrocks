@@ -37,6 +37,14 @@ CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
 // When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
 CONF_mBool(enable_lake_segment_metadata_filter, "true");
 
+// When a prepared-split scan's main morsel queue is momentarily empty (its seed page-pruning is still
+// running), it issues an extra PRE_REFINEMENT_COARSE morsel over an un-pruned segment range to keep
+// otherwise-idle drivers busy until the refined ranges land. Set to false to disable that pre-refinement
+// path: idle drivers simply wait for the pruned ranges instead. Disabling never drops data (the coarse
+// range is always a superset that the refined ranges subtract from) -- it only trades early parallelism
+// for less redundant coarse scanning. Only affects the enable_lake_prepared_physical_split_scan path.
+CONF_mBool(enable_lake_prepared_split_pre_refinement, "true");
+
 // Whether to use accurate row count for lake primary key tablets by reading delete vectors from object storage.
 // When enabled, each rowset's delete vector is fetched from remote storage to deduct deleted rows, which may
 // significantly increase the overhead of get_tablet_stats RPC.
@@ -98,14 +106,21 @@ CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 
 CONF_mBool(enable_strict_delvec_crc_check, "true");
 
+// When true, a shared-data del file (.del) read back during publish or primary-key index rebuild is
+// verified against the CRC32C recorded in its metadata, and a mismatch fails the operation with
+// Corruption instead of erasing the wrong primary keys. Del files written before the checksum
+// existed (or by the replication path, which cannot compute it) carry none and are always accepted.
+// Writing the checksum is unconditional; this only controls verification, as an escape hatch.
+CONF_mBool(lake_enable_del_file_crc_check, "true");
+
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
 // corruption can be detected on read. Readers always auto-detect and verify the checksum when
 // a file has it, regardless of this flag; the flag only controls the write format. Defaults to
-// false: enable it only after the whole cluster has been upgraded to a version that understands
-// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses
-// the legacy reader and cannot parse files written in the new format.
-CONF_mBool(lake_enable_protobuf_file_checksum, "false");
+// true. Set it to false only while the cluster may still be downgraded to a version that predates
+// the checksummed format, because during a rolling upgrade or a downgrade an older BE/CN uses the
+// legacy reader and cannot parse files written in the new format.
+CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
@@ -131,6 +146,14 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "true");
+
+// Whether horizontal compaction fills the local data cache with the input segments it reads.
+// Unlike vertical compaction, which scans the input once per column group, horizontal compaction
+// reads every input byte exactly once and the input rowsets are replaced right afterwards, so
+// caching them mostly evicts query-hot data and adds an inline local-disk write on each cache miss.
+// Defaults to false, matching the other full-scan background paths under storage/lake (schema
+// change, tablet merge, ADD INDEX). Set to true to restore the previous always-fill behavior.
+CONF_mBool(lake_enable_horizontal_compaction_fill_data_cache, "false");
 
 // If set to true, fallback to LIST metadata files on lake metadata cache miss to compute base size.
 // If set to false, skip LIST and use approximate tablet size (base_size=0).

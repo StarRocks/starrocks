@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <numeric>
 #include <roaring/roaring.hh>
+#include <unordered_set>
 
 #include "base/uid_util.h"
 #include "common/logging.h"
@@ -273,6 +274,12 @@ static void set_all_data_files_shared(TxnLogPB_OpWrite* op_write) {
     for (auto& del_meta : *op_write->mutable_dels_meta()) {
         del_meta.set_shared(true);
     }
+    // Pre-built tombstone sstables are ingested by every child during split cross-publish; mark them
+    // shared too so bulk_erase records them as shared and a child's vacuum/compaction cannot delete a
+    // file the siblings still reference.
+    for (auto& del_sst : *op_write->mutable_del_ssts()) {
+        del_sst.set_shared(true);
+    }
 }
 
 // Marks all data files referenced by an OpCompaction as shared. Used both for the
@@ -310,6 +317,17 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
         if (op_schema_change->has_delvec_meta()) {
             for (auto& pair : *op_schema_change->mutable_delvec_meta()->mutable_version_to_file()) {
                 pair.second.set_shared(true);
+            }
+        }
+    }
+
+    if (txn_log->has_op_add_index()) {
+        // ADD INDEX fast-path .idx files, peer of op_schema_change above: on a split
+        // cross-publish this OpAddIndex is applied to every new tablet, so its .idx must be
+        // marked shared or one child could later reclaim a file another child still uses.
+        for (auto& se : *txn_log->mutable_op_add_index()->mutable_segment_entries()) {
+            if (se.has_entry()) {
+                se.mutable_entry()->set_shared_file(true);
             }
         }
     }
@@ -354,6 +372,12 @@ void set_non_segment_files_shared(TabletMetadataPB* tablet_metadata, bool skip_d
         }
     }
 
+    if (tablet_metadata->has_idg_meta()) {
+        for (auto& idg : *tablet_metadata->mutable_idg_meta()->mutable_idgs()) {
+            set_idg_shared(&idg.second, true);
+        }
+    }
+
     if (tablet_metadata->has_sstable_meta()) {
         for (auto& sstable : *tablet_metadata->mutable_sstable_meta()->mutable_sstables()) {
             sstable.set_shared(true);
@@ -365,6 +389,12 @@ void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared) {
     auto* shared_files = dcg->mutable_shared_files();
     shared_files->Clear();
     shared_files->Resize(dcg->column_files_size(), shared);
+}
+
+void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared) {
+    for (auto& entry : *idg->mutable_entries()) {
+        entry.set_shared_file(shared);
+    }
 }
 
 void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delvecs) {
@@ -593,16 +623,101 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
     return Status::OK();
 }
 
-void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index) {
+RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const TabletRangePB& range_pb) {
+    if (rowset.segment_metas_size() == 0) {
+        return RangeOverlap::kUnknown;
+    }
+    TabletRange range;
+    if (!range.from_proto(range_pb).ok()) {
+        return RangeOverlap::kUnknown;
+    }
+    if (range.is_all()) {
+        // (-inf, +inf) contains every key.
+        return RangeOverlap::kYes;
+    }
+
+    VariantTuple envelope_min;
+    VariantTuple envelope_max;
+    for (const auto& segment_meta : rowset.segment_metas()) {
+        if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
+            return RangeOverlap::kUnknown;
+        }
+        VariantTuple segment_min;
+        VariantTuple segment_max;
+        if (!segment_min.from_proto(segment_meta.sort_key_min()).ok() ||
+            !segment_max.from_proto(segment_meta.sort_key_max()).ok()) {
+            return RangeOverlap::kUnknown;
+        }
+        if (segment_min.empty() || segment_max.empty()) {
+            return RangeOverlap::kUnknown;
+        }
+        if (envelope_min.empty() || segment_min.compare(envelope_min) < 0) {
+            envelope_min = segment_min;
+        }
+        if (envelope_max.empty() || segment_max.compare(envelope_max) > 0) {
+            envelope_max = segment_max;
+        }
+    }
+
+    // Only trust an exact arity match. VariantTuple::compare orders a shorter prefix-equal tuple
+    // BELOW its longer form, so comparing a bound written at one sort-key arity against a range at
+    // another can flip the boundary case -- e.g. envelope (100) vs lower bound (100, MIN) would
+    // read as "range entirely above the envelope" even though key 100 is exactly the range's first
+    // key. Degrading to kUnknown keeps that case on the legacy path instead of proving a false kNo.
+    const size_t range_arity =
+            !range.is_minimum() ? range.lower_bound().size() : (!range.is_maximum() ? range.upper_bound().size() : 0);
+    if (range_arity == 0 || envelope_min.size() != range_arity || envelope_max.size() != range_arity) {
+        return RangeOverlap::kUnknown;
+    }
+
+    // [envelope_min, envelope_max] is a superset of the rowset's keys, so "the range sits entirely
+    // outside the envelope" proves the sibling owns none of them.
+    if (range.less_than(envelope_min) || range.greater_than(envelope_max)) {
+        return RangeOverlap::kNo;
+    }
+    return RangeOverlap::kYes;
+}
+
+void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index,
+                              RangeOverlap overlap) {
     if (split_count <= 1) return;
 
+    if (overlap == RangeOverlap::kNo) {
+        // Proven to own none of the rowset's keys, so drop its segments outright rather than hand
+        // this sibling data it can never read. Presence is decided by what the op carries, so this
+        // has to be an explicit removal -- zeroing the counters no longer takes the rowset with it.
+        //
+        // Only the segments go. A del file must still be replayed against this sibling's own index
+        // (that is why the splitter keeps a del-file-carrying rowset whatever its range says), and
+        // dels_meta/del_ssts live on the op_write, not here.
+        rowset->clear_segment_metas();
+        // The legacy arrays are dual-written for rollback, so they have to go with segment_metas or
+        // a pre-feature reader would still see the segments (lake_proto_normalizer back-fills from
+        // them).
+        rowset->clear_deprecated_segments();
+        rowset->clear_deprecated_segment_size();
+        rowset->clear_deprecated_segment_encryption_metas();
+        rowset->clear_deprecated_shared_segments();
+        rowset->clear_deprecated_bundle_file_offsets();
+        rowset->set_overlapped(false);
+        if (rowset->has_num_rows()) rowset->set_num_rows(0);
+        if (rowset->has_data_size()) rowset->set_data_size(0);
+        if (rowset->has_num_dels()) rowset->set_num_dels(0);
+        return;
+    }
+
+    // kYes / kUnknown: spread the source's counters over the siblings. These are statistics only --
+    // the appliers decide a rowset's presence from its segments, so a zero here costs accuracy in
+    // compaction scoring and `SHOW`, never data.
+    auto apportion = [split_count, split_index](int64_t value) {
+        return value / split_count + (split_index < value % split_count ? 1 : 0);
+    };
+
     if (rowset->has_num_rows()) {
-        int64_t num_rows = rowset->num_rows();
-        rowset->set_num_rows(num_rows / split_count + (split_index < num_rows % split_count ? 1 : 0));
+        rowset->set_num_rows(apportion(rowset->num_rows()));
     }
     if (rowset->has_data_size()) {
-        int64_t data_size = rowset->data_size();
-        rowset->set_data_size(data_size / split_count + (split_index < data_size % split_count ? 1 : 0));
+        rowset->set_data_size(apportion(rowset->data_size()));
     }
     if (rowset->has_num_dels()) {
         int64_t num_dels = rowset->num_dels();
@@ -612,6 +727,33 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
 }
 
 namespace {
+
+// Append the output sstable file paths of |op|, skipping any that alias an input
+// sstable. The persistent-index parallel compaction "full contain / only do move"
+// optimization (LakePersistentIndexParallelCompactMgr) re-emits an input sstable as
+// its own output verbatim, keeping the same physical file and only re-stamping the
+// fileset_id. Such a file is still referenced by the base metadata and every sibling
+// tablet, so it must NOT be queued for deletion when a pending compaction is dropped
+// during a split/merge cross-publish. Templated over the op message so both
+// OpCompaction and OpParallelCompaction share it. This is the deletion-side mirror of
+// MetaFileBuilder::remove_compacted_sst, which applies the same invariant (by
+// filename) to the orphaning side of a normal compaction publish.
+template <typename OpCompactionLike>
+void append_non_reused_output_sstables(const OpCompactionLike& op, int64_t tablet_id, TabletManager* tablet_manager,
+                                       std::vector<std::string>* output_paths) {
+    std::unordered_set<std::string> input_filenames;
+    for (const auto& sstable : op.input_sstables()) {
+        input_filenames.insert(sstable.filename());
+    }
+    if (op.has_output_sstable() && !input_filenames.contains(op.output_sstable().filename())) {
+        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, op.output_sstable().filename()));
+    }
+    for (const auto& sstable : op.output_sstables()) {
+        if (!input_filenames.contains(sstable.filename())) {
+            output_paths->emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
+        }
+    }
+}
 
 // Append output-side files of a single OpCompaction. Used both for the
 // top-level op_compaction and for every op_parallel_compaction.subtask_compactions[*].
@@ -661,12 +803,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
     for (const auto& file_meta : op_compaction.ssts()) {
         output_paths->emplace_back(tablet_manager->sst_location(tablet_id, file_meta.name()));
     }
-    if (op_compaction.has_output_sstable()) {
-        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, op_compaction.output_sstable().filename()));
-    }
-    for (const auto& sstable : op_compaction.output_sstables()) {
-        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
-    }
+    append_non_reused_output_sstables(op_compaction, tablet_id, tablet_manager, output_paths);
     if (op_compaction.has_lcrm_file()) {
         output_paths->emplace_back(tablet_manager->lcrm_location(tablet_id, op_compaction.lcrm_file().name()));
     }
@@ -674,7 +811,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
 
 } // namespace
 
-std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
+std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
     DCHECK(tablet_manager != nullptr);
 
     const int64_t tablet_id = txn_log.tablet_id();
@@ -688,13 +825,7 @@ std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& tx
         for (const auto& subtask : op_parallel_compaction.subtask_compactions()) {
             append_compaction_output_files(subtask, tablet_id, tablet_manager, &output_paths);
         }
-        if (op_parallel_compaction.has_output_sstable()) {
-            output_paths.emplace_back(
-                    tablet_manager->sst_location(tablet_id, op_parallel_compaction.output_sstable().filename()));
-        }
-        for (const auto& sstable : op_parallel_compaction.output_sstables()) {
-            output_paths.emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
-        }
+        append_non_reused_output_sstables(op_parallel_compaction, tablet_id, tablet_manager, &output_paths);
         // orphan_lcrm_files holds the ORIGINAL per-subtask lcrm files copied
         // by the parallel-compaction manager (tablet_parallel_compaction_manager.cpp),
         // distinct from the merged lcrm placed on each subtask_compactions[i]
@@ -706,29 +837,39 @@ std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& tx
     return output_paths;
 }
 
-void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index) {
+void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index,
+                               const TabletRangePB* sibling_range) {
+    // Classify each rowset against the sibling's range; nullptr keeps the legacy apportionment.
+    auto overlap_of = [sibling_range](const RowsetMetadataPB& rowset) {
+        return sibling_range == nullptr ? RangeOverlap::kUnknown
+                                        : classify_rowset_range_overlap(rowset, *sibling_range);
+    };
     if (txn_log->has_op_write() && txn_log->mutable_op_write()->has_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index);
+        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index,
+                                 overlap_of(txn_log->op_write().rowset()));
     }
     if (txn_log->has_op_compaction() && txn_log->mutable_op_compaction()->has_output_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index);
+        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index,
+                                 overlap_of(txn_log->op_compaction().output_rowset()));
     }
     if (txn_log->has_op_schema_change()) {
         for (auto& rowset : *txn_log->mutable_op_schema_change()->mutable_rowsets()) {
-            update_rowset_data_stats(&rowset, split_count, split_index);
+            update_rowset_data_stats(&rowset, split_count, split_index, overlap_of(rowset));
         }
     }
     if (txn_log->has_op_replication()) {
         for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
             if (op_write.has_rowset()) {
-                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index);
+                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index,
+                                         overlap_of(op_write.rowset()));
             }
         }
     }
     if (txn_log->has_op_parallel_compaction()) {
         for (auto& subtask : *txn_log->mutable_op_parallel_compaction()->mutable_subtask_compactions()) {
             if (subtask.has_output_rowset()) {
-                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index);
+                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index,
+                                         overlap_of(subtask.output_rowset()));
             }
         }
     }

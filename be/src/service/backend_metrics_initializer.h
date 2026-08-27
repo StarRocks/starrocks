@@ -25,7 +25,6 @@ struct BackendMetricsInitOptions {
     std::vector<std::string> storage_paths;
     bool collect_hook_enabled = true;
     bool init_system_metrics = false;
-    bool init_jvm_metrics = false;
     bool bind_ipv6 = false;
 };
 

@@ -17,7 +17,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -32,11 +32,17 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
-                                                    GlobalEnv::GetInstance()->compaction_mem_tracker())),
+                                                    RuntimeEnv::GetInstance()->compaction_mem_tracker())),
           _context(context),
           _tablet_schema(std::move(tablet_schema)) {}
 
 Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
+    if (_context->is_unshare) {
+        // UNSHARE rewrites shared data files only. Rebuilding/major-compacting the
+        // cloud-native PK index in the same transaction adds substantial I/O and is
+        // unnecessary for the atomic query-layout cutover.
+        return Status::OK();
+    }
     if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
         SCOPED_RAW_TIMER(&_context->stats->pk_sst_merge_ns);
         auto metadata = _tablet.metadata();

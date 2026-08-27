@@ -170,7 +170,7 @@ public class SelectConstTest extends PlanTestBase {
                 "@@init_connect, @@interactive_timeout, @@language, @@license, @@lower_case_table_names, @@max_allowed_packet, " +
                 "@@net_write_timeout, @@performance_schema, @@query_cache_size, @@query_cache_type, @@sql_mode, " +
                 "@@system_time_zone, @@time_zone, @@tx_isolation, @@wait_timeout";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 2> : 1\n" +
                 "  |  <slot 3> : 'utf8'\n" +
@@ -254,7 +254,7 @@ public class SelectConstTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
         try {
-            RowBatch rowBatch = coordinator.getNext();
+            coordinator.getNext();
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }

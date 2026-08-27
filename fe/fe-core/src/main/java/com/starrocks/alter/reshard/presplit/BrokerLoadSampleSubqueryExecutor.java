@@ -110,7 +110,10 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         }
     }
 
-    private static void rejectNonIdentityFileGroups(List<BrokerFileGroup> fileGroups) throws StarRocksException {
+    // Package-private: the meta-tier BrokerLoadRowGroupStatisticsProvider reuses this identity guard
+    // before reading footers, so both tiers reject the same non-identity shapes (a load that maps or
+    // filters the sort key makes the raw footer column diverge from the loaded value).
+    static void rejectNonIdentityFileGroups(List<BrokerFileGroup> fileGroups) throws StarRocksException {
         for (BrokerFileGroup fileGroup : fileGroups) {
             if (fileGroup.getWhereExpr() != null) {
                 throw new StarRocksException(ERROR_PREFIX

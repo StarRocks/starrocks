@@ -24,6 +24,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -448,7 +450,7 @@ public class PredicateStatisticsCalculatorTest {
                         List.of(c1Ge30Condition, c2Eq50Predicate, innerIfPredicate));
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
-        Assertions.assertEquals(15.0, (int) result.getOutputRowCount());
+        Assertions.assertEquals(14.0, (int) result.getOutputRowCount());
 
         // IF ( IF ( c1 >= 20 , c2 >= 50 , c2 <= 70 ) , c3 = 80 , c3 = 70 )
         BinaryPredicateOperator c1Ge20Predicate =
@@ -586,5 +588,190 @@ public class PredicateStatisticsCalculatorTest {
 
         result = PredicateStatisticsCalculator.statisticsCalculate(outerIfPredicate, statistics);
         Assertions.assertEquals(11.0, (int) result.getOutputRowCount());
+    }
+
+    @Test
+    public void testLargeOrNullsFractionIsAveragedNotFloored() {
+        // GIVEN a column with no nulls
+        final var aColumn = new ColumnRefOperator(0, VarcharType.VARCHAR, "a", true);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(aColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0)
+                        .setDistinctValuesCount(100)
+                        .setAverageRowSize(10)
+                        .build())
+                .build();
+
+        // (a IS NULL) OR (a IS NOT NULL), ANDed together more than
+        // StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT (16) times so the estimator
+        // routes through LargeOrCalculatingVisitor's averaging heuristic instead of the
+        // inclusion-exclusion path.
+        ScalarOperator group = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                new IsNullPredicateOperator(false, aColumn), new IsNullPredicateOperator(true, aColumn));
+        ScalarOperator predicate = group;
+        for (int i = 0; i < StatisticsEstimateCoefficient.DEFAULT_OR_OPERATOR_LIMIT; i++) {
+            predicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, predicate, group);
+        }
+
+        // WHEN
+        Statistics result = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
+
+        // THEN
+        // Each OR arm hard-sets nullsFraction to 1.0 (IS NULL) and 0.0 (IS NOT NULL), so the
+        // averaging heuristic should land on 0.5, not be floored up to 1.0.
+        Assertions.assertEquals(0.5, result.getColumnStatistic(aColumn).getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testOrPredicateShouldCorrectlyModifyNullsFractionWithoutNulls() {
+        // GIVEN
+        final var aColumn = new ColumnRefOperator(0, VarcharType.VARCHAR, "a", true);
+        final var bColumn = new ColumnRefOperator(1, VarcharType.VARCHAR, "b", true);
+
+        double origRowCount = 10_000_000;
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(origRowCount)
+                .addColumnStatistic(aColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0)
+                        .setDistinctValuesCount(1_000_000)
+                        .setAverageRowSize(10)
+                        .build())
+                .addColumnStatistic(bColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0)
+                        .setDistinctValuesCount(1_000_000)
+                        .setAverageRowSize(10)
+                        .build())
+                .build();
+
+        // WHEN
+        // (a IS NULL) OR (b IS NOT NULL)
+        final var or1 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                new IsNullPredicateOperator(false, aColumn), new IsNullPredicateOperator(true, bColumn));
+        final var afterOr1 = PredicateStatisticsCalculator.statisticsCalculate(or1, statistics);
+
+        // THEN
+        Assertions.assertEquals(origRowCount, afterOr1.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(0.0, afterOr1.getColumnStatistic(aColumn).getNullsFraction(), 0.001);
+
+        // GIVEN
+        // (a IS NOT NULL) OR (b IS NULL)
+        final var or2 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                new IsNullPredicateOperator(true, aColumn), new IsNullPredicateOperator(false, bColumn));
+
+        // WHEN
+        final var afterOr2 = PredicateStatisticsCalculator.statisticsCalculate(or2, statistics);
+
+        // THEN
+        Assertions.assertEquals(origRowCount, afterOr2.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(0.0, afterOr2.getColumnStatistic(bColumn).getNullsFraction(), 0.001);
+
+        // GIVEN
+        // ((a IS NULL) OR (b IS NOT NULL)) AND ((a IS NOT NULL) OR (b IS NULL))
+        final var andOfOrs = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, or1, or2);
+
+        // WHEN
+        final var afterAnd = PredicateStatisticsCalculator.statisticsCalculate(andOfOrs, statistics);
+
+        // THEN
+        Assertions.assertEquals(origRowCount, afterAnd.getOutputRowCount(), 0.001);
+        Assertions.assertEquals(0.0, afterAnd.getColumnStatistic(aColumn).getNullsFraction(), 0.001);
+        Assertions.assertEquals(0.0, afterAnd.getColumnStatistic(bColumn).getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testOrPredicateShouldCorrectlyModifyNullsFractionWithNulls() {
+        final var aColumn = new ColumnRefOperator(0, VarcharType.VARCHAR, "a", true);
+        final var bColumn = new ColumnRefOperator(1, VarcharType.VARCHAR, "b", true);
+
+        double origRowCount = 10_000_000;
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(origRowCount)
+                .addColumnStatistic(aColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.2)
+                        .setDistinctValuesCount(1_000_000)
+                        .setAverageRowSize(10)
+                        .build())
+                .addColumnStatistic(bColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.3).
+                        setDistinctValuesCount(1_000_000)
+                        .setAverageRowSize(10)
+                        .build())
+                .build();
+
+        // (a IS NULL) OR (b IS NOT NULL)
+        CompoundPredicateOperator or1 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                new IsNullPredicateOperator(false, aColumn), new IsNullPredicateOperator(true, bColumn));
+
+        // WHEN
+        Statistics afterOr = PredicateStatisticsCalculator.statisticsCalculate(or1, statistics);
+
+        // THEN
+        double origNulls = 0.2 * origRowCount;
+        double afterOrNulls = afterOr.getColumnStatistic(aColumn).getNullsFraction() * afterOr.getOutputRowCount();
+        Assertions.assertTrue(afterOrNulls <= origNulls);
+    }
+
+    @Test
+    public void testOrPredicateShouldNotDoubleCountOverlappingNulls() {
+        // GIVEN a 1000-row table where:
+        //   - a has 20% nulls -> 200 rows have a = NULL
+        //   - b and c each match half the rows on "= 1" (2 distinct values 0/1, no nulls)
+        final var aColumn = new ColumnRefOperator(0, VarcharType.VARCHAR, "a", true);
+        final var bColumn = new ColumnRefOperator(1, IntegerType.INT, "b", true);
+        final var cColumn = new ColumnRefOperator(2, IntegerType.INT, "c", true);
+
+        double rows = 1000;
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(rows)
+                .addColumnStatistic(aColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.2).setDistinctValuesCount(100).setAverageRowSize(10).build())
+                .addColumnStatistic(bColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0).setMinValue(0).setMaxValue(1).setDistinctValuesCount(2).build())
+                .addColumnStatistic(cColumn, ColumnStatistic.builder()
+                        .setNullsFraction(0.0).setMinValue(0).setMaxValue(1).setDistinctValuesCount(2).build())
+                .build();
+
+        // WHEN
+        // (a IS NULL AND b = 1) OR (c = 1)
+        final var leftArm = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                new IsNullPredicateOperator(false, aColumn),
+                new BinaryPredicateOperator(BinaryType.EQ, bColumn, ConstantOperator.createInt(1)));
+        final var rightArm = new BinaryPredicateOperator(BinaryType.EQ, cColumn, ConstantOperator.createInt(1));
+        final var or = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, leftArm, rightArm);
+        final var afterOr = PredicateStatisticsCalculator.statisticsCalculate(or, statistics);
+
+        // THEN
+        // The two arms' null rows are unioned, counting the rows they share only once:
+        //   left arm  (a IS NULL AND b = 1): 100 null rows
+        //   right arm (c = 1):               100 null rows  (20% of its 500 rows)
+        //   shared    (both, b = 1 AND c = 1): 50 null rows
+        //   => 100 + 100 - 50 = 150 null rows
+        double nullRows = afterOr.getColumnStatistic(aColumn).getNullsFraction() * afterOr.getOutputRowCount();
+        Assertions.assertEquals(150, nullRows, 0.001);
+
+        // WHEN
+        // The two arms are complementary on the same column: a IS NOT NULL OR a IS NULL.
+        // All 200 null rows should survive.
+        final var isNotNull = new IsNullPredicateOperator(true, aColumn);
+        final var isNull = new IsNullPredicateOperator(false, aColumn);
+
+        // WHEN
+        final var notNullOrNull = PredicateStatisticsCalculator.statisticsCalculate(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, isNotNull, isNull), statistics);
+        double notNullOrNullNulls =
+                notNullOrNull.getColumnStatistic(aColumn).getNullsFraction() * notNullOrNull.getOutputRowCount();
+
+        // THEN
+        Assertions.assertEquals(200, notNullOrNullNulls, 0.001);
+
+        // WHEN
+        final var nullOrNotNull = PredicateStatisticsCalculator.statisticsCalculate(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, isNull, isNotNull), statistics);
+        double nullOrNotNullNulls =
+                nullOrNotNull.getColumnStatistic(aColumn).getNullsFraction() * nullOrNotNull.getOutputRowCount();
+
+        // THEN
+        Assertions.assertEquals(200, nullOrNotNullNulls, 0.001);
     }
 }

@@ -13,7 +13,7 @@ description: "Alphabetical a - c"
 - [非同期マテリアライズドビューのメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびStarletダッシュボードのメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../Monitor_and_Alert.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
 
 :::
 
@@ -304,6 +304,18 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 種類: カウンター
 - 説明: ブロックキャッシュミスの累積バイト数。現在、外部テーブルのキャッシュミスバイトのみがカウントされています。
+
+## `block_cache_hit_count`
+
+- 単位: 回
+- 種類: カウンター
+- 説明: ブロックキャッシュヒットの累積回数。
+
+## `block_cache_miss_count`
+
+- 単位: 回
+- 種類: カウンター
+- 説明: ブロックキャッシュミスの累積回数。
 
 ## `blocks_created_total (Deprecated)`
 

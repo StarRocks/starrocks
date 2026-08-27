@@ -93,7 +93,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -112,6 +111,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -177,6 +177,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FLAT_JSON_SPARSITY_FACTOR = "flat_json.sparsity.factor";
 
     public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
+
+    public static final String PROPERTIES_FLAT_JSON_VERSION = "flat_json.version";
 
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
@@ -747,7 +749,7 @@ public class PropertyAnalyzer {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
             MaterializedView.RefreshMode parsed;
             try {
-                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
                         ". Only INCREMENTAL, PCT are supported.");
@@ -1681,22 +1683,6 @@ public class PropertyAnalyzer {
 
     public static boolean analyzeDataCacheEnable(Map<String, String> properties) throws AnalysisException {
         return analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
-    }
-
-    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
-        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
-            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            if (type.equalsIgnoreCase(TableProperty.LOCAL_INDEX_TYPE)) {
-                return TPersistentIndexType.LOCAL;
-            } else if (type.equalsIgnoreCase(TableProperty.CLOUD_NATIVE_INDEX_TYPE)) {
-                return TPersistentIndexType.CLOUD_NATIVE;
-            } else {
-                throw new AnalysisException("Invalid persistent index type: " + type);
-            }
-        }
-        return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
-                : TPersistentIndexType.LOCAL;
     }
 
     public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {

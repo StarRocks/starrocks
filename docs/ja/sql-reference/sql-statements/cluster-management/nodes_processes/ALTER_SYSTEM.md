@@ -45,10 +45,23 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
   ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
   ```
 
+- Leader ロールを別の Follower FE にグレースフルに引き継ぎます（プロセスを再起動せず、その場で降格）。
+
+  ```SQL
+  ALTER SYSTEM TRANSFER LEADER TO "<fe_host>:<edit_log_port>" [FORCE]
+  ```
+
+  ターゲットは稼働中の Follower FE である必要があります。このステートメントは現在の Leader FE 上で実行され、Leader ロールをターゲットの Follower に引き継ぎます。その後、元の Leader は再起動せずにその場で Follower に降格します。新しい Leader は `SHOW PROC '/frontends'\G` で確認できます。`FORCE` を指定すると、BDBJE レイヤーで既に進行中の Leader 切り替えを置き換えます。`FORCE` を指定しない場合、そのような切り替えが進行中であればこのステートメントは失敗します。並行して実行された `TRANSFER LEADER` ステートメントは Leader 上で直列に実行されます。待機中のステートメントは前のステートメントの完了を待ち、実行の順番が来た時点でこの FE が既に Leader でなければエラーを返します（2 回目の切り替えは発生しません）。
+
+  失敗時のセマンティクス：切り替え自体が失敗した場合（例：ターゲットが内部の 30 秒ウィンドウ内に追いつけない、またはクラスタメンバーシップが未確定の場合）、ステートメントはエラーを返し、現在の Leader は変更されません（安全な結果であり、再試行できます）。切り替えが成功しても、元の Leader が `leader_demotion_drain_timeout_sec` 以内に処理中の作業を排出できない場合、元の Leader プロセスは終了して Follower として再起動します。新しい Leader には影響しません。
+
+  共有データ（shared-data）クラスタではこのステートメントはサポートされておらず、エラーを返します。共有データモードでリーダーシップを移すには、現在の Leader FE を再起動して選挙をトリガーしてください。
+
 | **パラメータ**      | **必須** | **説明**                                                     |
 | ------------------ | ------------ | ------------------------------------------------------------------- |
 | fe_host            | はい          | FE インスタンスのホスト名または IP アドレス。インスタンスに複数の IP アドレスがある場合は、設定項目 `priority_networks` の値を使用します。 |
 | edit_log_port      | はい          | FE ノードの BDB JE 通信ポート。デフォルト: `9010`。          |
+| FORCE              | いいえ        | BDBJE レイヤーで既に進行中の Leader 切り替えを置き換えます。指定しない場合、そのような切り替えが進行中であればステートメントは失敗します。並行する `TRANSFER LEADER` ステートメントは直列に実行されるため `FORCE` は不要です。 |
 
 ### BE
 
@@ -110,7 +123,7 @@ description: "ALTER SYSTEM は、クラスタ内の FE、BE、CN、Broker ノー
 
 ### Broker
 
-- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks にデータをロードできます。詳細は [Loading](../../../../loading/Loading_intro.md) を参照してください。
+- Broker ノードを追加します。Broker ノードを使用して、HDFS やクラウドストレージから StarRocks にデータをロードできます。詳細は [Loading](../../../../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]
@@ -208,4 +221,10 @@ ALTER SYSTEM DROP BROKER amazon_s3 "x.x.x.x:8000", "x.x.x.x:8000";
 
 ```SQL
 ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
+
+例 9: Leader ロールを特定の Follower FE に引き継ぎます。
+
+```SQL
+ALTER SYSTEM TRANSFER LEADER TO "x.x.x.x:9010";
 ```

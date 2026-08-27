@@ -13,7 +13,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../Monitor_and_Alert.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
 
 :::
 
@@ -304,6 +304,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Type: Counter
 - Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
+
+## `block_cache_hit_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache hits.
+
+## `block_cache_miss_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache misses.
 
 ## `blocks_created_total (Deprecated)`
 

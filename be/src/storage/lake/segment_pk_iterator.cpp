@@ -18,13 +18,16 @@
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
-#include "storage/primitive/primary_key_encoder.h"
+#include "storage/lake/cross_publish_context.h"
+#include "storage/lake/pk_index_utils.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
 Status SegmentPKIterator::_load() {
     TRY_CATCH_BAD_ALLOC(_pk_column_chunk = ChunkFactory::new_chunk(_pkey_schema, 4096));
     auto chunk_container = _pk_column_chunk->clone_empty();
+    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
     if (_iter != nullptr) {
         while (true) {
             chunk_container->reset();
@@ -54,7 +57,7 @@ Status SegmentPKIterator::_load() {
             }
             TRY_CATCH_BAD_ALLOC(_pk_column_chunk->append(*chunk_container));
             if (_lazy_load && (_pk_column_chunk->memory_usage() >= config::pk_column_lazy_load_threshold_bytes ||
-                               _pk_column_chunk->num_rows() >= config::pk_index_parallel_execution_min_rows)) {
+                               _pk_column_chunk->num_rows() >= min_rows_per_task)) {
                 break;
             }
         }
@@ -65,7 +68,17 @@ Status SegmentPKIterator::_load() {
         ASSIGN_OR_RETURN(_standalone_pk_column, encoded_pk_column(_pk_column_chunk.get()));
     }
     if (_pk_column_chunk->num_rows() == 0) {
+        _owned.clear();
         return Status::OK();
+    }
+    // Decide ownership here rather than in current(): the chunk is complete at this point and this
+    // function already returns Status, so a selection that cannot be built fails the load instead of
+    // handing the caller a chunk it would process as "own every row". current() runs after the
+    // consumer loop has already committed the previous chunk, so an error raised there is too late --
+    // LakePrimaryIndex::parallel_upsert checks the iterator status only after flush_memtable() has
+    // durably written the sstable.
+    if (_row_selector != nullptr) {
+        ASSIGN_OR_RETURN(_owned, _row_selector->select(*_pk_column_chunk));
     }
     _current_rows += _pk_column_chunk->num_rows();
     _begin_rowid_offsets.push_back(_current_rows);
@@ -120,6 +133,7 @@ SegmentPKChunkRef SegmentPKIterator::current() {
     SegmentPKChunkRef ref;
     const size_t logical_rowid_offset = _begin_rowid_offsets[_current_pk_column_idx];
     ref.physical_rowid_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(logical_rowid_offset);
+    ref.owned = std::move(_owned);
     ref.chunk = std::move(_pk_column_chunk);
     return ref;
 }
@@ -136,7 +150,12 @@ StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chu
 }
 
 void SegmentPKIterator::close() {
-    _iter->close();
+    // _iter is null when this wraps a lost segment ignored via experimental_lake_ignore_lost_segment
+    // (get_each_segment_iterator returns a nullptr placeholder for that slot). _load() already tolerates
+    // a null _iter; guard close() too so PK publish/partial-update paths don't crash on the empty slot.
+    if (_iter != nullptr) {
+        _iter->close();
+    }
 }
 
 } // namespace starrocks::lake

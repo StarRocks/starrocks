@@ -16,7 +16,7 @@
 #include <queue>
 
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "exprs/expr_context.h"
 #include "multi_cast_local_exchange.h"
 namespace starrocks::pipeline {

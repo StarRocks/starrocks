@@ -52,15 +52,14 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
-#include "runtime/heartbeat_flags.h"
 #include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
 
@@ -84,7 +83,6 @@ class TAllocateAutoIncrementIdParam;
 class TAllocateAutoIncrementIdResult;
 class UpdateManager;
 class CompactionManager;
-class LoadSpillBlockMergeExecutor;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 class ThreadPool;
@@ -233,8 +231,6 @@ public:
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
-    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() { return _load_spill_block_merge_executor.get(); }
-
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
     MemTableFlushExecutor* lake_memtable_flush_executor() { return _lake_memtable_flush_executor.get(); }
@@ -339,6 +335,7 @@ protected:
 private:
     // Friend class for testing
     friend class StorageEngineCompactionTest;
+    friend class StorageEngineCacheExpireTest;
     friend class TabletUpdatesTest;
 
     // Instance should be inited from `static open()`
@@ -367,6 +364,7 @@ private:
 
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
+    void _expire_caches(int64_t vector_cache_now);
     void* _update_cache_expire_thread_callback(void* arg);
     // update cache evict thread
     void* _update_cache_evict_thread_callback(void* arg);
@@ -497,8 +495,6 @@ private:
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
-
-    std::unique_ptr<LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 

@@ -20,12 +20,12 @@
 #include "base/utility/defer_op.h"
 #include "common/config_http_fwd.h"
 #include "common/process_exit.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 
 #ifdef USE_STAROS
-#include "staros_integration/staros_worker_runtime.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #endif
 
 namespace starrocks {

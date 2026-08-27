@@ -31,6 +31,11 @@ description: "Alphabetical t - z"
 - 单位: -
 - 描述: 当前BE中主键表tablet的最高合并分数。
 
+## `threadpool_task_exception_total`
+
+- 单位: 计数
+- 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
+
 ## `thrift_connections_total`
 
 - 单位: 计数
@@ -168,6 +173,48 @@ description: "Alphabetical t - z"
 
 - 单位：计数
 - 描述：主键表中行集 COMMIT 请求总数。
+
+## `vector_index_cache_async_load_failure`
+
+- 类型：累计
+- 单位：计数
+- 描述：已经开始执行、但在加载或写入缓存过程中失败的向量索引缓存后台加载任务累计数。不包括执行前被取消的任务。
+
+## `vector_index_cache_async_load_inflight`
+
+- 类型：瞬时
+- 单位：计数
+- 描述：当前正在后台 worker 中运行的向量索引缓存加载任务数。
+
+## `vector_index_cache_async_load_ns`
+
+- 类型：累计
+- 单位：纳秒
+- 描述：已经开始执行的向量索引缓存后台加载任务累计执行时间，包括成功和失败的任务，不包括队列等待时间和被拒绝的任务。
+
+## `vector_index_cache_async_load_queued`
+
+- 类型：瞬时
+- 单位：计数
+- 描述：后台线程池已经接受、但尚未开始运行的向量索引缓存加载任务数。
+
+## `vector_index_cache_async_load_rejected`
+
+- 类型：累计
+- 单位：计数
+- 描述：执行前被拒绝的向量索引缓存后台加载请求累计数。例如，缓存容量为零、线程池已经停止或任务队列无法接受任务时，该指标会增加。
+
+## `vector_index_cache_async_load_success`
+
+- 类型：累计
+- 单位：计数
+- 描述：成功加载索引并将其写入缓存的后台任务累计数。如果缓存无法继续保留该条目，容量淘汰可能会立即移除已经成功写入的索引。
+
+## `vector_index_cache_loading_wait_timeout`
+
+- 类型：累计
+- 单位：计数
+- 描述：同步缓存调用方等待正在进行的向量索引加载达到 `vector_index_cache_loading_wait_timeout_ms` 的累计次数。该指标按调用方而不是唯一索引计数；等待超时后，已经开始的 loader 会继续执行。
 
 ## `wait_base_compaction_task_num`
 

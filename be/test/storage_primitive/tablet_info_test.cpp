@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/primitive/tablet_info.h"
+#include "storage_primitive/tablet_info.h"
 
 #include <gtest/gtest.h>
 

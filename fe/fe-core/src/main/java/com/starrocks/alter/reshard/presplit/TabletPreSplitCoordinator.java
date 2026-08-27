@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.reshard.SplitTabletJobFactory;
 import com.starrocks.alter.reshard.TabletReshardJob;
@@ -24,9 +25,9 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
@@ -36,17 +37,20 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -74,12 +78,18 @@ import java.util.function.BooleanSupplier;
  *       takes a {@link PartitionSampleGrouper#group grouped} list of
  *       {@link PartitionSamples}, pre-creates missing partitions, and
  *       submits ONE combined reshard via
- *       {@link com.starrocks.alter.reshard.SplitTabletJobFactory#forExternalBoundariesMultiTablet}.</li>
+ *       {@link com.starrocks.alter.reshard.SplitTabletJobFactory#forExternalBoundaries}.</li>
  * </ul>
  */
 public final class TabletPreSplitCoordinator {
 
     private static final Logger LOG = LogManager.getLogger(TabletPreSplitCoordinator.class);
+
+    /**
+     * Placeholder byte budget for a derived route's {@link SampleRequest}. The derived pipeline never reads
+     * it; it exists only because the shared request type requires a positive value.
+     */
+    private static final long DERIVED_ROUTE_UNUSED_SAMPLE_BYTE_LIMIT = 1L;
 
     private TabletPreSplitCoordinator() {
     }
@@ -109,9 +119,6 @@ public final class TabletPreSplitCoordinator {
         if (table.getState() != OlapTable.OlapTableState.NORMAL) {
             return skipEligibility(SkipReason.TABLE_NOT_NORMAL);
         }
-        if (table.getVisibleIndexMetas().size() != 1) {
-            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
-        }
         if (!areSortKeyColumnsSupported(table)) {
             return skipEligibility(SkipReason.UNSUPPORTED_SORT_KEY);
         }
@@ -130,6 +137,9 @@ public final class TabletPreSplitCoordinator {
         if (baseIndex.getRowCount() > 0) {
             return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
         }
+        if (PreSplitTargets.resolveVisibleIndexTargets(table, partition) == null) {
+            return skipEligibility(SkipReason.HAS_MATERIALIZED_VIEW_OR_ROLLUP);
+        }
 
         return new PreSplitOutcome.Eligible();
     }
@@ -141,6 +151,14 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
+     * Whether {@code loadKind} is served by the derived tier, which reads no data. Such a route must not be
+     * measured, configured or diagnosed as though a sampler had run.
+     */
+    private static boolean derivedRoute(LoadKind loadKind) {
+        return loadKind == LoadKind.MV_REFRESH;
+    }
+
+    /**
      * Picks the per-path Config flag that gates the caller's load kind, then checks the
      * session opt-out. Returns {@code null} when both gates are open.
      */
@@ -149,6 +167,7 @@ public final class TabletPreSplitCoordinator {
             case INSERT_FROM_FILES -> Config.enable_tablet_pre_split_for_insert_from_files;
             case BROKER_LOAD -> Config.enable_tablet_pre_split_for_broker_load;
             case INSERT_FROM_TABLE -> Config.enable_tablet_pre_split_for_insert_from_table;
+            case MV_REFRESH -> Config.enable_tablet_pre_split_for_mv_refresh;
         };
         if (!configEnabled) {
             return SkipReason.DISABLED_BY_CONFIG;
@@ -221,9 +240,17 @@ public final class TabletPreSplitCoordinator {
             return eligibility;
         }
 
+        // A route that reads nothing must not consult -- or be blocked by -- sampler-only configuration.
+        // SampleRequest rejects a non-positive sampleByteLimit, and tablet_pre_split_sample_byte_limit is
+        // mutable, so reading it here would let an operator turn a derived refresh into an unrecorded
+        // IllegalArgumentException that escapes to the caller's fail-safe with no skip reason at all.
+        // The derived pipeline ignores the request entirely; the placeholder only keeps the shared request
+        // type valid.
+        long sampleByteLimit = derivedRoute(loadKind)
+                ? DERIVED_ROUTE_UNUSED_SAMPLE_BYTE_LIMIT
+                : Config.tablet_pre_split_sample_byte_limit;
         SampleRequest sampleRequest = new SampleRequest(
-                scanContext, MetaUtils.getRangeDistributionColumns(table),
-                Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L);
+                scanContext, MetaUtils.getRangeDistributionColumns(table), sampleByteLimit, /*seed*/ 0L);
         Duration preSubmitTimeout = Duration.ofSeconds(Config.tablet_pre_split_pre_submit_timeout_seconds);
 
         Optional<PreSplitPipeline.PreparedReshardJob> prepared;
@@ -250,14 +277,20 @@ public final class TabletPreSplitCoordinator {
         }
 
         PreSplitPipeline.PreparedReshardJob preparedJob = prepared.get();
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.JOB_SUBMISSION)) {
             pipeline.submit(preparedJob);
         } catch (StarRocksException submitFailure) {
             // Surfaces the structured error so operators can diagnose admission failures
             // (table-state changed, journal write rejected, job-id collision, etc.).
             LOG.warn("Pre-split skipped for table {}: TabletReshardJobMgr rejected admission — {}",
                     table.getName(), submitFailure.getMessage());
-            return skipPostEligibility(SkipReason.SUBMIT_FAILED);
+            // On a derived route this lands in the eligibility family rather than the sampler-failed one:
+            // no sampler ran, so a sampler-failure counter with no matching invocation would break the
+            // ratio the invocation counter exists to support. Sampled routes keep their existing family.
+            return derivedRoute(loadKind)
+                    ? skipEligibility(SkipReason.SUBMIT_FAILED)
+                    : skipPostEligibility(SkipReason.SUBMIT_FAILED);
         }
         return new PreSplitOutcome.Submitted(preparedJob);
     }
@@ -329,7 +362,8 @@ public final class TabletPreSplitCoordinator {
             BooleanSupplier shouldAbort)
             throws PreSplitPostSubmitTimeoutException, StarRocksException {
         long postSubmitStartMillis = System.currentTimeMillis();
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.RESHARD_WAIT)) {
             pipeline.awaitFinished(preparedJob, timeout, shouldAbort);
         } catch (TimeoutException timeoutException) {
             if (MetricRepo.hasInit) {
@@ -376,11 +410,14 @@ public final class TabletPreSplitCoordinator {
         String loadKindLabel = loadKind.displayName();
         try {
             awaitFinishedAndRecordMetrics(pipeline, preparedJob, postSubmitTimeout, shouldAbort);
+            PreSplitProfile.recordOutcome("FINISHED");
         } catch (PreSplitPostSubmitTimeoutException timeout) {
+            PreSplitProfile.recordOutcome("RESHARD_WAIT_TIMEOUT_FALLBACK");
             LOG.warn("Pre-split awaitFinished timed out for {} on table {} after {}s; "
                             + "load will proceed without abort against the currently visible layout: {}",
                     loadKindLabel, olapTable.getName(), postSubmitTimeout.toSeconds(), timeout.getMessage());
         } catch (StarRocksException waitFailure) {
+            PreSplitProfile.recordOutcome("RESHARD_WAIT_FAILED_FALLBACK");
             LOG.warn("Pre-split awaitFinished failed for {} on table {}; "
                             + "load will proceed without abort against the currently visible layout: {}",
                     loadKindLabel, olapTable.getName(), waitFailure.getMessage());
@@ -419,9 +456,11 @@ public final class TabletPreSplitCoordinator {
         Instant deadline = Instant.now().plus(postSubmitTimeout);
         long postSubmitStartMillis = System.currentTimeMillis();
         String loadKindLabel = loadKind.displayName();
-        try {
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.RESHARD_WAIT)) {
             while (true) {
                 if (shouldAbort.getAsBoolean()) {
+                    PreSplitProfile.recordOutcome("RESHARD_WAIT_ABORTED_FALLBACK");
                     LOG.info("Pre-split combined-job await abandoned for {} on table {} (caller " +
                                     "signalled abort); load will proceed against the currently visible layout",
                             loadKindLabel, olapTable.getName());
@@ -429,6 +468,7 @@ public final class TabletPreSplitCoordinator {
                 }
                 TabletReshardJob latest = tabletReshardJobManager.getTabletReshardJob(jobId);
                 if (latest == null) {
+                    PreSplitProfile.recordOutcome("RESHARD_JOB_DISAPPEARED_FALLBACK");
                     LOG.warn("Pre-split combined job {} disappeared for {} on table {}; "
                                     + "load will proceed against the currently visible layout",
                             jobId, loadKindLabel, olapTable.getName());
@@ -436,15 +476,18 @@ public final class TabletPreSplitCoordinator {
                 }
                 TabletReshardJob.JobState state = latest.getJobState();
                 if (state == TabletReshardJob.JobState.FINISHED) {
+                    PreSplitProfile.recordOutcome("FINISHED");
                     return;
                 }
                 if (state.isFinalState()) {
+                    PreSplitProfile.recordOutcome("RESHARD_JOB_FAILED_FALLBACK");
                     LOG.warn("Pre-split combined job {} aborted for {} on table {}: {}; "
                                     + "load will proceed against the currently visible layout",
                             jobId, loadKindLabel, olapTable.getName(), latest.getErrorMessage());
                     return;
                 }
                 if (Instant.now().isAfter(deadline)) {
+                    PreSplitProfile.recordOutcome("RESHARD_WAIT_TIMEOUT_FALLBACK");
                     if (MetricRepo.hasInit) {
                         MetricRepo.COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP.increase(1L);
                     }
@@ -457,6 +500,7 @@ public final class TabletPreSplitCoordinator {
                     Thread.sleep(DefaultPreSplitPipeline.DEFAULT_POLL_INTERVAL.toMillis());
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
+                    PreSplitProfile.recordOutcome("RESHARD_WAIT_INTERRUPTED_FALLBACK");
                     LOG.warn("Pre-split combined-job await interrupted for {} on table {}; "
                                     + "load will proceed against the currently visible layout",
                             loadKindLabel, olapTable.getName());
@@ -472,36 +516,113 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Choose how many tablets to pre-split a load into.
+     * Choose how many tablets to split into, sized against {@code tablet_reshard_target_size}.
+     * Load-time pre-split calls {@link #selectPreSplitTabletCount} instead, which sizes against
+     * {@code tablet_pre_split_target_size}; this form serves the non-load callers that reshape an
+     * index outside a load (range-rewrite schema change, range rollup).
      *
-     * <p>Picks the larger of two lower bounds — the cluster's active compute-node
-     * count (so every compute node gets at least one tablet) and the byte-volume
-     * estimate ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)})
-     * — then clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
+     * <p>Takes the byte-volume estimate
+     * ({@code ceil(estimatedTotalBytes / tablet_reshard_target_size)}), rounds it up
+     * to a whole multiple of the active compute-node count so tablets spread evenly
+     * across nodes, floors it at the node count (so every node gets at least one
+     * tablet), and clamps to {@code [2, tablet_reshard_max_split_count]}. Two is the
      * minimum because a single-tablet result is equivalent to skipping pre-split.
+     * The {@code max_split_count} cap takes precedence, so a clamped result is not
+     * necessarily a multiple of the node count.
+     *
+     * <p>The compute-node count used for the rounding/floor is itself bounded by how
+     * many {@code tablet_reshard_min_split_size} tablets the input can fill
+     * ({@code estimatedTotalBytes / tablet_reshard_min_split_size}). This stops a small
+     * load on a large cluster from being split into one tiny tablet per node — without
+     * it, the node-count floor alone would force {@code activeComputeNodeCount} tablets
+     * regardless of how little data there is.
      *
      * @param estimates              full-input estimates from the sampler. Only
      *                               {@link Estimates#totalBytes} is read.
      * @param activeComputeNodeCount total provisioned compute nodes in the load's warehouse.
      *                               Must be {@code >= 1}.
      */
-    static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
+    public static int selectTabletCount(Estimates estimates, int activeComputeNodeCount) {
+        return selectTabletCount(estimates, activeComputeNodeCount, Config.tablet_reshard_target_size);
+    }
+
+    /**
+     * Pre-split variant of {@link #selectTabletCount(Estimates, int)}, sized against
+     * {@link #preSplitTargetSize()} instead of {@code tablet_reshard_target_size}.
+     *
+     * <p>Every load-time pre-split path routes here so one config controls how finely a load's
+     * target partitions are carved, independently of the size the background split/merge daemon
+     * maintains for the rest of the cluster. Non-load callers (range-rewrite schema change,
+     * range rollup) keep using the two-argument form: they reshape an index that is not being
+     * written by a load, so the daemon's steady-state target is the right size for them.
+     */
+    public static int selectPreSplitTabletCount(Estimates estimates, int activeComputeNodeCount) {
+        return selectTabletCount(estimates, activeComputeNodeCount, preSplitTargetSize());
+    }
+
+    /**
+     * The target tablet size load-time pre-split sizes against: {@code tablet_pre_split_target_size}
+     * when set to a positive value, otherwise {@code tablet_reshard_target_size}.
+     *
+     * <p>A load that starts from one catch-all range tablet is bottlenecked on a single writer, and
+     * the split count that fixes that is driven by write parallelism, not by the steady-state
+     * tablet size the cluster wants to keep. Splitting below {@code tablet_reshard_target_size}
+     * is therefore deliberate and self-correcting: the background merge daemon still measures
+     * against {@code tablet_reshard_target_size} and merges the finer tablets back after the load.
+     */
+    @VisibleForTesting
+    static long preSplitTargetSize() {
+        long preSplitTargetSize = Config.tablet_pre_split_target_size;
+        return preSplitTargetSize > 0 ? preSplitTargetSize : Config.tablet_reshard_target_size;
+    }
+
+    /**
+     * Shared sizing implementation. {@code targetSize} is the caller-selected target tablet size;
+     * every other bound still comes from the {@code tablet_reshard_*} configs.
+     *
+     * @param targetSize target tablet size in bytes the byte-volume estimate is divided by.
+     *                   Must be {@code > 0}.
+     */
+    private static int selectTabletCount(Estimates estimates, int activeComputeNodeCount, long targetSize) {
         Objects.requireNonNull(estimates, "estimates");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
-        long targetSize = Config.tablet_reshard_target_size;
         int maxSplitCount = Config.tablet_reshard_max_split_count;
+        long minSplitSize = Config.tablet_reshard_min_split_size;
         Preconditions.checkState(targetSize > 0,
-                "tablet_reshard_target_size must be > 0, was %s", targetSize);
+                "target tablet size must be > 0, was %s", targetSize);
         Preconditions.checkState(maxSplitCount >= 2,
                 "tablet_reshard_max_split_count must be >= 2, was %s", maxSplitCount);
+        Preconditions.checkState(minSplitSize > 0,
+                "tablet_reshard_min_split_size must be > 0, was %s", minSplitSize);
 
         // Integer ceil-divide written as (n - 1) / d + 1 with a zero-case guard so it
         // does not overflow when totalBytes is near Long.MAX_VALUE.
         long totalBytes = estimates.totalBytes();
         long byteTargetTabletCount = totalBytes == 0L ? 0L : ((totalBytes - 1) / targetSize) + 1;
-        long proposed = Math.max(activeComputeNodeCount, byteTargetTabletCount);
+        // Clamp to maxSplitCount before the node-count rounding. The final result is
+        // capped at maxSplitCount anyway, and clamping first keeps the rounding
+        // arithmetic (+ activeComputeNodeCount) from overflowing on a near-
+        // Long.MAX_VALUE estimate (tiny target_size + huge input).
+        long boundedByteTarget = Math.min(byteTargetTabletCount, maxSplitCount);
+        // Bound the node count we align to by how many min-split-size tablets the input can
+        // fill (totalBytes / tablet_reshard_min_split_size). Without this, the rounding and
+        // node-count floor below would split a small load into one tiny tablet per node on a
+        // large cluster. effectiveMinSize is clamped to targetSize so the bound never forces
+        // tablets larger than the byte-volume target already implies; max(1, ...) keeps the
+        // divisor positive (and yields the minimum 2 after clamping for an empty input).
+        long effectiveMinSize = Math.min(minSplitSize, targetSize);
+        long maxTabletsByMinSize = totalBytes / effectiveMinSize;
+        long alignmentNodeCount = Math.min(activeComputeNodeCount, Math.max(1L, maxTabletsByMinSize));
+        // Round the byte-volume estimate up to a whole multiple of the (size-bounded) node
+        // count so the tablets distribute evenly. A count that is not a multiple of that node
+        // count leaves some nodes owning one more tablet than the rest (e.g. 4 tablets on 3
+        // nodes -> 2/1/1), skewing load-write and scan parallelism toward the heavier nodes.
+        long nodeAlignedCount =
+                ((boundedByteTarget + alignmentNodeCount - 1) / alignmentNodeCount)
+                        * alignmentNodeCount;
+        long proposed = Math.max(alignmentNodeCount, nodeAlignedCount);
         long clamped = Math.max(2L, Math.min(proposed, maxSplitCount));
         return (int) clamped;
     }
@@ -531,7 +652,7 @@ public final class TabletPreSplitCoordinator {
      * </ul>
      *
      * <p>After the loop, when at least one partition contributed,
-     * {@link SplitTabletJobFactory#forExternalBoundariesMultiTablet} builds
+     * {@link SplitTabletJobFactory#forExternalBoundaries} builds
      * the combined job and
      * {@link com.starrocks.alter.reshard.TabletReshardJobMgr#addTabletReshardJob}
      * admits it. Any synchronous failure of either step downgrades the whole
@@ -554,11 +675,58 @@ public final class TabletPreSplitCoordinator {
      */
     public static PreSplitOutcome submitForPartitionsCombined(
             Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
-            int activeComputeNodeCount, ConnectContext ctx) {
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            Set<Long> sampledSecondaryIndexMetaIds) {
+        return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
+                ctx, loadComputeResource, sampledSecondaryIndexMetaIds, false, -1L);
+    }
+
+    /**
+     * Dynamic-overwrite counterpart that creates and resolves transaction-scoped temporary
+     * partitions. The already-open overwrite transaction has not started writing, so it is
+     * excluded from the reshard job's cleanup watermark wait to avoid a synchronous wait cycle.
+     */
+    public static PreSplitOutcome submitForTemporaryPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            Set<Long> sampledSecondaryIndexMetaIds, long overwriteTransactionId) {
+        Preconditions.checkArgument(overwriteTransactionId > 0,
+                "overwriteTransactionId must be positive, was %s", overwriteTransactionId);
+        return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
+                ctx, loadComputeResource, sampledSecondaryIndexMetaIds, true, overwriteTransactionId);
+    }
+
+    /**
+     * Static-overwrite / explicit INSERT counterpart for temporary partitions that already exist.
+     * No transaction is excluded from cleanup: unlike dynamic overwrite, the static overwrite
+     * transaction has not been opened before this synchronous pre-split wait.
+     *
+     * <p>That is true when the job is admitted but does not make the load immune to the job's cleanup
+     * watermark, which {@code SplitTabletJob#runRunningJob} captures only at the END of its RUNNING
+     * phase. A load whose transaction opens after this wait times out can therefore still fall below it
+     * and be waited on by CLEANING. Excluding that transaction would not be sound — by then it is
+     * writing to the very tablets CLEANING is about to unregister, which is why dynamic overwrite
+     * revokes its own exclusion at the same point and shares the same window. See the note on
+     * {@code InsertOverwriteJobRunner#lockForCommitWaitingOutReshard}.
+     */
+    public static PreSplitOutcome submitForExistingTemporaryPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            Set<Long> sampledSecondaryIndexMetaIds) {
+        return submitForPartitionsCombined(database, table, partitionSamplesList, activeComputeNodeCount,
+                ctx, loadComputeResource, sampledSecondaryIndexMetaIds, true, -1L);
+    }
+
+    private static PreSplitOutcome submitForPartitionsCombined(
+            Database database, OlapTable table, List<PartitionSamples> partitionSamplesList,
+            int activeComputeNodeCount, ConnectContext ctx, ComputeResource loadComputeResource,
+            Set<Long> sampledSecondaryIndexMetaIds, boolean temporaryPartition,
+            long cleanupExcludedTransactionId) {
         Objects.requireNonNull(database, "database");
         Objects.requireNonNull(table, "table");
         Objects.requireNonNull(partitionSamplesList, "partitionSamplesList");
         Objects.requireNonNull(ctx, "ctx");
+        Objects.requireNonNull(sampledSecondaryIndexMetaIds, "sampledSecondaryIndexMetaIds");
         Preconditions.checkArgument(activeComputeNodeCount >= 1,
                 "activeComputeNodeCount must be >= 1, was %s", activeComputeNodeCount);
 
@@ -572,15 +740,18 @@ public final class TabletPreSplitCoordinator {
         // Phase 2: per-partition pre-create + plan, accumulating into oldTabletIdToRanges.
         // perPartitionResults is parallel-by-input bookkeeping: Skipped(reason) for dropped
         // entries, Submitted(null) sentinel for entries that fed the combined job.
-        List<Column> sortKey = MetaUtils.getRangeDistributionColumns(table);
         Map<Long, List<TabletRange>> oldTabletIdToRanges = new LinkedHashMap<>();
         List<PreSplitOutcome> perPartitionResults = new ArrayList<>(partitionSamplesList.size());
 
-        for (PartitionSamples entry : partitionSamplesList) {
-            PreSplitMetrics.recordPartitionCounted();
-            PreSplitOutcome perPartition = planOnePartition(
-                    database, table, entry, sortKey, activeComputeNodeCount, ctx, oldTabletIdToRanges);
-            perPartitionResults.add(perPartition);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.PARTITION_AND_BOUNDARY_PLANNING)) {
+            for (PartitionSamples entry : partitionSamplesList) {
+                PreSplitMetrics.recordPartitionCounted();
+                PreSplitOutcome perPartition = planOnePartition(
+                        database, table, entry, activeComputeNodeCount, ctx,
+                        sampledSecondaryIndexMetaIds, temporaryPartition, oldTabletIdToRanges);
+                perPartitionResults.add(perPartition);
+            }
         }
 
         if (oldTabletIdToRanges.isEmpty()) {
@@ -590,9 +761,20 @@ public final class TabletPreSplitCoordinator {
         // Phase 3: single combined submit. Any synchronous failure here surfaces as
         // SUBMIT_FAILED — the per-partition Submitted-pending markers were never promoted
         // to a real reshard job so callers see "no pre-split happened".
-        try {
-            TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundariesMultiTablet(
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startPhase(
+                PreSplitProfile.Phase.JOB_SUBMISSION)) {
+            TabletReshardJob combinedJob = SplitTabletJobFactory.forExternalBoundaries(
                     database, table, oldTabletIdToRanges);
+            // Carry the load's acquired compute resource (the one that sized the split) so the job's
+            // shard creation + publish run in the load's warehouse. Use prepared.computeResource() (passed
+            // in), NOT ctx.getCurrentComputeResource(): the latter can be the session warehouse when the
+            // load specifies a different `warehouse` property.
+            if (loadComputeResource != null) {
+                combinedJob.setWarehouseId(loadComputeResource.getWarehouseId());
+            }
+            if (cleanupExcludedTransactionId > 0) {
+                combinedJob.addCleanupExcludedTransactionId(cleanupExcludedTransactionId);
+            }
             GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addTabletReshardJob(combinedJob);
             return new PreSplitOutcome.SubmittedCombined(combinedJob, perPartitionResults);
         } catch (StarRocksException submitFailure) {
@@ -600,7 +782,7 @@ public final class TabletPreSplitCoordinator {
                     table.getName(), submitFailure.getMessage());
             return skipPostEligibility(SkipReason.SUBMIT_FAILED);
         } catch (RuntimeException submitFailure) {
-            // forExternalBoundariesMultiTablet validates the range list shape and may throw
+            // forExternalBoundaries validates the range list shape and may throw
             // IllegalArgumentException for bad caller-supplied ranges. Map to SUBMIT_FAILED
             // so the load still proceeds against the pre-create-only layout.
             LOG.warn("Pre-split combined submit rejected for table {}: {}",
@@ -616,17 +798,30 @@ public final class TabletPreSplitCoordinator {
      * sentinel; on any per-partition failure, returns a {@link PreSplitOutcome.Skipped}
      * carrying the specific reason. Throwables are caught and mapped — the
      * caller iterates the full list regardless of one entry's outcome.
+     *
+     * <p>Every visible index (base + rollups) is re-resolved and planned inside a
+     * LOCAL {@code {oldTabletId -> ranges}} map; the local map is merged into the
+     * combined {@code oldTabletIdToRanges} only after ALL indexes planned
+     * successfully. Any throw discards the local map, so a base-only remnant never
+     * leaks into the combined submit. A no-cut index is simply omitted from the
+     * local map; if EVERY index is no-cut the partition returns
+     * {@link SkipReason#NO_USEFUL_CUTS}.
      */
     private static PreSplitOutcome planOnePartition(
-            Database database, OlapTable table, PartitionSamples entry, List<Column> sortKey,
+            Database database, OlapTable table, PartitionSamples entry,
             int activeComputeNodeCount, ConnectContext ctx,
+            Set<Long> sampledSecondaryIndexMetaIds,
+            boolean temporaryPartition,
             Map<Long, List<TabletRange>> oldTabletIdToRanges) {
         try {
             if (!entry.existsInCatalog()) {
                 // Cheap pre-check: if the partition raced into the catalog since the grouper
                 // snapshot, skip the addPartitions call and record ALREADY_EXISTS. addPartitions
                 // would otherwise silently dedupe — we want the metric to attribute correctly.
-                if (table.getPartition(entry.partitionName()) != null) {
+                Partition existingPartition = temporaryPartition
+                        ? table.getPartition(entry.partitionName(), true)
+                        : table.getPartition(entry.partitionName());
+                if (existingPartition != null) {
                     PreSplitMetrics.recordPreCreate(PreSplitMetrics.PreCreateResult.ALREADY_EXISTS);
                 } else {
                     try {
@@ -646,27 +841,45 @@ public final class TabletPreSplitCoordinator {
                 }
             }
 
-            // Brief intensive READ lock for post-create re-resolve. Lock is acquired BEFORE the
-            // try block so a throw from the lock call does not run the finally release.
-            ResolvedPartition resolved = resolveUnderReadLock(database, table, entry.partitionName());
-            if (resolved == null) {
+            // Always re-resolve the partition's full visible-index target list immediately before
+            // planning (existing AND pre-created partitions): the factory does NOT enforce
+            // one-tablet-per-index, so a concurrent split could otherwise leak stale targets. A
+            // resolved secondary index-id set that no longer equals the sampled set drops the
+            // partition here rather than submitting a base-only partial.
+            List<IndexPreSplitTarget> resolvedTargets =
+                    resolveUnderReadLock(database, table, entry.partitionName(), temporaryPartition,
+                            sampledSecondaryIndexMetaIds);
+            if (resolvedTargets == null) {
                 PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
                 return new PreSplitOutcome.Skipped(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
             }
 
-            int requestedTabletCount = selectTabletCount(
+            int requestedTabletCount = selectPreSplitTabletCount(
                     new Estimates(entry.estimatedBytes(), 0L), activeComputeNodeCount);
-            SampleSet sampleSet = buildSampleSet(entry);
-            BoundaryPlannerResult planResult = BoundaryPlanner.planRowQuantileBoundaries(
-                    sampleSet, requestedTabletCount, sortKey);
-            if (planResult.isNoSplit()) {
+            // Plan every index into a LOCAL map first; merge only on full success so a throw
+            // mid-way never leaves a base-only remnant in the combined map. targets.get(0) is the
+            // base (resolveVisibleIndexTargets returns base first); the rest are rollups matched
+            // to each row's IndexTuple by indexMetaId, never by list position.
+            Map<Long, List<TabletRange>> local = new LinkedHashMap<>();
+            for (int i = 0; i < resolvedTargets.size(); i++) {
+                IndexPreSplitTarget target = resolvedTargets.get(i);
+                Long secondaryIndexMetaId = i == 0 ? null : target.indexMetaId();
+                SampleSet sampleSet = buildSampleSet(entry, secondaryIndexMetaId);
+                BoundaryPlannerResult planResult = BoundaryPlanner.planRowQuantileBoundaries(
+                        sampleSet, requestedTabletCount, target.sortKey());
+                if (planResult.isNoSplit()) {
+                    continue;
+                }
+                PreSplitProfile.recordBoundariesPlanned(planResult.getBoundaries().size());
+                local.put(target.oldTabletId(),
+                        DefaultPreSplitPipeline.buildTabletRanges(planResult.getBoundaries()));
+            }
+            if (local.isEmpty()) {
                 PreSplitMetrics.recordEligibilitySkip(SkipReason.NO_USEFUL_CUTS);
                 return new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS);
             }
 
-            List<TabletRange> tabletRanges = DefaultPreSplitPipeline.buildTabletRanges(
-                    planResult.getBoundaries());
-            oldTabletIdToRanges.put(resolved.oldTabletId, tabletRanges);
+            oldTabletIdToRanges.putAll(local);
             // Submitted(null) is a "fed-into-combined-submit" sentinel; promoted at the outer
             // level when the combined job is admitted.
             return new PreSplitOutcome.Submitted(null);
@@ -684,16 +897,26 @@ public final class TabletPreSplitCoordinator {
     }
 
     /**
-     * Acquire an intensive table READ lock, re-resolve the partition's
-     * default physical partition + base index, verify single-tablet + empty,
-     * and return the discovered oldTabletId. Returns {@code null} when any
-     * eligibility check fails (caller maps to PARTITION_NOT_ELIGIBLE_POST_CREATE).
+     * Acquire an intensive table READ lock and re-resolve the partition's FULL
+     * visible-index target list (base first) via
+     * {@link PreSplitTargets#resolveVisibleIndexTargets}. Verifies the base index
+     * is empty (its row count is not checked by the resolver) and that the
+     * resolved secondary index-id set still equals {@code sampledSecondaryIndexMetaIds}.
+     * Runs for BOTH existing and pre-created partitions -- always re-resolve
+     * immediately before planning, because the factory does NOT enforce
+     * one-tablet-per-index and a stale target from the grouper snapshot must be
+     * rejected here. Returns {@code null} when any check fails (caller maps to
+     * PARTITION_NOT_ELIGIBLE_POST_CREATE).
      */
-    private static ResolvedPartition resolveUnderReadLock(Database database, OlapTable table, String partitionName) {
+    private static List<IndexPreSplitTarget> resolveUnderReadLock(
+            Database database, OlapTable table, String partitionName, boolean temporaryPartition,
+            Set<Long> sampledSecondaryIndexMetaIds) {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
         try {
-            Partition partition = table.getPartition(partitionName);
+            Partition partition = temporaryPartition
+                    ? table.getPartition(partitionName, true)
+                    : table.getPartition(partitionName);
             if (partition == null) {
                 return null;
             }
@@ -702,14 +925,24 @@ public final class TabletPreSplitCoordinator {
                 return null;
             }
             MaterializedIndex baseIndex = physicalPartition.getIndex(table.getBaseIndexMetaId());
-            if (baseIndex == null) {
+            if (baseIndex == null || baseIndex.getRowCount() > 0) {
+                // resolveVisibleIndexTargets covers base tablet count + sort key, but intentionally
+                // not row-count emptiness -- gate that here before resolving the full index set.
                 return null;
             }
-            List<Tablet> tablets = baseIndex.getTablets();
-            if (tablets.size() != 1 || baseIndex.getRowCount() > 0) {
+            List<IndexPreSplitTarget> targets =
+                    PreSplitTargets.resolveVisibleIndexTargets(table, physicalPartition);
+            if (targets == null) {
                 return null;
             }
-            return new ResolvedPartition(physicalPartition.getId(), tablets.get(0).getId());
+            Set<Long> resolvedSecondaryIndexMetaIds = new HashSet<>();
+            for (int i = 1; i < targets.size(); i++) {
+                resolvedSecondaryIndexMetaIds.add(targets.get(i).indexMetaId());
+            }
+            if (!resolvedSecondaryIndexMetaIds.equals(sampledSecondaryIndexMetaIds)) {
+                return null;
+            }
+            return targets;
         } finally {
             locker.unLockTableWithIntensiveDbLock(database.getId(), table.getId(), LockType.READ);
         }
@@ -717,19 +950,38 @@ public final class TabletPreSplitCoordinator {
 
     /**
      * Project the entry's {@link SampleRow} list into a {@link SampleSet} the
-     * {@link BoundaryPlanner} consumes — only the sort-key tuples and a
-     * zero-byte {@link Estimates} are needed here (estimatedBytes already
-     * drove K_i selection).
+     * {@link BoundaryPlanner} consumes for one index. When
+     * {@code secondaryIndexMetaId} is {@code null} the base sort-key tuples are
+     * used; otherwise each row's {@link IndexTuple} whose {@code indexMetaId}
+     * matches is selected (matched by id, never by list position). Only the
+     * per-index tuples and a zero-byte {@link Estimates} are needed here
+     * (estimatedBytes already drove K_i selection).
      */
-    private static SampleSet buildSampleSet(PartitionSamples entry) {
+    private static SampleSet buildSampleSet(PartitionSamples entry, Long secondaryIndexMetaId) {
         List<SampleRow> rows = entry.samples();
-        List<Tuple> sortKeyTuples = new ArrayList<>(rows.size());
+        List<Tuple> tuples = new ArrayList<>(rows.size());
         for (SampleRow row : rows) {
-            sortKeyTuples.add(new Tuple(row.sortKeyTuple()));
+            List<Variant> values = secondaryIndexMetaId == null
+                    ? row.sortKeyTuple() : indexTupleValues(row, secondaryIndexMetaId);
+            tuples.add(new Tuple(values));
         }
-        return new SampleSet(sortKeyTuples, Estimates.ZERO);
+        return new SampleSet(tuples, Estimates.ZERO);
     }
 
-    /** One partition's post-create resolution: stable IDs the coordinator passes to the factory. */
-    private record ResolvedPartition(long physicalPartitionId, long oldTabletId) { }
+    /**
+     * The values of the row's {@link IndexTuple} tagged with {@code indexMetaId}.
+     * The grouper carries exactly one tuple per sampled secondary index, so a
+     * missing match signals a corrupt sample and is thrown as a RuntimeException
+     * that {@link #planOnePartition} maps to SAMPLE_FAILED (the whole partition,
+     * never a base-only remnant).
+     */
+    private static List<Variant> indexTupleValues(SampleRow row, long indexMetaId) {
+        for (IndexTuple indexTuple : row.secondaryIndexTuples()) {
+            if (indexTuple.indexMetaId() == indexMetaId) {
+                return indexTuple.values();
+            }
+        }
+        throw new IllegalStateException(
+                "sample row is missing a secondary-index tuple for index " + indexMetaId);
+    }
 }

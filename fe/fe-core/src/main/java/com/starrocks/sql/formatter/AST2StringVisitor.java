@@ -19,6 +19,7 @@ import com.google.common.base.Strings;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
@@ -37,6 +38,9 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -45,6 +49,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
@@ -54,15 +59,19 @@ import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
@@ -633,7 +642,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                     selectItemLabel += " EXCLUDE ( ";
                     selectItemLabel +=
                             item.getExcludedColumns().stream()
-                                    .map(col -> "`" + col + "`")
+                                    .map(ParseUtil::backquote)
                                     .collect(Collectors.joining(","));
                     selectItemLabel += " ) ";
                 }
@@ -772,14 +781,13 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         return sqlBuilder.toString();
     }
 
-    @Override
-    public String visitValues(ValuesRelation node, Void scope) {
+    /**
+     * Renders the bare {@code VALUES (...), (...)} list, without the parentheses that
+     * {@link #visitValues} wraps around it for derived-table position.
+     */
+    protected String visitValueRows(ValuesRelation node) {
         StringBuilder sqlBuilder = new StringBuilder();
-        if (node.isNullValues()) {
-            return null;
-        }
-
-        sqlBuilder.append("(VALUES");
+        sqlBuilder.append("VALUES");
         List<String> values = new ArrayList<>();
         for (int i = 0; i < node.getRows().size(); ++i) {
             StringBuilder rowBuilder = new StringBuilder();
@@ -791,7 +799,20 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             values.add(rowBuilder.toString());
         }
         sqlBuilder.append(Joiner.on(", ").join(values));
-        sqlBuilder.append(")");
+        return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitValues(ValuesRelation node, Void scope) {
+        StringBuilder sqlBuilder = new StringBuilder();
+        if (node.isNullValues()) {
+            return null;
+        }
+
+        // Parenthesized: reaching a ValuesRelation through the generic relation path means it sits in
+        // derived-table position, as in `FROM (VALUES (1), (2)) t`. The INSERT source position wants the
+        // bare list instead and goes through visitInsertSource().
+        sqlBuilder.append("(").append(visitValueRows(node)).append(")");
         if (node.getAlias() != null) {
             sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
@@ -1008,6 +1029,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                 org.apache.commons.collections4.CollectionUtils.isNotEmpty(
                         insert.getTargetPartitionNames().getPartitionNames())) {
             List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+            // Same namespace distinction as in the FROM clause: without the qualifier this names a
+            // formal partition, i.e. a different write target.
+            if (insert.getTargetPartitionNames().isTemp()) {
+                sb.append("TEMPORARY ");
+            }
             sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
         }
 
@@ -1024,15 +1050,157 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         // source
         if (insert.getQueryStatement() != null) {
-            sb.append(visit(insert.getQueryStatement()));
+            sb.append(visitInsertSource(insert.getQueryStatement(), context));
         }
         return sb.toString();
+    }
+
+    /**
+     * INSERT takes a bare {@code VALUES (...), (...)} list as its source; the parenthesized form
+     * {@link #visitValues} emits for derived-table position does not parse here.
+     */
+    protected String visitInsertSource(QueryStatement queryStatement, Void context) {
+        QueryRelation relation = queryStatement.getQueryRelation();
+        // Anything the generic path decorates the relation with (CTEs, alias, ORDER BY, LIMIT) falls back
+        // to visitQueryStatement so those clauses are not dropped.
+        if (relation instanceof ValuesRelation
+                && !relation.hasWithClause()
+                && relation.getAlias() == null
+                && !relation.hasOrderByClause()
+                && relation.getLimit() == null
+                && !((ValuesRelation) relation).isNullValues()) {
+            return visitValueRows((ValuesRelation) relation);
+        }
+        return visit(queryStatement);
     }
 
     protected void visitInsertLabel(String label, StringBuilder sb) {
         if (StringUtils.isNotEmpty(label)) {
             sb.append("WITH LABEL `").append(label).append("` ");
         }
+    }
+
+    @Override
+    public String visitCreateTableAsSelectStatement(CreateTableAsSelectStmt stmt, Void context) {
+        StringBuilder sb = new StringBuilder();
+        CreateTableStmt createStmt = stmt.getCreateTableStmt();
+        sb.append("CREATE ");
+        if (createStmt instanceof CreateTemporaryTableStmt) {
+            sb.append("TEMPORARY ");
+        }
+        sb.append("TABLE ");
+        if (createStmt.isSetIfNotExists()) {
+            sb.append("IF NOT EXISTS ");
+        }
+        TableRef tableRef = createStmt.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        sb.append(tableName.toSql());
+
+        // The parenthesized clause carries column names, index definitions, or both.
+        List<String> parenthesizedItems = new ArrayList<>();
+        if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(stmt.getColumnNames())) {
+            stmt.getColumnNames().forEach(c -> parenthesizedItems.add(ParseUtil.backquote(c)));
+        }
+        if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(createStmt.getIndexDefs())) {
+            createStmt.getIndexDefs().forEach(d -> parenthesizedItems.add(d.toSql()));
+        }
+        if (!parenthesizedItems.isEmpty()) {
+            sb.append(" (").append(String.join(",", parenthesizedItems)).append(")");
+        }
+
+        String engineName = createStmt.getEngineName();
+        if (!Strings.isNullOrEmpty(engineName) && !createStmt.isOlapEngine()) {
+            sb.append(" ENGINE = ").append(engineName);
+        }
+
+        // The analyzer derives a key desc when the user didn't write one; only print explicit ones.
+        KeysDesc keysDesc = createStmt.getKeysDesc();
+        if (keysDesc != null && !keysDesc.isKeysColumnsDerived()
+                && org.apache.commons.collections4.CollectionUtils.isNotEmpty(keysDesc.getKeysColumnNames())) {
+            sb.append(" ").append(keysDesc.getKeysType().toSql())
+                    .append("(").append(joinBackQuoted(keysDesc.getKeysColumnNames())).append(")");
+        }
+
+        if (StringUtils.isNotEmpty(createStmt.getComment())) {
+            sb.append(" COMMENT \"")
+                    .append(CatalogUtils.addEscapeCharacter(createStmt.getComment()))
+                    .append("\"");
+        }
+
+        if (createStmt.getPartitionDesc() != null) {
+            String partitionSql = partitionDescToSql(createStmt.getPartitionDesc());
+            if (!Strings.isNullOrEmpty(partitionSql)) {
+                sb.append(" ").append(partitionSql);
+            }
+        }
+
+        if (createStmt.getDistributionDesc() != null) {
+            sb.append(" ").append(createStmt.getDistributionDesc());
+        }
+
+        if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(createStmt.getOrderByElements())) {
+            String orderByColumns = createStmt.getOrderByElements().stream()
+                    .map(e -> visit(e.getExpr()))
+                    .collect(Collectors.joining(","));
+            sb.append(" ORDER BY (").append(orderByColumns).append(")");
+        }
+
+        Map<String, String> properties = createStmt.getProperties();
+        if (properties != null && !properties.isEmpty()) {
+            sb.append(" PROPERTIES (")
+                    .append(new PrintableMap<>(properties, "=", true, false, options.isHideCredential()))
+                    .append(")");
+        }
+
+        sb.append(" AS ").append(visit(stmt.getQueryStatement(), context));
+        return sb.toString();
+    }
+
+    /**
+     * {@link PartitionDesc#toSql()} is unimplemented across its subclasses, so render the
+     * PARTITION BY clause here. Partition definitions (VALUES IN / range items) are omitted:
+     * this output is for display (profile, audit log, digest), not for re-execution.
+     * Returns null for descriptors that cannot be rendered, so the caller skips the clause.
+     */
+    private String partitionDescToSql(PartitionDesc partitionDesc) {
+        if (partitionDesc instanceof ExpressionPartitionDesc) {
+            return "PARTITION BY " + visit(((ExpressionPartitionDesc) partitionDesc).getExpr());
+        }
+        if (partitionDesc instanceof ListPartitionDesc) {
+            ListPartitionDesc listPartitionDesc = (ListPartitionDesc) partitionDesc;
+            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(listPartitionDesc.getMultiDescList())) {
+                // PARTITION BY (c1, c2) or PARTITION BY (date_trunc('day', dt), c1)
+                String partitionItems = listPartitionDesc.getMultiDescList().stream()
+                        .map(this::visit)
+                        .collect(Collectors.joining(","));
+                return "PARTITION BY (" + partitionItems + ")";
+            }
+            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(listPartitionDesc.getPartitionColNames())) {
+                // The LIST keyword is what separates explicit list partitioning from automatic
+                // partitioning (AstBuilder sets autoPartitionTable only when LIST is absent), so
+                // emitting it for an automatic-partition table would deparse to a different table.
+                if (listPartitionDesc.isAutoPartitionTable()) {
+                    return "PARTITION BY (" + joinBackQuoted(listPartitionDesc.getPartitionColNames()) + ")";
+                }
+                return "PARTITION BY LIST(" + joinBackQuoted(listPartitionDesc.getPartitionColNames()) + ")";
+            }
+        }
+        if (partitionDesc instanceof RangePartitionDesc) {
+            RangePartitionDesc rangePartitionDesc = (RangePartitionDesc) partitionDesc;
+            if (org.apache.commons.collections4.CollectionUtils.isNotEmpty(rangePartitionDesc.getPartitionColNames())) {
+                // The grammar requires parentheses after RANGE(cols); keep an empty pair so the
+                // output stays parseable while the partition definitions are omitted.
+                return "PARTITION BY RANGE(" + joinBackQuoted(rangePartitionDesc.getPartitionColNames()) + ") ()";
+            }
+        }
+        return null;
+    }
+
+    private static String joinBackQuoted(List<String> names) {
+        return names.stream()
+                .map(ParseUtil::backquote)
+                .collect(Collectors.joining(","));
     }
 
     @Override

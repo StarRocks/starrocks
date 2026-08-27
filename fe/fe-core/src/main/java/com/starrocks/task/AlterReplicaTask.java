@@ -105,6 +105,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     // SchemaChangeHandler::do_process_add_index_only on BE.
     private boolean onlyAddIndex = false;
     private List<com.starrocks.thrift.TOlapTableIndex> indexesToAdd;
+    // New schema id/version FE allocated for the ADD INDEX fast path. Sent to BE
+    // so it stamps them onto the tablet metadata schema, invalidating every by-id
+    // schema cache so future loads / compaction build the new index. 0 = unset.
+    private long newIndexSchemaId = 0;
+    private long newIndexSchemaVersion = 0;
 
     // DROP INDEX fast-path flags (lake only). When onlyDropIndex is true, BE
     // writes an OpDropIndex TxnLog; publish applies tombstones into IDG.
@@ -330,6 +335,10 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             if (indexesToAdd != null && !indexesToAdd.isEmpty()) {
                 req.setIndexes_to_add(indexesToAdd);
             }
+            if (newIndexSchemaId > 0) {
+                req.setNew_index_schema_id(newIndexSchemaId);
+                req.setNew_index_schema_version(newIndexSchemaVersion);
+            }
         }
         if (onlyDropIndex) {
             req.setOnly_drop_index(true);
@@ -351,6 +360,16 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public void setOnlyAddIndex(List<com.starrocks.thrift.TOlapTableIndex> indexes) {
         this.onlyAddIndex = true;
         this.indexesToAdd = indexes;
+    }
+
+    /**
+     * Carry the new schema id/version FE allocated for the ADD INDEX fast path.
+     * BE stamps them onto the tablet metadata schema so all by-id schema caches
+     * miss and future loads / compaction build the newly-added index.
+     */
+    public void setNewIndexSchema(long schemaId, long schemaVersion) {
+        this.newIndexSchemaId = schemaId;
+        this.newIndexSchemaVersion = schemaVersion;
     }
 
     /**

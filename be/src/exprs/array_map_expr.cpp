@@ -33,7 +33,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
-#include "storage/chunk_helper.h"
+#include "runtime/chunk_accumulator.h"
 
 namespace starrocks {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
@@ -170,7 +170,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
         // if lambda expr doesn't rely on argument, we don't need to put it into cur_chunk
         if constexpr (!independent_lambda_expr) {
-            cur_chunk->append_column(elements_column, arguments_ids[i]);
+            // Move it in: when the same array column is passed as two lambda arguments
+            // (e.g. array_map((x, y) -> ..., a, a)), both iterations yield the same elements
+            // column, and Chunk requires its columns to be unique. The rvalue overload
+            // copy-on-writes the duplicate instead of aliasing one column to two slots.
+            cur_chunk->append_column(std::move(elements_column), arguments_ids[i]);
         }
     }
     DCHECK(aligned_offsets != nullptr);
@@ -411,6 +415,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
             array_col->check_or_die();
             auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
+            // result_null_column may be shorter than num_rows when the nullable input is a
+            // const/single-row column that has not been materialized to chunk size; align the
+            // per-row null mask to the empty-array column (padded rows are non-null, since the
+            // all-null case already returned above) so the NullableColumn stays consistent.
+            result_null_mut->resize(chunk->num_rows());
             auto result = NullableColumn::create(std::move(array_col), std::move(result_null_mut));
             result->check_or_die();
             return result;

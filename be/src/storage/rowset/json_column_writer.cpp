@@ -44,9 +44,9 @@
 #include "gutil/casts.h"
 #include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/column_writer.h"
 #include "storage/rowset/json_column_compactor.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/constexpr.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -201,11 +201,13 @@ Status FlatJsonColumnWriter::_init_flat_writers() {
             (!_has_remain || i != _flat_paths.size() - 1)) {
             // try to use dict encoding for flat json
             opts.meta->set_encoding(EncodingTypePB::DICT_ENCODING);
-            opts.meta->set_compression(_json_meta->compression());
         } else {
             opts.meta->set_encoding(EncodingTypePB::DEFAULT_ENCODING);
-            opts.meta->set_compression(_json_meta->compression());
         }
+        // Inherit both the codec and its level from the parent JSON column: the level must be carried
+        // along, otherwise the sub-column meta reads back level 0 and ZSTD falls back to its default.
+        opts.meta->set_compression(_json_meta->compression());
+        opts.meta->set_compression_level(_json_meta->compression_level());
 
         if (_flat_types[i] == LogicalType::TYPE_JSON) {
             opts.meta->mutable_json_meta()->set_format_version(kJsonMetaDefaultFormatVersion);
@@ -322,6 +324,7 @@ Status FlatJsonColumnWriter::finish() {
         }
     }
 
+    _json_meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();
 }
 

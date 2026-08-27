@@ -38,7 +38,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
@@ -55,17 +57,21 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectProcessor;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.LargeInPredicateException;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
@@ -87,6 +93,7 @@ import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -357,6 +364,76 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertFalse(myContext.isKilled());
     }
 
+    // A pooled connection handed back out must not expose the previous unit of work's diagnostics:
+    // statements that preserve the diagnostics area (SHOW, SET, transaction control) would
+    // otherwise let the next user read them.
+    @Test
+    public void testResetConnectionClearsSessionWarnings() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(resetConnectionPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Error", "1064", "leftover error from the previous session"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // COM_CHANGE_USER re-authenticates a different user on the same ConnectContext
+    // (MysqlProto.changeUser mutates it in place) and then falls through to the reset path, so the
+    // previous user's error text and load tracking URL must not survive into the new user's session.
+    // changeUserPacket cannot authenticate against the test catalog, so stub a successful
+    // change-user to reach handleResetConnection.
+    @Test
+    public void testChangeUserClearsSessionWarnings() throws IOException {
+        new MockUp<MysqlProto>() {
+            @Mock
+            public boolean changeUser(ConnectContext context, ByteBuffer buffer) {
+                return true;
+            }
+        };
+
+        ConnectContext ctx = initMockContext(mockChannel(changeUserPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265",
+                "1 row(s) filtered or substituted to NULL during load; "
+                        + "tracking_url=http://127.0.0.1:8040/api/_load_error_log?file=previous_user"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_CHANGE_USER, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // A rejected COM_CHANGE_USER is answered by MysqlProto.changeUser itself and returns before
+    // resetConnectionSession() runs, so the error the client just received has to be recorded on
+    // the way out of handleChangeUser.
+    @Test
+    public void testChangeUserFailureReplacesSessionWarnings() throws IOException {
+        new MockUp<MysqlProto>() {
+            @Mock
+            public boolean changeUser(ConnectContext context, ByteBuffer buffer) {
+                // Mirrors the real rejection paths: MysqlProto leaves the error on the state and
+                // answers the client itself.
+                context.getState().setError("Unknown database(no_such_db)");
+                return false;
+            }
+        };
+
+        ConnectContext ctx = initMockContext(mockChannel(changeUserPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
     @Test
     public void testPing() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(pingPacket), GlobalStateMgr.getCurrentState());
@@ -479,6 +556,261 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(1, auditRecords.size());
         Assertions.assertTrue(auditRecords.get(0).startsWith("ERR:"));
         Assertions.assertEquals("ERR:select from", auditRecords.get(0));
+    }
+
+    // Verify a parse failure replaces the previous statement's diagnostics with its own error:
+    // the statement never reaches StmtExecutor.execute() (which normally clears the buffer and
+    // records the failure), so without the explicit handling in handleQuery, SHOW WARNINGS would
+    // return stale entries after a syntax error and SHOW ERRORS would not return the error.
+    @Test
+    public void testParseFailureReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select from");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify a pre-execution rejection (here: the per-statement authentication re-check in
+    // validateStmtBeforeExecution) replaces the previous statement's diagnostics the same way a
+    // parse failure does: the statement parses fine but never reaches StmtExecutor.execute(), so
+    // without recording in the rejection path SHOW WARNINGS would return stale entries.
+    @Test
+    public void testPreExecutionRejectionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        Mockito.doReturn(null).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify the per-statement authentication re-check failure (AuthenticationException from
+    // checkLoginSuccess) replaces the previous statement's diagnostics like the other
+    // pre-execution rejections.
+    @Test
+    public void testAuthenticationExceptionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        AuthenticationProvider provider = Mockito.mock(AuthenticationProvider.class);
+        Mockito.doThrow(new AuthenticationException("mock: login revoked"))
+                .when(provider).checkLoginSuccess(Mockito.anyInt(), Mockito.any());
+        Mockito.doReturn(provider).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify a COM_STMT_EXECUTE that fails before reaching StmtExecutor.execute() (here: unknown
+    // prepared statement id) replaces the previous statement's diagnostics with its own error,
+    // matching the COM_QUERY pre-execution contract.
+    @Test
+    public void testExecuteUnknownPreparedStmtReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createExecutePacket(42, new ArrayList<>());
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A COM_QUERY statement can also fail after its StmtExecutor has been constructed but before
+    // execute() is entered. execute() owns the diagnostics area, so this window must record the
+    // failure too. The executor field cannot decide that: it is already assigned here.
+    @Test
+    public void testQueryFailureAfterExecutorCreatedReplacesSessionWarnings() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void addRunningQueryDetail(StatementBase parsedStmt) {
+                throw new IllegalStateException("mock: failed after executor creation, before execute");
+            }
+        };
+
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // The same window on the COM_STMT_EXECUTE path: a prepared statement that fails between
+    // executor creation and execute() must also replace the previous statement's diagnostics.
+    @Test
+    public void testExecuteFailureAfterExecutorCreatedReplacesSessionWarnings() throws Exception {
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
+            ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
+
+            PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
+            ctx.putPreparedStmt("1", new PrepareStmtContext(prepareStmt, ctx, null));
+            ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    throw new IllegalStateException("mock: failed after executor creation, before execute");
+                }
+            };
+            processor.processOnce();
+
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertEquals(1, ctx.getWarnings().size());
+            QueryWarning diagnostic = ctx.getWarnings().get(0);
+            Assertions.assertEquals("Error", diagnostic.getLevel());
+            Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
+    }
+
+    // A client that switches database with COM_INIT_DB instead of a USE statement never builds a
+    // StmtExecutor, so nothing would clear the diagnostics area and the previous statement's
+    // warnings would stay visible after the switch.
+    @Test
+    public void testInitDbClearsSessionWarnings() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertFalse(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // A failing COM_INIT_DB answers with an ERR packet, so SHOW ERRORS has to report that error
+    // rather than the previous statement's diagnostics.
+    @Test
+    public void testInitDbFailureReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_INIT_DB.getCommandCode());
+        serializer.writeEofString("db_that_does_not_exist");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // COM_FIELD_LIST is the other command answered without a StmtExecutor that can report an error
+    // of its own, so it follows the same contract.
+    @Test
+    public void testFieldListFailureReplacesSessionWarnings() throws Exception {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_FIELD_LIST.getCommandCode());
+        serializer.writeNulTerminateString("");
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A command code the dispatcher does not implement is rejected with an ERR packet before any
+    // statement handling, and must replace the diagnostics area like the handled commands do.
+    @Test
+    public void testUnsupportedCommandReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_CREATE_DB.getCommandCode());
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A command code that maps to no MysqlCommand is rejected before the dispatch switch is even
+    // reached, which is the other path that answers with an ERR packet and no StmtExecutor.
+    @Test
+    public void testUnknownCommandCodeReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(100);
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        // ErrorReport.report writes the error code through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
     }
 
     // Verify LargeInPredicate retry is scoped to the failing stmt instead of replaying previous stmts.
@@ -1078,6 +1410,175 @@ public class ConnectProcessorTest extends DDLTestBase {
                 qualifiedRelationName("testDb1", "relation_view_cp"),
                 qualifiedRelationName("testDb1", "testTable1")),
                 auditEvent.queriedRelations);
+    }
+
+    // A forwarding follower never analyzes the statement, so its local parse tree still carries
+    // CTE aliases and unqualified names. When the Leader resolved the relations and shipped them
+    // back, the follower must log the Leader's list rather than its own inaccurate collection.
+    @Test
+    public void testQueriedRelationsPrefersLeaderResultWhenForwarded() throws Exception {
+        ConnectProcessor processor = new ConnectProcessor(new ConnectContext());
+
+        List<String> leaderRelations = Arrays.asList("default_catalog.k.leader_only_table");
+        TMasterOpResult leaderResult = new TMasterOpResult();
+        leaderResult.setQueried_relations(leaderRelations);
+
+        LeaderOpExecutor leaderOpExecutor = Mockito.mock(LeaderOpExecutor.class);
+        Mockito.when(leaderOpExecutor.getResult()).thenReturn(leaderResult);
+
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.when(executor.getIsForwardToLeaderOrInit(false)).thenReturn(true);
+        Mockito.when(executor.getLeaderOpExecutor()).thenReturn(leaderOpExecutor);
+
+        // Local collection would yield default_catalog.testDb1.testTable1, but the Leader's list must win.
+        StatementBase localStmt = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+
+        Assertions.assertEquals(leaderRelations, processor.queriedRelationsForAudit(executor, localStmt));
+    }
+
+    // An explicitly-provided empty list from the Leader ("resolved no relations", e.g. a CTE-only
+    // query) must be preferred, not mistaken for "field missing" and overridden by local collection.
+    // Regressing the null-check to an isEmpty-check would silently re-log the CTE alias, so guard it.
+    @Test
+    public void testQueriedRelationsPrefersEmptyLeaderResultWhenForwarded() throws Exception {
+        ConnectProcessor processor = new ConnectProcessor(new ConnectContext());
+
+        List<String> leaderRelations = new ArrayList<>();
+        TMasterOpResult leaderResult = new TMasterOpResult();
+        leaderResult.setQueried_relations(leaderRelations);
+        // The empty list is still marked present on the wire.
+        Assertions.assertTrue(leaderResult.isSetQueried_relations());
+
+        LeaderOpExecutor leaderOpExecutor = Mockito.mock(LeaderOpExecutor.class);
+        Mockito.when(leaderOpExecutor.getResult()).thenReturn(leaderResult);
+
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.when(executor.getIsForwardToLeaderOrInit(false)).thenReturn(true);
+        Mockito.when(executor.getLeaderOpExecutor()).thenReturn(leaderOpExecutor);
+
+        // Local collection is non-empty here, so an empty result can only mean the Leader's empty
+        // list was preferred over a local fallback.
+        StatementBase localStmt = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+        Assertions.assertFalse(
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(localStmt).isEmpty());
+
+        Assertions.assertEquals(leaderRelations, processor.queriedRelationsForAudit(executor, localStmt));
+    }
+
+    // Statements that run locally (not forwarded) have an analyzed parse tree, so the follower
+    // falls back to its own accurate collection.
+    @Test
+    public void testQueriedRelationsFallsBackToLocalWhenNotForwarded() throws Exception {
+        ConnectProcessor processor = new ConnectProcessor(new ConnectContext());
+
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        Mockito.when(executor.getIsForwardToLeaderOrInit(false)).thenReturn(false);
+
+        StatementBase localStmt = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("testDb1", "testTable1")),
+                processor.queriedRelationsForAudit(executor, localStmt));
+    }
+
+    // A forwarded statement that resolves to no real relations (e.g. a CTE-only query) must still
+    // mark queried_relations as set. Otherwise the follower cannot tell "leader found none" from
+    // "leader too old to send the field" and falls back to its unanalyzed parse tree, which still
+    // holds the CTE alias -- re-introducing exactly the inaccuracy this fix removes.
+    @Test
+    public void testProxyExecuteSetsEmptyQueriedRelationsForCteOnlyStatement() throws Exception {
+        StatementBase analyzedCteOnly =
+                UtFrameUtils.parseStmtWithNewParser("with t as (select 1) select * from t", ctx);
+        Assertions.assertTrue(
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(analyzedCteOnly).isEmpty());
+
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("with t as (select 1) select * from t");
+        request.setIsInternalStmt(true);
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        context.setCurrentCatalog("default");
+        context.setDatabase("testDb1");
+        context.setQualifiedUser("root");
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(UserIdentity.ROOT);
+        context.setSessionId(UUID.randomUUID());
+        context.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(context);
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doNothing().when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                    Mockito.when(mock.getParsedStmt()).thenReturn(analyzedCteOnly);
+                })) {
+            TMasterOpResult result = processor.proxyExecute(request, null);
+            Assertions.assertTrue(result.isSetQueried_relations());
+            Assertions.assertTrue(result.getQueried_relations().isEmpty());
+        }
+    }
+
+    // queried_relations must be populated even when execute() throws after analysis. Otherwise the
+    // follower sees "field missing" on an error, falls back to its unanalyzed parse tree, and a
+    // failed forwarded statement gets an inaccurate audit log. The collection runs in a finally
+    // around execute(), so an already-analyzed statement still ships its resolved relations.
+    @Test
+    public void testProxyExecuteSetsQueriedRelationsWhenExecuteFails() throws Exception {
+        StatementBase analyzed = UtFrameUtils.parseStmtWithNewParser("select v1 from testTable1", ctx);
+
+        TMasterOpRequest request = new TMasterOpRequest();
+        request.setCatalog("default");
+        request.setDb("testDb1");
+        request.setUser("root");
+        request.setSql("select v1 from testTable1");
+        request.setIsInternalStmt(true);
+        request.setCurrent_user_ident(new TUserIdentity().setUsername("root").setHost("127.0.0.1"));
+        request.setQueryId(UUIDUtil.genTUniqueId());
+        request.setSession_id(UUID.randomUUID().toString());
+        request.setIsLastStmt(true);
+
+        ConnectContext context = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        context.setCurrentCatalog("default");
+        context.setDatabase("testDb1");
+        context.setQualifiedUser("root");
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(UserIdentity.ROOT);
+        context.setSessionId(UUID.randomUUID());
+        context.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(context);
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doThrow(new RuntimeException("execution failed")).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                    Mockito.when(mock.getParsedStmt()).thenReturn(analyzed);
+                })) {
+            TMasterOpResult result = processor.proxyExecute(request, null);
+            Assertions.assertTrue(result.isSetQueried_relations());
+            Assertions.assertEquals(Arrays.asList(qualifiedRelationName("testDb1", "testTable1")),
+                    result.getQueried_relations());
+        }
+    }
+
+    // queried_relations is populated in the shared proxyExecute(), so every forward path is covered,
+    // including Arrow Flight SQL: ArrowFlightSqlConnectProcessor overrides doProxyExecute() but must
+    // inherit proxyExecute(). If it ever overrides proxyExecute(), forwarded Arrow queries would
+    // bypass the population and regress to logging CTE aliases / unqualified names -- guard that here.
+    @Test
+    public void testArrowFlightSqlInheritsProxyExecute() throws Exception {
+        Method proxyExecute = ArrowFlightSqlConnectProcessor.class.getMethod(
+                "proxyExecute", TMasterOpRequest.class, Frontend.class);
+        Assertions.assertEquals(ConnectProcessor.class, proxyExecute.getDeclaringClass(),
+                "ArrowFlightSqlConnectProcessor must inherit proxyExecute() so forwarded queries "
+                        + "populate queried_relations");
     }
 
     @Test

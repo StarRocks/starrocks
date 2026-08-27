@@ -214,9 +214,26 @@ public class OlapTableSink extends DataSink {
         tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
-        TransactionState txnState =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getTransactionState(dbId, txnId);
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState txnState = globalTransactionMgr.getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            // Multi-statement stream load plans its sub-task sinks during the load, before the
+            // explicit transaction is upserted into the DatabaseTransactionMgr at commit time, so
+            // getTransactionState misses. Fall back to the explicit transaction registry so the sink
+            // observes the transaction's combined-txn-log decision; otherwise write_txn_log stays at
+            // the per-tablet default while publish expects combined logs, wedging publish.
+            //
+            // Restricted to MULTI_STATEMENT_STREAMING on purpose: INSERT_STREAMING (BEGIN ... COMMIT)
+            // emits per-load-id txn logs that publish reads via the load_ids branch (which takes
+            // precedence over combined_txn_log), so its sink must keep the default per-load-id mode.
+            // Honoring the combined flag here would make BE skip those per-load-id logs and lose data.
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
+            if (explicitTxnState != null && explicitTxnState.getTransactionState() != null
+                    && explicitTxnState.getTransactionState().getSourceType()
+                            == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
+                txnState = explicitTxnState.getTransactionState();
+            }
+        }
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
@@ -427,6 +444,18 @@ public class OlapTableSink extends DataSink {
             tSink.setPartition(partitionParam);
             tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
+            // A column-mode partial update writes the new values into a DCG beside the segment it
+            // patches. A split's UNSHARE compaction rewrites every segment wholesale and does not carry
+            // those across, so the update would be silently lost the first time such a table is split.
+            // Row mode rewrites whole rows and is unaffected. hasSeparateSortKey carries the range and
+            // primary-key tests itself, so a HASH-distributed primary-key table with a separate ORDER BY
+            // -- long supported -- stays out of this.
+            if ((this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPDATE_MODE
+                    || this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPSERT_MODE)
+                    && MetaUtils.hasSeparateSortKey(dstTable, dstTable.getBaseIndexMetaId())) {
+                throw new StarRocksException("Column-mode partial update is not supported on a range-distributed "
+                        + "primary key table whose ORDER BY key differs from the primary key");
+            }
             tSink.setPartial_update_mode(this.partialUpdateMode);
             tSink.setAutomatic_bucket_size(automaticBucketSize);
             if (canUseColocateMVIndex(dstTable)) {
@@ -1212,18 +1241,34 @@ public class OlapTableSink extends DataSink {
         }
 
         int lowUsageIndex = -1;
+        // Only used when every healthy candidate is in DECOMMISSION state.
+        int decommissionIndex = -1;
         for (int i = 0; i < replicas.size(); i++) {
             Replica replica = replicas.get(i);
             boolean isHealthy = !replica.getLastWriteFail()
                     && !infoService.getBackend(replica.getBackendId()).getLastWriteFail();
-            
+
             // The isAlive() flag indicates node availability during shutdown sequences.
             // For single-replica configurations, we bypass node status checks to maintain
             // loading operation continuity despite shutdown transitions.
             if (replicas.size() > 1) {
                 isHealthy = isHealthy && infoService.getBackend(replica.getBackendId()).isAlive();
             }
-            
+
+            // A replica in DECOMMISSION state is scheduled for deletion, so it is the one most
+            // likely to disappear while the load is still running. It has to stay a write target
+            // to make up the write quorum, but it should not become the primary: when its tablet
+            // is dropped mid-load, LocalTabletsChannel tolerates the resulting "Fail to get
+            // tablet" error only for a Secondary replica, while for a Primary one it aborts the
+            // whole tablet_writer_open and fails the entire load. Keeping it as the last resort
+            // degrades a mid-load deletion to a per-replica failure that the write quorum absorbs.
+            if (replica.getState() == Replica.ReplicaState.DECOMMISSION) {
+                if (decommissionIndex == -1 && isHealthy) {
+                    decommissionIndex = i;
+                }
+                continue;
+            }
+
             if (lowUsageIndex == -1 && isHealthy) {
                 lowUsageIndex = i;
             }
@@ -1234,7 +1279,7 @@ public class OlapTableSink extends DataSink {
                 lowUsageIndex = i;
             }
         }
-        return lowUsageIndex;
+        return lowUsageIndex != -1 ? lowUsageIndex : decommissionIndex;
     }
 
     private static boolean canUseColocateMVIndex(OlapTable table) {

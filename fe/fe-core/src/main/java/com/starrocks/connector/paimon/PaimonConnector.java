@@ -31,11 +31,16 @@ import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
+import org.apache.paimon.options.CatalogOptions;
+import org.apache.paimon.options.MemorySize;
 import org.apache.paimon.options.Options;
+import org.apache.paimon.privilege.PrivilegedCatalog;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -49,6 +54,12 @@ public class PaimonConnector implements Connector {
     public static final String PAIMON_CATALOG_WAREHOUSE = "paimon.catalog.warehouse";
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private static final String DLF_CATGALOG_ID = "dlf.catalog.id";
+    // implicit for user, mirrors iceberg_meta_cache_ttl_sec
+    public static final String PAIMON_META_CACHE_TTL = "paimon_meta_cache_ttl_sec";
+    private static final long DEFAULT_META_CACHE_TTL_SEC = 24L * 60 * 60;
+    private static final long CACHE_PARTITION_MAX_NUM = 1000L;
+    private static final MemorySize CACHE_MANIFEST_FILE_THRESHOLD = MemorySize.ofMebiBytes(10);
+    private static final MemorySize CACHE_MANIFEST_MEMORY = MemorySize.ofMebiBytes(1024);
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
     private final String catalogName;
@@ -93,14 +104,18 @@ public class PaimonConnector implements Connector {
         }
         initFsOption(cloudConfiguration);
 
-        // cache expire time, set to 2h
-        this.paimonOptions.set("cache.expiration-interval", "7200s");
+        // Both must be set, or the one left out keeps its default (10min / 30min) and binds instead.
+        // With equal values expire-after-write binds, which is Iceberg's write-only TTL semantics.
+        Duration metaCacheTtl = Duration.ofSeconds(
+                PropertyUtil.propertyAsLong(properties, PAIMON_META_CACHE_TTL, DEFAULT_META_CACHE_TTL_SEC));
+        this.paimonOptions.set(CatalogOptions.CACHE_EXPIRE_AFTER_ACCESS, metaCacheTtl);
+        this.paimonOptions.set(CatalogOptions.CACHE_EXPIRE_AFTER_WRITE, metaCacheTtl);
         // max num of cached partitions of a Paimon catalog
-        this.paimonOptions.set("cache.partition.max-num", "1000");
+        this.paimonOptions.set(CatalogOptions.CACHE_PARTITION_MAX_NUM, CACHE_PARTITION_MAX_NUM);
         // max size of cached manifest files, 10m means cache all since files usually no more than 8m
-        this.paimonOptions.set("cache.manifest.small-file-threshold", "10m");
+        this.paimonOptions.set(CatalogOptions.CACHE_MANIFEST_SMALL_FILE_THRESHOLD, CACHE_MANIFEST_FILE_THRESHOLD);
         // max size of memory manifest cache uses
-        this.paimonOptions.set("cache.manifest.small-file-memory", "1g");
+        this.paimonOptions.set(CatalogOptions.CACHE_MANIFEST_SMALL_FILE_MEMORY, CACHE_MANIFEST_MEMORY);
 
         String keyPrefix = "paimon.option.";
         Set<String> optionKeys = properties.keySet().stream().filter(k -> k.startsWith(keyPrefix)).collect(Collectors.toSet());
@@ -149,9 +164,21 @@ public class PaimonConnector implements Connector {
         if (paimonNativeCatalog == null) {
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
-            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(), configuration));
+            CatalogContext context = CatalogContext.create(getPaimonOptions(), configuration);
+            // Build the cache layer ourselves so background refresh can track access time and
+            // snapshot/schema revisions; privilege wrapper stays outside, as in createCatalog.
+            Catalog unwrapped = CatalogFactory.createUnwrappedCatalog(context,
+                    CatalogFactory.class.getClassLoader());
+            if (!getPaimonOptions().get(CatalogOptions.CACHE_ENABLED)) {
+                // no cache layer, hence nothing for the background refresh to track
+                this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(unwrapped, getPaimonOptions());
+                return paimonNativeCatalog;
+            }
+            CachingPaimonCatalog cachingCatalog =
+                    new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions());
+            this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
             GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                    .registerPaimonCatalog(catalogName, this.paimonNativeCatalog);
+                    .registerPaimonCatalog(catalogName, cachingCatalog);
         }
         return paimonNativeCatalog;
     }

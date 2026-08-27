@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +24,6 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
-        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         String dbName = "prune_column_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
@@ -114,6 +112,45 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE complex_nested (\n" +
+                "    id int,\n" +
+                "    nested struct<n_id int,\n" +
+                "        xxx array<\n" +
+                "            struct<\n" +
+                "                sf1 varchar(100),\n" +
+                "                sf2 int,\n" +
+                "                sf3 varchar(100)\n" +
+                "            >\n" +
+                "        >\n" +
+                "    >\n" +
+                ") ENGINE=OLAP\n" +
+                "partition by id\n" +
+                "distributed by hash(id)\n" +
+                "buckets 10\n" +
+                "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        );
+        starRocksAssert.withTable("CREATE TABLE `arr2d_nested` (\n" +
+                "  `id` int NULL, \n" +
+                "  `col2d` array<array<struct<a int, b int>>> NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");"
+        );
+        starRocksAssert.withTable("CREATE TABLE `agg_state_arr` (\n" +
+                "  `k` int NULL, \n" +
+                "  `v` array_agg_distinct(varchar(100)) \n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`k`)\n" +
+                "DISTRIBUTED BY HASH(`k`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");"
+        );
         FeConstants.runningUnitTest = false;
     }
 
@@ -140,6 +177,19 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
         connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
+    }
+
+    @Test
+    public void testPredicateExprReuseKeepsAccessPathCoveringScanProjection() throws Exception {
+        // `st6.a3[1].s5` appears in both the predicate and the output list. PullUpScanPredicateRule used to
+        // project the intermediate `st6.a3` - the whole ARRAY<STRUCT<s5, s6>> - out of the scan even though
+        // nothing referenced that slot, while the access path only delivered /st6/a3/INDEX/s5. The scan then
+        // emitted an array whose `s6` field held no rows, which read out of bounds downstream.
+        String sql = "select st6.a3[1].s5 from sc0 where v1 = st6.a3[1].s5 order by v1 limit 2";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st6/a3/INDEX/s5]");
+        // no slot holds the bare `st6.a3`, which would need /st6/a3 as a whole
+        assertNotContains(plan, "].a3[true]\n");
     }
 
     @Test
@@ -336,6 +386,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         sql = "select array_length(a1), a1[1] from pc0";
         plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/a1/ALL]");
+
+        // An AGG_STATE_UNION column stores a serialized aggregate state, and the storage layer rebuilds
+        // the array by running the aggregate function over it. Asking the BE for /v/OFFSET alone leaves
+        // the merge an array that kept its offsets and lost its elements: array_length() answers 0 or 1,
+        // and a wider merge indexes past the element column and kills the BE. No path for those columns.
+        sql = "select array_length(v) from agg_state_arr";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
 
         sql = "select a1[map1[1]] from pc0";
         plan = getVerboseExplain(sql);
@@ -1297,5 +1355,71 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         assertNotContains(plan, "UNKNOWN_TYPE\n");
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+    }
+
+    @Test
+    public void testUnnestOutputMatchesInputWhenArrayAlsoAccessedDirectly() throws Exception {
+        // The UNNEST input array (ass) is a scan column that is ALSO read directly as ass[1].a.
+        // UNNEST needs the whole array, so no ColumnAccessPath survives for `ass` and the OLAP scan
+        // materializes the full element struct. FE must therefore keep the declared type full as
+        // well: narrowing it to the touched subfields {a, b} would declare a struct narrower than BE
+        // reads back from the tablet schema, which desyncs the positional chunk encoding on shuffle
+        // ("encode size does not equal when decoding", or a read_raw crash on the column after it).
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        try {
+            String sql = "select ass[1].a, outcome.b from tt, unnest(ass) as t(outcome) order by v1 limit 10";
+            String plan = getVerboseExplain(sql);
+            assertNotContains(plan, "ColumnAccessPath");
+            assertContains(plan, "returnTypes: [struct<`a` int(11), `b` int(11), `c` int(11)>]");
+            assertNotContains(plan, "returnTypes: [struct<`b` int(11)>]");
+        } finally {
+            connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
+            connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+        }
+    }
+
+    @Test
+    public void testUnnestOutputMatchesFullyMaterializedInput() throws Exception {
+        // Regression for "encode size does not equal when decoding": SELECT x.* forces the parent
+        // struct column (nested) to stay fully materialized, so the UNNEST input array (nested.xxx)
+        // keeps every subfield. The UNNEST output type must therefore stay full to match what BE
+        // materializes for that input; pruning it down to only the touched subfield made the
+        // FE-declared tuple narrower than the shuffled chunk and crashed deserialization at the
+        // exchange.
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        try {
+            String sql = "select n.sf3, x.*" +
+                    " from complex_nested x, unnest(x.`nested`.xxx) as t(n)" +
+                    " where n.sf3 is not null";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "returnTypes: [struct<`sf1` varchar(100), `sf2` int(11), `sf3` varchar(100)>]");
+            assertNotContains(plan, "returnTypes: [struct<`sf3` varchar(100)>]");
+        } finally {
+            connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
+            connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+        }
+    }
+
+    @Test
+    public void testPruneStackedUnnestOnNestedArray() throws Exception {
+        // Stacked UNNEST of a 2D array: UNNEST(col2d) -> inner_arr (array<struct>), then
+        // UNNEST(inner_arr) -> e (struct). The chain bottoms out at an OLAP scan column that UNNEST
+        // reads whole, so no ColumnAccessPath is pushed down and BE materializes the full element
+        // struct. Every type in the chain therefore has to stay full: pruning the outer output to
+        // {a} would declare a struct narrower than the elements BE actually produces.
+        connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+        connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(true);
+        try {
+            String sql = "select e.a from arr2d_nested, unnest(col2d) as t1(inner_arr), unnest(inner_arr) as t2(e)";
+            String plan = getVerboseExplain(sql);
+            assertNotContains(plan, "ColumnAccessPath");
+            assertContains(plan, "returnTypes: [struct<`a` int(11), `b` int(11)>]");
+            assertNotContains(plan, "returnTypes: [struct<`a` int(11)>]");
+        } finally {
+            connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
+            connectContext.getSessionVariable().setEnablePruneComplexTypesInUnnest(false);
+        }
     }
 }

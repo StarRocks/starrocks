@@ -23,7 +23,7 @@
 #include "column/chunk.h"
 #include "common/config_exec_flow_fwd.h"
 #include "runtime/current_thread.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks {
 
@@ -83,9 +83,9 @@ Status DictionaryCacheChunkUtil::compress_and_serialize_chunk(const Chunk* src, 
 
 Status DictionaryCacheChunkUtil::uncompress_and_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk,
                                                                   faststring* uncompressed_buffer,
-                                                                  const RowDescriptor& row_desc) {
+                                                                  const RecordDescriptor& record_desc) {
     // build chunk meta
-    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(row_desc, pchunk);
+    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(record_desc, pchunk);
     if (!res.ok()) {
         return res.status();
     }

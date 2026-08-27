@@ -21,8 +21,8 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/query_cache/pipeline_cache_context.h"
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "runtime/runtime_fwd.h"
 
 namespace starrocks::query_cache {

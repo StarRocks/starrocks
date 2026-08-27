@@ -60,30 +60,29 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "compute_env/load/http_load_params.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_context.h"
+#include "compute_env/load/stream_load_metrics.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "compute_env/load_path/base_load_path_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/batch_write/batch_write_util.h"
+#include "data_workflows/load/stream_load/stream_load_executor.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-#include "http/http_auth.h"
-#include "http/http_channel.h"
-#include "http/http_common.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
-#include "http/http_response.h"
+#include "orchestration/stream_load_orchestrator.h"
+#include "platform/http/http_auth.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_response.h"
 #include "platform/thrift_rpc_helper.h"
-#include "runtime/batch_write/batch_write_mgr.h"
-#include "runtime/batch_write/batch_write_util.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/plan_fragment_executor.h"
-#include "runtime/stream_load/load_stream_mgr.h"
-#include "runtime/stream_load/stream_load_context.h"
-#include "runtime/stream_load/stream_load_executor.h"
-#include "runtime/stream_load/stream_load_metrics.h"
-#include "runtime/stream_load/stream_load_pipe.h"
 #include "simdjson.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -106,6 +105,8 @@ static TFileFormatType::type parse_format(const std::string& format_str) {
         return TFileFormatType::FORMAT_CSV_DEFLATE;
     } else if (boost::iequals(format_str, "zstd")) {
         return TFileFormatType::FORMAT_CSV_ZSTD;
+    } else if (boost::iequals(format_str, "arrow")) {
+        return TFileFormatType::FORMAT_ARROW;
     }
     return TFileFormatType::FORMAT_UNKNOWN;
 }
@@ -119,6 +120,7 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
     case TFileFormatType::FORMAT_CSV_DEFLATE:
     case TFileFormatType::FORMAT_CSV_ZSTD:
     case TFileFormatType::FORMAT_JSON:
+    case TFileFormatType::FORMAT_ARROW:
         return true;
     default:
         return false;
@@ -128,8 +130,16 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
 static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,
                                        TStreamLoadPutResult* result);
 
-StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
-        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {}
+StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
+                                   StreamLoadExecutor* stream_load_executor, ConcurrentLimiter* limiter,
+                                   BatchWriteMgr* batch_write_mgr)
+        : _exec_env(exec_env),
+          _stream_load_orchestrator(stream_load_orchestrator),
+          _stream_load_executor(stream_load_executor),
+          _batch_write_mgr(batch_write_mgr),
+          _http_concurrent_limiter(limiter) {
+    DCHECK(_stream_load_orchestrator != nullptr);
+}
 
 StreamLoadAction::~StreamLoadAction() = default;
 
@@ -157,9 +167,9 @@ void StreamLoadAction::handle(HttpRequest* req) {
     ctx->load_cost_nanos = MonotonicNanos() - ctx->start_nanos;
 
     if (!ctx->status.ok() && !ctx->status.is_publish_timeout()) {
-        if (ctx->need_rollback) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
-            ctx->need_rollback = false;
+        if (ctx->need_rollback()) {
+            (void)_stream_load_executor->rollback_txn(ctx);
+            ctx->clear_need_rollback();
         }
         if (ctx->body_sink != nullptr) {
             ctx->body_sink->cancel(ctx->status);
@@ -187,7 +197,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
         // then execute_plan_fragment here
         // this will close file
         ctx->body_sink.reset();
-        RETURN_IF_ERROR(_exec_env->stream_load_executor()->execute_plan_fragment(ctx));
+        RETURN_IF_ERROR(_stream_load_orchestrator->execute_plan_fragment(ctx));
     } else {
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip_to_read();
@@ -202,20 +212,24 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 
     // If put file succeess we need commit this load
     int64_t commit_and_publish_start_time = MonotonicNanos();
-    RETURN_IF_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx));
+    RETURN_IF_ERROR(_stream_load_executor->commit_txn(ctx));
     ctx->commit_and_publish_txn_cost_nanos = MonotonicNanos() - commit_and_publish_start_time;
     return Status::OK();
 }
 
 Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
+    if (_batch_write_mgr == nullptr) {
+        return Status::ServiceUnavailable("Batch write manager is unavailable");
+    }
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
     ctx->buffer->flip_to_read();
-    return _exec_env->batch_write_mgr()->append_data(ctx);
+    return _batch_write_mgr->append_data(ctx);
 }
 
 int StreamLoadAction::on_header(HttpRequest* req) {
-    auto* ctx = new StreamLoadContext(_exec_env, &StreamLoadMetrics::instance()->streaming_load_current_processing);
+    auto* ctx = new StreamLoadContext(_exec_env->load_stream_mgr(),
+                                      &StreamLoadMetrics::instance()->streaming_load_current_processing);
     ctx->ref();
     req->set_handler_ctx(ctx);
 
@@ -262,9 +276,9 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;
-        if (ctx->need_rollback) {
-            (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
-            ctx->need_rollback = false;
+        if (ctx->need_rollback()) {
+            (void)_stream_load_executor->rollback_txn(ctx);
+            ctx->clear_need_rollback();
         }
         if (ctx->body_sink != nullptr) {
             ctx->body_sink->cancel(st);
@@ -368,7 +382,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
     // begin transaction
     int64_t begin_txn_start_time = MonotonicNanos();
-    RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
+    RETURN_IF_ERROR(_stream_load_executor->begin_txn(ctx));
     ctx->begin_txn_cost_nanos = MonotonicNanos() - begin_txn_start_time;
     // process put file
     return _process_put(http_req, ctx);
@@ -681,7 +695,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
-    return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
+    return _stream_load_orchestrator->execute_plan_fragment(ctx);
 }
 
 Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,

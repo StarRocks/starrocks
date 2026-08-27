@@ -17,8 +17,8 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks {
 using MapFunc = std::function<double(double)>;

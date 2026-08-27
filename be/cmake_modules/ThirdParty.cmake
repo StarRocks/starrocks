@@ -403,7 +403,7 @@ set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
 
-starrocks_resolve_thirdparty_library(HTTP_CLIENT_CURL_LIBRARY libhttp_client_curl.a)
+starrocks_resolve_thirdparty_library(HTTP_CLIENT_CURL_LIBRARY libopentelemetry_http_client_curl.a)
 add_library(http_client_curl STATIC IMPORTED GLOBAL)
 set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${HTTP_CLIENT_CURL_LIBRARY})
 
@@ -498,6 +498,25 @@ if (${WITH_TENANN} STREQUAL "ON")
     else()
         set_target_properties(tenann PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libtenann-bundle.a)
     endif()
+endif()
+
+if (${WITH_PAIMON_CPP} STREQUAL "ON")
+    set(PAIMON_CPP_DIR "${THIRDPARTY_DIR}/paimon-cpp")
+    find_library(PAIMON_SHARED_LIBRARY NAMES paimon
+                 PATHS ${PAIMON_CPP_DIR}/lib ${PAIMON_CPP_DIR}/lib64 NO_DEFAULT_PATH)
+    if (NOT PAIMON_SHARED_LIBRARY)
+        message(FATAL_ERROR "libpaimon.so not found under ${PAIMON_CPP_DIR}, "
+                            "run thirdparty/build-thirdparty.sh paimon_cpp first")
+    endif()
+    add_library(paimon SHARED IMPORTED GLOBAL)
+    # Headers install under <prefix>/include/paimon/..., so consumers write
+    # #include <paimon/predicate/literal.h>. The include path rides on the
+    # imported target (treated as SYSTEM by default) instead of the global
+    # include path, so only targets that link `paimon` can see the headers.
+    set_target_properties(paimon PROPERTIES
+        IMPORTED_LOCATION ${PAIMON_SHARED_LIBRARY}
+        INTERFACE_INCLUDE_DIRECTORIES "${PAIMON_CPP_DIR}/include")
+    message(STATUS "link paimon-cpp from ${PAIMON_SHARED_LIBRARY}")
 endif()
 
 set(BUNDLED_JAVA_HOME ${THIRDPARTY_DIR}/open_jdk)

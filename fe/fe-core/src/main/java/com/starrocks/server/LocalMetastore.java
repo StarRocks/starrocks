@@ -50,6 +50,8 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService.RangeSpec;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -1888,6 +1890,25 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      */
     public void addPhysicalPartition(String dbName, String tableName, String partitionName,
                                      int bucketNum) throws DdlException {
+        addPhysicalPartition(dbName, tableName, partitionName, bucketNum, 1);
+    }
+
+    /**
+     * Add {@code count} new physical partitions to an existing logical partition, each with the
+     * given bucket number, persisted in a single batch. Calling this with {@code count == 1} is
+     * equivalent to the 4-argument overload. Designed to be called via admin execute script for
+     * cross-cluster data replication scenarios that need to backfill many physical partitions on a
+     * random-distribution table in one call instead of one per scheduling cycle.
+     *
+     * @param dbName        the database name
+     * @param tableName     the table name
+     * @param partitionName the partition name (null for non-partitioned table)
+     * @param bucketNum     the bucket number (0 to use system default)
+     * @param count         the number of physical partitions to add (must be {@code >= 1} and
+     *                      {@code <= Config.max_partitions_in_one_batch})
+     */
+    public void addPhysicalPartition(String dbName, String tableName, String partitionName,
+                                     int bucketNum, int count) throws DdlException {
         Database db = getDb(dbName);
         if (db == null) {
             throw new DdlException("Database '" + dbName + "' does not exist");
@@ -1940,6 +1961,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Bucket number exceeds maximum allowed: " + Config.max_bucket_number_per_partition);
         }
 
+        if (count < 1) {
+            throw new DdlException("Count must be at least 1");
+        }
+
+        if (count > Config.max_partitions_in_one_batch) {
+            throw new DdlException(String.format(
+                    "Count %d exceeds the maximum number of physical partitions allowed in one batch: %d. " +
+                            "You can modify this restriction by setting max_partitions_in_one_batch larger.",
+                    count, Config.max_partitions_in_one_batch));
+        }
+
         // Get compute resource
         long warehouseId = ConnectContext.get() != null
                 ? ConnectContext.get().getCurrentWarehouseId()
@@ -1948,13 +1980,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
-        // Add one physical partition with the specified bucket number.
+        // Add `count` physical partitions with the specified bucket number, persisted in one batch.
         // The bucketNum is set on the shadow-copied table inside addSubPartitions,
         // so there is no concurrent safety issue with the original table object.
-        addSubPartitions(db, olapTable, partition, 1, bucketNum, computeResource);
+        addSubPartitions(db, olapTable, partition, count, bucketNum, computeResource);
 
-        LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
-                partition.getName(), olapTable.getName());
+        LOG.info("Successfully added {} physical partition(s) to partition '{}' in table '{}'",
+                count, partition.getName(), olapTable.getName());
     }
 
     public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
@@ -3212,6 +3244,40 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    /**
+     * The sort key column positions for the index meta, or null to let the storage sort by the key columns.
+     * An mv whose sort key IS its key columns needs no explicit one. This comparison is only safe because a
+     * range-distributed incremental mv rejects ORDER BY (see
+     * {@code MaterializedViewAnalyzer#checkIvmSortKeySupported}): its sort keys would be a prefix of its key
+     * columns, and emitting them would change how the storage derives its tablet boundaries.
+     */
+    private static List<Integer> independentSortKeyIdxes(CreateMaterializedViewStatement stmt,
+                                                         List<Column> baseSchema) {
+        if (CollectionUtils.isEmpty(stmt.getSortKeys())) {
+            return null;
+        }
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
+        for (String sortKey : stmt.getSortKeys()) {
+            int idx = -1;
+            for (int i = 0; i < baseSchema.size(); i++) {
+                if (baseSchema.get(i).getName().equalsIgnoreCase(sortKey)) {
+                    idx = i;
+                    break;
+                }
+            }
+            // The analyzer already resolved every sort key against the schema it built.
+            Preconditions.checkState(idx >= 0, "sort key column %s not found in mv schema", sortKey);
+            sortKeyIdxes.add(idx);
+        }
+        List<Integer> keyColumnIdxes = Lists.newArrayList();
+        for (int i = 0; i < baseSchema.size(); i++) {
+            if (baseSchema.get(i).isKey()) {
+                keyColumnIdxes.add(i);
+            }
+        }
+        return sortKeyIdxes.equals(keyColumnIdxes) ? null : sortKeyIdxes;
+    }
+
     // TODO(murphy) refactor it into MVManager
     @Override
     public void createMaterializedView(CreateMaterializedViewStatement stmt)
@@ -3392,10 +3458,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // set base index meta
         int schemaVersion = 0;
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
-        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null);
+        // The short-key index covers the leading sort key columns, so it must be sized from the sort key
+        // the index meta ends up with -- sizing it from the key columns would cap it at __ROW_ID__ alone.
+        List<Integer> sortKeyIdxes = independentSortKeyIdxes(stmt, baseSchema);
+        short shortKeyColumnCount = sortKeyIdxes == null
+                ? GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null)
+                : GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null, sortKeyIdxes);
         TStorageType baseIndexStorageType = TStorageType.COLUMN;
         materializedView.setIndexMeta(baseIndexMetaId, mvName, baseSchema, schemaVersion, schemaHash,
-                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
+                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType(), null, sortKeyIdxes);
 
         // Assign unique ids for columns after index meta is set up, so that getBaseSchema() returns
         // the actual columns. The initUniqueId() call in the MV constructor is a no-op because it
@@ -4399,7 +4470,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     // The caller need to hold the db write lock
     public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
-        if (colocateTableIndex.isColocateTable(table.getId())) {
+        if (table.hasColocateGroup()) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
 
@@ -4448,7 +4519,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throws DdlException {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        if (colocateTableIndex.isColocateTable(table.getId())) {
+        if (table.hasColocateGroup()) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
 
@@ -5552,6 +5623,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
         }
+    }
+
+    public String getRangeDistributionTopology(String databaseName, String tableName) throws StarRocksException {
+        return new RangeDistributionMigrationService().getTopology(databaseName, tableName);
+    }
+
+    public long submitRangeDistributionSplit(String databaseName, String tableName,
+                                             Map<Long, List<RangeSpec>> parentTabletIdToRanges)
+            throws StarRocksException {
+        return new RangeDistributionMigrationService().submitSplit(
+                databaseName, tableName, parentTabletIdToRanges);
     }
 
     public void onEraseDatabase(long dbId) {

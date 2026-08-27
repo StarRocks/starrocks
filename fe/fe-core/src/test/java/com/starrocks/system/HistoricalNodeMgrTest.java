@@ -110,7 +110,6 @@ public class HistoricalNodeMgrTest {
         };
 
         HistoricalNodeMgr historicalNodeMgr = new HistoricalNodeMgr();
-        String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         List<Long> computeNodeIds = Arrays.asList(201L, 202L, 203L);
         long updateTime = System.currentTimeMillis();
         historicalNodeMgr.updateHistoricalComputeNodeIds(defaultWarehouseId, defaultWorkerGroupId, computeNodeIds, updateTime);

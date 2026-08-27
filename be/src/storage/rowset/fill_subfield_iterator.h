@@ -17,8 +17,8 @@
 #include <memory>
 
 #include "column/column_access_path.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 // FillSubfieldIterator is a wrapper/proxy on complex type(STRUCT) column iterator that will
@@ -41,6 +41,8 @@ public:
     Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) override;
 
     Status seek_to_first() override;
 

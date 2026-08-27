@@ -16,8 +16,8 @@
 #include <string>
 #include <vector>
 
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 
 namespace starrocks::pipeline {
 // OperatorWithDependency is used to decompose multi-input ExecNode, such as HashJoinNode, CrossJoinNode and etc.

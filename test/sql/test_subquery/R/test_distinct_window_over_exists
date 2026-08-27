@@ -1,0 +1,53 @@
+-- name: test_distinct_window_over_exists
+CREATE TABLE dw_t1 (
+  a int,
+  b int
+) ENGINE=OLAP
+DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE dw_t2 (
+  c int
+) ENGINE=OLAP
+DUPLICATE KEY(c)
+DISTRIBUTED BY HASH(c) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO dw_t1 VALUES (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+INSERT INTO dw_t2 VALUES (1), (2);
+-- result:
+-- !result
+SELECT count(DISTINCT a) OVER () FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2);
+-- result:
+3
+3
+3
+-- !result
+SELECT sum(DISTINCT b) OVER (PARTITION BY a) FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2) ORDER BY 1;
+-- result:
+10
+20
+30
+-- !result
+SELECT count(DISTINCT a) OVER () FROM dw_t1 WHERE EXISTS (SELECT 1 FROM dw_t2) LIMIT 5;
+-- result:
+3
+3
+3
+-- !result
+SELECT count(DISTINCT a) OVER () FROM dw_t1 WHERE EXISTS (SELECT c FROM dw_t2 WHERE dw_t2.c = dw_t1.a);
+-- result:
+2
+2
+-- !result
+SELECT count(DISTINCT a) OVER () FROM dw_t1;
+-- result:
+3
+3
+3
+-- !result

@@ -15,9 +15,8 @@
 package com.starrocks.connector.delta;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
@@ -28,7 +27,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.memory.estimate.Estimator;
-import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.Table;
@@ -44,9 +42,7 @@ import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.NotNull;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -66,8 +62,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     protected final Configuration hdfsConfiguration;
     protected final DeltaLakeCatalogProperties properties;
 
-    private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
-    private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
+    private final Cache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
+    private final Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
     public DeltaLakeMetastore(String catalogName, IMetastore metastore, Configuration hdfsConfiguration,
                               DeltaLakeCatalogProperties properties) {
@@ -85,26 +81,13 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                 .weigher((key, value) -> weighCheckpointEntry((Pair<DeltaLakeFileStatus, StructType>) key,
                         (List<ColumnarBatch>) value))
                 .maximumWeight(checkpointCacheSize)
-                .build(new CacheLoader<>() {
-                    @NotNull
-                    @Override
-                    public List<ColumnarBatch> load(@NotNull Pair<DeltaLakeFileStatus, StructType> pair) {
-                        return DeltaLakeParquetHandler.readParquetFile(pair.first.getPath(), pair.first.getSize(),
-                                pair.first.getModificationTime(), pair.second, hdfsConfiguration);
-                    }
-                });
+                .build();
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
                 .weigher((key, value) -> weighJsonEntry((DeltaLakeFileStatus) key, (List<JsonNode>) value))
                 .maximumWeight(jsonCacheSize)
-                .build(new CacheLoader<>() {
-                    @NotNull
-                    @Override
-                    public List<JsonNode> load(@NotNull DeltaLakeFileStatus fileStatus) throws IOException {
-                        return DeltaLakeJsonHandler.readJsonFile(fileStatus.getPath(), hdfsConfiguration);
-                    }
-                });
+                .build();
     }
 
     @Override
@@ -136,25 +119,26 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         }
 
         String path = metastoreTable.getTableLocation();
+        // A vended credential only grants access to its own table, so it must not reach the catalog-wide
+        // Configuration that every cached engine references.
+        Configuration snapshotConf = new Configuration(hdfsConfiguration);
         if (metastoreTable.getCloudConfiguration() != null) {
-            metastoreTable.getCloudConfiguration().applyToConfiguration(hdfsConfiguration);
+            metastoreTable.getCloudConfiguration().applyToConfiguration(snapshotConf);
         }
-        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
+        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(snapshotConf, properties, checkpointCache, jsonCache);
         SnapshotImpl snapshot;
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
             Table deltaTable = Table.forPath(deltaLakeEngine, path);
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaLakeEngine);
         } catch (TableNotFoundException e) {
-            LOG.error("Failed to find Delta table for {}.{}.{}, {}. caused by : {}", catalogName, dbName, tableName,
-                    e.getMessage(), e.getCause());
-            throw new SemanticException("Failed to find Delta table for %s.%s.%s, %s. caused by : %s", catalogName,
-                    dbName, tableName, e.getMessage(), e.getCause());
+            LOG.error("Failed to find Delta table for {}.{}.{}", catalogName, dbName, tableName, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to find Delta table %s.%s.%s", catalogName, dbName, tableName), e);
         } catch (Exception e) {
-            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}. caused by : {}", catalogName, dbName,
-                    tableName, e.getMessage(), e.getCause());
-            throw new SemanticException("Failed to get latest snapshot for %s.%s.%s, %s. caused by : %s",
-                    catalogName, dbName, tableName, e.getMessage(), e.getCause());
+            LOG.error("Failed to get latest snapshot for {}.{}.{}", catalogName, dbName, tableName, e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to get latest snapshot for %s.%s.%s", catalogName, dbName, tableName), e);
         }
         return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, metastoreTable);
     }

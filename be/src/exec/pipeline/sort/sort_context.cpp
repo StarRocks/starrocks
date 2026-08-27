@@ -22,12 +22,12 @@
 #include "column/vectorized_fwd.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_cursor.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -180,7 +180,7 @@ SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::typ
                                        [[maybe_unused]] const std::vector<TExpr>& t_pre_agg_exprs,
                                        [[maybe_unused]] const std::vector<TSlotId>& t_pre_agg_output_slot_id,
                                        int64_t offset, int64_t limit, const std::string& sort_keys,
-                                       const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
+                                       [[maybe_unused]] bool has_outer_join_child,
                                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters)
         : _state(state),
           _topn_type(topn_type),

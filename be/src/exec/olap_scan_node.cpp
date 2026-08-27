@@ -33,7 +33,8 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/global_dict/parser.h"
-#include "exec/olap_scan_prepare.h"
+#include "compute_env/query/partition_scan_range_pruner.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -42,7 +43,7 @@
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
-#include "exec/pipeline/scan/scan_morsel.h"
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/column_access_path_resolver.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -53,16 +54,15 @@
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/primitive/storage_ids.h"
-#include "storage/primitive/storage_version.h"
 #include "storage/query/olap_fixed_morsel_queue_builder.h"
 #include "storage/query/split_morsel_queue_builder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage_primitive/storage_ids.h"
+#include "storage_primitive/storage_version.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
@@ -153,6 +153,8 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _back_pressure_throttle_time = tnode.olap_scan_node.back_pressure_throttle_time;
         _back_pressure_throttle_time_upper_bound = tnode.olap_scan_node.back_pressure_throttle_time_upper_bound;
     }
+    _topn_filter_back_pressure_disabled = tnode.olap_scan_node.__isset.topn_filter_back_pressure_disabled &&
+                                          tnode.olap_scan_node.topn_filter_back_pressure_disabled;
 
     _estimate_scan_and_output_row_bytes();
 
@@ -647,12 +649,30 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _gin_predicate_dict_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
 
-    _get_row_ranges_by_vector_index_timer = ADD_CHILD_TIMER(_scan_profile, "GetVectorRowRangesTime", "SegmentInit");
-    _vector_search_timer = ADD_CHILD_TIMER(_scan_profile, "VectorSearchTime", "SegmentInit");
+    const std::string vector_index_name = "VectorIndex";
+    const std::string vector_index_load_name = "VectorIndexLoad";
+    const std::string vector_index_cache_lookup_name = "VectorIndexCacheLookup";
+    const std::string vector_index_search_name = "VectorIndexSearch";
+    _vector_index_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_name, "SegmentInit");
+    _vector_index_load_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_load_name, vector_index_name);
+    _get_row_ranges_by_vector_index_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_search_name, vector_index_name);
+    _vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_scan_profile, vector_index_cache_lookup_name, vector_index_load_name);
+    _vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_scan_profile, "VectorIndexFileOpenAndGetSize", vector_index_load_name);
+    _vector_index_read_file_timer = ADD_CHILD_TIMER(_scan_profile, "VectorIndexFileRead", vector_index_load_name);
+    _vector_index_init_index_timer = ADD_CHILD_TIMER(_scan_profile, "VectorIndexDeserialize", vector_index_load_name);
+    _vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_scan_profile, "VectorIndexSearcherCreate", vector_index_load_name);
+    _vector_index_cache_hit_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexCacheHit", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_index_cache_miss_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexCacheMiss", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_search_timer = ADD_CHILD_TIMER(_scan_profile, "VectorANNSearch", vector_index_search_name);
     _vector_index_filtered_counter =
-            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexFilterRows", TUnit::UNIT, "SegmentInit");
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexFilterRows", TUnit::UNIT, vector_index_search_name);
     _process_vector_distance_and_id_timer =
-            ADD_CHILD_TIMER(_scan_profile, "ProcessVectorDistanceAndIdTime", "SegmentInit");
+            ADD_CHILD_TIMER(_scan_profile, "VectorResultProcess", vector_index_search_name);
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");

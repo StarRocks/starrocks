@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {

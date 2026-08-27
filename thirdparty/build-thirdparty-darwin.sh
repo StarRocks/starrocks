@@ -62,6 +62,11 @@ Usage: $0 [options...] [packages...]
     --clean                Clean extracted source before building
     --continue <package>   Continue building from specified package
     -h, --help             Show this help message
+
+  Notes:
+    When packages are given (also with --continue), only the archives those
+    packages are built from are downloaded, unpacked and patched. A full build
+    still processes every archive.
 EOF
 }
 
@@ -921,6 +926,8 @@ build_vpack() {
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_CXX_STANDARD=17 \
+        -DCMAKE_CXX_STANDARD_REQUIRED=ON \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_CXX_FLAGS="$(append_flags "${CXXFLAGS}" "-D_LIBCPP_HAS_NO_HASH_MEMORY=1")" \
@@ -2019,6 +2026,10 @@ build_arrow() {
         -DARROW_BUILD_STATIC=ON \
         -DARROW_BUILD_SHARED=OFF \
         -DARROW_BUILD_TESTS=OFF \
+        -DARROW_TESTING=ON \
+        -DGTest_SOURCE=SYSTEM \
+        -DGTest_ROOT="${TP_INSTALL_DIR}" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -fno-sized-deallocation" \
         -DARROW_BUILD_EXAMPLES=OFF \
         -DARROW_BUILD_INTEGRATION=OFF \
         -DARROW_BUILD_UTILITIES=OFF \
@@ -2082,7 +2093,8 @@ build_arrow() {
         -Dflatbuffers_ROOT="${flatbuffers_prefix}" \
         -DCMAKE_PREFIX_PATH="${arrow_prefix_path}" \
         -DThrift_ROOT="${TP_INSTALL_DIR}" \
-        -Dthrift_SOURCE=SYSTEM \
+        -DARROW_THRIFT_USE_SHARED=OFF \
+        -DThrift_SOURCE=SYSTEM \
         -Dxsimd_SOURCE=SYSTEM \
         -Dxsimd_DIR="${TP_INSTALL_DIR}/share/cmake/xsimd" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -2908,10 +2920,12 @@ build_benchgen() {
     cd "${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}"
     perl -0pi -e 's/brotlicommon snappy zstd\)/brotlicommon lz4 snappy zstd)/' \
         cmake_modules/BenchmarkArrow.cmake
+    perl -0pi -e 's/set\(CMAKE_CXX_STANDARD 17\)/set(CMAKE_CXX_STANDARD 20)/' CMakeLists.txt
     "${CMAKE_CMD}" -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -fno-sized-deallocation" \
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" \
         -S . -B build
     "${CMAKE_CMD}" --build build -j "${PARALLEL}"
@@ -2997,6 +3011,14 @@ if [[ "${CONTINUE}" -eq 1 ]] && ([[ -z "${start_package}" ]] || [[ "${#packages[
 fi
 if [[ "${CONTINUE}" -eq 1 ]]; then
     validate_requested_package "${start_package}"
+fi
+
+# A partial build only needs its own archives, so limit the download/unpack/patch
+# pass accordingly. Must happen before packages defaults to the full list below.
+if [[ "${#packages[@]}" -ne 0 ]]; then
+    starrocks_restrict_archives "${packages[@]}"
+elif [[ "${CONTINUE}" -eq 1 ]]; then
+    starrocks_restrict_archives_from "${start_package}"
 fi
 
 if [[ "${#packages[@]}" -eq 0 ]]; then

@@ -25,17 +25,19 @@
 #include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/statusor.h"
 #include "gutil/stl_util.h"
-#include "storage/base/merge_iterator.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/primary_key_encoder.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 
@@ -49,6 +51,24 @@ public:
                             const Schema& schema, const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer,
                             const MergeConfig& cfg) = 0;
 };
+
+static bool should_release_compaction_chunk_capacity(const Chunk* chunk, MemTracker* mem_tracker) {
+    const int32_t threshold_percent = config::compaction_chunk_reset_memory_tracker_threshold_percent;
+    if (chunk == nullptr || mem_tracker == nullptr || threshold_percent < 0) {
+        return false;
+    }
+
+    int64_t limit = config::compaction_memory_limit_per_worker;
+    if (limit <= 0) {
+        return false;
+    }
+
+    return static_cast<double>(mem_tracker->consumption()) > static_cast<double>(limit) * threshold_percent / 100.0;
+}
+
+static bool should_release_compaction_chunk_capacity(const Chunk* chunk) {
+    return should_release_compaction_chunk_capacity(chunk, CurrentThread::mem_tracker());
+}
 
 template <class T>
 struct MergeEntry {
@@ -111,7 +131,14 @@ struct MergeEntry {
 
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
-        chunk->reset();
+        if (should_release_compaction_chunk_capacity(chunk.get())) {
+            if (chunk_pk_column != nullptr) {
+                chunk_pk_column = chunk_pk_column->clone_empty();
+            }
+            chunk = chunk->clone_empty(0);
+        } else {
+            chunk->reset();
+        }
         rssid_rowids.clear();
         auto st = Status::OK();
         if (need_rssid_rowids) {
@@ -161,13 +188,16 @@ struct MergeEntryCmp {
     }
 };
 
-static int32_t calculate_chunk_size_for_column_group(const Schema& column_group_schema,
-                                                     const vector<RowsetSharedPtr>& rowsets) {
+static StatusOr<int32_t> calculate_chunk_size_for_column_group(const Schema& column_group_schema,
+                                                               const vector<RowsetSharedPtr>& rowsets) {
     int64_t total_num_rows = 0;
     int64_t total_mem_footprint = 0;
     // TODO: using actual merge element count after fixing merge bug for non-overlapping rowset
     int64_t total_input_segs = 0;
     for (const auto& rowset : rowsets) {
+        RowsetReleaseGuard guard(rowset);
+        RETURN_IF_ERROR(rowset->load());
+
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->num_segments();
         const auto& segments = rowset->segments();
@@ -359,7 +389,7 @@ private:
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
             sort_column = BinaryColumn::create();
         }
-        _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
+        ASSIGN_OR_RETURN(_chunk_size, calculate_chunk_size_for_column_group(schema, rowsets));
         if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
             _chunk_size = config::update_compaction_chunk_size_for_row_store;
         }
@@ -427,7 +457,11 @@ private:
         auto chunk = ChunkFactory::new_chunk(schema, _chunk_size);
         vector<uint64_t> rssid_rowids;
         while (true) {
-            chunk->reset();
+            if (should_release_compaction_chunk_capacity(chunk.get())) {
+                chunk = chunk->clone_empty(0);
+            } else {
+                chunk->reset();
+            }
             rssid_rowids.clear();
             Status status = get_next(chunk.get(), source_masks.get(), &rssid_rowids);
             if (!status.ok()) {
@@ -540,7 +574,7 @@ private:
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
             Schema schema = ChunkHelper::convert_schema(tablet_schema, column_groups[i]);
-            _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
+            ASSIGN_OR_RETURN(_chunk_size, calculate_chunk_size_for_column_group(schema, rowsets));
             if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
                 _chunk_size = config::update_compaction_chunk_size_for_row_store;
             }
@@ -585,7 +619,11 @@ private:
             auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
-                chunk->reset();
+                if (should_release_compaction_chunk_capacity(chunk.get())) {
+                    chunk = chunk->clone_empty(0);
+                } else {
+                    chunk->reset();
+                }
                 Status status = iter->get_next(chunk.get(), source_masks.get());
                 if (!status.ok()) {
                     if (status.is_end_of_file()) {

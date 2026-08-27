@@ -16,22 +16,28 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 ADD_BE_LIB(FormatCore
         column_evaluator.cpp
+        delta/deletion_vector.cpp
         deletion_bitmap.cpp
         disk_range.hpp
+        file_input_stream.cpp
         file_writer.cpp
         io/async_flush_output_stream.cpp
+        io/async_flush_stream_poller.cpp
         io/formatted_output_stream_file.cpp
+        paimon/paimon_delete_file_builder.cpp
         reserved_columns.h
+        scan_context.cpp
         scan_context.h
         utils.h
         )
 
 target_link_libraries(FormatCore PUBLIC
+        Cache
         ComputeEnv
         ExecPrimitive
-        ExprCore
-        RuntimeCore
-        FSCore
+        Expr
+        Runtime
+        FileSystem
         ChunkCore
         ColumnCore
         Types
@@ -66,6 +72,7 @@ ADD_BE_LIB(FormatCsv
 target_link_libraries(FormatCsv PUBLIC FormatCore)
 
 ADD_BE_LIB(FormatJson
+        json/json_parser.cpp
         json/json_utils.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
@@ -111,7 +118,7 @@ ADD_BE_LIB(FormatOrc
 
 target_link_libraries(FormatOrc PUBLIC FormatCore Cache)
 
-ADD_BE_LIB(Formats
+ADD_BE_LIB(FormatParquet
         parquet/arrow_memory_pool.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_materializer.cpp
@@ -147,7 +154,14 @@ ADD_BE_LIB(Formats
         parquet/parquet_pos_reader.cpp
         )
 
-target_link_libraries(Formats PUBLIC FormatOrc FormatAvro FormatJson FormatCsv FormatCore StoragePrimitive Cache)
+target_link_libraries(FormatParquet PUBLIC FormatCore StoragePrimitive Cache)
+
+ADD_BE_LIB(Formats
+        formats_aggregate.cpp
+        iceberg/iceberg_delete_builder.cpp
+        )
+
+target_link_libraries(Formats PUBLIC FormatCore FormatCsv FormatJson FormatAvro FormatOrc FormatParquet)
 
 add_subdirectory(orc/apache-orc)
 target_link_libraries(FormatOrc PUBLIC orc)

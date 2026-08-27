@@ -19,11 +19,13 @@
 
 #include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
+#include "common/storage_define.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "storage/chunk_aggregator.h"
-#include "storage/primitive/primary_key_encoding_types.h"
-#include "storage/primitive/storage_define.h"
+#include "runtime/mem_tracker_fwd.h"
+#include "storage/tablet_schema.h"
+#include "storage_primitive/chunk_aggregator.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks {
 
@@ -87,6 +89,12 @@ public:
 
     Status prepare(PrimaryKeyEncodingType pk_encoding_type);
 
+    // Column-mode partial update rewrites the schema's sort key to the primary key columns, which is
+    // what the .upt segment indexes. Rows whose key is missing are materialised into full segments
+    // after commit under the table's ORIGINAL ordering, and the encoded size is order-sensitive, so
+    // that ordering has to be bounded too. Positions are in |_vectorized_schema|.
+    void set_extra_sort_key_idxes(std::vector<ColumnId> idxes) { _extra_sort_key_idxes = std::move(idxes); }
+
     int64_t tablet_id() const { return _tablet_id; }
 
     // the total memory used (contain tmp chunk and aggregator chunk)
@@ -121,6 +129,10 @@ public:
 private:
     Status _merge();
 
+    // Bounds every admitted row's sort key, for the schema ordering and, when column-mode partial
+    // update set one, the table's original ordering as well.
+    Status _check_sort_key_sizes();
+
     Status _sort(bool is_final, bool by_sort_key = false);
     Status _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
@@ -151,6 +163,7 @@ private:
     uint64_t _merge_count = 0;
 
     bool _has_op_slot = false;
+    std::vector<ColumnId> _extra_sort_key_idxes;
     MutableColumnPtr _deletes;
 
     std::string _merge_condition;

@@ -34,11 +34,11 @@
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 #include "types/datum.h"
 
 namespace starrocks {
@@ -317,8 +317,11 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
     if (PredicateType::kGinFallback == pred->type()) {
         const auto* fallback_pred = down_cast<const InvertedIndexFallbackPredicate*>(pred);
+        // The bitmap is the set of rows for which the predicate is TRUE (negation
+        // and NULLs already folded in), so an empty bitmap means the predicate
+        // holds for no row regardless of whether it was negated.
         if (fallback_pred->get_bitmap().isEmpty()) {
-            return fallback_pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
+            return RewriteStatus::ALWAYS_FALSE;
         }
         return RewriteStatus::UNCHANGED;
     }

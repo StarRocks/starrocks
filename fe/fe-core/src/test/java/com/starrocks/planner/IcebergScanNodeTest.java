@@ -1766,6 +1766,9 @@ public class IcebergScanNodeTest {
             table.getCatalogTableName(); result = "test_tbl"; minTimes = 0;
             table.getNativeTable(); result = nativeTable; minTimes = 0;
             nativeTable.schema(); result = nativeSchema; minTimes = 0;
+            // setupScanRangeLocations filters required column names against the read schema (the
+            // targeted snapshot's schema for time travel, the current schema otherwise).
+            table.getReadSchema(); result = nativeSchema; minTimes = 0;
             globalStateMgr.getMetadataMgr(); result = metadataMgr; minTimes = 0;
             metadataMgr.getRemoteFiles((com.starrocks.catalog.Table) any, (GetRemoteFilesParams) any);
             result = new mockit.Delegate() {

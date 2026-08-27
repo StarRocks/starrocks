@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 3
+sidebar_position: 40
 description: "湖仓分析"
 toc_max_heading_level: 2
 keywords: ['iceberg']
@@ -243,4 +243,4 @@ MinIO 的用户名和密码在 docker-compose.yml 文件中。系统会提示您
 
 #### 了解更多
 
-现在您已经使用 Iceberg 和 StarRocks 运行起来了，请查看 [StarRocks-Iceberg 文档](../data_source/catalog/iceberg/iceberg_catalog.md) 以了解更多信息！
+现在您已经使用 Iceberg 和 StarRocks 运行起来了，请查看 [StarRocks-Iceberg 文档](../data_source/catalog/iceberg/iceberg.md) 以了解更多信息！

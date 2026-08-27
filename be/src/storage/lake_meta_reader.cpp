@@ -62,6 +62,12 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*base_schema);
         int field_number = read_params.next_uniq_id;
         for (auto& path : *read_params.column_access_paths) {
+            // See olap_meta_scanner: only JSONV2 extended (linear) paths become synthetic tablet
+            // columns; skip non-extended cbo_prune_subfield multi-child trees, which linear_path()
+            // cannot handle and which the reader consumes via its leaf iterator instead.
+            if (!path->is_extended()) {
+                continue;
+            }
             int root_column_index = tmp_schema->field_index(path->path());
             RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
 
@@ -143,6 +149,13 @@ Status LakeMetaReader::_init_seg_meta_collecters(const lake::VersionedTablet& ta
     RETURN_IF_ERROR(_get_segments(tablet, &segments, &options_list));
     for (int i = 0; i < segments.size(); ++i) {
         auto& segment = segments[i];
+        // A null placeholder slot means a segment was dropped (e.g. a lost segment via
+        // experimental_lake_ignore_lost_segment); skip it whatever the cause. segments and options_list
+        // are built index-aligned in _get_segments(), so skipping the pair keeps every other segment at
+        // its correct position.
+        if (segment == nullptr) {
+            continue;
+        }
         auto& options = options_list[i];
         auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
 

@@ -94,13 +94,14 @@ public:
     Int96ToDateTimeConverter() = default;
     ~Int96ToDateTimeConverter() override = default;
 
-    Status init(const std::string& timezone);
+    Status init(const std::string& timezone, bool as_timestamp_ntz);
     // convert column from int96 to timestamp
     Status convert(const Column* src, Column* dst) override;
 
 private:
     int _offset = 0;
     cctz::time_zone _ctz;
+    bool _as_timestamp_ntz = false;
 };
 
 class FixedLenByteArrayToUUIDConverter final : public ColumnConverter {
@@ -177,7 +178,11 @@ class PrimitiveToDecimalConverter final : public ColumnConverter {
 public:
     using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
     using DestColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
-    using DestPrimitiveType = typename RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
+    // Valid decimal data always fits DestDecimalType, so the scaled intermediate only needs to be as
+    // wide as DestDecimalType itself (min int64, since decimal32/64 arithmetic on a plain int64 is much
+    // cheaper than always widening to int128: multiply/divide compile to native instructions instead of
+    // calls to __multi3/__divti3, and the loop is far more friendly to the compiler/CPU pipeline).
+    using DestPrimitiveType = std::conditional_t<(sizeof(DestDecimalType) <= sizeof(int64_t)), int64_t, int128_t>;
 
     PrimitiveToDecimalConverter(int32_t src_scale, int32_t dst_scale) {
         if (src_scale < dst_scale) {
@@ -186,6 +191,29 @@ public:
         } else if (src_scale > dst_scale) {
             _scale_type = DecimalScaleType::kScaleDown;
             _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+        }
+    }
+
+    // _scale_type is loop-invariant but was previously re-checked on every element, which both adds a
+    // per-row branch and defeats vectorization/ILP. Dispatch on it once via a template parameter instead,
+    // matching the pattern already used by BinaryToDecimalConverter::t_convert below.
+    template <DecimalScaleType ST>
+    void t_convert(size_t size, DestDecimalType* dst_data, const SourceType* src_data) {
+        for (size_t i = 0; i < size; i++) {
+            DestPrimitiveType value;
+            if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
+                // Reinterpret the source through its unsigned bit pattern so a high-bit
+                // unsigned value is zero-extended instead of sign-extended.
+                value = static_cast<std::make_unsigned_t<SourceType>>(src_data[i]);
+            } else {
+                value = src_data[i];
+            }
+            if constexpr (ST == DecimalScaleType::kScaleUp) {
+                value *= _scale_factor;
+            } else if constexpr (ST == DecimalScaleType::kScaleDown) {
+                value /= _scale_factor;
+            }
+            dst_data[i] = DestDecimalType(value);
         }
     }
 
@@ -205,30 +233,25 @@ public:
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-        bool has_null = false;
         size_t size = src_column->size();
-        for (size_t i = 0; i < size; i++) {
-            dst_null_data[i] = src_null_data[i];
-            if (dst_null_data[i]) {
-                has_null = true;
-                continue;
-            }
-            DestPrimitiveType value;
-            if constexpr (kSourceUnsigned && std::is_integral_v<SourceType>) {
-                // Reinterpret the source through its unsigned bit pattern so a high-bit
-                // unsigned value is zero-extended instead of sign-extended.
-                value = static_cast<std::make_unsigned_t<SourceType>>(src_data[i]);
-            } else {
-                value = src_data[i];
-            }
-            if (_scale_type == DecimalScaleType::kScaleUp) {
-                value *= _scale_factor;
-            } else if (_scale_type == DecimalScaleType::kScaleDown) {
-                value /= _scale_factor;
-            }
-            dst_data[i] = DestDecimalType(value);
+        memcpy(dst_null_data.data(), src_null_data.data(), size);
+
+        // Computing the scaled value for null rows is harmless (the row is masked out by the null flag
+        // regardless), so we no longer branch per-row on nullness either — same tradeoff already made by
+        // NumericToNumericConverter::convert above.
+        switch (_scale_type) {
+        case DecimalScaleType::kScaleUp:
+            t_convert<DecimalScaleType::kScaleUp>(size, dst_data.data(), src_data.data());
+            break;
+        case DecimalScaleType::kScaleDown:
+            t_convert<DecimalScaleType::kScaleDown>(size, dst_data.data(), src_data.data());
+            break;
+        default:
+            t_convert<DecimalScaleType::kNoScale>(size, dst_data.data(), src_data.data());
+            break;
         }
-        dst_nullable_column->set_has_null(has_null);
+
+        dst_nullable_column->set_has_null(src_nullable_column->has_null());
         return Status::OK();
     }
 
@@ -624,7 +647,7 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         need_convert = true;
         if (col_type == LogicalType::TYPE_DATETIME) {
             auto _converter = std::make_unique<Int96ToDateTimeConverter>();
-            RETURN_IF_ERROR(_converter->init(timezone));
+            RETURN_IF_ERROR(_converter->init(timezone, typeDescriptor.datetime_is_ntz));
             *converter = std::move(_converter);
         }
         break;
@@ -779,7 +802,8 @@ Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst
     return Status::OK();
 }
 
-Status Int96ToDateTimeConverter::init(const std::string& timezone) {
+Status Int96ToDateTimeConverter::init(const std::string& timezone, bool as_timestamp_ntz) {
+    _as_timestamp_ntz = as_timestamp_ntz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
@@ -812,6 +836,12 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
             if (!src_null_data[i]) {
                 Timestamp timestamp =
                         (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                if (_as_timestamp_ntz) {
+                    // Paimon TIMESTAMP (NTZ): the INT96 stores the wall clock, so keep it as-is
+                    // instead of shifting by the session timezone the way Hive/Spark INT96 needs.
+                    dst_data[i].set_timestamp(timestamp);
+                    continue;
+                }
                 int offset = _offset;
                 if constexpr (!FAST_TZ) {
                     offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);
@@ -912,6 +942,14 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
             if (!src_null_data[i]) {
                 int64_t seconds = src_data[i] / _second_mask;
                 int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+                // Truncating division leaves a negative sub-second remainder for a pre-1970 tick;
+                // borrow a whole second so nanoseconds stays in [0, NANOSECS_PER_SEC), matching the
+                // floor split the FE boundary computation uses. Without this, of_epoch_second packs
+                // a negative microsecond into the timestamp and corrupts the value.
+                if (nanoseconds < 0) {
+                    seconds -= 1;
+                    nanoseconds += NANOSECS_PER_SEC;
+                }
 
                 if constexpr (UTC_TO_TZ) {
                     int offset = _offset;

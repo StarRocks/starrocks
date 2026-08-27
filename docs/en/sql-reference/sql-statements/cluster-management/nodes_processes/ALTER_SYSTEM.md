@@ -43,10 +43,23 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
   ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
   ```
 
+- Transfer the Leader role to another Follower FE (graceful in-place handoff).
+
+  ```SQL
+  ALTER SYSTEM TRANSFER LEADER TO "<fe_host>:<edit_log_port>" [FORCE]
+  ```
+
+  The target must be an alive Follower FE. This statement runs on the current Leader FE and hands the Leader role to the target Follower; the previous Leader then transitions to a Follower in place instead of restarting. Check the new Leader with `SHOW PROC '/frontends'\G`. With `FORCE`, the statement supersedes a Leader transfer that is already in progress at the BDBJE layer; without `FORCE`, it fails if such a transfer is in progress. Concurrent `TRANSFER LEADER` statements are serialized on the Leader: a queued statement waits for the previous one to finish, and returns an error if this FE is no longer the Leader when it gets its turn (it does not trigger a second transfer).
+
+  Failure semantics: if the transfer itself fails (for example, the target cannot catch up within the internal 30-second window, or its cluster membership is not fully acknowledged yet), the statement returns an error and the current Leader stays unchanged - a safe outcome you can simply retry. If the transfer succeeds but the old Leader cannot drain its in-flight work within `leader_demotion_drain_timeout_sec`, the old Leader process exits and restarts as a Follower; the new Leader is unaffected.
+
+  This statement is not supported in shared-data clusters and returns an error there; to transfer leadership in shared-data mode, restart the current Leader FE to trigger an election.
+
 | **Parameter**      | **Required** | **Description**                                                     |
 | ------------------ | ------------ | ------------------------------------------------------------------- |
 | fe_host            | Yes          | The host name or IP address of the FE instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses. |
 | edit_log_port      | Yes          | BDB JE communication port of the FE node. Default: `9010`.          |
+| FORCE              | No           | Supersede a Leader transfer that is already in progress at the BDBJE layer. Without it, the statement fails if such a transfer is in progress. Concurrent `TRANSFER LEADER` statements are serialized and do not need `FORCE`. |
 
 ### BE
 
@@ -108,7 +121,7 @@ ALTER SYSTEM Manages FE, BE, CN, Broker nodes, and metadata snapshots in a clust
 
 ### Broker
 
-- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Loading](../../../../loading/Loading_intro.md).
+- Add Broker nodes. You can use Broker nodes to load data from HDFS or cloud storage into StarRocks. For more information, see [Loading](../../../../loading/loading_introduction/loading_introduction.mdx).
 
   ```SQL
   ALTER SYSTEM ADD BROKER <broker_name> "<broker_host>:<broker_ipc_port>"[, ...]
@@ -206,4 +219,10 @@ Example 8: Drop all Broker nodes in `amazon_s3`.
 
 ```SQL
 ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
+
+Example 9: Transfer the Leader role to a specific Follower FE.
+
+```SQL
+ALTER SYSTEM TRANSFER LEADER TO "x.x.x.x:9010";
 ```

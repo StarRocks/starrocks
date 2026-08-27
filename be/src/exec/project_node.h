@@ -17,7 +17,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks {
@@ -31,11 +31,8 @@ public:
     Status open(RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status reset(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    void push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) override;
-    void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
     void push_down_tuple_slot_mappings(RuntimeState* state,
                                        const std::vector<TupleSlotMapping>& parent_mappings) override;
 

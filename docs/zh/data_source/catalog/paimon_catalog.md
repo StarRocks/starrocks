@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 description: "StarRocks 从 v3.1 起支持 Paimon catalog，无导入直接查询 Apache Paimon 数据及转换导入。"
 toc_max_heading_level: 5
@@ -48,6 +49,11 @@ Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` 从 v4.2 版本起支持，且仅支持由 Native Reader 读取的 split（Append-Only 表以及 Primary Key 表中已完成 Compaction 的数据）。从尚未 Compaction 的 Primary Key 数据中读取 `VARIANT` 需要使用 JNI Reader，目前尚不支持，此类查询会在 Plan 阶段报错并被拒绝执行。
+:::
 
 ## 集成准备
 
@@ -65,7 +71,7 @@ Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon
 
 在上述三种身份验证方法中，实例配置文件是最广泛使用的。
 
-有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
@@ -181,7 +187,7 @@ Paimon catalog 的描述。此参数是可选的。
 | aws.s3.access_key           | 否       | 您的 IAM 用户的访问密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 | aws.s3.secret_key           | 否       | 您的 IAM 用户的秘密密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ##### 兼容 S3 的存储系统
 

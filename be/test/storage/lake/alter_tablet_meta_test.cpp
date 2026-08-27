@@ -17,6 +17,8 @@
 #include "agent/agent_task.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -26,6 +28,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log_applier.h"
 #include "test_util.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 
@@ -74,6 +77,7 @@ TEST_F(AlterTabletMetaTest, test_missing_txn_id) {
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
+    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
     lake::SchemaChangeHandler handler(_tablet_mgr.get());
     TUpdateTabletMetaInfoReq update_tablet_meta_req;
     int64_t txn_id = next_id();
@@ -668,6 +672,260 @@ TEST_F(AlterTabletMetaTest, test_compaction_strategy) {
     auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
     ASSERT_OK(new_tablet_meta.status());
     ASSERT_EQ(CompactionStrategyPB::REAL_TIME, new_tablet_meta.value()->compaction_strategy());
+}
+
+namespace {
+
+// Builds a DUP schema PB whose first `num_sort_keys` INT columns are the contiguous sort key
+// (stable unique ids 100..) followed by a single INT value column.
+TabletSchemaPB build_range_schema_pb(int num_sort_keys, int64_t schema_id) {
+    TabletSchemaPB pb;
+    pb.set_keys_type(DUP_KEYS);
+    pb.set_id(schema_id);
+    pb.set_schema_version(schema_id);
+    pb.set_num_short_key_columns(1);
+    for (int i = 0; i < num_sort_keys; ++i) {
+        auto* c = pb.add_column();
+        c->set_unique_id(100 + i);
+        c->set_name("k" + std::to_string(i));
+        c->set_type("INT");
+        c->set_is_key(true);
+        c->set_is_nullable(i == num_sort_keys - 1);
+        c->set_aggregation("NONE");
+        pb.add_sort_key_idxes(i);
+    }
+    auto* v = pb.add_column();
+    v->set_unique_id(200);
+    v->set_name("v");
+    v->set_type("INT");
+    v->set_is_key(false);
+    v->set_is_nullable(true);
+    v->set_aggregation("NONE");
+    return pb;
+}
+
+void add_int_value(TuplePB* t, int32_t v) {
+    auto* pb = t->add_values();
+    TypeDescriptor td(TYPE_INT);
+    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->set_value(std::to_string(v));
+    pb->set_variant_type(VariantTypePB::NORMAL_VALUE);
+}
+
+void add_null_value(TuplePB* t) {
+    auto* pb = t->add_values();
+    TypeDescriptor td(TYPE_INT);
+    pb->mutable_type()->CopyFrom(td.to_protobuf());
+    pb->set_variant_type(VariantTypePB::NULL_VALUE);
+}
+
+} // namespace
+
+// apply_alter_meta_log with a range-carrying update installs the new tablet range and archives the
+// pre-alter schema via the NON-CLEARING pattern, independent of `lake_enable_alter_struct`.
+TEST_F(AlterTabletMetaTest, test_apply_range_alter_meta_non_clearing_archival) {
+    auto saved = config::lake_enable_alter_struct;
+    config::lake_enable_alter_struct = false;
+    DeferOp restore([&]() { config::lake_enable_alter_struct = saved; });
+
+    constexpr int64_t kOlderSchemaId = 400;
+    constexpr int64_t kOldSchemaId = 500;
+    constexpr int64_t kNewSchemaId = 501;
+    constexpr uint32_t kRowset0 = 10;
+    constexpr uint32_t kRowset1 = 11;
+    constexpr uint32_t kRowset2 = 12;
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->CopyFrom(build_range_schema_pb(1, kOldSchemaId));
+
+    // Old range [(1), (2)).
+    {
+        auto* r = metadata->mutable_range();
+        add_int_value(r->mutable_lower_bound(), 1);
+        add_int_value(r->mutable_upper_bound(), 2);
+        r->set_lower_bound_included(true);
+        r->set_upper_bound_included(false);
+    }
+
+    // Three rowsets; only rowset0 is pre-mapped (to an even older schema).
+    metadata->add_rowsets()->set_id(kRowset0);
+    metadata->add_rowsets()->set_id(kRowset1);
+    metadata->add_rowsets()->set_id(kRowset2);
+    (*metadata->mutable_rowset_to_schema())[kRowset0] = kOlderSchemaId;
+    (*metadata->mutable_historical_schemas())[kOlderSchemaId] = build_range_schema_pb(1, kOlderSchemaId);
+
+    // Alter log: trailing sort-key ADD -> 2 sort keys, range [(1, NULL), (2, NULL)).
+    TxnLogPB log;
+    log.set_tablet_id(metadata->id());
+    auto* upd = log.mutable_op_alter_metadata()->add_metadata_update_infos();
+    upd->mutable_tablet_schema()->CopyFrom(build_range_schema_pb(2, kNewSchemaId));
+    {
+        auto* r = upd->mutable_tablet_range();
+        add_int_value(r->mutable_lower_bound(), 1);
+        add_null_value(r->mutable_lower_bound());
+        add_int_value(r->mutable_upper_bound(), 2);
+        add_null_value(r->mutable_upper_bound());
+        r->set_lower_bound_included(true);
+        r->set_upper_bound_included(false);
+    }
+
+    auto version = metadata->version() + 1;
+    std::unique_ptr<TxnLogApplier> applier =
+            new_txn_log_applier(Tablet(_tablet_mgr.get(), metadata->id()), metadata, version, false, false);
+    ASSERT_OK(applier->apply(log));
+
+    // New range installed with the trailing NULL sentinel.
+    ASSERT_TRUE(metadata->has_range());
+    ASSERT_EQ(2, metadata->range().lower_bound().values_size());
+    ASSERT_EQ(2, metadata->range().upper_bound().values_size());
+    ASSERT_EQ(VariantTypePB::NULL_VALUE, metadata->range().lower_bound().values(1).variant_type());
+    ASSERT_EQ(VariantTypePB::NULL_VALUE, metadata->range().upper_bound().values(1).variant_type());
+
+    // New schema installed.
+    ASSERT_EQ(kNewSchemaId, metadata->schema().id());
+
+    // Non-clearing archival: preexisting mapping/history preserved; only unmapped rowsets added.
+    ASSERT_EQ(3, metadata->rowset_to_schema().size());
+    ASSERT_EQ(kOlderSchemaId, metadata->rowset_to_schema().at(kRowset0)); // preserved
+    ASSERT_EQ(kOldSchemaId, metadata->rowset_to_schema().at(kRowset1));   // newly mapped to old schema
+    ASSERT_EQ(kOldSchemaId, metadata->rowset_to_schema().at(kRowset2));
+    ASSERT_EQ(2, metadata->historical_schemas().size());
+    ASSERT_TRUE(metadata->historical_schemas().count(kOlderSchemaId) > 0); // preserved, not cleared
+    ASSERT_TRUE(metadata->historical_schemas().count(kOldSchemaId) > 0);   // pre-alter schema archived
+}
+
+// do_process_update_tablet_meta copies the thrift range into the proto update info (via structural
+// validation) without logging raw boundary values.
+TEST_F(AlterTabletMetaTest, test_do_process_update_tablet_meta_copies_range) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+
+    // A DUP range tablet with a single INT sort key.
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(1);
+    metadata->mutable_schema()->CopyFrom(build_range_schema_pb(1, 600));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto tablet_id = metadata->id();
+
+    int64_t txn_id = next_id();
+    TUpdateTabletMetaInfoReq req;
+    req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo info;
+    info.__set_tablet_id(tablet_id);
+
+    // New schema: 2 INT sort keys (trailing ADD).
+    TTabletSchema t_schema;
+    t_schema.__set_id(601);
+    t_schema.__set_schema_version(2);
+    t_schema.__set_short_key_column_count(1);
+    t_schema.__set_keys_type(TKeysType::DUP_KEYS);
+    for (int i = 0; i < 2; ++i) {
+        TColumn c;
+        c.__set_column_name("k" + std::to_string(i));
+        c.column_type.__set_type(TPrimitiveType::INT);
+        c.__set_col_unique_id(100 + i);
+        c.__set_is_key(true);
+        c.__set_is_allow_null(i == 1);
+        t_schema.columns.push_back(c);
+    }
+    {
+        TColumn v;
+        v.__set_column_name("v");
+        v.column_type.__set_type(TPrimitiveType::INT);
+        v.__set_col_unique_id(200);
+        v.__set_is_key(false);
+        v.__set_is_allow_null(true);
+        t_schema.columns.push_back(v);
+    }
+    t_schema.sort_key_idxes.push_back(0);
+    t_schema.sort_key_idxes.push_back(1);
+    t_schema.__isset.sort_key_idxes = true;
+    info.__set_tablet_schema(t_schema);
+
+    // Range [(1, NULL), (2, NULL)).
+    TTabletRange t_range;
+    TTypeDesc int_type;
+    int_type.types.resize(1);
+    int_type.__isset.types = true;
+    int_type.types[0].type = TTypeNodeType::SCALAR;
+    int_type.types[0].scalar_type.__set_type(TPrimitiveType::INT);
+    int_type.types[0].__isset.scalar_type = true;
+    auto make_variant = [&](std::optional<int32_t> v) {
+        TVariant var;
+        var.__set_type(int_type);
+        if (v.has_value()) {
+            var.__set_value(std::to_string(*v));
+            var.__set_variant_type(TVariantType::NORMAL_VALUE);
+        } else {
+            var.__set_variant_type(TVariantType::NULL_VALUE);
+        }
+        return var;
+    };
+    TTuple lower;
+    lower.values.push_back(make_variant(1));
+    lower.values.push_back(make_variant(std::nullopt));
+    TTuple upper;
+    upper.values.push_back(make_variant(2));
+    upper.values.push_back(make_variant(std::nullopt));
+    t_range.__set_lower_bound(lower);
+    t_range.__set_upper_bound(upper);
+    t_range.__set_lower_bound_included(true);
+    t_range.__set_upper_bound_included(false);
+    info.__set_tablet_range(t_range);
+
+    req.tabletMetaInfos.push_back(info);
+    ASSERT_OK(handler.process_update_tablet_meta(req));
+
+    // The generated txn log carries the range copied into the proto update info.
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->has_op_alter_metadata());
+    ASSERT_EQ(1, txn_log->op_alter_metadata().metadata_update_infos_size());
+    const auto& upd = txn_log->op_alter_metadata().metadata_update_infos(0);
+    ASSERT_TRUE(upd.has_tablet_range());
+    ASSERT_EQ(2, upd.tablet_range().lower_bound().values_size());
+    ASSERT_EQ(2, upd.tablet_range().upper_bound().values_size());
+    ASSERT_EQ("1", upd.tablet_range().lower_bound().values(0).value());
+    ASSERT_EQ(VariantTypePB::NULL_VALUE, upd.tablet_range().lower_bound().values(1).variant_type());
+    ASSERT_TRUE(upd.tablet_range().lower_bound_included());
+    ASSERT_FALSE(upd.tablet_range().upper_bound_included());
+}
+
+TEST_F(AlterTabletMetaTest, test_alter_flat_json_config) {
+    lake::SchemaChangeHandler handler(_tablet_mgr.get());
+    TUpdateTabletMetaInfoReq update_tablet_meta_req;
+    int64_t txn_id = next_id();
+    update_tablet_meta_req.__set_txn_id(txn_id);
+
+    TTabletMetaInfo tablet_meta_info;
+    auto tablet_id = _tablet_metadata->id();
+    tablet_meta_info.__set_tablet_id(tablet_id);
+    TFlatJsonConfig flat_json_config;
+    flat_json_config.__set_flat_json_enable(true);
+    flat_json_config.__set_flat_json_null_factor(0.25);
+    flat_json_config.__set_flat_json_sparsity_factor(0.75);
+    flat_json_config.__set_flat_json_column_max(12);
+    flat_json_config.__set_version(3);
+    tablet_meta_info.__set_flat_json_config(flat_json_config);
+
+    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
+    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->has_op_alter_metadata());
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
+    ASSERT_OK(new_tablet_meta.status());
+    ASSERT_TRUE(new_tablet_meta.value()->has_flat_json_config());
+    const auto& flat_json_config_pb = new_tablet_meta.value()->flat_json_config();
+    ASSERT_TRUE(flat_json_config_pb.flat_json_enable());
+    ASSERT_DOUBLE_EQ(0.25, flat_json_config_pb.flat_json_null_factor());
+    ASSERT_DOUBLE_EQ(0.75, flat_json_config_pb.flat_json_sparsity_factor());
+    ASSERT_EQ(12, flat_json_config_pb.flat_json_max_column_max());
+    ASSERT_EQ(3, flat_json_config_pb.version());
 }
 
 } // namespace starrocks::lake

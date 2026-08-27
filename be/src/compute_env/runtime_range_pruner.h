@@ -20,7 +20,7 @@
 
 #include "column/global_dict/types_fwd_decl.h"
 #include "common/status.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 class SlotDescriptor;
@@ -61,7 +61,8 @@ public:
     }
 
     // True iff this scan has any pushdownable runtime filter registered (arrived or not). Lets the
-    // vector stage keep PRE off when a runtime filter would post-filter the top-k (-> under-return).
+    // vector stage apply the configured fallback policy when a runtime filter can only be evaluated
+    // after the per-segment ANN search.
     bool has_runtime_filters() const { return !_arrived_runtime_filters_masks.empty(); }
 
 private:

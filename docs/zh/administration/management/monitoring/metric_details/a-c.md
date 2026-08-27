@@ -13,7 +13,7 @@ description: "Alphabetical a - c"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../monitoring.md)。
 
 :::
 
@@ -304,6 +304,18 @@ description: "Alphabetical a - c"
 - 单位：字节
 - 类型：计数器
 - 描述：块缓存未命中累计字节数。目前，仅计算外部表的缓存未命中字节数。
+
+## `block_cache_hit_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存命中累计次数。
+
+## `block_cache_miss_count`
+
+- 单位：个
+- 类型：计数器
+- 描述：块缓存未命中累计次数。
 
 ## `blocks_created_total (Deprecated)`
 

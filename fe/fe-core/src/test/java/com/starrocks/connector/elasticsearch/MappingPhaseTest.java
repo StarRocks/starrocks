@@ -148,7 +148,7 @@ public class MappingPhaseTest extends EsTestCase {
             props.put(EsTable.KEY_TYPE, "_doc");
             props.put(EsTable.KEY_VERSION, "6.5.3");
             Assertions.assertThrows(DdlException.class, () -> {
-                EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
+                new EsTable(new Random().nextLong(), "fake", columns, props, null);
             });
         }
         {
@@ -157,7 +157,7 @@ public class MappingPhaseTest extends EsTestCase {
             props.put(EsTable.KEY_INDEX, "test");
             props.put(EsTable.KEY_TYPE, "_doc");
             props.put(EsTable.KEY_VERSION, "6.5.3");
-            EsTable t = new EsTable(new Random().nextLong(), "fake", columns, props, null);
+            new EsTable(new Random().nextLong(), "fake", columns, props, null);
         }
     }
 

@@ -106,9 +106,6 @@ public:
     virtual Status start(RuntimeState* state);
     // Must only return one row at most each time
     virtual Status get_next(ChunkPtr* chunk, bool* eos);
-    // factory function
-    static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
-
     TAuthInfo build_auth_info();
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }

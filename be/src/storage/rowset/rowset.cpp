@@ -47,18 +47,13 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "segment_options.h"
-#include "storage/base/merge_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/index/index_descriptor.h"
-#include "storage/primitive/chunk_iterator.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/projection_iterator.h"
-#include "storage/primitive/schema_helper.h"
-#include "storage/primitive/union_iterator.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -68,6 +63,12 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 
@@ -80,7 +81,7 @@ Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetM
           _refs_by_reader(0) {
     _schema = _rowset_meta->tablet_schema() ? _rowset_meta->tablet_schema() : schema;
     _keys_type = _schema->keys_type();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
 Rowset::~Rowset() {
@@ -91,7 +92,7 @@ Rowset::~Rowset() {
         MetadataCache::instance()->evict_rowset(this);
     }
 #endif
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
 Status Rowset::load() {
@@ -367,10 +368,14 @@ Status Rowset::remove() {
         // delete index
         for (const auto& index : *(_schema->indexes())) {
             if (index.index_type() == IndexType::GIN) {
+                if (is_builtin_inverted_index(index)) {
+                    continue;
+                }
                 std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
                         _rowset_path, rowset_id().to_string(), i, index.index_id());
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
-                LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
+                LOG_IF(WARNING, !ist.ok())
+                        << "Fail to delete inverted_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
             } else if (index.index_type() == IndexType::VECTOR) {
                 std::string vector_index_path = IndexDescriptor::vector_index_file_path(
@@ -462,6 +467,9 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int
             const auto& indexes = *_schema->indexes();
             for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
@@ -591,11 +599,14 @@ StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
         if (!indexes.empty()) {
             for (const auto& index : indexes) {
                 if (index.index_type() == IndexType::GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dir, rowset_id().to_string(),
                                                                                            i, index.index_id());
                     if (fs::path_exist(dst_index_path)) {
-                        LOG(WARNING) << "Index path already exist: " << dst_path;
-                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_path));
+                        LOG(WARNING) << "Index path already exist: " << dst_index_path;
+                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_index_path));
                     }
 
                     std::string src_index_path = IndexDescriptor::inverted_index_file_path(

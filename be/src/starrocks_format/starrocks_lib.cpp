@@ -23,14 +23,14 @@
 #include "common/config_lake_fwd.h"
 #include "common/configbase.h"
 #include "common/metrics/process_metrics_registry.h"
+#include "common/storage_define.h"
 #include "common/system/mem_info.h"
+#include "exec/exec_env.h"
 #include "formats/orc/lzo_decompressor_registration.h"
 #include "fs/fs_s3.h"
 #include "platform/aws/aws_sdk_guard.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/primitive/storage_define.h"
 #include "types/time_types.h"
 
 namespace starrocks::lake {
@@ -74,8 +74,8 @@ void starrocks_format_initialize(void) {
 
         TimezoneUtils::init_time_zones();
 
-        auto ge_init_stat = GlobalEnv::GetInstance()->init(process_metrics_registry()->root_registry());
-        CHECK(ge_init_stat.ok()) << "init global env error";
+        auto ge_init_stat = RuntimeEnv::GetInstance()->init(process_metrics_registry()->root_registry());
+        CHECK(ge_init_stat.ok()) << "init runtime env error";
 
         auto lake_location_provider = std::make_shared<FixedLocationProvider>("");
         _lake_tablet_manager = new lake::TabletManager(lake_location_provider, config::lake_metadata_cache_limit);

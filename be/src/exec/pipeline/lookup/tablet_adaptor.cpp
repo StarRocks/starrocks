@@ -20,12 +20,14 @@
 #include "base/status.h"
 #include "base/status_fmt.hpp"
 #include "base/statusor.h"
+#include "common/config_lake_fwd.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "connector/lake/lake_global_late_materialization_context.h"
+#include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/column_access_path_resolver.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/extends_column_utils.h"
@@ -78,6 +80,15 @@ Status init_global_dicts_for_scan_node(RuntimeState* state, ObjectPool* pool, co
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
             dicts->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        } else if (slot->type().type == TYPE_INT && is_string_type(tablet_schema->column(index).type())) {
+            // The plan typed this slot as the dictionary code while storage holds the string, so the
+            // caller is asking to read it dictionary-encoded. Skipping quietly leaves the reader to
+            // return the raw string into an int column, which surfaces far away as a decode failure
+            // against a "key" that is really string bytes, or as an out-of-bounds access.
+            return Status::InternalError(
+                    fmt::format("no global dict for slot {} ({}), which the plan reads as a dictionary code; "
+                                "query_global_dicts carries {} entries",
+                                slot->id(), slot->col_name(), global_dict_map.size()));
         }
     }
     *global_dicts = dicts;
@@ -168,6 +179,7 @@ private:
     LakeScanLazyMaterializationContext* _glm_ctx = nullptr;
     std::vector<lake::RowsetPtr> _rowsets;
     bool _use_page_cache = false;
+    LakeIOOptions _lake_io_opts;
 };
 
 Status OlapScanTabletAdaptor::init(int64_t tablet_id) {
@@ -270,7 +282,11 @@ Status LakeScanTabletAdaptor::init(int64_t tablet_id) {
 }
 
 Status LakeScanTabletAdaptor::init_schema(RuntimeState* state) {
-    _use_page_cache = state->use_page_cache();
+    const auto cache_options = _glm_ctx->get_cache_options(_tablet_id);
+    _use_page_cache = state->use_page_cache() && cache_options.use_page_cache;
+    _lake_io_opts.fill_data_cache = cache_options.fill_data_cache;
+    _lake_io_opts.fill_metadata_cache = cache_options.fill_metadata_cache;
+    _lake_io_opts.skip_disk_cache = cache_options.skip_disk_cache;
     auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
     const auto& lake_scan_node = _glm_ctx->scan_node();
 
@@ -341,7 +357,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
         return Status::InternalError(fmt::format("not found lake rssid:{} in tablet_id:{}", rssid, _tablet_id));
     }
 
-    ASSIGN_OR_RETURN(auto segments, target->segments(true));
+    ASSIGN_OR_RETURN(auto segments, target->segments(_lake_io_opts));
     if (target_segment_idx < 0 || target_segment_idx >= segments.size()) {
         return Status::InternalError(
                 fmt::format("invalid segment index:{} for lake rssid:{}", target_segment_idx, rssid));
@@ -353,12 +369,9 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     RowsetReadOptions rs_opts;
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     rs_opts.profile = nullptr;
-    // Honor the same page-cache policy as the normal scan (RuntimeState::use_page_cache(),
-    // which already respects the disable_storage_page_cache config and the session var).
-    // Otherwise the lookup bypasses StoragePageCache and re-decompresses every fetched
-    // column page per row locator. See lake_connector.cpp. Data-cache (fill_data_cache)
-    // is left at its default so the lookup does not override the scan's per-range policy.
+    // Honor both the query-level page-cache setting and this tablet's scan-range cache policy.
     rs_opts.use_page_cache = _use_page_cache;
+    rs_opts.lake_io_opts = _lake_io_opts;
     rs_opts.stats = &_stats;
     rs_opts.global_dictmaps = _global_dicts;
     rs_opts.column_access_paths = &_column_access_paths;
@@ -369,6 +382,19 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     }
 
     const auto* segment = segments[target_segment_idx].get();
+    // A GLM point-lookup must return exactly the rows at the requested locators: the consumer accumulates
+    // the fetched rows and materializes them by a permutation built over the full locator set. Yielding no
+    // row would leave the accumulated chunk shorter than the permutation (silent wrong rows, or a
+    // null-chunk deref when every locator is lost). So a null segment -- which, unlike a scan, this path
+    // cannot tolerate -- must fail cleanly here whether or not experimental_lake_ignore_lost_segment is on.
+    if (segment == nullptr) {
+        return Status::InternalError(fmt::format(
+                "null segment (index:{}) for lake rssid:{}{}", target_segment_idx, rssid,
+                config::experimental_lake_ignore_lost_segment
+                        ? " (a segment lost + tolerated by experimental_lake_ignore_lost_segment; a point lookup "
+                          "cannot locate rows in it)"
+                        : " (unexpected: experimental_lake_ignore_lost_segment is off)"));
+    }
     rs_opts.rowid_range_option->add(target.get(), segment, rowid_range, true);
 
     ASSIGN_OR_RETURN(auto iters, target->read(_read_schema, rs_opts));

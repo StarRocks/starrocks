@@ -14,8 +14,8 @@
 
 #include "storage/rowset/rowset_meta.h"
 
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 RowsetMeta::RowsetMeta(std::string_view pb_rowset_meta, bool* parse_ok) {
@@ -25,25 +25,25 @@ RowsetMeta::RowsetMeta(std::string_view pb_rowset_meta, bool* parse_ok) {
         _init();
     }
     _mem_usage = _calc_mem_usage();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
 }
 
 RowsetMeta::RowsetMeta(std::unique_ptr<RowsetMetaPB>& rowset_meta_pb) {
     _rowset_meta_pb = std::move(rowset_meta_pb);
     _init();
     _mem_usage = _calc_mem_usage();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
 }
 
 RowsetMeta::RowsetMeta(const RowsetMetaPB& rowset_meta_pb) {
     _rowset_meta_pb = std::make_unique<RowsetMetaPB>(rowset_meta_pb);
     _init();
     _mem_usage = _calc_mem_usage();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
 }
 
 RowsetMeta::~RowsetMeta() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage);
 }
 
 static std::string empty_encryption_meta;

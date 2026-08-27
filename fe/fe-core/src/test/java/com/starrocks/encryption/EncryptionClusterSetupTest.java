@@ -26,7 +26,6 @@ public class EncryptionClusterSetupTest {
     public static void setUp() throws Exception {
         Config.default_master_key = "plain:aes_128:enwSdCUAiCLLx2Bs9E/neQ==";
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        PseudoCluster cluster = PseudoCluster.getInstance();
         Thread.sleep(1000);
     }
 

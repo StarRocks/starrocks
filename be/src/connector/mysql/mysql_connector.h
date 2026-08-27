@@ -17,8 +17,8 @@
 #include "column/column.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "connector/connector.h"
 #include "connector/mysql/mysql_scanner.h"
+#include "connector_primitive/connector.h"
 
 namespace starrocks::connector {
 class MySQLConnector final : public Connector {

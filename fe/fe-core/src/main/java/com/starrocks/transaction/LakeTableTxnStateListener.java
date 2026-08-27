@@ -75,7 +75,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+    public void prePrepared(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                             List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         txnState.clearAutomaticPartitionSnapshot();
@@ -135,16 +135,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
-        if (enableIngestSlowdown()) {
-            long currentTimeMs = System.currentTimeMillis();
-            Set<Long> partitionIds = Sets.newHashSet();
-            for (Long partitionId : dirtyPartitionSet) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                partitionIds.add(partition.getParentId());
-            }
-            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(partitionIds, currentTimeMs);
-        }
-
         List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
@@ -167,6 +157,28 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             throw new TransactionCommitFailedException(
                     "table '" + table.getName() + "\" has unfinished tablets: " + unfinishedTablets);
         }
+    }
+
+    @Override
+    public void preCommit(TransactionState txnState) throws TransactionException {
+        if (!enableIngestSlowdown()) {
+            return;
+        }
+
+        TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(table.getId());
+        if (tableCommitInfo == null || tableCommitInfo.getIdToPartitionCommitInfo() == null) {
+            return;
+        }
+
+        Set<Long> partitionIds = Sets.newHashSet();
+        for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionCommitInfo.getPhysicalPartitionId());
+            if (partition != null) {
+                partitionIds.add(partition.getId());
+            }
+        }
+        new CommitRateLimiter(compactionMgr, txnState, table.getId())
+                .check(partitionIds, System.currentTimeMillis());
     }
 
     @Override
@@ -193,6 +205,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0);
             }
+            // A shadow-rewrite txn writes a real, non-version-advancing PartitionCommitInfo so the
+            // publish daemon has a work item. The sentinel version (-1) and the txn sourceType
+            // (txnState.isShadowRewrite()) keep it out of all version allocation, adjacency checks,
+            // and visible-version advances.
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }

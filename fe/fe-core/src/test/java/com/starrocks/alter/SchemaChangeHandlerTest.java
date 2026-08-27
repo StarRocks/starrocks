@@ -1000,6 +1000,235 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
 
+    @Test
+    public void testModifyColumnCommentOnlyForDuplicateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_dup",
+                "ALTER TABLE test.cmt_dup MODIFY COLUMN v1 INT COMMENT 'dup comment';",
+                "v1", "dup comment");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyForAggregateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_agg",
+                "ALTER TABLE test.cmt_agg MODIFY COLUMN v1 INT SUM COMMENT 'agg comment';",
+                "v1", "agg comment");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyForUniqueTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_uniq (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_uniq",
+                "ALTER TABLE test.cmt_uniq MODIFY COLUMN v1 INT COMMENT 'uniq comment';",
+                "v1", "uniq comment");
+    }
+
+    // A comment-only MODIFY COLUMN takes the lightweight path even for a primary key table's key column,
+    // which the regular processModifyColumn path rejects ("Can not modify key column ... for primary key table").
+    @Test
+    public void testModifyColumnCommentOnlyForPrimaryKeyTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_pk (k1 INT, v1 INT) PRIMARY KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_pk",
+                "ALTER TABLE test.cmt_pk MODIFY COLUMN k1 INT COMMENT 'pk key comment';",
+                "k1", "pk key comment");
+        assertCommentOnlyModify("cmt_pk",
+                "ALTER TABLE test.cmt_pk MODIFY COLUMN v1 INT COMMENT 'pk value comment';",
+                "v1", "pk value comment");
+    }
+
+    // On an AGGREGATE table the aggregation method is omitted for key columns, so MODIFY COLUMN k1 INT COMMENT '...'
+    // rebuilds k1 with no aggregation type; isCommentOnlyModification must infer the key flag from "no aggregation
+    // method == key column" (the AGG_KEYS branch), otherwise the comment-only change on the key column would be
+    // misclassified and spawn a schema change job.
+    @Test
+    public void testModifyColumnCommentOnlyForKeyColumnOfAggregateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg_key (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_agg_key",
+                "ALTER TABLE test.cmt_agg_key MODIFY COLUMN k1 INT COMMENT 'agg key comment';",
+                "k1", "agg key comment");
+    }
+
+    // On a DUPLICATE table the helper only treats a MODIFY COLUMN target as a key column when the clause carries the
+    // KEY keyword (otherwise it fills in the NONE value-column aggregation). So a comment-only change on a key column
+    // must spell out KEY -- "MODIFY COLUMN k1 INT KEY COMMENT '...'" -- for the rebuilt column to match the stored key
+    // column and take the lightweight path.
+    @Test
+    public void testModifyColumnCommentOnlyForKeyColumnOfDuplicateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup_key (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_dup_key",
+                "ALTER TABLE test.cmt_dup_key MODIFY COLUMN k1 INT KEY COMMENT 'dup key comment';",
+                "k1", "dup key comment");
+    }
+
+    // Same as the DUPLICATE case: on a UNIQUE table a key column omitting KEY would be rebuilt as a REPLACE value
+    // column, so the comment-only clause has to carry the KEY keyword to stay on the lightweight path.
+    @Test
+    public void testModifyColumnCommentOnlyForKeyColumnOfUniqueTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_uniq_key (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertCommentOnlyModify("cmt_uniq_key",
+                "ALTER TABLE test.cmt_uniq_key MODIFY COLUMN k1 INT KEY COMMENT 'uniq key comment';",
+                "k1", "uniq key comment");
+    }
+
+    // Reverse of testModifyColumnCommentOnlyForKeyColumnOfDuplicateTable: omitting the KEY keyword makes the helper
+    // rebuild k1 as a NONE value column, so the modify is no longer comment-only and demoting the sole key column is
+    // rejected. The comment must stay unchanged.
+    @Test
+    public void testModifyKeyColumnCommentWithoutKeyKeywordFailsForDuplicateTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_dup_key_nokey (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertModifyColumnFails("cmt_dup_key_nokey",
+                "ALTER TABLE test.cmt_dup_key_nokey MODIFY COLUMN k1 INT COMMENT 'dup key comment';",
+                "k1");
+    }
+
+    // Reverse of testModifyColumnCommentOnlyForKeyColumnOfUniqueTable: omitting the KEY keyword makes the helper
+    // rebuild k1 as a REPLACE value column, so the modify is rejected and the comment stays unchanged.
+    @Test
+    public void testModifyKeyColumnCommentWithoutKeyKeywordFailsForUniqueTable() throws Exception {
+        createTable("CREATE TABLE test.cmt_uniq_key_nokey (k1 INT, v1 INT) UNIQUE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        assertModifyColumnFails("cmt_uniq_key_nokey",
+                "ALTER TABLE test.cmt_uniq_key_nokey MODIFY COLUMN k1 INT COMMENT 'uniq key comment';",
+                "k1");
+    }
+
+    @Test
+    public void testModifyColumnCommentOnlyCannotCombineWithOtherClause() throws Exception {
+        createTable("CREATE TABLE test.cmt_combine (k1 INT, v1 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        String alterSql = "ALTER TABLE test.cmt_combine MODIFY COLUMN v1 INT COMMENT 'x', ADD COLUMN v2 INT;";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_combine");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+        Assertions.assertTrue(exception.getMessage()
+                        .contains("MODIFY COLUMN COMMENT can not be combined with other alter operations"),
+                exception.getMessage());
+    }
+
+    @Test
+    public void testModifyColumnRepositionIsNotCommentOnly() throws Exception {
+        createTable("CREATE TABLE test.cmt_reposition (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_reposition");
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.cmt_reposition MODIFY COLUMN v2 INT AFTER k1;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
+        // absolute job-count assertions in sibling tests
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    // Omitting an explicit aggregation type on an AGGREGATE table value column (v INT SUM -> v INT) is a real
+    // schema change, not a comment-only one: the stored SUM is explicit user schema, so isCommentOnlyModification
+    // must NOT inherit it. The clause has to fall through to processModifyColumn, which treats the missing
+    // aggregation as turning the value column into a key column and rejects it on this table.
+    @Test
+    public void testModifyColumnOmittingExplicitAggregationIsNotCommentOnly() throws Exception {
+        createTable("CREATE TABLE test.cmt_agg_omit (k1 INT, v1 INT SUM) AGGREGATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("cmt_agg_omit");
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.cmt_agg_omit MODIFY COLUMN v1 INT COMMENT 'agg comment';");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+        // It must not have been silently routed to the comment-only path: the comment stays unchanged.
+        Assertions.assertEquals("", table.getColumn("v1").getComment(), exception.getMessage());
+    }
+
+    @Test
+    public void testNoOpModifyColumnCanCombineWithOtherClause() throws Exception {
+        createTable("CREATE TABLE test.noop_batch_dup (k1 INT, v1 INT, v2 INT) DUPLICATE KEY(k1) "
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("noop_batch_dup");
+        // "MODIFY COLUMN v1 INT" changes nothing (no-op); batched with a real change on v2.
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.noop_batch_dup MODIFY COLUMN v1 INT, MODIFY COLUMN v2 BIGINT;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        // Must not throw the comment-combine error; the no-op clause stays on the schema-change path.
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        // Remove the job this test created from the shared global alterJobsV2 map so it does not skew the
+        // absolute job-count assertions in sibling tests
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    @Test
+    public void testNoOpModifyColumnCanCombineWithOtherClauseOnPrimaryKeyTable() throws Exception {
+        createTable("CREATE TABLE test.noop_batch_pk (k1 INT NOT NULL, v10 VARCHAR(40) NULL, v11 INT NULL) "
+                + "PRIMARY KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("noop_batch_pk");
+        // "MODIFY COLUMN v10 VARCHAR(40)" is a no-op (v10 already is VARCHAR(40)); batched with a real change on v11.
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.noop_batch_pk MODIFY COLUMN v10 VARCHAR(40), MODIFY COLUMN v11 BIGINT;");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(jobs.isEmpty());
+        waitAlterJobDone(handler.getAlterJobsV2());
+        jobs.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+    }
+
+    private void assertCommentOnlyModify(String tableName, String alterSql, String columnName, String expectedComment)
+            throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Assertions.assertNotNull(table);
+
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(alterTableStmt.getAlterClauseList(), db, table);
+
+        // A comment-only MODIFY COLUMN must take the lightweight path: no schema change job is created and
+        // the table stays in NORMAL state, while the column comment is updated in place.
+        Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+        Assertions.assertEquals(expectedComment, table.getColumn(columnName).getComment());
+    }
+
+    private void assertModifyColumnFails(String tableName, String alterSql, String columnName) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Assertions.assertNotNull(table);
+        String originalComment = table.getColumn(columnName).getComment();
+
+        AlterTableStmt alterTableStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(alterTableStmt.getAlterClauseList(), db, table));
+
+        // The rejected modify must not have been routed to the comment-only path: the comment stays unchanged, no
+        // schema change job is created, and the table remains NORMAL.
+        Assertions.assertEquals(originalComment, table.getColumn(columnName).getComment(), exception.getMessage());
+        Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
     private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {
         List<Column> columns = tbl.getBaseSchema();
         MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());

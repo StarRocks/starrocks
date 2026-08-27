@@ -185,6 +185,10 @@ class _MVRefreshTransformer(Transformer):
     def ASYNC(self, t: Token):
         return "ASYNC"
 
+    def SCHEDULE(self, t: Token):
+        # SCHEDULE added as new keyword in 4.1+, return ASYNC for backwards compatibility
+        return "ASYNC"
+
     def MANUAL(self, t: Token):
         return "MANUAL"
 

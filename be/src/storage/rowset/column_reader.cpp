@@ -55,11 +55,11 @@
 #include "gen_cpp/segment.pb.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_file_reader.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "types/type_descriptor.h"
 #ifndef __APPLE__
 #include "storage/index/inverted/builtin/builtin_inverted_reader.h"
@@ -67,6 +67,7 @@
 #endif
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
+#include "base/compression/zstd_dict.h"
 #include "cache/mem_cache/page_handle.h"
 #include "common/bloom_filter.h"
 #include "storage/rowset/array_column_iterator.h"
@@ -97,47 +98,61 @@ StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta,
 }
 
 ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 ColumnReader::~ColumnReader() {
     if (_segment_zone_map != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                  _segment_zone_map->SpaceUsedLong());
         _segment_zone_map.reset(nullptr);
     }
     if (_ordinal_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _ordinal_index_meta.reset(nullptr);
     }
     if (_zonemap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _zonemap_index_meta.reset(nullptr);
     }
     if (_bitmap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _bitmap_index_meta.reset(nullptr);
     }
     if (_bloom_filter_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
     }
     if (_builtin_inverted_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
                                  _builtin_inverted_index_meta->SpaceUsedLong());
         _builtin_inverted_index_meta.reset(nullptr);
     }
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    if (_zstd_compression_ddict != nullptr) {
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(),
+                                 _zstd_compression_ddict->mem_usage());
+        // Free under the same tracker the allocation was charged to. Eviction runs on
+        // whatever thread happened to trigger it, so without this the process tracker
+        // would keep the charge while an unrelated query's tracker went negative.
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
+        _zstd_compression_ddict.reset();
+    }
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
     _column_type = static_cast<LogicalType>(meta->type());
     _column_length = meta->length();
     _dict_page_pointer = PagePointer(meta->dict_page());
+    // pick up the compression-dict page pointer if present (unset -> size 0 ->
+    // has_zstd_compression_dict() is false and the read path is unchanged).
+    if (meta->has_zstd_compression_dict_page()) {
+        _zstd_compression_dict_page_pointer = PagePointer(meta->zstd_compression_dict_page());
+    }
     _total_mem_footprint = meta->total_mem_footprint();
     if (column == nullptr) {
         _name = meta->has_name() ? meta->name() : "None";
@@ -173,7 +188,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
             switch (index_meta->type()) {
             case ORDINAL_INDEX:
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                          _ordinal_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
@@ -191,33 +206,33 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                     delete _segment_zone_map->release_min();
                     delete _segment_zone_map->release_max();
                 }
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                          _zonemap_index_meta->SpaceUsedLong())
                 _meta_mem_usage.fetch_add(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 // the segment zone map will release from zonemap_index_map,
                 // so we should calc mem usage after release.
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                          _segment_zone_map->SpaceUsedLong())
                 _meta_mem_usage.fetch_add(_segment_zone_map->SpaceUsedLong(), std::memory_order_relaxed);
                 _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                          _bloom_filter_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 break;
             case BUILTIN_INVERTED_INDEX:
                 _builtin_inverted_index_meta.reset(index_meta->release_builtin_inverted_index());
-                MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
                                          _builtin_inverted_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_builtin_inverted_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 break;
@@ -237,6 +252,14 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                 auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment, sub_column);
                 RETURN_IF_ERROR(res);
                 _sub_readers->emplace_back(std::move(res).value());
+            }
+            // Flat JSON segments written before the root footprint was persisted have a zero root
+            // value even though their child readers have valid footprints. Recover the aggregate
+            // at read time so compaction can size chunks correctly for existing data.
+            if (_is_flat_json && _total_mem_footprint == 0) {
+                for (const auto& sub_reader : *_sub_readers) {
+                    _total_mem_footprint += sub_reader->total_mem_footprint();
+                }
             }
             return Status::OK();
         }
@@ -429,10 +452,20 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
 
     // Build a transient BitmapIndexReader backed by the .idx file. The
     // upstream IndexReadOptions points at the original segment data; swap
-    // in the .idx stream so the underlying page reads come from the right
+    // in the .idx file so the underlying page reads come from the right
     // file. Stats / cache options are inherited.
+    //
+    // Use the RandomAccessFile WRAPPER (not idx_file->stream(), the inner
+    // SeekableInputStream): the page cache key is derived from
+    // read_file->page_cache_key(), and only the wrapper carries the unique
+    // .idx path. The inner stream (e.g. lake StarletInputStream) leaves
+    // filename() empty, which collapses every .idx page key to ("", offset)
+    // and makes the global StoragePageCache return a CRC-valid page from an
+    // unrelated .idx file/column -> "Failed to decode value at position 0"
+    // or wrong rows. The wrapper outlives the reader: idx_file is moved into
+    // the OwningBitmapIndexIterator below and its object address is stable.
     IndexReadOptions sub_opts = opts;
-    sub_opts.read_file = idx_file->stream().get();
+    sub_opts.read_file = idx_file.get();
 
     auto bitmap_reader = std::make_unique<BitmapIndexReader>();
     ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
@@ -476,7 +509,75 @@ Status ColumnReader::read_page(const ColumnIteratorOptions& iter_opts, const Pag
     opts.use_page_cache = iter_opts.use_page_cache;
     opts.encoding_type = _encoding_info->encoding();
 
+    // this is the single choke point for all column data-page reads (seek /
+    // fetch_by_rowid / scans / compaction). Ensure the shared DDict is loaded
+    // and reference it; a no-dict frame (raw page / value-dict page) decodes
+    // identically under the referenced raw-content DDict (I5), so this is safe
+    // for every page of a compression-dict column.
+    if (has_zstd_compression_dict()) {
+        RETURN_IF_ERROR(_ensure_zstd_compression_ddict(iter_opts));
+        opts.dict = _zstd_compression_ddict.get();
+    }
+
     return PageIO::read_and_decompress_page(opts, handle, page_body, footer);
+}
+
+Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions& iter_opts) {
+    return success_once(
+                   _zstd_compression_ddict_once,
+                   [&]() -> Status {
+                       // Bootstrap-read the compression-dict page directly through
+                       // PageIO (NOT read_page: that would re-enter
+                       // _ensure_zstd_compression_ddict on this same thread and deadlock
+                       // the OnceFlag). The dict page is a no-dict ZSTD frame,
+                       // so codec is set but dict stays null (self-decoding).
+                       PageReadOptions opts;
+                       opts.read_file = iter_opts.read_file;
+                       opts.page_pointer = _zstd_compression_dict_page_pointer;
+                       opts.codec = _compress_codec;
+                       opts.stats = iter_opts.stats;
+                       opts.verify_checksum = true;
+                       opts.use_page_cache = iter_opts.use_page_cache;
+                       opts.encoding_type = _encoding_info->encoding();
+                       opts.dict = nullptr;
+
+                       PageHandle handle;
+                       Slice body;
+                       PageFooterPB footer;
+                       RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &handle, &body, &footer));
+                       // ZSTD copies the dictionary bytes internally, so the
+                       // page handle may be released after create().
+                       //
+                       // That copy is a plain malloc, and malloc is hooked, so without
+                       // a scope it is charged to whatever tracker the first reader of
+                       // this segment happens to be running under -- usually a query's.
+                       // The dictionary then outlives that query, for as long as the
+                       // segment stays in the metacache, and is freed on whichever
+                       // thread evicts it. Pointing the allocation at the process
+                       // tracker moves the charge to where the memory actually lives
+                       // instead of adding a second one; the explicit consume below is
+                       // on the parentless metadata tree, which is what sizes the
+                       // metacache and does not participate in process accounting.
+                       // ~ColumnReader releases under the same scope.
+                       StatusOr<std::unique_ptr<compression::ZstdDDict>> ddict_or;
+                       {
+                           SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
+                           ddict_or = compression::ZstdDDict::create(body);
+                       }
+                       RETURN_IF_ERROR(ddict_or.status());
+                       _zstd_compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
+                       // The DDict holds its own copy of the dictionary and lives as long
+                       // as this reader does, which for a cached segment means as long as
+                       // the segment stays in the metacache. Report it the way every other
+                       // lazily loaded per-column structure here does, or the metacache
+                       // sizes itself against a number that leaves these dictionaries out.
+                       const size_t ddict_bytes = _zstd_compression_ddict->mem_usage();
+                       MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), ddict_bytes);
+                       _meta_mem_usage.fetch_add(ddict_bytes, std::memory_order_relaxed);
+                       _segment->update_cache_size();
+                       return Status::OK();
+                   })
+            .status();
 }
 
 Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_indexes, SparseRange<>* row_ranges) {
@@ -589,8 +690,16 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                 if (meta == nullptr || !meta->has_bloom_filter_index()) {
                     return Status::Corruption("IDG entry references missing bloom filter in .idx file");
                 }
+                // Use the RandomAccessFile WRAPPER, not its inner stream: the
+                // page cache key comes from read_file->page_cache_key(), and
+                // only the wrapper carries the unique .idx path. Passing the
+                // inner stream (whose filename() is empty on lake) collapses
+                // all .idx page keys to ("", offset) and returns the wrong
+                // file's cached page. idg_file_holder outlives bf_iter (both
+                // are stack locals; the holder is declared first so it is
+                // destroyed last).
                 IndexReadOptions sub_opts = opts;
-                sub_opts.read_file = idg_file_holder->stream().get();
+                sub_opts.read_file = idg_file_holder.get();
                 idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
                 ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
                 (void)bf_first_load;
@@ -622,7 +731,17 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
 
     for (const auto& pid : page_ids) {
         std::unique_ptr<BloomFilter> bf;
-        RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
+        if (Status st = bf_iter->read_bloom_filter(pid, &bf); !st.ok()) {
+            // Defensive: a bloom filter for this data page is unavailable (e.g. a
+            // build-vs-read granularity mismatch left fewer bloom filters than
+            // data pages). Degrade to NO pruning for this page instead of failing
+            // the query or reading out of bounds: keep the page's full row range
+            // so no matching row can be lost.
+            LOG_EVERY_N(WARNING, 100) << "skip bloom-filter pruning for data page " << pid << ": " << st;
+            bf_row_ranges.add(
+                    Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+            continue;
+        }
 
         const bool satisfy = std::ranges::any_of(predicates, [&](const ColumnPredicate* pred) {
             if constexpr (is_original_bf) {
@@ -658,7 +777,7 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     auto meta = _ordinal_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_ordinal_index->mem_usage(), std::memory_order_relaxed);
@@ -674,7 +793,7 @@ Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     auto meta = _zonemap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_zonemap_index->mem_usage());
@@ -690,7 +809,7 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     auto meta = _bitmap_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_bitmap_index->mem_usage(), std::memory_order_relaxed);
@@ -706,7 +825,7 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     auto meta = _bloom_filter_index_meta.get();
     ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(opts, *meta));
     if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _meta_mem_usage.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _meta_mem_usage.fetch_add(_bloom_filter_index->mem_usage(), std::memory_order_relaxed);
@@ -748,7 +867,7 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                            RETURN_IF(builtin_inverted_index == nullptr,
                                      Status::Corruption("Inverted index reader type mismatch"));
 
-                           MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
+                           MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->builtin_inverted_index_mem_tracker(),
                                                     _builtin_inverted_index_meta->SpaceUsedLong());
                            _meta_mem_usage.fetch_sub(_builtin_inverted_index_meta->SpaceUsedLong(),
                                                      std::memory_order_relaxed);

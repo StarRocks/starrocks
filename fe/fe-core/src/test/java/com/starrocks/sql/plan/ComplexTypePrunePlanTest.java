@@ -270,9 +270,10 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     @Test
     public void testProjectOnTF() throws Exception {
         FeConstants.runningUnitTest = true;
-        // no project on input, and project on tf, prune
+        // UNNEST reads the whole c2 array, so no access path is pushed down and the element type
+        // has to stay as wide as what BE materializes, even though only c2_sub1 is read
         String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         // no project on input, and project on tf all subfiled, no prune
         sql = "select c2_struct.c2_sub1, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
         assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
@@ -295,7 +296,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
     public void testNoOutputOnTF() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select c1 from array_struct_nest, unnest(c2) as t(c2_struct) where c2_struct.c2_sub1 > 0;";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         sql = "select c1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct) where c3_struct.c3_sub1_sub1 > 0;";
         assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
         FeConstants.runningUnitTest = false;
@@ -306,9 +307,35 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c2) as t(c_struct), " +
                 "unnest(c3.c3_sub1) as tt(c3_struct) where c_struct.c2_sub1 > 10";
-        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
         assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testPruneBoundaryAfterColumnRename() throws Exception {
+        // An access path is rooted at the column's storage id, and a rename does not change that id -
+        // only the name. If the prune boundary were decided by the current name, a renamed column
+        // would stop being recognised as backed by a path: FE would keep the declared type full while
+        // BE still prunes the scan schema by the path, which is the same width disagreement as an
+        // unbacked narrowing, only the other way round.
+        FeConstants.runningUnitTest = true;
+        starRocksAssert.withTable("create table array_struct_rename(c1 int, " +
+                "c2 array<struct<c2_sub1 int, c2_sub2 int>>) " +
+                "duplicate key(c1) distributed by hash(c1) buckets 1 " +
+                "properties('replication_num'='1')");
+        try {
+            starRocksAssert.ddl("alter table array_struct_rename rename column c2 to c2_new");
+            String sql = "select c2_new[1].c2_sub1 from array_struct_rename";
+            String plan = getVerboseExplain(sql);
+            // the path is still rooted at the original column id ...
+            assertContains(plan, "ColumnAccessPath: [/c2/INDEX/c2_sub1]");
+            // ... and the declared type narrows in lockstep with it
+            assertContains(plan, "[ARRAY<struct<`c2_sub1` int(11)>>]");
+        } finally {
+            starRocksAssert.dropTable("array_struct_rename");
+            FeConstants.runningUnitTest = false;
+        }
     }
 
     @Test
@@ -317,6 +344,47 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest cross join " +
                 "unnest(c3.c3_sub1) as t(c3_struct) where c1 > 0;";
         assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    // Reproduces SIGSEGV scenario where two UNNESTs share the same input array column.
+    @Test
+    public void testTwoUnnestsOnSameArrayColumn() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(c1), sum(case when t2.c2_sub2 is not null then 1 else 0 end) " +
+                "from array_struct_nest, unnest(c2) as t(t1), unnest(c2) as tt(t2) " +
+                "where t1.c2_sub1 = 5";
+        getVerboseExplain(sql);
+        // After fix: both c2_sub1 (used by t1.c2_sub1 in WHERE) and c2_sub2 (used by t2.c2_sub2) must
+        // be retained in the pruned type, otherwise BE crashes when reading the missing field.
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testUnnestResultTypeMatchesInputWidth() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // The unnest INPUT array element and the unnest OUTPUT (returnTypes) must always describe the
+        // same width, otherwise the emitted struct differs from its input element and BE hits a
+        // StructColumn::append field-count mismatch. UNNEST reads the whole c2 array, so no
+        // ColumnAccessPath survives for it and BE materializes the full element from the tablet
+        // schema - both stay full. c3 is different: only c3.c3_sub1 is read, that path IS pushed
+        // down, BE prunes the scan schema by it, and the declared types narrow in lockstep.
+        String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        // input array element stays full - UNNEST gives c2 no access path ...
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
+        // ... and the unnest result type describes exactly that same element
+        assertVerbosePlanContains(sql, "returnTypes: [struct<`c2_sub1` int(11), `c2_sub2` int(11)>]");
+
+        // Nested case: unnest over an array nested inside a struct.
+        sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
+        assertVerbosePlanContains(sql, "returnTypes: [struct<`c3_sub1_sub1` int(11)>]");
+
+        // All subfields used: nothing to prune, output keeps full width (still consistent).
+        sql = "select c2_struct.c2_sub1, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<`c2_sub1` int(11), `c2_sub2` int(11)>>]");
+        assertVerbosePlanContains(sql, "returnTypes: [struct<`c2_sub1` int(11), `c2_sub2` int(11)>]");
         FeConstants.runningUnitTest = false;
     }
 
@@ -356,5 +424,23 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         sql = "select count(distinct map{'a': 1})";
         plan = getFragmentPlan(sql);
         assertContains(plan, "output: any_value(CAST(map{'a':1} IS NOT NULL AS BIGINT))");
+    }
+    @Test
+    public void testUnnestDerivedInputOutputWidthRegression() throws Exception {
+        // Regression guard: for a derived UNNEST input c3.c3_sub1 (a synthesized ColumnRef, not a
+        // scan ref) only c3_sub1_sub1 is used, so the scan is pruned to struct<c3_sub1_sub1>. The
+        // UNNEST output type must EQUAL that pruned input element, not stay full struct<c3_sub1_sub1,
+        // c3_sub1_sub2>. Before this fix canSafelyPruneUnnestOutput() treated every non-scan input as
+        // unsafe and left the output wider than its input element, mismatching shuffle decode /
+        // StructColumn::append on non-OLAP scans.
+        FeConstants.runningUnitTest = true;
+        String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        String plan = getVerboseExplain(sql);
+        // scan side is pruned to a single-field element:
+        assertContains(plan, "[struct<`c3_sub1` array<struct<`c3_sub1_sub1` int(11)>>>]");
+        // therefore the UNNEST output MUST also be the single-field element - not the full 2-field struct:
+        assertContains(plan, "returnTypes: [struct<`c3_sub1_sub1` int(11)>]");
+        assertNotContains(plan, "returnTypes: [struct<`c3_sub1_sub1` int(11), `c3_sub1_sub2` int(11)>]");
+        FeConstants.runningUnitTest = false;
     }
 }

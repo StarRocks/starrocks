@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
@@ -154,7 +155,7 @@ public class PaimonScanNodeTest {
         DeletionFile deletionFile = new DeletionFile("dummy", 1, 22, 0L);
         scanNode.splitRawFileScanRangeLocations(rawFile, deletionFile);
         scanNode.splitScanRangeLocations(rawFile, 0, 256 * 1024 * 1024, 64 * 1024 * 1024, null);
-        scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
+        scanNode.addJNISplitScanRangeLocations(split, null, 256 * 1024 * 1024);
         Assertions.assertEquals(6, scanNode.getScanRangeLocations(10).size());
     }
 
@@ -181,7 +182,7 @@ public class PaimonScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
-        scanNode.addSplitScanRangeLocations(split, null, 256 * 1024 * 1024);
+        scanNode.addJNISplitScanRangeLocations(split, null, 256 * 1024 * 1024);
         Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
         TScanRangeLocations tScanRangeLocations = scanNode.getScanRangeLocations(10).get(0);
         Assertions.assertEquals(THdfsFileFormat.UNKNOWN, tScanRangeLocations.getScan_range().getHdfs_scan_range().getFile_format());
@@ -210,5 +211,27 @@ public class PaimonScanNodeTest {
         PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
         scanNode.splitRawFileScanRangeLocations(rawFile, null);
         Assertions.assertEquals(2, scanNode.getScanRangeLocations(10).size());
+    }
+
+    @Test
+    public void testJniReaderRejectsVariantSlot() {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
+        SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
+        slot.setType(com.starrocks.type.VariantType.VARIANT);
+        slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
+        tuple.addSlot(slot);
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple));
+        Assertions.assertTrue(e.getMessage().contains("VARIANT"));
+    }
+
+    @Test
+    public void testJniReaderAllowsNonVariantSlots() {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
+        SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
+        slot.setType(IntegerType.INT); // same constant PaimonColumnConverterTest asserts against
+        slot.setColumn(new Column("i", IntegerType.INT));
+        tuple.addSlot(slot);
+        Assertions.assertDoesNotThrow(() -> PaimonScanNode.checkJniReaderVariantSupport(tuple));
     }
 }

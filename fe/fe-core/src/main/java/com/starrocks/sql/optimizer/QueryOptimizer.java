@@ -94,6 +94,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitWindowSkewToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
+import com.starrocks.sql.optimizer.rule.transformation.WindowSkewToMergeSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -125,6 +126,7 @@ import com.starrocks.sql.optimizer.rule.tree.PruneShuffleDistributionNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
+import com.starrocks.sql.optimizer.rule.tree.PushDownNonGroupedAggregateBelowUnion;
 import com.starrocks.sql.optimizer.rule.tree.RemoveUselessScanOutputPropertyRule;
 import com.starrocks.sql.optimizer.rule.tree.SemiJoinDeduplicateRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
@@ -339,6 +341,16 @@ public class QueryOptimizer extends Optimizer {
         // MV Rewrite will be used when cbo is enabled.
         if (context.getOptimizerOptions().isRuleBased() || sessionVariable.isDisableMaterializedViewRewrite() ||
                 !sessionVariable.isEnableMaterializedViewRewrite()) {
+            return;
+        }
+        // A materialized view holds the base table's state as of its last refresh, so it cannot answer a read
+        // pinned to an explicit snapshot, tag or branch: the targeted snapshot is not the one materialized, and
+        // for a non-main branch the MV is not even considered stale because the table's current snapshot never
+        // moved. Mirror the definition side, which rejects time-travel clauses outright
+        // (see AnalyzerUtils#prohibitTimeTravelQuery), and skip the rewrite until snapshot-aware MVs exist.
+        if (MvUtils.containsTimeTravelScan(logicOperatorTree)) {
+            OptimizerTraceUtil.logMVPrepare(connectContext,
+                    "Skip mv rewrite because the query reads a table at an explicit time-travel version");
             return;
         }
         // prepare related mvs if needed and initialize mv rewrite strategy
@@ -625,6 +637,13 @@ public class QueryOptimizer extends Optimizer {
 
         // No heavy metadata operation before external table partition prune
         prepareMetaOnlyOnce(tree, rootTaskContext);
+
+        // Apply merge-sort execution to window operators with skewed composite partition keys.
+        // This rule only annotates windows, so it can run after predicate pushdown.
+        if (sessionVariable.isEnableWindowSkewMergeSort()) {
+            Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+            scheduler.rewriteOnce(tree, rootTaskContext, WindowSkewToMergeSortRule.getInstance());
+        }
 
         // apply skew join optimize after push down join on expression to child project,
         // we need to compute the stats of child project(like subfield).
@@ -1037,6 +1056,8 @@ public class QueryOptimizer extends Optimizer {
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
+
+        result = new PushDownNonGroupedAggregateBelowUnion().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.

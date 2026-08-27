@@ -1,0 +1,60 @@
+-- name: test_cte_consume_decoded_column
+set cbo_enable_low_cardinality_optimize = true;
+-- result:
+-- !result
+set low_cardinality_optimize_v2 = true;
+-- result:
+-- !result
+CREATE TABLE `cte_decoded_t` (
+  `id` bigint NOT NULL,
+  `c_user` varchar(128) NULL,
+  `c_dept` varchar(128) NULL,
+  `c_par` varchar(128) NULL,
+  `ts` datetime NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into cte_decoded_t
+select
+    generate_series,
+    concat('U', generate_series % 2),
+    concat('D', generate_series % 2),
+    concat('P', generate_series % 2),
+    seconds_add('2026-01-01 00:00:00', generate_series)
+from TABLE(generate_series(0, 299));
+-- result:
+-- !result
+[UC] analyze full table cte_decoded_t;
+function: wait_global_dict_ready('c_user', 'cte_decoded_t')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('c_dept', 'cte_decoded_t')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('c_par', 'cte_decoded_t')
+-- result:
+
+-- !result
+[ORDER]
+WITH CTE AS (
+  SELECT c_par, c_user, c_dept,
+         lead(c_user, 1, 'NONE') over (partition by c_dept order by c_user) nx
+  FROM cte_decoded_t
+) [materialized]
+SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+  c_par, c_user, count(*) cnt
+FROM CTE
+WHERE nx != 'ZZZ'
+GROUP BY c_par, c_user
+ORDER BY c_par, c_user;
+-- result:
+P0	U0	150
+P1	U1	150
+-- !result

@@ -186,15 +186,16 @@ public class FunctionSet {
     public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
+    public static final String BLAKE3 = "blake3";
     public static final String FROM_BINARY = "from_binary";
     public static final String TO_BINARY = "to_binary";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
-    public static final String ENCODE_ROW_ID = "encode_row_id";
     public static final String ENCODE_FINGERPRINT_SHA256 = "encode_fingerprint_sha256";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_INNER_PRODUCT = "approx_inner_product";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Geo functions:
@@ -590,6 +591,11 @@ public class FunctionSet {
     public static final String NGRAM_SEARCH = "ngram_search";
     public static final String NGRAM_SEARCH_CASE_INSENSITIVE = "ngram_search_case_insensitive";
 
+    public static final String TOKENIZE = "tokenize";
+    // Tokenizers GinFunctions::tokenize() implements on the BE. Matching is case-sensitive there.
+    public static final Set<String> SUPPORTED_TOKENIZERS =
+            ImmutableSet.of("english", "standard", "chinese");
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {JsonType.JSON, VarcharType.VARCHAR}, JsonType.JSON, false);
@@ -806,6 +812,7 @@ public class FunctionSet {
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_INNER_PRODUCT)
                     .add(APPROX_L2_DISTANCE)
                     .build();
 

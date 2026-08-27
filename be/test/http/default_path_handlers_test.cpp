@@ -19,7 +19,7 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 namespace starrocks {
 
@@ -27,18 +27,18 @@ class DefaultPathHandlersTest : public testing::Test {};
 
 TEST_F(DefaultPathHandlersTest, mem_tracker) {
     WebPageHandler::ArgumentMap args;
-    const auto& global_env = *GlobalEnv::GetInstance();
-    auto* mem_tracker = global_env.process_mem_tracker();
+    const auto& runtime_env = *RuntimeEnv::GetInstance();
+    auto* mem_tracker = runtime_env.process_mem_tracker();
 
     std::stringstream output1;
-    MemTrackerWebPageHandler::handle(global_env, mem_tracker, args, &output1);
+    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output1);
     ASSERT_TRUE(output1.str().find("<tr><td>1</td><td>process</td><td>") != std::string::npos);
     ASSERT_TRUE(output1.str().find("<tr><td>2</td><td>update</td>") != std::string::npos);
 
     std::stringstream output2;
     args["type"] = "metadata";
     args["upper_level"] = "4";
-    MemTrackerWebPageHandler::handle(global_env, mem_tracker, args, &output2);
+    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output2);
     ASSERT_TRUE(output2.str().find("<tr><td>1</td><td>process</td><td>") == std::string::npos);
     ASSERT_TRUE(output2.str().find("<tr><td>3</td><td>tablet_metadata</td><td>metadata</td>") != std::string::npos);
 }

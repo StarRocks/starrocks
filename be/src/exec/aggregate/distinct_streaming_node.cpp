@@ -19,9 +19,9 @@
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
 #include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_builder_operators.h"
+#include "exec_primitive/pipeline/operator.h"
 
 namespace starrocks {
 
@@ -73,10 +73,6 @@ StatusOr<pipeline::OpFactories> DistinctStreamingNode::decompose_to_pipeline(
                 context, id(), ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
-    if (limit() != -1) {
-        ops_with_source.emplace_back(
-                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
-    }
     ops_with_source =
             ::starrocks::pipeline::builder::maybe_interpolate_debug_ops(context, runtime_state(), _id, ops_with_source);
     return ops_with_source;

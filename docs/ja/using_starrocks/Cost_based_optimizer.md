@@ -250,7 +250,7 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name
 - 統計情報を収集するカラムの型：
   - `col_name`： 統計情報を収集する列。複数の列はカンマ (`,`) で区切る。このパラメータが指定されない場合は、テーブル全体が収集される。
   - `ALL COLUMNS`： すべての列から統計情報を収集する。v3.5.0 からサポートされている。
-  - `PREDICATE COLUMNS`：Predicate Column のみから統計情報を収集する。v3.5.0 からサポート。
+  - `PREDICATE COLUMNS`：Predicate Column のみから統計情報を収集する。ネイティブテーブルでは v3.5.0 から、Hive、Iceberg、Hudi、ODPS、Delta Lake、Paimon を含む分析可能な外部テーブルでは v4.1.4 からサポートされている。
   - `MULTIPLE COLUMNS`：指定した複数の列から共同の統計情報を収集する。現在のところ、複数列の手動同期収集のみがサポートされている。手動で統計情報を収集する列の数は `statistics_max_multi_column_combined_num` を超えることはできず、デフォルト値は `10` である。v3.5.0 からサポートされている。
 
 - `WITH SYNC | ASYNC MODE`: 手動収集タスクを同期モードまたは非同期モードで実行するかどうか。指定しない場合、デフォルトで同期収集が使用されます。
@@ -685,7 +685,7 @@ partition_name:
   - 現在、Leader FE ノードのみが ANALYZE タスクをトリガーできます。
   - システムは Hive および Iceberg テーブルのパーティション変更のみをチェックし、データが変更されたパーティションの統計情報のみを収集します。Delta Lake/Hudi テーブルの場合、システムはテーブル全体の統計情報を収集します。
   - Iceberg テーブルに Partition Transforms が適用されている場合、`identity`、`year`、`month`、`day`、`hour` タイプの Transforms のみ統計情報の収集がサポートされています。
-  - Iceberg テーブルの Partition Evolution の統計情報の収集はサポートされていません。
+  - Iceberg テーブルの Partition Evolution に関する統計情報の収集は、バージョン 4.0 以降でサポートされています。
 
 以下の例は、Hive 外部カタログのデータベースで発生します。`default_catalog` から Hive テーブルの統計情報を収集したい場合は、テーブルを `[catalog_name.][database_name.]<table_name>` 形式で参照してください。
 

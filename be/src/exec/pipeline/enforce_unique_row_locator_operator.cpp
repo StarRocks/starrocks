@@ -127,6 +127,8 @@ Status EnforceUniqueRowLocatorOperator::push_chunk(RuntimeState* state, const Ch
     const auto* file_path_data = down_cast<const BinaryColumn*>(file_path_inner);
     const auto* row_pos_data = row_pos_typed->get_data().data();
 
+    _seen.reserve(_seen.size() + num_rows);
+
     for (size_t i = 0; i < num_rows; ++i) {
         // Skip rows where any key column is null
         if (file_path_nullable != nullptr && file_path_nullable->is_null(i)) {

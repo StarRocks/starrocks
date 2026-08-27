@@ -20,8 +20,8 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 Status SpillableNLJoinBuildOperator::prepare(RuntimeState* state) {
@@ -56,6 +56,18 @@ bool SpillableNLJoinBuildOperator::is_finished() const {
 
 Status SpillableNLJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto spiller = _spill_channel->spiller();
+
+    // On cancellation, do not run spiller->flush() during teardown. The not-spilled branch below
+    // already delegates to NLJoinBuildOperator::set_finishing, which early-returns when cancelled;
+    // guard the spilled branch the same way to avoid touching spill state while the query is being
+    // torn down.
+    if (state->is_cancelled()) {
+        if (spiller != nullptr) {
+            spiller->cancel();
+        }
+        _spill_channel->set_finishing();
+        return NLJoinBuildOperator::set_finishing(state);
+    }
 
     if (!spiller->spilled()) {
         _spill_channel->set_finishing();

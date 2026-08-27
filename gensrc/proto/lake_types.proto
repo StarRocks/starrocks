@@ -63,10 +63,20 @@ message PersistentIndexSstablePB {
     optional PUniqueId fileset_id = 12;
     // Offset applied to rssid when reusing sstables across tablets (e.g., tablet merge).
     optional int32 rssid_offset = 13 [default = 0];
+    // The tablet metadata version at which this physical sstable file first
+    // became visible -- i.e. the new version of the publish (or reshard) that
+    // produced it. Stamped once when the file is first persisted and never
+    // changed afterward; CopyFrom inherits it across tablet split/merge so a
+    // shared file keeps its original value. A non-zero value is never
+    // overwritten. 0/unset means unknown -- e.g. a file created before this
+    // field existed stays 0, so consumers such as lake vacuum retention must
+    // treat 0 conservatively.
+    optional int64 generation_version = 14;
 }
 
 message PersistentIndexSstableMetaPB {
-    // sstables are ordered with the smaller version on the left.
+    // sstables are ordered by max_rss_rowid ascending (see
+    // LakePersistentIndex::commit and apply_opcompaction), not by any version.
     repeated PersistentIndexSstablePB sstables = 1;
 }
 
@@ -81,6 +91,18 @@ message FileMetaPB {
     // Whether this file shared by multiple tablets
     optional bool shared = 3 [default=false];
     optional bytes encryption_meta = 4;
+    // The tablet metadata version at which the file was created. Stamped when the file is moved into
+    // orphan_files so lake vacuum can tell whether the file was live at a snapshot-retained version
+    // without reading that version's tablet metadata. Unset (0) means "creation version unknown" and
+    // is treated conservatively (retained under any covering retain version).
+    optional int64 version = 5;
+    // Masked CRC32C (crc32c::Mask) of the file's LOGICAL content -- the bytes a reader gets back,
+    // i.e. before encryption on write / after decryption on read. Computed once at write time; the
+    // file is immutable afterwards, so a recorded checksum always describes the current content and
+    // a mismatch is genuine corruption. Currently only del files (.del) populate it. Absent means
+    // "not recorded" (file written before this field existed, or a producer that cannot compute it
+    // such as the replication transcode path) and readers then skip verification.
+    optional uint32 crc32c = 6;
 }
 
 message DelvecMetadataPB {
@@ -174,6 +196,21 @@ message DelfileWithRowsetId {
     optional bytes encryption_meta = 4;
     // Whether this file shared by multiple tablets
     optional bool shared = 5 [default=false];
+    // The tablet metadata version at which this del file was created. Stamped once at creation and
+    // carried verbatim by CopyFrom when the del file is transferred to a compaction output rowset or
+    // inherited across tablet split/merge, so it reflects the ORIGINAL creation version even after
+    // the containing rowset is re-versioned. Lake vacuum uses it to tell whether the del file was
+    // live at a snapshot-retained version. Unset (0) means "creation version unknown" and is treated
+    // conservatively (retained under any covering retain version).
+    optional int64 version = 6;
+    // Number of delete rows (tombstones) in this del file, recorded at write time. Used by the
+    // cloud-native PK index to account tombstone volume toward the rebuild-rows threshold. Absent
+    // on del files written before this field existed (treated as 0).
+    optional int64 num_rows = 7;
+    // Masked CRC32C of the del file's logical content, carried over verbatim from
+    // FileMetaPB.crc32c at apply/persist time (see FileMetaPB.crc32c for the exact definition).
+    // Absent means "not recorded" -> readers skip verification.
+    optional uint32 crc32c = 8;
 }
 
 message SegmentMetadataPB {
@@ -188,22 +225,26 @@ message SegmentMetadataPB {
     // IDs of vector indexes that need .vi files for this segment.
     // Only populated when the segment meets the build threshold.
     repeated int64 vector_index_ids = 5;
+    // Deprecated: superseded by the full sort key index. Still written for
+    // legacy/config-off segments; removal deferred to a later version.
     // Equal-row-interval samples of the sort key, NON-DECREASING.
-    // sort_key_samples[i] is the sort key at 0-indexed row (i+1) * interval,
-    // where interval == sort_key_sample_row_interval. Always paired with
-    // a positive sort_key_sample_row_interval. May be empty when num_rows
+    // deprecated_sort_key_samples[i] is the sort key at 0-indexed row (i+1) * interval,
+    // where interval == deprecated_sort_key_sample_row_interval. Always paired with
+    // a positive deprecated_sort_key_sample_row_interval. May be empty when num_rows
     // is not greater than interval (small segments produce no samples
     // because the first sample row is at index `interval`, which only
     // exists for num_rows > interval). Consumed by tablet split and
     // range-split parallel compaction to accurately estimate row
     // distribution for overlapping segments.
-    repeated TuplePB sort_key_samples = 6;
-    // Row interval used to produce sort_key_samples. Set if and only if
-    // sort_key_samples_size() > 0; in that case the value is > 0 and
-    // sort_key_samples.size() * sort_key_sample_row_interval < num_rows.
+    repeated TuplePB deprecated_sort_key_samples = 6 [json_name = "sort_key_samples"];
+    // Deprecated: superseded by the full sort key index. Still written for
+    // legacy/config-off segments; removal deferred to a later version.
+    // Row interval used to produce deprecated_sort_key_samples. Set if and only if
+    // deprecated_sort_key_samples_size() > 0; in that case the value is > 0 and
+    // deprecated_sort_key_samples.size() * deprecated_sort_key_sample_row_interval < num_rows.
     // Persisted per-segment so a future change to the producer's interval
     // constant cannot break cross-version readers.
-    optional int64 sort_key_sample_row_interval = 7;
+    optional int64 deprecated_sort_key_sample_row_interval = 7 [json_name = "sort_key_sample_row_interval"];
     // File attributes of the segment. These are the canonical home for the
     // per-segment file info that historically lived in the parallel arrays on
     // RowsetMetadataPB (deprecated_segments / deprecated_segment_size /
@@ -218,6 +259,17 @@ message SegmentMetadataPB {
     // Offset of this segment inside a bundle file. Use has_bundle_file_offset()
     // to test presence: 0 is a legitimate value (first segment in a bundle).
     optional int64 bundle_file_offset = 12;
+    // Per-segment unique id embedded in this segment's vector index (.vi) filenames
+    // ("<segment_base>_<segment_vector_index_uid>_<index_id>.vi") so that bundle-file segments
+    // sharing one physical file across tablets still get distinct .vi files. Its VALUE is the id of
+    // the tablet that WROTE the segment, used purely as a unique key (do not treat it as a live
+    // tablet reference): it is RECORDED here, instead of using the reading tablet's id, so the name
+    // is stable and reader-agnostic -- carried verbatim by CopyFrom across tablet SPLIT so every
+    // child sharing this segment resolves the same .vi. Always stamped by the writer in the same
+    // step that records vector_index_ids, so a segment carrying vector_index_ids always carries this
+    // uid too. Consumers (read / GC / async build) only read it for vector-indexed segments and
+    // DCHECK its presence -- there is no fall back to the reading tablet's id.
+    optional int64 segment_vector_index_uid = 13;
 }
 
 message RowsetMetadataPB {
@@ -273,6 +325,14 @@ enum CompactionStrategyPB {
     REAL_TIME = 1;
 }
 
+// Extension point for TabletMetadataPB. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TabletMetadataPB
+// fields belong on TabletMetadataPB itself, whose remaining numbers are free.
+message TabletMetadataExtPB {
+}
+
 message TabletMetadataPB {
     optional int64 id = 1;
     optional int64 version = 2;
@@ -321,6 +381,22 @@ message TabletMetadataPB {
     // Per-segment index delta groups produced by ADD INDEX schema change
     // (lake-only). Allows adding indexes without rewriting segment data.
     optional IndexDeltaGroupMetadataPB idg_meta = 24;
+
+    // Tags 50, 51 are occupied by downstream distributions and already persisted
+    // in downstream tablet metadata. Placeholders are declared here (unused by
+    // upstream) so that no upstream field is ever allocated on these tags.
+    repeated int64 placeholder_50 = 50;
+    optional bytes placeholder_51 = 51;
+    optional TabletMetadataExtPB ext = 25;
+}
+
+// Extension point for MetadataUpdateInfoPB. DO NOT MODIFY: do not add fields
+// here, and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New
+// MetadataUpdateInfoPB fields belong on MetadataUpdateInfoPB itself, whose
+// remaining numbers are free.
+message MetadataUpdateInfoExtPB {
 }
 
 message MetadataUpdateInfoPB {
@@ -331,6 +407,8 @@ message MetadataUpdateInfoPB {
     optional bool bundle_tablet_metadata = 4;
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
+    optional TabletRangePB tablet_range = 7;
+    optional MetadataUpdateInfoExtPB ext = 8;
 }
 
 message BundleTabletMetadataPB {
@@ -371,6 +449,41 @@ message TxnLogPB {
         repeated FileMetaPB dels_meta = 19;
         // Canonical per-rewrite-segment metadata, superseding deprecated_rewrite_segments.
         repeated FileMetaPB rewrite_segments_meta = 20;
+        // Parallel to `dels_meta` (index by del_id): the in-rowset segment index each delete
+        // logically follows, so its rssid is `rowset_id + op_offset`. Used to preserve the
+        // in-transaction upsert/delete order. A UINT32_MAX entry means "not recorded" (e.g.
+        // spill / concurrent flush); readers then fall back to the max segment index (legacy
+        // "all deletes after all upserts"). Empty (size != dels_meta_size) means no del carries
+        // an offset -- the downgrade-safe default until the cluster is fully upgraded
+        // (see config::lake_enable_pk_preserve_txn_delete_order). The persisted per-del order
+        // lives on DelfileWithRowsetId.op_offset, derived from this at apply/persist time.
+        repeated uint32 del_op_offsets = 21;
+        // Per-incoming-segment delete vector carrying the duplicate-primary-key loser rowids that a
+        // separate-sort-key (ORDER BY != PK) spill+eager-SST load leaves physically in the segment: the
+        // eager PK-index SST points at the winning row, but the losing rows stay in the segment data and
+        // must be masked at publish. Indexed by local segment id, parallel to the incoming segments;
+        // empty (or size 0) for the sort-key==PK path, which has no intra-segment duplicates. A publisher
+        // that does not apply this leaves live duplicate primary keys, so this must be understood
+        // fleet-wide (including downgrade / cross-version OpReplication targets) before the writer emits it.
+        repeated DelvecDataPB seg_delvecs = 22;
+        // Parallel to `dels_meta` (index by del_id): the tombstone (delete row) count of each del
+        // file, recorded at write time. Carried through to DelfileWithRowsetId.num_rows so the
+        // cloud-native PK index can account tombstone volume toward its rebuild-rows threshold.
+        // If del_num_rows_size() < dels_meta_size(), missing entries are treated as 0.
+        repeated int64 del_num_rows = 23;
+        // Pre-built tombstone sstables for the del files, parallel to `dels_meta` (index by del_id). Built
+        // at import time when the serialized del-file size reaches pk_index_eager_build_threshold_bytes.
+        // When present for a del file, publish ingests it directly to avoid accumulating tombstones in the
+        // persistent-index memtable and causing additional flushes. The deleted keys' rss_rowid is still
+        // reverse-looked-up from the existing index to build the delete vector, and that lookup can run in
+        // parallel in both erase paths. The array, when populated, is the same length as dels_meta; a per-entry
+        // EMPTY FileMetaPB (empty name) means that del file has no tombstone sstable (below the threshold) and
+        // publish falls back to the memtable erase path. A totally empty array (size != dels_meta_size) is the
+        // downgrade-safe default and the behavior for pre-upgrade writers.
+        // del_sst_ranges carries the key range of each tombstone sstable (for tablet split), parallel to
+        // del_ssts.
+        repeated FileMetaPB del_ssts = 24;
+        repeated PersistentIndexSstableRangePB del_sst_ranges = 25;
     }
 
     message OpCompaction {
@@ -484,6 +597,14 @@ message TxnLogPB {
         // Indexes added by this alter; redundant w.r.t. schema.table_indices
         // that FE has already published, kept for idempotent reconciliation.
         repeated TabletIndexPB new_indexes = 3;
+        // New schema id/version allocated by FE for this fast-path ADD INDEX.
+        // apply_add_index stamps these onto the tablet metadata schema so every
+        // by-id schema cache (GS{id} metacache, GlobalTabletSchemaMap dedup,
+        // SCHEMA_{id} file) misses and picks up the now-indexed schema; without
+        // an id change, data loaded after the index — and compaction output —
+        // would keep reusing the cached pre-index schema and build no index.
+        optional int64 new_schema_id = 4;
+        optional int64 new_schema_version = 5;
     }
 
     // Produced by DROP INDEX fast-path schema change (lake-only). Applied
@@ -552,6 +673,22 @@ message TxnInfoPB {
     // to unblock a stuck-publish transaction. Only meaningful for load/compaction
     // txn types in the current implementation; alter is not supported yet.
     optional bool no_op_publish = 12;
+    // Watershed version W for a TXN_SHADOW_REWRITE flip publish: the shadow tablet's source op_write is
+    // anchored as op_schema_change@W. W == 1 means the base partition was empty at the watershed
+    // (PARTITION_INIT_VERSION == 1), so there is no source op_write and BE synthesizes an empty one.
+    optional int64 shadow_rewrite_alter_version = 13;
+    // TXN_SHADOW_REWRITE flip publish: true when the rewrite produced no source op_write because the base
+    // partition was empty at the watershed. FE sets it from the rewrite txn loading zero rows (loadedRows
+    // == 0); it does NOT consult tablet commit infos, which are reset to null at the VISIBLE finish before
+    // FE reads this (see the rewriteSourceEmpty comment in LakeOnlineRewriteJobBase).
+    // When true, BE synthesizes an empty op_schema_change@W for ANY W (no source load), generalizing the
+    // W == 1 empty fast-path to a partition that is empty at W > 1 (e.g. a repeat online rewrite of an
+    // empty range partition). When false, the source op_write MUST exist and is loaded as before.
+    optional bool shadow_rewrite_source_empty = 14;
+    // Marks the partition-wide compaction that removes split-shared segments. This is copied from the
+    // persisted compaction transaction attachment so aggregate publish can omit the query-only parent
+    // metadata even after an FE leader failover (when the in-memory compaction job no longer exists).
+    optional bool unshare_compaction = 15;
 }
 
 message SplittingTabletInfoPB {
@@ -585,6 +722,9 @@ message ReshardingTabletInfoPB {
     optional SplittingTabletInfoPB splitting_tablet_info = 1;
     optional MergingTabletInfoPB merging_tablet_info = 2;
     optional IdenticalTabletInfoPB identical_tablet_info = 3;
+    // Ordinal 4 was shadow_rewrite_tablet_info (removed; shadow rewrite is now keyed on
+    // TxnInfoPB.txn_type == TXN_SHADOW_REWRITE). Do NOT reuse ordinal 4 in this message. The proto2
+    // `reserved 4;` keyword is intentionally NOT used: the FE jprotobuf generator's parser rejects it.
 }
 
 // Placeholder for external cluster snapshot feature.

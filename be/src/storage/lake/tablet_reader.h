@@ -14,12 +14,16 @@
 
 #pragma once
 
-#include "exec/pipeline/scan/scan_morsel.h"
+#include <optional>
+#include <vector>
+
+#include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/primitive/chunk_iterator.h"
 #include "storage/tablet_reader_params.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/range.h"
 #include "types_fwd.h"
 
 namespace starrocks {
@@ -35,11 +39,18 @@ class SeekTuple;
 class Segment;
 class TabletSchema;
 class TabletMetadataPB;
+class RowsetReadOptions;
 
 namespace lake {
 
+struct PreparedTabletReadState;
 class Rowset;
 class TabletManager;
+
+// Set difference lhs - rhs over two sorted, internally non-overlapping sparse ranges. Used by the
+// prepared-split refine path to compute the REFINED coverage (pruned - already-allocated-coarse).
+// Declared here so it can be unit-tested directly (the definition lives in tablet_reader.cpp).
+SparseRange<> subtract_sparse_ranges(const SparseRange<>& lhs, const SparseRange<>& rhs);
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -64,7 +75,7 @@ public:
                  std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
-                 std::shared_ptr<const TabletSchema> tablet_schema);
+                 std::shared_ptr<const TabletSchema> tablet_schema, RowSourceMaskBuffer* selection_buffer = nullptr);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -109,7 +120,15 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
+    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state);
+    Status build_initial_coarse_split_tasks(const TabletReaderParams& params,
+                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state);
+    Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
+                                                                RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* options);
+    Status init_rowset_read_options_for_split(const TabletReaderParams& params, RowsetReadOptions* options,
+                                              LakeIOOptions* lake_io_opts);
 
     Status init_predicates(const TabletReaderParams& read_params);
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
@@ -128,6 +147,7 @@ private:
     bool _rowsets_inited = false;
     std::vector<RowsetPtr> _rowsets;
     std::vector<SegmentSharedPtr> _segments;
+    std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     DeletePredicates _delete_predicates;
@@ -138,12 +158,18 @@ private:
     MemPool _mempool;
     ObjectPool _obj_pool;
 
+    // Cached parse_seek_range() result, reused across this reader's per-split reopens: the seek range
+    // derives only from the tablet schema and scan-constant key ranges, so it is invariant across reopens
+    // (runtime filters narrow rows separately). Its datums live in _mempool, so declare it after _mempool.
+    std::optional<std::vector<SeekRange>> _cached_seek_ranges;
+
     bool _is_asc_hint = true;
 
     // used for vertical compaction
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+    RowSourceMaskBuffer* _selection_buffer = nullptr;
 
     std::shared_ptr<VersionedTablet> _tablet;
 

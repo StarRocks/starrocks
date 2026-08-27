@@ -31,13 +31,14 @@
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
+#include "storage/full_sort_key_codec.h"
 #include "storage/memtable_sink.h"
 #include "storage/non_retryable_load_errors.h"
-#include "storage/primitive/primary_key_encoder.h"
 #include "storage/row_store_encoder.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {
@@ -73,6 +74,22 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
     } else {
         return ChunkHelper::convert_schema(tablet_schema);
     }
+}
+
+Status MemTable::_check_sort_key_sizes() {
+    if (_result_chunk == nullptr || _result_chunk->num_rows() == 0) {
+        return Status::OK();
+    }
+    // _result_chunk is in _vectorized_schema order and holds exactly the rows insert() admitted, so
+    // sort key positions address it directly -- unlike the caller's input chunk, which is resolved by
+    // slot id and may carry extra schema-change shadow columns.
+    RETURN_IF_ERROR(check_sort_key_size(*_vectorized_schema, _vectorized_schema->sort_key_idxes(), *_result_chunk, 0,
+                                        _result_chunk->num_rows()));
+    if (!_extra_sort_key_idxes.empty()) {
+        RETURN_IF_ERROR(check_sort_key_size(*_vectorized_schema, _extra_sort_key_idxes, *_result_chunk, 0,
+                                            _result_chunk->num_rows()));
+    }
+    return Status::OK();
 }
 
 Status MemTable::prepare(PrimaryKeyEncodingType pk_encoding_type) {
@@ -232,6 +249,17 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
         }
     }
 
+    // The buffer accumulates across inserts and is only measured against its budget afterwards, so
+    // it can end up holding more than a column can address with uint32 offsets even when every
+    // chunk that went into it was fine on its own. Everything downstream -- the flushed segment and
+    // the apply that reads it back -- inherits the wrapped offsets, so stop here instead.
+    if (auto st = _chunk->capacity_limit_reached(); !st.ok()) {
+        return Status::CapacityLimitExceed(fmt::format(
+                "memtable of tablet {} is too large to flush: {}. Reduce the number of rows per batch, or the size "
+                "of the string/array values in it.",
+                _tablet_id, st.message()));
+    }
+
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
         _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
@@ -308,14 +336,37 @@ Status MemTable::finalize() {
                 _aggregator_bytes_usage = 0;
                 return Status::Cancelled(kPrimaryKeySizeExceedError);
             }
-            if (_has_op_slot) {
+            // Bound the sort key for every admitted row, not just the rows that become index entries,
+            // so a later re-blocking during compaction or a post-commit rewrite cannot promote an
+            // over-limit value into a full sort key index entry. Deliberately placed before
+            // _split_upserts_deletes: DELETE rows are checked here exactly as the primary key check
+            // above checks them, so the verdict cannot depend on whether the op-aware spill path
+            // retained the __op column.
+            RETURN_IF_ERROR(_check_sort_key_sizes());
+            if (_has_op_slot && !_sink->keep_op_column()) {
                 // TODO(cbl): mem_tracker
                 ChunkPtr upserts;
                 RETURN_IF_ERROR(_split_upserts_deletes(_result_chunk, &upserts, &_deletes));
                 if (_result_chunk != upserts) {
                     _result_chunk = upserts;
                 }
+            } else if (_has_op_slot && !_merge_condition.empty()) {
+                // The op-aware spill path (keep_op_column) skips _split_upserts_deletes, which is where a
+                // DELETE combined with a merge condition is rejected. Enforce the same rejection here so
+                // such a load fails consistently instead of the spill merge silently applying the delete.
+                size_t op_column_id = _result_chunk->num_columns() - 1;
+                RawDataVisitor visitor;
+                RETURN_IF_ERROR(_result_chunk->get_column_by_index(op_column_id)->accept(&visitor));
+                const auto* ops = visitor.result();
+                for (size_t i = 0; i < _result_chunk->num_rows(); i++) {
+                    if (ops[i] == TOpType::DELETE) {
+                        return Status::InternalError(fmt::format(
+                                "memtable of tablet {} delete with condition column {}", _tablet_id, _merge_condition));
+                    }
+                }
             }
+            // When the sink keeps the __op column (spill path), _result_chunk retains __op and is not
+            // split here; the sink resolves the upsert/delete order during its merge (see flush()).
             if (_keys_type == KeysType::PRIMARY_KEYS) {
                 std::vector<ColumnId> primary_key_idxes(_vectorized_schema->num_key_fields());
                 for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
@@ -335,6 +386,10 @@ Status MemTable::finalize() {
             _aggregator_bytes_usage = 0;
         } else {
             RETURN_IF_ERROR(_sort(true));
+            // _sort(is_final=true) populates _result_chunk for DUP_KEYS. DUP_KEYS has no __op column
+            // (_has_op_slot is gated on PRIMARY_KEYS), so there is no upsert/delete split to order
+            // this against.
+            RETURN_IF_ERROR(_check_sort_key_sizes());
         }
     }
     // Release the input chunk after finalize to free memory earlier.
@@ -369,6 +424,10 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, 
         if (_deletes) {
             RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size,
                                                             slot_idx));
+        } else if (_has_op_slot && _sink->keep_op_column()) {
+            // Spill path: _result_chunk still carries the trailing __op column; the sink spills it and
+            // resolves upsert/delete order during the merge.
+            RETURN_IF_ERROR(_sink->flush_chunk_with_op(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         } else {
             RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size, slot_idx));
         }

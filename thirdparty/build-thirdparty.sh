@@ -54,6 +54,13 @@ if [ ! -f ${TP_DIR}/vars.sh ]; then
 fi
 . ${TP_DIR}/vars.sh
 
+if [[ ! -f "${TP_DIR}/package-manifest.sh" ]]; then
+    echo "package-manifest.sh is missing".
+    exit 1
+fi
+. "${TP_DIR}/package-manifest.sh"
+starrocks_set_default_packages "${MACHINE_TYPE}"
+
 # Check args
 usage() {
     echo "
@@ -68,6 +75,11 @@ Usage: $0 [options...] [packages...]
     --clean                Clean extracted source before building
     --continue <package>   Continue building from specified package
     -h, --help             Show this help message
+
+  Notes:
+    When packages are given (also with --continue), only the archives those
+    packages are built from are downloaded, unpacked and patched. A full build
+    still processes every archive.
 
   Examples:
     # Build all packages with default parallelism
@@ -221,7 +233,13 @@ if [[ "${CLEAN}" -eq 1 ]]; then
     clean_sources
 fi
 
-# Download thirdparties.
+# Download thirdparties. A partial build only needs its own archives, so limit
+# the download/unpack/patch pass accordingly.
+if [[ "${#packages[@]}" -ne 0 ]]; then
+    starrocks_restrict_archives "${packages[@]}"
+elif [[ "${CONTINUE}" -eq 1 ]]; then
+    starrocks_restrict_archives_from "${start_package}"
+fi
 ${TP_DIR}/download-thirdparty.sh
 
 # set COMPILER
@@ -895,7 +913,7 @@ build_brotli() {
 
 # arrow
 build_arrow() {
-    export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g ${FILE_PREFIX_MAP_OPTION}"
+    export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g -fno-sized-deallocation ${FILE_PREFIX_MAP_OPTION}"
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g ${FILE_PREFIX_MAP_OPTION}"
     export CPPFLAGS=$CXXFLAGS
 
@@ -931,7 +949,7 @@ build_arrow() {
     # so disable jemalloc here and use SystemAllocator.
     #
     # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
-    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
@@ -964,7 +982,8 @@ build_arrow() {
     -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} \
     -G "${CMAKE_GENERATOR}" \
     -DThrift_ROOT=$TP_INSTALL_DIR/ \
-    -Dthrift_SOURCE=SYSTEM \
+    -DARROW_THRIFT_USE_SHARED=OFF \
+    -DThrift_SOURCE=SYSTEM \
     -Dxsimd_SOURCE=SYSTEM \
     -Dxsimd_DIR=$TP_INSTALL_DIR/share/cmake/xsimd ..
 
@@ -1289,10 +1308,12 @@ build_aws_cpp_sdk() {
 build_vpack() {
     check_if_source_exist $VPACK_SOURCE
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    rm -rf build
     mkdir -p build
     cd build
     $CMAKE_CMD .. \
         -DCMAKE_CXX_STANDARD="17" \
+        -DCMAKE_CXX_STANDARD_REQUIRED=ON \
         -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} \
         -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
@@ -1329,10 +1350,12 @@ build_jemalloc() {
     # time one, but aborts on a larger one. If not defined, it falls back to the
     # the build system's _SC_PAGESIZE, which in many architectures can vary. Set
     # this to 64K (2^16) for arm architecture, and default 4K on x86 for performance.
-    local addition_opts=" --with-lg-page=12"
+    local addition_opts
     if [[ $MACHINE_TYPE == "aarch64" ]] ; then
-        # change to 64K for arm architecture
+        # 64K for arm architecture
         addition_opts=" --with-lg-page=16"
+    else
+        addition_opts=" --with-lg-page=12"
     fi
     # build jemalloc with release
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
@@ -1343,11 +1366,39 @@ build_jemalloc() {
     mkdir -p ${TP_INSTALL_DIR}/jemalloc/lib-static/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.so* ${TP_INSTALL_DIR}/jemalloc/lib-shared/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.a ${TP_INSTALL_DIR}/jemalloc/lib-static/
-    # build jemalloc with debug options
+    # build jemalloc with debug options. Each subsequent ./configure below
+    # reuses this same source tree with different flags (page size,
+    # --disable-static, --enable-debug); autotools' generated Makefile
+    # doesn't reliably detect a configure-option change and rebuild the
+    # affected objects, so force a clean rebuild before every configure
+    # pass after the first.
+    make distclean
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl $addition_opts
     make -j$PARALLEL
     make install
+
+    if [[ $MACHINE_TYPE == "aarch64" ]] ; then
+        # arm64 kernels vary between 4K and 64K pages depending on distro/kernel
+        # config. The 64K release/debug builds above are the safe default
+        # (work on any runtime page size <= 64K), but waste memory via larger
+        # chunk granularity on the common 4K-page case. Build matching 4K
+        # release and debug variants so downstream consumers can pick the
+        # pair matching the host via getconf PAGESIZE.
+        local page4k_opts=" --with-lg-page=12"
+
+        make distclean
+        CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --disable-cxx --disable-libdl $page4k_opts
+        make -j$PARALLEL
+        make install
+
+        make distclean
+        CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --disable-cxx --disable-libdl $page4k_opts
+        make -j$PARALLEL
+        make install
+    fi
 }
 
 # google benchmark
@@ -1726,12 +1777,62 @@ build_benchgen() {
     cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
     perl -0pi -e 's/brotlicommon snappy zstd\)/brotlicommon lz4 snappy zstd)/' \
         cmake_modules/BenchmarkArrow.cmake
+    perl -0pi -e 's/set\(CMAKE_CXX_STANDARD 17\)/set(CMAKE_CXX_STANDARD 20)/' CMakeLists.txt
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -fno-sized-deallocation" \
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
     ${CMAKE_CMD} --build build -j "${PARALLEL}"
     ${CMAKE_CMD} --install build
+}
+
+# paimon-cpp
+# Third-party deps are BUNDLED: paimon-cpp's cmake downloads them at build
+# time from the URLs pinned in its third_party/versions.txt (network required).
+# Protobuf is the one exception and reuses the thirdparty-built one: protoc is
+# a build-time executable, and the protoc built by the bundled protobuf may
+# require a newer runtime libstdc++ than the host provides (e.g. rocky9),
+# while the thirdparty protoc is linked with -static-libstdc++ and runs
+# anywhere. Same pattern as build_arrow. paimon's bundled ORC inherits the
+# resolved protobuf automatically.
+build_paimon_cpp() {
+    check_if_source_exist $PAIMON_CPP_SOURCE
+
+    # build_arrow exports ARROW_*_URL to feed StarRocks' own Arrow build
+    # offline; paimon-cpp's bundled Arrow honors the same env vars, so they
+    # must not leak into this build (those tarballs do not match the
+    # versions pinned by paimon's bundled Arrow and fail its SHA256 check).
+    local arrow_url_var
+    for arrow_url_var in $(compgen -v | grep -E '^ARROW_[A-Z0-9_]+_URL$'); do
+        unset "${arrow_url_var}"
+    done
+
+    cd $TP_SOURCE_DIR/$PAIMON_CPP_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    # protobuf required for rocky9
+    ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/paimon-cpp \
+        -DPAIMON_BUILD_STATIC=OFF \
+        -DPAIMON_ENABLE_ORC=ON \
+        -DPAIMON_ENABLE_AVRO=ON \
+        -DPAIMON_ENABLE_LUMINA=OFF \
+        -DPAIMON_ENABLE_LUCENE=OFF \
+        -DPAIMON_ENABLE_TANTIVY=OFF \
+        -DPAIMON_ENABLE_JINDO=OFF \
+        -DPAIMON_DEPENDENCY_SOURCE=BUNDLED \
+        -DProtobuf_SOURCE=SYSTEM \
+        -DProtobuf_ROOT=$TP_INSTALL_DIR \
+        -DCMAKE_PREFIX_PATH=$TP_INSTALL_DIR
+
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+    restore_compile_flags
 }
 
 # restore cxxflags/cppflags/cflags to default one
@@ -1764,13 +1865,6 @@ export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -
 export CPPFLAGS=$GLOBAL_CPPFLAGS
 export CXXFLAGS=$GLOBAL_CXXFLAGS
 export CFLAGS=$GLOBAL_CFLAGS
-
-if [[ ! -f "${TP_DIR}/package-manifest.sh" ]]; then
-    echo "package-manifest.sh is missing".
-    exit 1
-fi
-. "${TP_DIR}/package-manifest.sh"
-starrocks_set_default_packages "${MACHINE_TYPE}"
 
 # Initialize packages array - if none specified, build all
 if [[ "${#packages[@]}" -eq 0 ]]; then

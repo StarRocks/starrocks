@@ -88,6 +88,13 @@ bool HiveTextArrayReader::split_array_elements(const Slice& s, std::vector<Slice
     size_t right = 0;
     for (/**/; right < s.size; right++) {
         char c = s[right];
+        // An escaped delimiter (e.g. "a\|b|c") is not a real element boundary. Elements
+        // stay RAW here -- with the escape byte still in them -- unescaping happens one
+        // level down, in NullableConverter, once it knows this element is a scalar leaf.
+        if (_escape != 0 && c == _escape && right + 1 < s.size) {
+            right++;
+            continue;
+        }
         if (c == _array_delimiter) {
             elements.emplace_back(s.data + left, right - left);
             left = right + 1;

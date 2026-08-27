@@ -23,11 +23,11 @@
 #include "compute_env/spill/spill_components.h"
 #include "compute_env/spill/spiller.hpp"
 #include "exec/cross_join_node.h"
-#include "exec/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
 #include "exprs/expr.h"
 #include "fmt/format.h"
+#include "runtime/chunk_accumulator.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 

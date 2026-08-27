@@ -33,9 +33,6 @@
 #include "gutil/walltime.h"
 #include "storage/chunk_helper.h"
 #include "storage/kv_store.h"
-#include "storage/primitive/empty_iterator.h"
-#include "storage/primitive/primary_key_encoder.h"
-#include "storage/primitive/union_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -50,6 +47,9 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 
@@ -381,7 +381,10 @@ public:
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash, bool multi_column_pk = false,
                                   int64_t schema_id = 0, int32_t schema_version = 0, bool add_v3 = false) {
-        srand(GetCurrentTimeMicros());
+        // Deliberately no srand() here. This helper never calls rand(), and re-seeding mid-test
+        // restarts the caller's sequence: `create_tablet(rand(), rand())` followed by another
+        // `create_tablet(rand(), rand())` replays the same two values whenever both seeds land in
+        // the same microsecond, so both calls end up on ONE tablet id (target == base).
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);

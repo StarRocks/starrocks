@@ -123,11 +123,9 @@ public class KafkaRoutineLoadJobTest {
                              @Mocked SystemInfoService systemInfoService,
                              @Mocked Database database,
                              @Mocked RoutineLoadDesc routineLoadDesc) throws MetaNotFoundException {
-        List<Integer> partitionList1 = Lists.newArrayList(1, 2);
         List<Integer> partitionList2 = Lists.newArrayList(1, 2, 3);
         List<Integer> partitionList3 = Lists.newArrayList(1, 2, 3, 4);
         List<Integer> partitionList4 = Lists.newArrayList(1, 2, 3, 4, 5, 6, 7);
-        List<Long> beIds1 = Lists.newArrayList(1L);
         List<Long> beIds2 = Lists.newArrayList(1L, 2L, 3L, 4L);
 
         new Expectations() {
@@ -300,7 +298,7 @@ public class KafkaRoutineLoadJobTest {
         };
 
         try {
-            KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+            KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
             Assertions.fail();
         } catch (StarRocksException e) {
             LOG.info(e.getMessage());

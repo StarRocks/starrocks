@@ -42,11 +42,12 @@ target_link_libraries(AgentServer
             Storage
             Cache
             ComputeEnv
+            Exec
             ExecRuntime
             StoragePrimitive
-            RuntimeCore
+            Runtime
             Platform
-            FSCore
+            FileSystem
             IO
             Common
             Base

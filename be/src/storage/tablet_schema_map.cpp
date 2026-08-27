@@ -16,8 +16,8 @@
 
 #include <bvar/bvar.h>
 
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks {
 
@@ -112,7 +112,7 @@ void TabletSchemaMap::_insert(MapShard& shard, SchemaId id, const TabletSchemaPt
     int64_t mem_usage = tablet_schema->mem_usage();
     _stats.num_items++;
     _stats.memory_usage += mem_usage;
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage);
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage);
 
     shard.map.emplace(id, Item{tablet_schema, mem_usage});
 }
@@ -122,7 +122,7 @@ void TabletSchemaMap::_replace(const ShardMapIter& iter, const TabletSchemaPtr& 
     int64_t new_mem_usage = tablet_schema->mem_usage();
     int64_t delta_mem_usage = new_mem_usage - old_mem_usage;
     _stats.memory_usage += delta_mem_usage;
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), delta_mem_usage);
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_schema_mem_tracker(), delta_mem_usage);
 
     iter->second = Item{std::weak_ptr<const TabletSchema>(tablet_schema), new_mem_usage};
 }
@@ -175,7 +175,7 @@ void TabletSchemaMap::erase(SchemaId id) {
         int64_t mem_usage = iter->second.mem_usage;
         _stats.num_items--;
         _stats.memory_usage -= mem_usage;
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage);
+        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage);
         shard->map.erase(iter);
     }
 }

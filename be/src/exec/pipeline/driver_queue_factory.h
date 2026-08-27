@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 
 namespace starrocks::pipeline {
 

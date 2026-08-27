@@ -14,12 +14,25 @@
 
 #include "storage/storage_env.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <vector>
 
+#ifdef WITH_TENANN
+#include "tenann/index/index_cache.h"
+#endif
+
+#ifdef USE_STAROS
+#include <fslib/configuration.h>
+#endif
+
+#include "base/string/parse_util.h"
+#include "common/config_vector_index_fwd.h"
+#include "common/logging.h"
 #include "gutil/strings/join.h"
 #include "platform/store_path.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
@@ -27,13 +40,17 @@
 #include "storage/lake/update_manager.h"
 
 #ifdef USE_STAROS
-#include <fslib/configuration.h>
-
 #include "common/config_starlet_fwd.h"
 #include "storage/lake/starlet_location_provider.h"
 #endif
 
 namespace starrocks {
+
+namespace {
+
+constexpr int kVectorIndexCacheAsyncLoadMaxQueueSize = 4096;
+
+} // namespace
 
 StorageEnv* StorageEnv::GetInstance() {
     static StorageEnv s_storage_env;
@@ -42,9 +59,15 @@ StorageEnv* StorageEnv::GetInstance() {
 
 StorageEnv::StorageEnv() = default;
 
-StorageEnv::~StorageEnv() = default;
+StorageEnv::~StorageEnv() {
+    destroy_vector_index_cache();
+}
 
 Status StorageEnv::init(const StorageEnvOptions& options) {
+    if (options.vector_index_mem_tracker != nullptr) {
+        RETURN_IF_ERROR(init_vector_index_cache(options.process_mem_limit, options.vector_index_mem_tracker));
+    }
+
     if (_lake_tablet_manager != nullptr || options.lake_location_provider_mode == LakeLocationProviderMode::kDisabled) {
         return Status::OK();
     }
@@ -105,6 +128,40 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
     return Status::OK();
 }
 
+Status StorageEnv::init_vector_index_cache(int64_t process_mem_limit, MemTracker* vector_index_mem_tracker) {
+#ifdef WITH_TENANN
+    if (_vector_index_cache != nullptr) {
+        return Status::OK();
+    }
+    if (vector_index_mem_tracker == nullptr) {
+        return Status::InvalidArgument("StorageEnv vector index mem tracker is null");
+    }
+
+    ASSIGN_OR_RETURN(int64_t vi_capacity,
+                     ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, process_mem_limit));
+    if (vi_capacity <= 0) {
+        LOG(WARNING) << "vector_query_cache_capacity resolved to " << vi_capacity
+                     << " bytes (raw=" << config::vector_query_cache_capacity
+                     << ", process_mem_limit=" << process_mem_limit
+                     << "); async vector index loading is disabled, but queries still load indexes synchronously. "
+                        "The cache capacity is a soft limit";
+        vi_capacity = 0;
+    }
+    auto vector_index_cache =
+            std::make_unique<VectorIndexCache>(static_cast<size_t>(vi_capacity), vector_index_mem_tracker);
+    const int async_load_threads = std::max(1, config::vector_index_cache_async_load_threads);
+    if (async_load_threads != config::vector_index_cache_async_load_threads) {
+        LOG(WARNING) << "vector_index_cache_async_load_threads must be positive; use 1 instead of "
+                     << config::vector_index_cache_async_load_threads;
+    }
+    RETURN_IF_ERROR(
+            vector_index_cache->init_async_load_pool(async_load_threads, kVectorIndexCacheAsyncLoadMaxQueueSize));
+    _vector_index_cache = std::move(vector_index_cache);
+    tenann::SetGlobalIndexCache(_vector_index_cache.get());
+#endif
+    return Status::OK();
+}
+
 void StorageEnv::stop() {
     if (_parallel_compact_mgr != nullptr) {
         _parallel_compact_mgr->shutdown();
@@ -115,6 +172,18 @@ void StorageEnv::stop_lake_tablet_manager() {
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->stop();
     }
+}
+
+void StorageEnv::destroy_vector_index_cache() {
+#ifdef WITH_TENANN
+    if (_vector_index_cache != nullptr && tenann::GetGlobalIndexCache() == _vector_index_cache.get()) {
+        tenann::SetGlobalIndexCache(nullptr);
+    }
+    if (_vector_index_cache != nullptr) {
+        _vector_index_cache->shutdown_async_load_pool();
+    }
+#endif
+    _vector_index_cache.reset();
 }
 
 void StorageEnv::destroy() {

@@ -17,12 +17,12 @@
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/data_stream/data_stream_recvr.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "glog/logging.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
@@ -90,7 +90,7 @@ std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_re
     auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
     auto* query_execution_services = state->query_execution_services();
     _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
-            state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
+            state, _record_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, false, query_statistic_recv, true, _degree_of_parallelism, false);
 
     return _stream_recvr;

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.partitiontraits;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.MaterializedView;
@@ -37,7 +38,11 @@ public class DeltaLakePartitionTraits extends DefaultTraits {
     @Override
     public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                 MaterializedView.AsyncRefreshContext context) {
-        // TODO: implement
-        return null;
+        // TODO: Implement Delta Lake partition update tracking. Until then, return an empty set (meaning
+        //  "no updated partitions detected") rather than null. Returning null is interpreted as "update info
+        //  unknown", which forces the timeliness arbiter to treat the MV as stale (full refresh) and disables
+        //  query rewrite entirely in the default CHECKED consistency mode. Empty set keeps the MV eligible for
+        //  rewrite, matching the behavior of the other not-yet-implemented connectors (e.g. Hudi).
+        return Sets.newHashSet();
     }
 }

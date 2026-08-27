@@ -36,7 +36,9 @@ import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -90,6 +92,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -120,6 +123,7 @@ import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.util.Box;
 import org.apache.commons.collections4.SetUtils;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -226,6 +230,29 @@ public class MvUtils {
                 getAllTables(child, tables);
             }
         }
+    }
+
+    /**
+     * True when any scan below root reads a table pinned to an explicit time-travel version, i.e. a
+     * {@code FOR VERSION/TIMESTAMP AS OF} clause (a snapshot id, tag or branch name).
+     * <p>
+     * A query period reaches the plan in one of two shapes, the same two that
+     * {@link com.starrocks.sql.analyzer.AnalyzerUtils#prohibitTimeTravelQuery} has to handle on the
+     * definition side: connectors that resolve the version themselves carry a delta range on the scan,
+     * while a MySQL temporal read keeps the clause verbatim on the operator and leaves its range at the
+     * default. An ordinary read carries a {@link com.starrocks.common.tvr.TvrTableSnapshot} of the
+     * table's current version, so only a query period produces a delta range on a freshly transformed plan.
+     */
+    public static boolean containsTimeTravelScan(OptExpression root) {
+        if (root.getOp() instanceof LogicalScanOperator) {
+            LogicalScanOperator scanOperator = (LogicalScanOperator) root.getOp();
+            if (scanOperator.getTvrVersionRange() instanceof TvrTableDelta) {
+                return true;
+            }
+            return scanOperator instanceof LogicalMysqlScanOperator
+                    && !Strings.isNullOrEmpty(((LogicalMysqlScanOperator) scanOperator).getTemporalClause());
+        }
+        return root.getInputs().stream().anyMatch(MvUtils::containsTimeTravelScan);
     }
 
     public static List<MaterializedView> collectMaterializedViews(OptExpression optExpression) {
@@ -1288,7 +1315,11 @@ public class MvUtils {
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
             OptExpression inlineViewPlan = viewScanOperator.getOriginalPlanEvaluator();
-            if (viewScanOperator.getPredicate() != null) {
+            // A view scan may carry a merged projection even without a predicate (e.g. an unfiltered
+            // view usage, or the null-supplying side of an outer join). Keep the projection in that
+            // case too; dropping it leaves parents referencing columns the inlined plan no longer
+            // produces, which later hard-errors in statistics derivation.
+            if (viewScanOperator.getPredicate() != null || viewScanOperator.getProjection() != null) {
                 Operator inlineViewOp = inlineViewPlan.getOp();
 
                 // original map records inlined view's column ref to non-inlined view's column ref mapping,
@@ -1483,13 +1514,10 @@ public class MvUtils {
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
-            // For hive catalog, when meets NoSuchObjectException, we should return empty
-            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
-            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
-            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
-            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+            // For hive catalog, the metastore client always throws (wrapping NoSuchObjectException as the
+            // cause) instead of returning null when the table doesn't exist, so we must unwrap the cause
+            // chain to tell "table not found" apart from other failures.
+            if (LogUtil.isCausedBy(e, NoSuchObjectException.class)) {
                 return Optional.empty();
             }
             throw e;
@@ -1501,14 +1529,11 @@ public class MvUtils {
             return GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getTableWithIdentifier(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
-            // For hive catalog, when meets NoSuchObjectException, we should return empty
-            //  msg: NoSuchObjectException: hive_db_8b48cd2f_4bfe_11f0_bc1a_00163e09349d.t1 table not found
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:178)
-            //        at com.starrocks.connector.hive.HiveMetaClient.callRPC(HiveMetaClient.java:163)
-            //        at com.starrocks.connector.hive.HiveMetaClient.getTable(HiveMetaClient.java:272)
-            //        at com.starrocks.connector.hive.HiveMetastore.getTable(HiveMetastore.java:116)
+            // For hive catalog, the metastore client always throws (wrapping NoSuchObjectException as the
+            // cause) instead of returning null when the table doesn't exist, so we must unwrap the cause
+            // chain to tell "table not found" apart from other failures.
             LOG.warn("Failed to get table with baseTableInfo: {}, error: {}", baseTableInfo, e.getMessage());
-            if (e.getMessage() != null && e.getMessage().contains("NoSuchObjectException")) {
+            if (LogUtil.isCausedBy(e, NoSuchObjectException.class)) {
                 return Optional.empty();
             }
             throw e;

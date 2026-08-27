@@ -18,22 +18,17 @@
 #include <string_view>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config_exec_fwd.h"
-#include "common/object_pool.h"
 #include "gtest/gtest.h"
-#include "runtime/chunk_helper.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/descriptors.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
-#include "storage/primitive/schema_helper.h"
-#include "types/logical_type.h"
+#include "storage_primitive/schema_helper.h"
 
 namespace starrocks {
 
@@ -95,132 +90,7 @@ void expect_padded_char_column(const BinaryColumn& column, const std::vector<std
 
 } // namespace
 
-class ChunkHelperTest : public ::testing::Test {
-protected:
-    LogicalType _primitive_type[9] = {LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
-                                      LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
-                                      LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
-
-    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
-    TupleDescriptor* _create_tuple_desc();
-
-    // A tuple with one column
-    TupleDescriptor* _create_simple_desc() {
-        TDescriptorTableBuilder table_builder;
-        TTupleDescriptorBuilder tuple_builder;
-
-        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_INT, "c0", 0));
-        tuple_builder.build(&table_builder);
-
-        std::vector<TTupleId> row_tuples{0};
-        DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                      .ok());
-
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-        return tuple_desc;
-    }
-
-    // A tuple with two column
-    TupleDescriptor* _create_simple_desc2() {
-        TDescriptorTableBuilder table_builder;
-        TTupleDescriptorBuilder tuple_builder;
-
-        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_INT, "c0", 0));
-        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_VARCHAR, "c1", 1));
-        tuple_builder.build(&table_builder);
-
-        std::vector<TTupleId> row_tuples{0};
-        DescriptorTbl* tbl = nullptr;
-        CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                      .ok());
-
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-        auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-        return tuple_desc;
-    }
-
-    RuntimeState _runtime_state;
-    ObjectPool _pool;
-};
-
-TSlotDescriptor ChunkHelperTest::_create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
-    TSlotDescriptorBuilder builder;
-
-    if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
-        return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
-    } else {
-        return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
-    }
-}
-
-TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
-    TDescriptorTableBuilder table_builder;
-    TTupleDescriptorBuilder tuple_builder;
-
-    for (size_t i = 0; i < 9; i++) {
-        tuple_builder.add_slot(_create_slot_desc(_primitive_type[i], "c" + std::to_string(i), 0));
-    }
-
-    tuple_builder.build(&table_builder);
-
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    DescriptorTbl* tbl = nullptr;
-    CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
-                  .ok());
-
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
-    auto* tuple_desc = row_desc->tuple_descriptors()[0];
-
-    return tuple_desc;
-}
-
-TEST_F(ChunkHelperTest, Accumulator) {
-    constexpr size_t kDesiredSize = 4096;
-    auto* tuple_desc = _create_simple_desc();
-    ChunkAccumulator accumulator(kDesiredSize);
-    size_t input_rows = 0;
-    size_t output_rows = 0;
-    // push small chunks
-    for (int i = 0; i < 10; i++) {
-        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1025);
-        chunk->get_column_raw_ptr_by_index(0)->append_default(1025);
-        input_rows += 1025;
-
-        static_cast<void>(accumulator.push(std::move(chunk)));
-        if (ChunkPtr output = accumulator.pull()) {
-            output_rows += output->num_rows();
-            EXPECT_EQ(kDesiredSize, output->num_rows());
-        }
-    }
-    // push large chunks
-    for (int i = 0; i < 10; i++) {
-        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 8888);
-        chunk->get_column_raw_ptr_by_index(0)->append_default(8888);
-        input_rows += 8888;
-        static_cast<void>(accumulator.push(std::move(chunk)));
-    }
-
-    accumulator.finalize();
-    while (ChunkPtr output = accumulator.pull()) {
-        EXPECT_LE(output->num_rows(), kDesiredSize);
-        output_rows += output->num_rows();
-    }
-    EXPECT_EQ(input_rows, output_rows);
-
-    // push empty chunks
-    for (int i = 0; i < ChunkAccumulator::kAccumulateLimit; i++) {
-        auto chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 1);
-        static_cast<void>(accumulator.push(std::move(chunk)));
-    }
-    EXPECT_TRUE(accumulator.reach_limit());
-    auto output = accumulator.pull();
-    EXPECT_EQ(nullptr, output);
-    EXPECT_TRUE(accumulator.reach_limit());
-}
+class ChunkHelperTest : public ::testing::Test {};
 
 TEST_F(ChunkHelperTest, PaddingNullableCharColumnSkipsNullRowsWhenNullsAreDense) {
     auto tablet_schema = create_char_tablet_schema(4);
@@ -270,6 +140,42 @@ TEST_F(ChunkHelperTest, PaddingNullableCharColumnCopiesAllRowsWhenNullsAreSparse
     expect_padded_char_column(
             *data_column, {padded_char("a", 4), padded_char("bc", 4), padded_char("def", 4), padded_char("nullv", 4),
                            padded_char("wxyzq", 4), padded_char("m", 4), padded_char("no", 4), padded_char("pqrs", 4)});
+}
+
+static ChunkPtr make_string_chunk(const std::vector<std::string>& values) {
+    // One row per value, and one array element per row, so that every invariant Chunk and its
+    // columns assert on lines up: each column's size equals the chunk's row count, the array's last
+    // offset equals its element count, and each null column matches the column it annotates.
+    const size_t rows = values.size();
+    auto binary = BinaryColumn::create();
+    auto elements = BinaryColumn::create();
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    for (size_t i = 0; i < rows; i++) {
+        binary->append(Slice(values[i]));
+        elements->append(Slice(values[i]));
+        offsets->append(static_cast<uint32_t>(i + 1));
+    }
+    // ArrayColumn requires its elements to be nullable.
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(elements), NullColumn::create(rows, 0)),
+                                     std::move(offsets));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(std::move(binary), 0);
+    chunk->append_column(NullableColumn::create(std::move(array), NullColumn::create(rows, 0)), 1);
+    return chunk;
+}
+
+TEST_F(ChunkHelperTest, reject_if_over_capacity_accepts_an_ordinary_chunk) {
+    auto chunk = make_string_chunk({"alpha", "beta", "gamma"});
+    // Covers the nested case too: the array column has to be walked down to the binary column
+    // holding its elements. On this branch those offsets are AdaptiveOffsets and the byte limb
+    // is MAX_LARGE_CAPACITY_LIMIT, so this check only fires on a genuinely unaddressable chunk;
+    // it is here to keep the path in step with branch-3.5-cc, where the same offsets are uint32.
+    ASSERT_OK(ChunkHelper::reject_if_over_capacity(*chunk, "source chunk", 10001, 4242));
+
+    Chunk empty;
+    ASSERT_OK(ChunkHelper::reject_if_over_capacity(empty, "source chunk", 10001, 4242));
 }
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {

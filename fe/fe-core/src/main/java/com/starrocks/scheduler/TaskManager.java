@@ -45,6 +45,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TaskRunHistory;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -91,7 +92,9 @@ public class TaskManager implements MemoryTrackable {
     private final Map<Long, Task> idToTaskMap;
     // taskName -> Task, include Manual Task, Periodical Task
     private final Map<String, Task> nameToTaskMap;
-    private final Map<Long, ScheduledFuture<?>> periodFutureMap;
+    // Package-private so same-package tests can assert the cleared-on-stop contract without
+    // reflection.
+    final Map<Long, ScheduledFuture<?>> periodFutureMap;
 
     // include PENDING/RUNNING taskRun;
     private final TaskRunManager taskRunManager;
@@ -99,13 +102,20 @@ public class TaskManager implements MemoryTrackable {
 
     // The periodScheduler is used to generate the corresponding TaskRun on time for the Periodical Task.
     // This scheduler can use the time wheel to optimize later.
-    private final ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
+    //
+    // Not final: rebuilt by start() if a previous stop() shut it down so this manager is
+    // reusable across leader demotion / re-election cycles.
+    // Package-private so same-package tests can assert / swap pool state without reflection.
+    volatile ScheduledExecutorService periodScheduler = Executors.newScheduledThreadPool(1);
 
     // The dispatchTaskScheduler is responsible for periodically checking whether the running TaskRun is completed
     // and updating the status. It is also responsible for placing pending TaskRun in the running TaskRun queue.
     // This operation need to consider concurrency.
     // This scheduler can use notify/wait to optimize later.
-    private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
+    //
+    // Not final: same rebuild-on-restart contract as periodScheduler.
+    // Package-private for same reasons as periodScheduler above.
+    volatile ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
     // Use to concurrency control
     private final QueryableReentrantLock taskLock;
 
@@ -121,6 +131,18 @@ public class TaskManager implements MemoryTrackable {
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
+            // The re-activation cleanliness gate (GlobalStateMgr.assertLeaderSessionQuiescedOrExit)
+            // verifies both schedulers terminated before start() runs, so there is no restart guard
+            // here. Rebuild both schedulers if a previous stop() shut them down. periodScheduler also
+            // needs a fresh pool so the futures kept by periodFutureMap (which we cleared in
+            // stop()) cannot reference cancelled futures from the previous leader session.
+            if (periodScheduler.isShutdown()) {
+                periodScheduler = Executors.newScheduledThreadPool(1);
+            }
+            if (dispatchScheduler.isShutdown()) {
+                dispatchScheduler = Executors.newScheduledThreadPool(1);
+            }
+            taskRunManager.getTaskRunExecutor().rebuildIfShutdown();
             clearUnfinishedTaskRun();
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
@@ -141,6 +163,91 @@ public class TaskManager implements MemoryTrackable {
                 }
             }, 0, 1, TimeUnit.SECONDS);
         }
+    }
+
+    /**
+     * Non-blocking equivalent of {@link #stop(long)}: shuts down both schedulers without
+     * waiting for in-flight TaskRun checks to actually exit. Prefer {@link #stop(long)} on
+     * the leader demotion drain path so a re-elected leader does not race the old
+     * scheduler generation.
+     */
+    public void stop() {
+        stop(0L);
+    }
+
+    /**
+     * Fire-and-forget stop for leader demotion. TaskManager owns two ScheduledExecutorService
+     * instances and is not a LeaderDaemon (its dispatch loop runs inside the executor with an
+     * embedded leader check), so it has no worker to self-clean; demotion calls {@code stop(0)}
+     * as the equivalent of a daemon's {@link LeaderDaemon#stopBestEffort()}.
+     *
+     * shutdownNow() interrupts in-flight TaskRun checks so they exit promptly even if blocked in
+     * metadata locks. Demotion does not wait for the pools to drain; if a straggler dispatch
+     * iteration outlives demotion, {@link #schedulersStoppedButNotTerminated()} reports it to the
+     * re-activation cleanliness gate, which restarts the process on re-election rather than let a
+     * fresh scheduler from the next {@link #start()} overlap the still-running old generation. The
+     * {@code timeoutMs > 0} path performs a bounded synchronous drain for callers that want one.
+     *
+     * @param timeoutMs maximum time to wait for both schedulers to drain, in milliseconds. Zero
+     *                  or negative means do not wait (the demotion path). The budget is split
+     *                  across the three pools.
+     */
+    public void stop(long timeoutMs) {
+        if (!isStart.compareAndSet(true, false)) {
+            return;
+        }
+        // Cancel periodic futures so a re-registered task on the next leader does not race
+        // a still-firing future against the new periodScheduler.
+        for (ScheduledFuture<?> future : periodFutureMap.values()) {
+            try {
+                future.cancel(true);
+            } catch (Throwable t) {
+                LOG.warn("cancel periodic task future failed", t);
+            }
+        }
+        periodFutureMap.clear();
+        periodScheduler.shutdownNow();
+        dispatchScheduler.shutdownNow();
+        // Stop the task-run pool like every other leader-session pool: shutdownNow interrupts in-flight
+        // MV-refresh / INSERT task runs (their transactions abort) so a previous term's run cannot race
+        // the next leader's re-driven run of the same task or rewrite the archived status object that
+        // clearUnfinishedTaskRun journals as FAILED on re-election.
+        taskRunManager.getTaskRunExecutor().shutdownNow();
+        if (timeoutMs > 0L) {
+            long deadline = System.currentTimeMillis() + timeoutMs;
+            try {
+                long remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!periodScheduler.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("TaskManager periodScheduler did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!dispatchScheduler.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("TaskManager dispatchScheduler did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!taskRunManager.getTaskRunExecutor().awaitTermination(remaining)) {
+                    LOG.warn("TaskManager taskRunPool did not terminate within drain timeout");
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for TaskManager schedulers to terminate");
+            }
+        }
+    }
+
+    /**
+     * Whether any leader-session pool was shut down by a previous demotion but has not finished
+     * terminating - i.e. a straggler from the previous leader session is still running. Read by the
+     * re-activation cleanliness gate (TaskManager is not a LeaderDaemon, so it has no isRunning to
+     * cover its pools); a fresh/running pool is not shut down and so is not a straggler. Covers the
+     * two schedulers AND the task-run pool: an MV-refresh / INSERT task run surviving demotion would
+     * race the next leader's re-driven run of the same task and mutate the archived status object
+     * that clearUnfinishedTaskRun already journaled as FAILED.
+     */
+    public boolean schedulersStoppedButNotTerminated() {
+        return (periodScheduler.isShutdown() && !periodScheduler.isTerminated())
+                || (dispatchScheduler.isShutdown() && !dispatchScheduler.isTerminated())
+                || taskRunManager.getTaskRunExecutor().stoppedButNotTerminated();
     }
 
     private void registerPeriodicalTask() {
@@ -386,15 +493,40 @@ public class TaskManager implements MemoryTrackable {
             return null;
         }
         TaskRun taskRun = buildTaskRun(task, option);
-        ExecPlan execPlan = getMVRefreshExecPlan(taskRun, task, option, statement);
+        MVRefreshProcessor.ProcessExecPlan processExecPlan =
+                getMVRefreshProcessExecPlan(taskRun, task, option, statement);
+        ExecPlan execPlan = processExecPlan == null ? null : processExecPlan.execPlan();
         String explainString = StmtExecutor.buildExplainString(execPlan, statement,
                 ConnectContext.get(), ResourceGroupClassifier.QueryType.MV, statement.getExplainLevel());
+        if (execPlan == null) {
+            // A planning failure never lands here -- it propagates as DmlException.
+            if (!explainString.endsWith("\n")) {
+                // TRACE TIMES/LOGS output ends without a trailing newline.
+                explainString += "\n";
+            }
+            explainString += noRefreshPlanMessage(processExecPlan) + "\n";
+        }
         // add extra info
         String extraInfo = getExtraExplainInfo(taskRun, statement);
         if (!Strings.isNullOrEmpty(extraInfo)) {
             explainString += "\n" + extraInfo;
         }
         return explainString;
+    }
+
+    private static String noRefreshPlanMessage(MVRefreshProcessor.ProcessExecPlan processExecPlan) {
+        MVRefreshProcessor.ProcessExecPlan.SkipReason skipReason =
+                processExecPlan == null ? null : processExecPlan.skipReason();
+        if (skipReason == null) {
+            return "REFRESH SKIPPED: no refresh plan was produced";
+        }
+        // Exhaustive on purpose: a new SkipReason must not silently inherit an "up to date" claim.
+        return switch (skipReason) {
+            case MV_UP_TO_DATE -> "NO REFRESH NEEDED: the materialized view is already up to date";
+            case SCOPE_UP_TO_DATE -> "NO REFRESH NEEDED: the requested partitions are already up to date, "
+                    + "other partitions of the materialized view may still be stale";
+            case STALE_PINNED_BATCH -> "REFRESH SKIPPED: another refresh job owns the pinned partition ranges";
+        };
     }
 
     public TaskRun buildTaskRun(Task task, ExecuteOption option) {
@@ -426,7 +558,9 @@ public class TaskManager implements MemoryTrackable {
     /**
      * Get the MV refresh execution plan for the given task.
      */
-    public ExecPlan getMVRefreshExecPlan(TaskRun taskRun, Task task, ExecuteOption option, StatementBase statement) {
+    public MVRefreshProcessor.ProcessExecPlan getMVRefreshProcessExecPlan(TaskRun taskRun, Task task,
+                                                                          ExecuteOption option,
+                                                                          StatementBase statement) {
         if (statement == null || !statement.isExplain()) {
             return null;
         }
@@ -447,7 +581,7 @@ public class TaskManager implements MemoryTrackable {
             // prepare the task run context
             taskRunContext = mvRefreshProcessor.prepare(taskRunContext);
             // execute the task run
-            return mvRefreshProcessor.getMVRefreshExecPlan();
+            return mvRefreshProcessor.getMVRefreshProcessExecPlan();
         } catch (Exception e) {
             LOG.warn("Failed to get MV refresh explain for task: {}", task.getName(), e);
             throw new DmlException("Failed to get MV refresh explain for task: %s, error: %s", e,

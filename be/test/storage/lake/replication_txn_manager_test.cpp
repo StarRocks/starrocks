@@ -20,6 +20,7 @@
 
 #include <chrono>
 #include <fstream>
+#include <functional>
 #include <thread>
 
 #include "base/path/filesystem_util.h"
@@ -28,11 +29,12 @@
 #include "column/chunk_factory.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/storage_define.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
 #include "platform/store_path.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_file_stream_converter.h"
 #include "storage/delta_column_group.h"
@@ -44,7 +46,6 @@
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
-#include "storage/primitive/storage_define.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -256,7 +257,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_remote_snapshot_no_missing_versions) 
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -278,7 +279,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_remote_snapshot_no_versions) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -300,7 +301,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -323,7 +324,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash + 1);
@@ -350,7 +351,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -384,7 +385,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -404,7 +405,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -453,7 +454,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -473,7 +474,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -515,7 +516,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -556,7 +557,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_incremental_non_pk_skips_dcg_download
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -593,7 +594,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_w
     remote_snapshot_request.__set_schema_hash(_schema_hash);
     remote_snapshot_request.__set_visible_version(_version);
     remote_snapshot_request.__set_data_version(_version);
-    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_token(get_master_token());
     remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     remote_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -620,7 +621,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_full_snapshot_creates_dcg_file_even_w
     replicate_snapshot_request.__set_schema_hash(_schema_hash);
     replicate_snapshot_request.__set_visible_version(_version);
     replicate_snapshot_request.__set_data_version(_version);
-    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_token(get_master_token());
     replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
     replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
     replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
@@ -772,6 +773,32 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_rowset_meta_col
     // Verify all segment files are .dat files
     for (const auto& segment : op_write.rowset().segment_metas()) {
         EXPECT_TRUE(lake::is_segment(segment.filename()));
+    }
+}
+
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, rejects_encrypted_shared_nothing_rowset_files) {
+    const std::vector<std::pair<std::string, std::function<void(RowsetMetaPB*)>>> cases = {
+            {"segment", [](RowsetMetaPB* meta) { meta->add_segment_encryption_metas("source-encrypted"); }},
+            {"delete", [](RowsetMetaPB* meta) { meta->add_delfile_encryption_metas("source-encrypted"); }},
+            {"update", [](RowsetMetaPB* meta) { meta->add_updatefile_encryption_metas("source-encrypted"); }},
+    };
+
+    for (const auto& [file_type, set_encryption_meta] : cases) {
+        SCOPED_TRACE(file_type);
+        RowsetMetaPB rowset_meta_pb;
+        rowset_meta_pb.set_rowset_id("0");
+        rowset_meta_pb.set_num_segments(1);
+        rowset_meta_pb.set_num_delete_files(1);
+        rowset_meta_pb.set_num_update_files(1);
+        rowset_meta_pb.set_rowset_seg_id(5);
+        set_encryption_meta(&rowset_meta_pb);
+        RowsetMeta rowset_meta(rowset_meta_pb);
+
+        TxnLogPB::OpWrite op_write;
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+        Status status = lake::ReplicationTxnManager::convert_rowset_meta(rowset_meta, 12345, &op_write, &filename_map);
+
+        EXPECT_TRUE(status.is_not_supported()) << status;
     }
 }
 
@@ -1059,6 +1086,34 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_convert_dcg_meta_for_pk
     for (const auto& [old_name, pair] : filename_map) {
         EXPECT_TRUE(lake::is_cols(pair.first));
     }
+}
+
+TEST_F(LakeReplicationTxnManagerStaticFunctionTest, rejects_encrypted_shared_nothing_dcg_files) {
+    DeltaColumnGroupSnapshotPB non_pk_snapshot;
+    non_pk_snapshot.add_rowset_id("source-rowset");
+    non_pk_snapshot.add_segment_id(0);
+    auto* non_pk_list = non_pk_snapshot.add_dcg_lists();
+    non_pk_list->add_versions(1);
+    auto* non_pk_dcg = non_pk_list->add_dcgs();
+    non_pk_dcg->add_column_ids()->add_column_ids(1);
+    non_pk_dcg->add_column_files("source-non-pk.cols");
+    non_pk_dcg->add_encryption_metas("source-encrypted");
+
+    std::unordered_map<std::string, uint32_t> rowset_id_to_seg_id = {{"source-rowset", 5}};
+    DeltaColumnGroupMetadataPB target_non_pk_meta;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> non_pk_filename_map;
+    Status non_pk_status = lake::ReplicationTxnManager::convert_dcg_meta_for_non_pk(
+            non_pk_snapshot, rowset_id_to_seg_id, 12345, &target_non_pk_meta, &non_pk_filename_map);
+    EXPECT_TRUE(non_pk_status.is_not_supported()) << non_pk_status;
+
+    auto source_pk_dcg = std::make_shared<DeltaColumnGroup>();
+    source_pk_dcg->init(1, {{1}}, {"source-pk.cols"}, {"source-encrypted"});
+    std::unordered_map<uint32_t, DeltaColumnGroupList> pk_dcgs = {{5, {source_pk_dcg}}};
+    DeltaColumnGroupMetadataPB target_pk_meta;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> pk_filename_map;
+    Status pk_status =
+            lake::ReplicationTxnManager::convert_dcg_meta_for_pk(pk_dcgs, 12345, &target_pk_meta, &pk_filename_map);
+    EXPECT_TRUE(pk_status.is_not_supported()) << pk_status;
 }
 
 // Test convert_dcg_column_unique_ids

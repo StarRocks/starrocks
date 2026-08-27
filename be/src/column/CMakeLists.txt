@@ -21,7 +21,6 @@ ADD_BE_LIB(ColumnCore
         struct_column.cpp
         raw_buffer.cpp
         column.cpp
-        column_filter_range.cpp
         column_visitor.cpp
         column_visitor_mutable.cpp
         type_converter.cpp
@@ -51,6 +50,8 @@ ADD_BE_LIB(ColumnCore
         arrow/arrow_to_starrocks_converter.cpp
         arrow/arrow_to_json_converter.cpp
         arrow/column_to_arrow_converter.cpp
+        arrow/type_to_arrow_converter.cpp
+        arrow/record_batch_converter.cpp
         datum_convert.cpp
         logical_type_size.cpp
         runtime_type_traits.cpp
@@ -63,9 +64,10 @@ ADD_BE_LIB(ColumnCore
         variant_merger.cpp
         column_hash/column_hash.cpp
         adaptive_offsets.cpp
+        serde/column_array_serde.cpp
 )
 
-target_link_libraries(ColumnCore PRIVATE arrow)
+target_link_libraries(ColumnCore PRIVATE arrow streamvbyte)
 
 ADD_BE_LIB(ChunkCore
         chunk_factory.cpp

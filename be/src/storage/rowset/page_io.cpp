@@ -51,9 +51,9 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/staros/starlet_filesystem.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "fs/fs_starlet.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/raw_container_checked.h"
@@ -113,6 +113,9 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
         break;
     case SHORT_KEY_PAGE:
         CHECK(footer.has_short_key_page_footer());
+        break;
+    case SORT_KEY_PAGE:
+        CHECK(footer.has_sort_key_page_footer());
         break;
     default:
         CHECK(false) << "Invalid page footer type: " << footer.type();
@@ -259,7 +262,14 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 
     Slice compressed_body(page_slice->data, body_size);
     Slice decompressed_body(decompressed->data(), decompressed_size);
-    RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    // Reference the per-column dictionary when the page has one. A frame that does
+    // not reference a dictionary decodes the same either way, so this is safe for
+    // plain pages and for value-dictionary pages in the same column.
+    if (opts.dict != nullptr) {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict));
+    } else {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    }
 
     if (decompressed_body.size != decompressed_size) {
         return Status::Corruption(strings::Substitute("Bad page: uncompressed size mismatch ($0 vs $1), file=$2",

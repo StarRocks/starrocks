@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/tablet_column.h"
+#include "storage_primitive/tablet_column.h"
 
 #include <string>
 #include <utility>
@@ -20,7 +20,7 @@
 
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"
-#include "storage/primitive/aggregate_type.h"
+#include "storage_primitive/aggregate_type.h"
 #include "types/agg_state_desc.h"
 #include "types/type_descriptor.h"
 

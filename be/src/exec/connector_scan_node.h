@@ -23,7 +23,7 @@
 #include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 #include "exec/scan_node.h"
 #include "fs/fs.h"
 
@@ -68,6 +68,8 @@ public:
             size_t num_total_scan_ranges) override;
 
     size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
+
+    void set_filtered_above_iterator(bool value) override;
 
     int io_tasks_per_scan_operator() const override;
     bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }

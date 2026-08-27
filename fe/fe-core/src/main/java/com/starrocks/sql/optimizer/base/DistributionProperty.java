@@ -104,8 +104,11 @@ public class DistributionProperty implements PhysicalProperty {
                         hashDistributionSpec.getEquivDesc()), isCTERequired);
             }
         }
-        // RangeDistributionSpec always builds colocate columns with
-        // nullStrict=true (see RangeDistributionSpec constructor); no conversion needed.
+        // Non-hash specs (gather / broadcast / any / range) need no conversion. A
+        // RangeDistributionSpec in particular is scan-local and never a required
+        // distribution property (appendEnforcers rejects it, and this method only runs
+        // on context.getRequiredProperty()), so a range spec never reaches here even
+        // though a full-outer range-colocate join can produce a null-relaxed one.
         return this;
     }
 

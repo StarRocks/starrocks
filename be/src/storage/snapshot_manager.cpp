@@ -45,9 +45,10 @@
 #include "gen_cpp/Types_constants.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/del_vector.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 
 #ifndef __APPLE__
 #include "storage/index/inverted/clucene/clucene_plugin.h"
@@ -79,7 +80,7 @@ SnapshotManager* SnapshotManager::instance() {
     if (_s_instance == nullptr) {
         std::lock_guard<std::mutex> lock(_mlock);
         if (_s_instance == nullptr) {
-            _s_instance = new SnapshotManager(GlobalEnv::GetInstance()->clone_mem_tracker());
+            _s_instance = new SnapshotManager(RuntimeEnv::GetInstance()->clone_mem_tracker());
         }
     }
     return _s_instance;
@@ -793,6 +794,9 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
                 const auto& indexes = *tablet_schema->indexes();
                 for (const auto& index : indexes) {
                     if (index.index_type() == GIN) {
+                        if (is_builtin_inverted_index(index)) {
+                            continue;
+                        }
                         std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                                 clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
                         std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(

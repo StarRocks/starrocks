@@ -517,7 +517,6 @@ public class OlapTableTest {
     @Test
     public void testIsRangeDistribution() throws AnalysisException {
         // Test case 1: Table with RangeDistributionInfo
-        Database db = new Database(1L, "test_db");
         
         // Create columns for the table
         List<Column> columns = new ArrayList<>();

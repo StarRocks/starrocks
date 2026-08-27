@@ -18,18 +18,17 @@
 
 #include "common/runtime_profile.h"
 #include "compute_env/workgroup/work_group_fwd.h"
-#include "exec/olap_common.h"
-#include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state_fwd.h"
-#include "storage/primitive/conjunctive_predicates.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
-#include "storage/query/olap_scan_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/olap_scan_keys.h"
+#include "storage_primitive/olap_scan_range.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 
@@ -198,7 +197,16 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_miss_counter = nullptr;
     RuntimeProfile::Counter* _vector_search_timer = nullptr;
     RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;

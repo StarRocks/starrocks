@@ -18,8 +18,8 @@
 #include <utility>
 
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "gutil/macros.h"
-#include "storage/primitive/storage_define.h"
 
 namespace google::protobuf {
 class Message;

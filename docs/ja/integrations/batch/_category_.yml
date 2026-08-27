@@ -1,0 +1,8 @@
+position: 40
+label: 'Batch Loading Data'
+description: 'Batch loading and data transformation'
+collapsible: true
+collapsed: true
+link:
+  id: batch
+  type: doc

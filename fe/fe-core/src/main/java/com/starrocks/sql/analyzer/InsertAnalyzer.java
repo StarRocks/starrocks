@@ -190,6 +190,12 @@ public class InsertAnalyzer {
 
             PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
+            // Always validate a static partition clause so a clause naming a non-partition or
+            // non-existent column is rejected instead of being silently ignored (issue #11350).
+            // This is independent of the target-list invariant below, so both run when both apply.
+            if (insertStmt.isStaticKeyPartitionInsert()) {
+                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
+            }
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
                     // case-insensitive match. refer to AstBuilder#getColumnNames
@@ -197,8 +203,6 @@ public class InsertAnalyzer {
                         throw new SemanticException("Must include partition column %s", partitionColName);
                     }
                 }
-            } else if (insertStmt.isStaticKeyPartitionInsert()) {
-                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             }
             if (!table.isIcebergTable()) {
                 List<Column> partitionColumns = tablePartitionColumnNames.stream()
@@ -305,7 +309,12 @@ public class InsertAnalyzer {
             }
         }
 
-        if (!insertStmt.usePartialUpdate()) {
+        // An internal shadow-rewrite INSERT writes only the target rollup index with a column-subset
+        // target list, so a base required column that the rollup does not carry must not be required
+        // here. This branch only fires for the internal rewrite (no user INSERT sets isShadowRewrite).
+        boolean shadowRewriteSubsetWrite =
+                insertStmt.isShadowRewrite() && insertStmt.getTargetWriteIndexId() != null;
+        if (!insertStmt.usePartialUpdate() && !shadowRewriteSubsetWrite) {
             for (Column column : table.getBaseSchema()) {
                 Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL &&

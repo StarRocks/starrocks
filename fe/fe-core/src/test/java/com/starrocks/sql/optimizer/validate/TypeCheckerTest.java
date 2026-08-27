@@ -74,6 +74,7 @@ class TypeCheckerTest {
                 null,
                 null,
                 null,
+                null,
                 null);
 
         OptExpression left = new OptExpression(new MockOperator(OperatorType.LOGICAL_VALUES));

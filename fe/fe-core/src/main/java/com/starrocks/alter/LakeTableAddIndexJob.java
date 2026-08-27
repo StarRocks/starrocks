@@ -18,13 +18,17 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -67,9 +71,30 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     @SerializedName(value = "addBfColumns")
     private List<String> addBfColumns = new ArrayList<>();
 
+    /**
+     * Per-index-meta new schema id + version, allocated once at job build time
+     * (one getNextId() per affected index meta; version = that meta's own
+     * schemaVersion + 1). The fast path reuses each index meta's schema_id but
+     * changes its content (adds the index); every lake by-id schema cache assumes
+     * id==content, so without a fresh id per index, loads/compaction on that index
+     * keep resolving the cached pre-index schema and build no index. Each index's
+     * tablets are stamped with THAT index's new id (populateAlterRequest), and
+     * each affected meta is bumped in applyCatalogMutation — the dispatch set, the
+     * allocation set, and the mutation set are kept identical so FE and BE schema
+     * ids never diverge (e.g. on a table with rollup / sync-MV indexes). Persisted
+     * for idempotent replay. Key = index meta id; value = [schemaId, schemaVersion].
+     */
+    @SerializedName(value = "indexMetaIdToNewSchema")
+    private Map<Long, long[]> indexMetaIdToNewSchema = new HashMap<>();
+
     /** For deserialization / GSON. */
     public LakeTableAddIndexJob() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    /** Record the FE-allocated new schema id/version for one affected index meta. */
+    public void putNewSchema(long indexMetaId, long schemaId, long schemaVersion) {
+        indexMetaIdToNewSchema.put(indexMetaId, new long[] {schemaId, schemaVersion});
     }
 
     public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
@@ -91,11 +116,72 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         this.newIndexes = other.newIndexes == null ? null : new ArrayList<>(other.newIndexes);
         this.indexesToAdd = other.indexesToAdd == null ? null : new ArrayList<>(other.indexesToAdd);
         this.addBfColumns = other.addBfColumns == null ? null : new ArrayList<>(other.addBfColumns);
+        this.indexMetaIdToNewSchema = other.indexMetaIdToNewSchema == null ? null
+                : new HashMap<>(other.indexMetaIdToNewSchema);
+    }
+
+    /**
+     * Returns the subset of {@code indexes} whose columns are ALL carried by the
+     * given materialized index meta's schema, matched by {@link ColumnId} to
+     * mirror the authoritative legacy rule {@code OlapTable.getIndexesBySchema}.
+     * An index is built on every materialized index whose schema carries all of
+     * the index's columns (base plus any qualifying rollup / sync-MV); a meta
+     * that projects an indexed column away gets an empty (no-op) task instead of
+     * failing the alter. Matching by ColumnId (not name) is required so a rollup
+     * / sync-MV that keeps the indexed column's ColumnId under a renamed output
+     * is still indexed — otherwise its FE schema (which includes the index) and
+     * BE tablet (never stamped) would diverge. The index's columns are resolved
+     * to their base-table ColumnId via {@code table}; when {@code table} or
+     * {@code meta} is null (defensive), every index applies.
+     */
+    static List<TOlapTableIndex> applicableIndexes(List<TOlapTableIndex> indexes, MaterializedIndexMeta meta,
+                                                   OlapTable table) {
+        if (indexes == null || indexes.isEmpty() || meta == null) {
+            return indexes;
+        }
+        Set<ColumnId> metaColumnIds = new HashSet<>();
+        for (Column column : meta.getSchema()) {
+            metaColumnIds.add(column.getColumnId());
+        }
+        List<TOlapTableIndex> applicable = new ArrayList<>();
+        for (TOlapTableIndex ix : indexes) {
+            if (ix.getColumns() == null) {
+                continue;
+            }
+            boolean allCarried = true;
+            for (String columnName : ix.getColumns()) {
+                Column baseColumn = table != null ? table.getColumn(columnName) : null;
+                ColumnId columnId = baseColumn != null ? baseColumn.getColumnId() : ColumnId.create(columnName);
+                if (!metaColumnIds.contains(columnId)) {
+                    allCarried = false;
+                    break;
+                }
+            }
+            if (allCarried) {
+                applicable.add(ix);
+            }
+        }
+        return applicable;
     }
 
     @Override
-    protected void populateAlterRequest(AlterReplicaTask task) {
-        task.setOnlyAddIndex(indexesToAdd);
+    protected void populateAlterRequest(AlterReplicaTask task, long indexMetaId, MaterializedIndexMeta indexMeta,
+                                        OlapTable table) {
+        // A materialized index (rollup / sync MV) whose schema projects away an
+        // indexed column must not build that index: send it only the indexes
+        // whose columns its schema carries (matched by ColumnId via the base
+        // table). An empty list makes BE write a no-op txn log so the reserved
+        // alter version still publishes on its tablets.
+        task.setOnlyAddIndex(applicableIndexes(indexesToAdd, indexMeta, table));
+        // Each affected index meta got its OWN new schema id/version; stamp this
+        // tablet with its index's id so BE bumps that index's schema, and
+        // applyCatalogMutation bumps the same meta. Keeps FE and BE schema ids
+        // aligned per index. Metas with no applicable index were never allocated
+        // an entry (see the build sites), so their tablets carry no stamp.
+        long[] newSchema = indexMetaIdToNewSchema.get(indexMetaId);
+        if (newSchema != null && newSchema[0] > 0) {
+            task.setNewIndexSchema(newSchema[0], newSchema[1]);
+        }
     }
 
     @Override
@@ -146,6 +232,33 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
             }
             table.setBloomFilterInfo(merged, fpp);
         }
+
+        // Bump EACH affected index meta's schema id/version so subsequent loads
+        // and compaction resolve the now-indexed schema instead of the cached
+        // pre-index one (the fast path reuses the schema_id but changed its
+        // content; every lake by-id schema cache would otherwise return stale).
+        // Per-index — the same set stamped onto BE tablets (populateAlterRequest)
+        // — so a rollup / sync-MV index meta stays consistent with its tablets.
+        // Idempotent on replay: the persisted ids/versions are set verbatim.
+        // Mirrors LakeTableAsyncFastSchemaChangeJob's per-index meta update.
+        if (indexMetaIdToNewSchema != null && !indexMetaIdToNewSchema.isEmpty()) {
+            boolean bumped = false;
+            for (Map.Entry<Long, long[]> entry : indexMetaIdToNewSchema.entrySet()) {
+                MaterializedIndexMeta meta = table.getIndexMetaByMetaId(entry.getKey());
+                if (meta == null) {
+                    continue;
+                }
+                long[] newSchema = entry.getValue();
+                MaterializedIndexMeta copy = meta.shallowCopy();
+                copy.setSchemaId(newSchema[0]);
+                copy.setSchemaVersion((int) newSchema[1]);
+                table.getIndexMetaIdToMeta().put(entry.getKey(), copy);
+                bumped = true;
+            }
+            if (bumped) {
+                table.rebuildFullSchema();
+            }
+        }
     }
 
     private static boolean sameIndex(Index a, Index b) {
@@ -173,6 +286,8 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         c.newIndexes = this.newIndexes == null ? null : new ArrayList<>(this.newIndexes);
         c.indexesToAdd = this.indexesToAdd == null ? null : new ArrayList<>(this.indexesToAdd);
         c.addBfColumns = this.addBfColumns == null ? null : new ArrayList<>(this.addBfColumns);
+        c.indexMetaIdToNewSchema = this.indexMetaIdToNewSchema == null ? null
+                : new HashMap<>(this.indexMetaIdToNewSchema);
     }
 
     // Accessors for tests / tooling.

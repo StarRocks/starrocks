@@ -14,9 +14,11 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.common.util.DateUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
@@ -62,5 +64,64 @@ public class MetaTierTemporalWindowTest {
         } finally {
             Locale.setDefault(previous);
         }
+    }
+
+    @Test
+    public void windowAcceptsYearOneThroughNineThousand() throws Exception {
+        // DATE and DATETIME share the window down to the start of the AD range: pre-1970 and pre-1582
+        // are FE/BE-identical because both the load and the boundary parse are proleptic Gregorian.
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(1, 1, 1));
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(1500, 6, 15));
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(1969, 12, 31));
+        MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(9999, 12, 31));
+    }
+
+    @Test
+    public void windowRejectsYearZeroAndBeyondNineThousand() {
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(0, 12, 31)));
+        Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> MetaTierTemporalWindow.rejectOutsideWindow(LocalDate.of(10000, 1, 1)));
+    }
+
+    @Test
+    public void renderDateTimeRoundTripsThroughParseStrictForPre1582AndYearOne() {
+        // The render domain now reaches year 1, so the canonical text must round-trip through the
+        // parser the pre-split flow uses, with microseconds, below 1582 and at year 1.
+        LocalDateTime pre1582 = LocalDateTime.of(1500, 6, 15, 12, 0, 0, 500_000_000);
+        String pre1582Text = MetaTierTemporalWindow.renderDateTime(pre1582);
+        Assertions.assertEquals("1500-06-15 12:00:00.500000", pre1582Text);
+        Assertions.assertEquals(pre1582, DateUtils.parseStrictDateTime(pre1582Text));
+
+        LocalDateTime yearOne = LocalDateTime.of(1, 1, 1, 0, 0, 0, 1_000);
+        String yearOneText = MetaTierTemporalWindow.renderDateTime(yearOne);
+        Assertions.assertEquals("0001-01-01 00:00:00.000001", yearOneText);
+        Assertions.assertEquals(yearOne, DateUtils.parseStrictDateTime(yearOneText));
+    }
+
+    @Test
+    void fixedOffsetZoneResolvesToConstantOffset() {
+        Assertions.assertEquals(ZoneOffset.ofHoursMinutes(8, 0),
+                MetaTierTemporalWindow.fixedLoadOffset("+08:00").orElseThrow());
+        Assertions.assertEquals(ZoneOffset.UTC,
+                MetaTierTemporalWindow.fixedLoadOffset("UTC").orElseThrow());
+        Assertions.assertEquals(ZoneOffset.ofHours(-5),
+                MetaTierTemporalWindow.fixedLoadOffset("-05:00").orElseThrow());
+    }
+
+    @Test
+    void namedOrDstOrAliasZoneResolvesToEmpty() {
+        // DST / named zones apply a per-instant offset the meta tier cannot reproduce with one scalar.
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("America/New_York").isEmpty());
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("Asia/Shanghai").isEmpty());
+        // CST resolves (via FE) to Asia/Shanghai, itself non-fixed; ZoneId.of("CST") throws -- either way empty.
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("CST").isEmpty());
+    }
+
+    @Test
+    void nullEmptyOrUnparseableZoneResolvesToEmpty() {
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset(null).isEmpty());
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("").isEmpty());
+        Assertions.assertTrue(MetaTierTemporalWindow.fixedLoadOffset("not-a-zone").isEmpty());
     }
 }

@@ -77,7 +77,10 @@ fi
 
 if [ -f /etc/lsb-release ]; then
     source /etc/lsb-release
-    if [[ $DISTRIB_ID = "Ubuntu" && $DISTRIB_RELEASE =~ 22.* && -f ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh ]]; then
+    # Ubuntu 22.04 and 24.04 share the same prebuilt thirdparty artifacts (vars-ubuntu22-*).
+    # The ubuntu22 artifacts (glibc 2.35) run on both 22.04 and 24.04 (glibc 2.39) by forward
+    # compatibility, so there is no separate vars-ubuntu24-* set.
+    if [[ $DISTRIB_ID = "Ubuntu" && ( $DISTRIB_RELEASE =~ ^22\. || $DISTRIB_RELEASE =~ ^24\. ) && -f ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh ]]; then
         . ${TP_DIR}/vars-ubuntu22-${MACHINE_TYPE}.sh
     fi
 fi
@@ -91,16 +94,16 @@ LIBEVENT_SOURCE=libevent-24236aed01798303745470e6c498bf606e88724a
 LIBEVENT_MD5SUM="c6c4e7614f03754b8c67a17f68177649"
 
 # openssl
-OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz"
-OPENSSL_NAME=openssl-OpenSSL_1_1_1m.tar.gz
-OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
-OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
+OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz"
+OPENSSL_NAME=openssl-3.5.7.tar.gz
+OPENSSL_SOURCE=openssl-3.5.7
+OPENSSL_MD5SUM="36608cd5445f708d0c2200aea9682c35"
 
 # thrift
-THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.23.0/thrift-0.23.0.tar.gz"
-THRIFT_NAME=thrift-0.23.0.tar.gz
-THRIFT_SOURCE=thrift-0.23.0
-THRIFT_MD5SUM="7b62f4258ded41e233a638fe8b9fcf64"
+THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.24.0/thrift-0.24.0.tar.gz"
+THRIFT_NAME=thrift-0.24.0.tar.gz
+THRIFT_SOURCE=thrift-0.24.0
+THRIFT_MD5SUM="232e035ff80c5fb4b7243f0be3a76b02"
 
 # protobuf
 PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.16.1.tar.gz"
@@ -211,10 +214,10 @@ SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
 # MIT Kerberos publishes release archives from web.mit.edu/kerberos/dist.
-KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz"
-KRB5_NAME=krb5-1.19.4.tar.gz
-KRB5_SOURCE=krb5-1.19.4
-KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
+KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.21/krb5-1.21.3.tar.gz"
+KRB5_NAME=krb5-1.21.3.tar.gz
+KRB5_SOURCE=krb5-1.21.3
+KRB5_MD5SUM="beb34d1dfc72ba0571ce72bed03e06eb"
 
 # librdkafka
 LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.11.0.tar.gz"
@@ -229,10 +232,10 @@ PULSAR_SOURCE=pulsar-client-cpp-3.3.0
 PULSAR_MD5SUM="348b7e5ec39e50547668520d13a417a1"
 
 # zstd
-ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.7.tar.gz"
+ZSTD_DOWNLOAD="https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"
 ZSTD_NAME=zstd-1.5.7.tar.gz
 ZSTD_SOURCE=zstd-1.5.7
-ZSTD_MD5SUM="619a019adbbc4536e7fb93cdbb01af3e"
+ZSTD_MD5SUM="780fc1896922b1bc52a4e90980cdda48"
 
 # brotli
 BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.9.tar.gz"
@@ -247,10 +250,10 @@ FLATBUFFERS_SOURCE=flatbuffers-1.10.0
 FLATBUFFERS_MD5SUM="f7d19a3f021d93422b0bc287d7148cd2"
 
 # arrow
-ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-19.0.1.tar.gz"
-ARROW_NAME="arrow-apache-arrow-19.0.1.tar.gz"
-ARROW_SOURCE="arrow-apache-arrow-19.0.1"
-ARROW_MD5SUM="8c5091da0f8fb41a47d7f4dad7b712df"
+ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/refs/tags/apache-arrow-24.0.0.tar.gz"
+ARROW_NAME="arrow-apache-arrow-24.0.0.tar.gz"
+ARROW_SOURCE="arrow-apache-arrow-24.0.0"
+ARROW_MD5SUM="66c53bd00baa79034bd2ca167beea436"
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
@@ -338,10 +341,10 @@ VPACK_SOURCE="velocypack-XYZ1.0"
 VPACK_MD5SUM="161cbf4c347f6daadacfb749c31842f8"
 
 # open-telemetry
-OPENTELEMETRY_DOWNLOAD="https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.2.0.tar.gz"
-OPENTELEMETRY_NAME=opentelemetry-cpp-v1.2.0.tar.gz
-OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.2.0
-OPENTELEMETRY_MD5SUM="c084abc742c6b3cd4c9c3684e559d4e1"
+OPENTELEMETRY_DOWNLOAD="https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/v1.9.1.tar.gz"
+OPENTELEMETRY_NAME=opentelemetry-cpp-v1.9.1.tar.gz
+OPENTELEMETRY_SOURCE=opentelemetry-cpp-1.9.1
+OPENTELEMETRY_MD5SUM="fd353f085f3f3bfbc2c28197287335a0"
 
 # benchmark
 BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz"
@@ -380,7 +383,7 @@ SERDES_SOURCE="libserdes-7.3.1"
 SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
 
 # lzo
-LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
+LZO2_DOWNLOAD="https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
 LZO2_NAME=lzo-2.10.tar.gz
 LZO2_SOURCE=lzo-2.10
 LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"
@@ -410,10 +413,10 @@ LLVM_SOURCE="llvm-project-18.1.8.src"
 LLVM_MD5SUM="81cd0be5ae6f1ad8961746116d426a96"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.04.09.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2026.04.09.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2026.04.09"
-CLUCENE_MD5SUM="a06ce32908dad5b2b834b19a8879a2c8"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2026.06.23.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2026.06.23"
+CLUCENE_MD5SUM="774561443bc372ec6e8e56f46f3e9f4a"
 
 
 #absl
@@ -447,10 +450,10 @@ ICU_SOURCE="icu"
 ICU_MD5SUM="f5f5c827d94af8445766c7023aca7f6b"
 
 # xsimd
-XSIMD_DOWNLOAD="https://github.com/xtensor-stack/xsimd/archive/refs/tags/13.2.0.tar.gz"
-XSIMD_NAME="xsimd-13.2.0.tar.gz"
-XSIMD_SOURCE="xsimd-13.2.0"
-XSIMD_MD5SUM="f451a1c57d2a4fdc0ba663be438dced4"
+XSIMD_DOWNLOAD="https://github.com/xtensor-stack/xsimd/archive/refs/tags/14.0.0.tar.gz"
+XSIMD_NAME="xsimd-14.0.0.tar.gz"
+XSIMD_SOURCE="xsimd-14.0.0"
+XSIMD_MD5SUM="75c0d34cf7011924ba19978076c76dc1"
 
 # libxml2
 LIBXML2_DOWNLOAD="https://github.com/GNOME/libxml2/archive/refs/tags/v2.11.7.tar.gz"
@@ -498,13 +501,21 @@ BENCHGEN_NAME=benchgen-26.03.11.tar.gz
 BENCHGEN_SOURCE=benchgen-26.03.11
 BENCHGEN_MD5SUM="fd97eb82eb4c629d7916b6d012c7e81d"
 
+# paimon-cpp
+# NOTE: all its third-party deps are BUNDLED and downloaded by its own cmake
+# at build time (network required when building this package)
+PAIMON_CPP_DOWNLOAD="https://github.com/apache/paimon-cpp/releases/download/v0.3.0/apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_NAME="apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_SOURCE="paimon-cpp-0.3.0"
+PAIMON_CPP_MD5SUM="e82940588fa423926cb47b2617cf21dc"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BLAKE3 BENCHGEN"
+            BLAKE3 BENCHGEN PAIMON_CPP"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

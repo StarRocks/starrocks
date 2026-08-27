@@ -60,7 +60,6 @@ public class DeltaUtils {
         String tblName = snapshot.getTableName();
         DeltaLakeEngine deltaLakeEngine = snapshot.getDeltaLakeEngine();
         SnapshotImpl snapshotImpl = snapshot.getSnapshot();
-        String path = snapshot.getPath();
 
         StructType deltaSchema = snapshotImpl.getSchema();
         if (deltaSchema == null) {

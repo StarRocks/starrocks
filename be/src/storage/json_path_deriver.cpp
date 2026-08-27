@@ -35,8 +35,8 @@
 #include "common/status.h"
 #include "fmt/format.h"
 #include "gutil/casts.h"
-#include "storage/primitive/flat_json_config.h"
 #include "storage/rowset/column_reader.h"
+#include "storage_primitive/flat_json_config.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
 
