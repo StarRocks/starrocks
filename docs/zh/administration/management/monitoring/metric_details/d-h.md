@@ -276,10 +276,12 @@ description: "Alphabetical d - h"
 
 ## `fe_edit_log`
 
-- 单位: 个
-- 类型: 瞬时
-- 标签: `type` (`current` 或 `starmgr_current`)
-- 描述: 当前保留在 BDB JE 中的元数据日志条数，从保留的最早一条日志计算到最新写入的一条。Checkpoint 守护线程只有在所有已注册的 FE 都收到新 image 之后才会删除旧日志，因此一个无法访问的已注册 FE 会导致该值持续增长，可作为元数据磁盘即将写满的预警。该值在每次采集时从日志中实时读取，因此 FE 重启后立即准确，并在日志被真正删除后随之下降。`current` 对应 FE 元数据日志。`starmgr_current` 对应 StarMgr 日志：在存算分离模式下它与 FE 元数据日志存放于同一个 BDB JE 环境，但由各自独立的 checkpoint 守护线程清理，因此可能独立增长并占用同一块元数据磁盘；在存算一体模式下该序列恒为 0。
+- 单位: 个（`current`）/ 字节（`current_bytes`）
+- 类型: 累积值
+- 标签: `type` (`current` 或 `current_bytes`)
+- 描述: 自上次有效清理以来 FE 元数据日志的积压量：`current` 统计条数，`current_bytes` 统计字节数。两者随日志写入而累加，仅当某轮 checkpoint **确实删除了** journal database 时才会重新基准化——`current_bytes` 归零，`current` 被置为 BDB JE 中仍保留的日志条数。Checkpoint 守护线程只有在所有已注册的 FE 都收到新 image 之后才会删除旧日志，因此一个无法访问的已注册 FE 会导致两个序列持续增长，可作为元数据磁盘即将写满的预警。
+
+  两点注意：FE 进程重启后两个序列都会从 0 重新开始；两者仅覆盖 FE 元数据日志，不含存算分离模式下与之共用同一个 BDB JE 环境的 StarMgr 日志。它们以 counter 类型上报，因此适合观察增长和趋势，而不应当作磁盘实际占用的精确值。
 
 ## `fe_edit_log_read`
 

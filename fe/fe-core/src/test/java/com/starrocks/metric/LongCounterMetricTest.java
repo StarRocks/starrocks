@@ -17,9 +17,6 @@ package com.starrocks.metric;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
-import java.util.List;
-
 public class LongCounterMetricTest {
 
     @Test
@@ -34,20 +31,32 @@ public class LongCounterMetricTest {
     }
 
     /**
-     * CounterMetric is documented as "can only be increased", and Prometheus reads any drop in a
-     * counter as a process restart. Levels that legitimately go down - such as the number of edit
-     * logs still retained in bdbje - therefore have to be gauges, not counters with a way to lower
-     * them. This pins that: no API on LongCounterMetric may walk the value back.
+     * reset()/update() exist for the "since the last X" counters (edit_log{type="current"} and
+     * friends), which are re-baselined when a cleanup actually reclaims journals. Deliberately not
+     * a gauge: recomputing that level on every scrape would mean a Database.count() full btree scan
+     * on the metrics path.
      */
     @Test
-    public void testNoApiCanLowerTheValue() {
-        List<String> loweringMethods = Arrays.stream(LongCounterMetric.class.getDeclaredMethods())
-                .map(m -> m.getName())
-                .filter(n -> n.equals("reset") || n.equals("update") || n.equals("set")
-                        || n.equals("decrease"))
-                .toList();
+    public void testResetAndUpdateReBaseline() {
+        LongCounterMetric metric = new LongCounterMetric("test", Metric.MetricUnit.NOUNIT, "test");
 
-        Assertions.assertTrue(loweringMethods.isEmpty(),
-                "LongCounterMetric must stay increase-only, but found: " + loweringMethods);
+        metric.increase(10L);
+        metric.increase(5L);
+        Assertions.assertEquals(15L, metric.getValue());
+
+        metric.reset();
+        Assertions.assertEquals(0L, metric.getValue());
+
+        // accumulation resumes from the new baseline
+        metric.increase(3L);
+        Assertions.assertEquals(3L, metric.getValue());
+
+        // update() replaces rather than adds
+        metric.update(7L);
+        Assertions.assertEquals(7L, metric.getValue());
+        metric.update(2L);
+        Assertions.assertEquals(2L, metric.getValue());
+        metric.increase(1L);
+        Assertions.assertEquals(3L, metric.getValue());
     }
 }

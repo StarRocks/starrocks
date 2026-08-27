@@ -241,6 +241,117 @@ public class CheckpointControllerTest {
     }
 
     /**
+     * A real reclaim re-baselines the backlog counters: bytes go back to zero, the count is set to
+     * what bdbje still holds. This is the only place they are lowered - the scrape path never reads
+     * them out of the journal, because getMaxJournalId() runs a full btree count().
+     */
+    @Test
+    public void testBacklogCountersReBaselinedOnReclaim() {
+        Journal journal = Mockito.mock(Journal.class);
+        Mockito.when(journal.getPrefix()).thenReturn("");
+        Mockito.when(journal.getDatabaseNames())
+                .thenReturn(List.of(1L, 101L, 201L))
+                .thenReturn(List.of(201L));
+        Mockito.when(journal.getMaxJournalId()).thenReturn(300L);
+        CheckpointController controller = new CheckpointController("test-rebaseline", journal, "");
+
+        withBacklogMetrics(() -> {
+            MetricRepo.COUNTER_EDIT_LOG_CURRENT.increase(5000L);
+            MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.increase(9_000_000L);
+
+            controller.deleteOldJournals(500L);
+
+            // journals 201..300 survive -> 100 retained
+            assertEquals(100L, MetricRepo.COUNTER_EDIT_LOG_CURRENT.getValue());
+            assertEquals(0L, MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.getValue());
+        });
+    }
+
+    /**
+     * The case this PR is about: an unreachable peer pins deleteVersion at 0, nothing is reclaimed,
+     * and the backlog counters must keep their accumulated values. Keying the reset off
+     * "deleteJournals() did not throw" would be wrong here - it returns normally having removed
+     * nothing, which would zero a backlog that is still growing.
+     */
+    @Test
+    public void testBacklogCountersKeptWhenNothingReclaimed() {
+        Journal journal = Mockito.mock(Journal.class);
+        Mockito.when(journal.getPrefix()).thenReturn("");
+        Mockito.when(journal.getDatabaseNames()).thenReturn(List.of(1L, 101L));
+        CheckpointController controller = new CheckpointController("test-keep", journal, "");
+
+        withBacklogMetrics(() -> {
+            MetricRepo.COUNTER_EDIT_LOG_CURRENT.increase(5000L);
+            MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.increase(9_000_000L);
+
+            controller.deleteOldJournals(500L);
+
+            assertEquals(5000L, MetricRepo.COUNTER_EDIT_LOG_CURRENT.getValue());
+            assertEquals(9_000_000L, MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.getValue());
+        });
+    }
+
+    /**
+     * StarMgr runs its own CheckpointController over its own "starmgr_" journal; it must not
+     * re-baseline the FE metadata journal's counters.
+     */
+    @Test
+    public void testStarMgrReclaimLeavesGlobalStateCountersAlone() {
+        Journal journal = Mockito.mock(Journal.class);
+        Mockito.when(journal.getPrefix()).thenReturn("starmgr_");
+        Mockito.when(journal.getDatabaseNames())
+                .thenReturn(List.of(1L, 101L))
+                .thenReturn(List.of(101L));
+        // non-empty subDir -> belongToGlobalStateMgr == false
+        CheckpointController controller = new CheckpointController("test-starmgr", journal, "starmgr");
+
+        withBacklogMetrics(() -> {
+            MetricRepo.COUNTER_EDIT_LOG_CURRENT.increase(5000L);
+            MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.increase(9_000_000L);
+
+            controller.deleteOldJournals(500L);
+
+            assertEquals(5000L, MetricRepo.COUNTER_EDIT_LOG_CURRENT.getValue());
+            assertEquals(9_000_000L, MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.getValue());
+        });
+    }
+
+    @Test
+    public void testGetRetainedJournalCount() {
+        // journals 101..200 still held -> 100
+        assertEquals(100L, CheckpointController.getRetainedJournalCount(List.of(101L), 200L));
+        // a single journal in a freshly rolled database
+        assertEquals(1L, CheckpointController.getRetainedJournalCount(List.of(101L), 101L));
+        // counted from the oldest surviving database
+        assertEquals(300L, CheckpointController.getRetainedJournalCount(List.of(1L, 101L, 201L), 300L));
+        // everything gone / environment closing / unreadable max id must not go negative
+        assertEquals(0L, CheckpointController.getRetainedJournalCount(List.of(), 200L));
+        assertEquals(0L, CheckpointController.getRetainedJournalCount(null, 200L));
+        assertEquals(0L, CheckpointController.getRetainedJournalCount(List.of(101L), -1L));
+    }
+
+    /**
+     * Swaps in fresh backlog counters and flips MetricRepo.hasInit for the body, then restores.
+     */
+    private void withBacklogMetrics(Runnable body) {
+        LongCounterMetric oldCount = MetricRepo.COUNTER_EDIT_LOG_CURRENT;
+        LongCounterMetric oldBytes = MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES;
+        boolean oldHasInit = MetricRepo.hasInit;
+        MetricRepo.COUNTER_EDIT_LOG_CURRENT =
+                new LongCounterMetric("edit_log", Metric.MetricUnit.OPERATIONS, "test");
+        MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES =
+                new LongCounterMetric("edit_log", Metric.MetricUnit.BYTES, "test");
+        MetricRepo.hasInit = true;
+        try {
+            body.run();
+        } finally {
+            MetricRepo.hasInit = oldHasInit;
+            MetricRepo.COUNTER_EDIT_LOG_CURRENT = oldCount;
+            MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES = oldBytes;
+        }
+    }
+
+    /**
      * A failed removeDatabase() must not be swallowed: the caller logs it under the
      * "Delete old edit log failed:" prefix and rethrows so the daemon round aborts.
      */

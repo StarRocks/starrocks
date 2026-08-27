@@ -16,6 +16,7 @@
 package com.starrocks.journal;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
@@ -51,6 +52,8 @@ public class JournalWriter {
     // other threads can put log to this queue by calling Editlog.logEdit()
     private final BlockingQueue<JournalTask> journalQueue;
     private final Journal journal;
+    // whether this writer serves the FE metadata journal (as opposed to StarMgr's)
+    private final boolean globalStateJournal;
 
     // used for checking if edit log need to roll
     protected long rollJournalCounter = 0;
@@ -93,6 +96,11 @@ public class JournalWriter {
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
+        // StarMgr builds its own JournalWriter over the same class with a "starmgr_" prefix, and its
+        // journal is reclaimed by a separate CheckpointController. Only the unprefixed FE metadata
+        // journal feeds the backlog counters, so that what accumulates here matches what that
+        // controller resets.
+        this.globalStateJournal = Strings.isNullOrEmpty(journal.getPrefix());
     }
 
     /**
@@ -381,6 +389,9 @@ public class JournalWriter {
         }
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) currentBatchTasks.size());
+            if (globalStateJournal) {
+                MetricRepo.COUNTER_EDIT_LOG_CURRENT.increase((long) currentBatchTasks.size());
+            }
             MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update(durationMs);
             MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(currentBatchTasks.size());
             MetricRepo.HISTO_JOURNAL_WRITE_BYTES.update(uncommittedEstimatedBytes);
@@ -388,6 +399,9 @@ public class JournalWriter {
 
             for (JournalTask e : currentBatchTasks) {
                 MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase(e.estimatedSizeByte());
+                if (globalStateJournal) {
+                    MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.increase(e.estimatedSizeByte());
+                }
             }
         }
         if (journalQueue.size() > Config.metadata_journal_max_batch_cnt) {

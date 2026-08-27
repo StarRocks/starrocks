@@ -64,7 +64,6 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
-import com.starrocks.journal.Journal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
@@ -91,7 +90,6 @@ import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.staros.StarMgrServer;
-import com.starrocks.staros.StarOSBDBJEJournalSystem;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -330,6 +328,12 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
+    // Journal backlog since the last effective cleanup. Accumulated on the write path and only
+    // walked back when a journal database is actually removed - never read out of bdbje at scrape
+    // time, because that would put Database.count() (a full btree scan, and slowest exactly when
+    // the backlog is largest) on the metrics path.
+    public static LongCounterMetric COUNTER_EDIT_LOG_CURRENT;
+    public static LongCounterMetric COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES;
     public static LongCounterMetric COUNTER_IMAGE_WRITE;
     public static LongCounterMetric COUNTER_IMAGE_WRITE_FAILED;
     public static LongCounterMetric COUNTER_IMAGE_PUSH;
@@ -639,36 +643,6 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
-        // Edit logs still held in bdbje, i.e. not yet dropped by the checkpoint daemon. An
-        // unreachable follower blocks deleteOldJournals(), so this level keeps climbing and is the
-        // signal that the metadata disk is heading for a fill.
-        // Derived on every scrape rather than accumulated: a counter would restart at 0 on FE
-        // startup - exactly when a blocked cleanup has left the most journals behind - and could
-        // only be lowered by writes that Prometheus would read as counter resets.
-        GaugeMetric<Long> retainedEditLog = new GaugeMetric<Long>(
-                "edit_log", MetricUnit.OPERATIONS, "number of edit logs retained in bdbje") {
-            @Override
-            public Long getValue() {
-                return getRetainedJournalCount(GlobalStateMgr.getCurrentState().getJournal());
-            }
-        };
-        retainedEditLog.addLabel(new MetricLabel("type", "current"));
-        STARROCKS_METRIC_REGISTER.addMetric(retainedEditLog);
-
-        // In shared-data mode StarMgr writes a "starmgr_"-prefixed journal into the SAME bdbje
-        // environment (StarRocksFEServer hands it GlobalStateMgr's BDBEnvironment) but cleans it up
-        // through its own CheckpointController. So it can be pinned on its own and fill the same
-        // metadata disk while the series above stays flat - it needs its own series.
-        GaugeMetric<Long> retainedStarMgrEditLog = new GaugeMetric<Long>(
-                "edit_log", MetricUnit.OPERATIONS, "number of starmgr edit logs retained in bdbje") {
-            @Override
-            public Long getValue() {
-                return getRetainedStarMgrJournalCount();
-            }
-        };
-        retainedStarMgrEditLog.addLabel(new MetricLabel("type", "starmgr_current"));
-        STARROCKS_METRIC_REGISTER.addMetric(retainedStarMgrEditLog);
-
         GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
                 "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,
                 "epoch millis of the last finished automated cluster snapshot, 0 if none") {
@@ -968,6 +942,14 @@ public final class MetricRepo {
         COUNTER_EDIT_LOG_SIZE_BYTES =
                 new LongCounterMetric("edit_log_size_bytes", MetricUnit.BYTES, "size of edit log");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_SIZE_BYTES);
+        COUNTER_EDIT_LOG_CURRENT = new LongCounterMetric(
+                "edit_log", MetricUnit.OPERATIONS, "number of edit logs retained since the last cleanup");
+        COUNTER_EDIT_LOG_CURRENT.addLabel(new MetricLabel("type", "current"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_CURRENT);
+        COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES = new LongCounterMetric(
+                "edit_log", MetricUnit.BYTES, "bytes of edit logs retained since the last cleanup");
+        COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.addLabel(new MetricLabel("type", "current_bytes"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES);
         COUNTER_IMAGE_WRITE = new LongCounterMetric("image_write", MetricUnit.OPERATIONS, "counter of image generated");
         COUNTER_IMAGE_WRITE.addLabel(new MetricLabel("type", "success"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE);
@@ -1400,38 +1382,6 @@ public final class MetricRepo {
                 stat.counterCloneTaskIntraNodeCopyDurationMs);
         cloneTaskIntraNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
         STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyDurationMs);
-    }
-
-    /**
-     * Number of edit logs bdbje is still holding: everything from the oldest surviving journal
-     * database up to the newest written id. Read straight off the journal so the value survives an
-     * FE restart and never has to be walked back by hand.
-     */
-    static long getRetainedJournalCount(Journal journal) {
-        if (journal == null) {
-            return 0L;
-        }
-        // Sorted ascending, and null while the bdb environment is closing.
-        List<Long> databaseNames = journal.getDatabaseNames();
-        if (databaseNames == null || databaseNames.isEmpty()) {
-            return 0L;
-        }
-        long oldestRetainedId = databaseNames.get(0);
-        long maxJournalId = journal.getMaxJournalId();
-        return maxJournalId < oldestRetainedId ? 0L : maxJournalId - oldestRetainedId + 1;
-    }
-
-    /**
-     * Same for the StarMgr journal, which shares the bdbje environment in shared-data mode. Returns
-     * 0 when there is no StarMgr journal at all: the journal system is only built by
-     * initialize(BDBEnvironment, ...), so it stays null in shared-nothing mode.
-     * <p>
-     * getServingState() rather than getCurrentState() on purpose - the latter constructs a second
-     * StarMgrServer when called from the checkpoint thread.
-     */
-    static long getRetainedStarMgrJournalCount() {
-        StarOSBDBJEJournalSystem journalSystem = StarMgrServer.getServingState().getJournalSystem();
-        return journalSystem == null ? 0L : getRetainedJournalCount(journalSystem.getJournal());
     }
 
     // to generate the metrics related to tablets of each backend

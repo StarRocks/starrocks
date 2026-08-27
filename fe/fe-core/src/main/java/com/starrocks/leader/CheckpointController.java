@@ -513,6 +513,14 @@ public class CheckpointController extends LeaderDaemon {
         }
         List<Long> databaseNamesAfter = journal.getDatabaseNames();
         if (journalDatabaseDeleted(databaseNamesBefore, databaseNamesAfter)) {
+            if (belongToGlobalStateMgr && MetricRepo.hasInit) {
+                // Only on a real reclaim. deleteJournals() returns normally when it removes
+                // nothing, so keying off "it did not throw" would also fire when deleteVersion is
+                // pinned at 0 by an unreachable peer, zeroing a backlog that is still growing.
+                MetricRepo.COUNTER_CURRENT_EDIT_LOG_SIZE_BYTES.reset();
+                MetricRepo.COUNTER_EDIT_LOG_CURRENT.update(
+                        getRetainedJournalCount(databaseNamesAfter, journal.getMaxJournalId()));
+            }
             LOG.info("Delete old edit log succeeded: deleteVersion={}, imageVersion={}, "
                             + "minReplayedJournalId={}, prefix={}, databasesBefore={}, databasesAfter={}",
                     deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(),
@@ -535,6 +543,19 @@ public class CheckpointController extends LeaderDaemon {
             return false;
         }
         return after.isEmpty() || after.get(0) > before.get(0);
+    }
+
+    /**
+     * Journals still held after a reclaim: from the oldest surviving journal database up to the
+     * newest written id. Called once per successful cleanup to re-baseline the backlog counter -
+     * never from the metrics path, since getMaxJournalId() runs Database.count() over the newest
+     * journal database.
+     */
+    static long getRetainedJournalCount(List<Long> databaseNames, long maxJournalId) {
+        if (databaseNames == null || databaseNames.isEmpty() || maxJournalId < databaseNames.get(0)) {
+            return 0;
+        }
+        return maxJournalId - databaseNames.get(0) + 1;
     }
 
     // Package-private so same-package tests can exercise the per-node push failure path.

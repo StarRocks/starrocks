@@ -276,10 +276,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 ## `fe_edit_log`
 
-- Unit: Count
-- Type: Instantaneous
-- Labels: `type` (`current` or `starmgr_current`)
-- Description: Number of edit logs currently retained in BDB JE, counted from the oldest retained journal to the newest one written. The checkpoint daemon deletes old journals only after every registered FE has received the new image, so a registered FE that cannot be reached keeps this value climbing and gives early warning that the metadata disk is filling up. The value is read from the journal on every scrape, so it is accurate right after an FE restart and drops as soon as journals are actually deleted. `current` covers the FE metadata journal. `starmgr_current` covers the StarMgr journal, which in shared-data mode is stored in the same BDB JE environment but is cleaned up by its own checkpoint daemon, so it can grow independently and consume the same metadata disk; it reports 0 in shared-nothing mode.
+- Unit: Count (`current`) / Bytes (`current_bytes`)
+- Type: Cumulative
+- Labels: `type` (`current` or `current_bytes`)
+- Description: Backlog of FE metadata journals since the last effective cleanup: `current` counts entries, `current_bytes` counts bytes. Both accumulate as journals are written and are re-baselined only when a checkpoint round actually removes a journal database — `current_bytes` returns to zero and `current` is set to the number of journals BDB JE still holds. The checkpoint daemon removes old journals only after every registered FE has received the new image, so a registered FE that cannot be reached leaves both series climbing, which is the early warning that the metadata disk is filling up.
+
+  Two caveats. Both series restart at zero when the FE process restarts, and both cover only the FE metadata journal, not the StarMgr journal that shares the same BDB JE environment in shared-data mode. They are reported as counters, so use them for growth and trend rather than as an exact on-disk size.
 
 ## `fe_edit_log_read`
 

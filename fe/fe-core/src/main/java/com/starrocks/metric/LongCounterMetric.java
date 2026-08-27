@@ -55,4 +55,20 @@ public class LongCounterMetric extends CounterMetric<Long> {
     public Long getValue() {
         return value.longValue();
     }
+
+    /**
+     * Only for "since the last X" counters such as edit_log{type="current"}, whose whole point is
+     * to drop back when X happens. Prometheus reads the drop as a counter restart, which is
+     * acceptable here: the alternative is recomputing the level out of bdbje on every scrape, and
+     * that puts a full btree scan on the metrics path. Do not call these on a plain cumulative
+     * counter - CounterMetric is otherwise increase-only.
+     */
+    public void reset() {
+        value.reset();
+    }
+
+    public void update(long newValue) {
+        value.reset();
+        value.add(newValue);
+    }
 }

@@ -24,23 +24,18 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
-import com.starrocks.journal.Journal;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.staros.StarMgrServer;
-import com.starrocks.staros.StarOSBDBJEJournalSystem;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Set;
@@ -146,77 +141,17 @@ public class MetricRepoTest extends PlanTestBase {
         String output = visitor.build();
 
         Assertions.assertTrue(output.contains("starrocks_fe_edit_log{type=\"current\""), output);
-        // StarMgr shares the bdbje environment in shared-data mode but cleans up independently, so
-        // it gets its own series rather than being folded into the one above
-        Assertions.assertTrue(output.contains("starrocks_fe_edit_log{type=\"starmgr_current\""), output);
+        Assertions.assertTrue(output.contains("starrocks_fe_edit_log{type=\"current_bytes\""), output);
         Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"success\""), output);
         Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"failed\""), output);
         Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"success\""), output);
         Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"failed\""), output);
 
-        // The retained-journal level is a gauge; image counts stay counters. Only one TYPE line is
-        // emitted per metric name (PrometheusMetricVisitor dedupes it), so declaring the retained
-        // level as a counter would make every cleanup look like a counter reset to Prometheus.
-        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log gauge"), output);
+        // All of these are counters. Only one TYPE line is emitted per metric name
+        // (PrometheusMetricVisitor dedupes it), so the series sharing a name must agree.
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log counter"), output);
         Assertions.assertTrue(output.contains("# TYPE starrocks_fe_image_write counter"), output);
         Assertions.assertTrue(output.contains("# TYPE starrocks_fe_image_push counter"), output);
-    }
-
-    @Test
-    public void testGetRetainedJournalCount() {
-        // journals 101..200 are still on disk -> 100 retained
-        Assertions.assertEquals(100L, MetricRepo.getRetainedJournalCount(journalOf(List.of(101L), 200L)));
-        // a single journal written into a freshly rolled database
-        Assertions.assertEquals(1L, MetricRepo.getRetainedJournalCount(journalOf(List.of(101L), 101L)));
-        // several databases retained: counted from the oldest surviving one
-        Assertions.assertEquals(300L, MetricRepo.getRetainedJournalCount(
-                journalOf(List.of(1L, 101L, 201L), 300L)));
-
-        // nothing retained / bdb environment closing / journal not open yet
-        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(journalOf(List.of(), 200L)));
-        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(journalOf(null, 200L)));
-        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(null));
-        // getMaxJournalId() returns -1 when the environment cannot be read; must not go negative
-        Assertions.assertEquals(0L, MetricRepo.getRetainedJournalCount(journalOf(List.of(101L), -1L)));
-    }
-
-    /**
-     * Shared-nothing mode never builds the StarMgr journal system, so the gauge must read 0 instead
-     * of throwing on a null journalSystem and taking the whole /metrics endpoint down with it.
-     */
-    @Test
-    public void testGetRetainedStarMgrJournalCountWithoutStarMgr() {
-        Assertions.assertNull(StarMgrServer.getServingState().getJournalSystem());
-        Assertions.assertEquals(0L, MetricRepo.getRetainedStarMgrJournalCount());
-    }
-
-    /**
-     * In shared-data mode the StarMgr journal lives in the same bdbje environment under the
-     * "starmgr_" prefix, and its retained count has to be reported independently of the
-     * GlobalStateMgr one.
-     */
-    @Test
-    public void testGetRetainedStarMgrJournalCountInSharedData() {
-        // built before the stubbing calls below: creating a mock inside when(...) is nested
-        // stubbing and Mockito rejects it
-        Journal starMgrJournal = journalOf(List.of(201L), 500L);
-        StarOSBDBJEJournalSystem journalSystem = Mockito.mock(StarOSBDBJEJournalSystem.class);
-        Mockito.when(journalSystem.getJournal()).thenReturn(starMgrJournal);
-        StarMgrServer starMgrServer = Mockito.mock(StarMgrServer.class);
-        Mockito.when(starMgrServer.getJournalSystem()).thenReturn(journalSystem);
-
-        try (MockedStatic<StarMgrServer> mocked = Mockito.mockStatic(StarMgrServer.class)) {
-            mocked.when(StarMgrServer::getServingState).thenReturn(starMgrServer);
-
-            Assertions.assertEquals(300L, MetricRepo.getRetainedStarMgrJournalCount());
-        }
-    }
-
-    private static Journal journalOf(List<Long> databaseNames, long maxJournalId) {
-        Journal journal = Mockito.mock(Journal.class);
-        Mockito.when(journal.getDatabaseNames()).thenReturn(databaseNames);
-        Mockito.when(journal.getMaxJournalId()).thenReturn(maxJournalId);
-        return journal;
     }
 
     @Test
