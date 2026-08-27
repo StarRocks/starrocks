@@ -664,9 +664,10 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
     // another can flip the boundary case -- e.g. envelope (100) vs lower bound (100, MIN) would
     // read as "range entirely above the envelope" even though key 100 is exactly the range's first
     // key. Degrading to kUnknown keeps that case on the legacy path instead of proving a false kNo.
-    const size_t range_arity =
-            !range.is_minimum() ? range.lower_bound().size() : (!range.is_maximum() ? range.upper_bound().size() : 0);
-    if (range_arity == 0 || envelope_min.size() != range_arity || envelope_max.size() != range_arity) {
+    const size_t envelope_arity = envelope_min.size();
+    if (envelope_max.size() != envelope_arity ||
+        (!range.is_minimum() && range.lower_bound().size() != envelope_arity) ||
+        (!range.is_maximum() && range.upper_bound().size() != envelope_arity)) {
         return RangeOverlap::kUnknown;
     }
 

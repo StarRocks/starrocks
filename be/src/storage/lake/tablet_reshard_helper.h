@@ -159,17 +159,12 @@ const TabletRangePB& effective_old_tablet_local_range(const RowsetMetadataPB& ro
 
 // Where a cross-published rowset's keys sit relative to one sibling's range.
 //
-// The stat apportionment below splits a rowset's num_rows/data_size by SPLIT INDEX and knows
-// nothing about which sub-range the rows occupy. That is fine as an estimate -- read-time range
-// filtering decides what a sibling actually returns -- except that num_rows == 0 is load bearing:
-// both txn log appliers DROP a rowset whose num_rows is 0 (NonPrimaryKeyTxnLogApplier::
-// apply_write_log requires num_rows > 0 || has_delete_predicate; PrimaryKeyTxnLogApplier::
-// apply_write_log returns early on the same condition). A rowset with fewer rows than the split
-// count therefore loses the rows of whichever sibling was apportioned 0.
-//
-// Classifying the rowset's key envelope against the sibling's range fixes that without inventing
-// row counts: a sibling that provably owns nothing gets a true 0 (and is correctly dropped), while
-// endpoint ownership lets an overlapping sibling absorb the virtual shares of pruned outer siblings.
+// The stat apportionment below is a persisted estimate; segment facts, rather than num_rows alone,
+// determine whether an applier retains a rowset. A sibling that provably owns nothing clears its
+// segments and counters. An overlapping sibling keeps its segments even when its estimated counter
+// is zero. For comparable envelopes across contiguous children, endpoint ownership folds virtual
+// shares from pruned outer siblings into the endpoint children, conserving num_rows and data_size
+// across the family without requiring sibling-wide context.
 enum class RangeOverlap {
     // The envelope could not be determined -- a segment without sort-key bounds, or bounds whose
     // arity does not match the range's. Callers keep the legacy index-based apportionment.

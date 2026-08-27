@@ -740,6 +740,12 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     two_column_lower_bound.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(0)));
     two_column_lower_bound.to_proto(arity_mismatch.mutable_lower_bound());
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(one_key, arity_mismatch));
+
+    // Both finite range bounds must use the envelope arity. Checking only the
+    // lower bound would incorrectly classify this malformed range as kNo.
+    TabletRangePB upper_arity_mismatch = co_range(40, 50);
+    two_column_lower_bound.to_proto(upper_arity_mismatch.mutable_upper_bound());
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(one_key, upper_arity_mismatch));
 }
 
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_contiguous_overlap_interval) {
@@ -751,17 +757,28 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_con
                     RowsetMetadataPB rowset;
                     rowset.set_num_rows(source_value);
                     rowset.set_data_size(source_value * 10);
-                    rowset.add_segment_metas()->set_filename("segment.dat");
+                    // Each inner child owns [100*i, 100*(i+1)); the outer
+                    // children are unbounded. Choosing the envelope endpoints
+                    // on child lower bounds exercises closed-open ownership.
+                    add_segment_span(&rowset, first * 100,
+                                     last == split_count - 1 ? split_count * 100 : (last + 1) * 100 - 1);
 
                     int64_t total_rows = 0;
                     int64_t total_size = 0;
                     for (int32_t split_index = 0; split_index < split_count; ++split_index) {
-                        const RangeOverlap overlap = split_index < first || split_index > last ? RangeOverlap::kNo
-                                                     : split_index == first && split_index == last
-                                                             ? RangeOverlap::kContainsBoth
-                                                     : split_index == first ? RangeOverlap::kContainsLower
-                                                     : split_index == last  ? RangeOverlap::kContainsUpper
-                                                                            : RangeOverlap::kInterior;
+                        const TabletRangePB child_range =
+                                split_index == 0                 ? co_range(std::nullopt, 100)
+                                : split_index == split_count - 1 ? co_range(100 * split_index, std::nullopt)
+                                                                 : co_range(100 * split_index, 100 * (split_index + 1));
+                        const RangeOverlap overlap = classify_rowset_range_overlap(rowset, child_range);
+                        const RangeOverlap expected = split_index < first || split_index > last ? RangeOverlap::kNo
+                                                      : split_index == first && split_index == last
+                                                              ? RangeOverlap::kContainsBoth
+                                                      : split_index == first ? RangeOverlap::kContainsLower
+                                                      : split_index == last  ? RangeOverlap::kContainsUpper
+                                                                             : RangeOverlap::kInterior;
+                        EXPECT_EQ(expected, overlap) << "split_count=" << split_count << " first=" << first
+                                                     << " last=" << last << " split_index=" << split_index;
                         RowsetMetadataPB child = rowset;
                         update_rowset_data_stats(&child, split_count, split_index, overlap);
 
