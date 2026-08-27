@@ -110,7 +110,7 @@ TEST_F(PaimonFileSystemTest, OpenReadSeekAndReadAsync) {
     position_result = input->GetPos();
     ASSERT_TRUE(position_result.ok()) << position_result.status().ToString();
     EXPECT_EQ(8, position_result.value());
-    EXPECT_TRUE(input->Seek(-11, paimon::FS_SEEK_END).IsIOError());
+    EXPECT_TRUE(input->Seek(-11, paimon::FS_SEEK_END).IsInvalid());
 
     EXPECT_TRUE(input->Read(nullptr, -1).status().IsInvalid());
     EXPECT_TRUE(input->Read(nullptr, 1, -1).status().IsInvalid());
@@ -269,9 +269,9 @@ TEST_F(PaimonFileSystemTest, GetStatusListAndExists) {
     std::sort(basic_statuses.begin(), basic_statuses.end(),
               [](const auto& lhs, const auto& rhs) { return lhs->GetPath() < rhs->GetPath(); });
     ASSERT_EQ(2, basic_statuses.size());
-    EXPECT_EQ("child", basic_statuses[0]->GetPath());
+    EXPECT_EQ(_child_dir, basic_statuses[0]->GetPath());
     EXPECT_TRUE(basic_statuses[0]->IsDir());
-    EXPECT_EQ("data.bin", basic_statuses[1]->GetPath());
+    EXPECT_EQ(_data_path, basic_statuses[1]->GetPath());
     EXPECT_FALSE(basic_statuses[1]->IsDir());
 
     std::vector<std::unique_ptr<paimon::FileStatus>> detailed_statuses;
@@ -280,9 +280,9 @@ TEST_F(PaimonFileSystemTest, GetStatusListAndExists) {
     std::sort(detailed_statuses.begin(), detailed_statuses.end(),
               [](const auto& lhs, const auto& rhs) { return lhs->GetPath() < rhs->GetPath(); });
     ASSERT_EQ(2, detailed_statuses.size());
-    EXPECT_EQ("child", detailed_statuses[0]->GetPath());
+    EXPECT_EQ(_child_dir, detailed_statuses[0]->GetPath());
     EXPECT_TRUE(detailed_statuses[0]->IsDir());
-    EXPECT_EQ("data.bin", detailed_statuses[1]->GetPath());
+    EXPECT_EQ(_data_path, detailed_statuses[1]->GetPath());
     EXPECT_FALSE(detailed_statuses[1]->IsDir());
     EXPECT_EQ(_content.size(), detailed_statuses[1]->GetLen());
 

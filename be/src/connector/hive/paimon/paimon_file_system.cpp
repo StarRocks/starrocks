@@ -148,6 +148,15 @@ private:
     std::shared_ptr<PaimonFileSystemStats> _stats;
 };
 
+// paimon expects listing entries to carry full paths (see LocalFileSystem in paimon-cpp),
+// while StarRocks DirEntry only carries the bare name.
+std::string join_path(const std::string& dir, std::string_view name) {
+    if (!dir.empty() && dir.back() == '/') {
+        return fmt::format("{}{}", dir, name);
+    }
+    return fmt::format("{}/{}", dir, name);
+}
+
 PaimonFileSystemStats::SharedBufferedStats snapshot_shared_buffered_stats(const SharedBufferedInputStream* stream) {
     return {
             .shared_io_count = stream->shared_io_count(),
@@ -160,6 +169,10 @@ PaimonFileSystemStats::SharedBufferedStats snapshot_shared_buffered_stats(const 
     };
 }
 
+// The paimon::InputStream contract requires positional reads to behave like pread():
+// they must not disturb the sequential position. Some underlying streams implement
+// read_at_fully() as seek()+read_fully(), so the sequential position is owned here
+// (_pos) instead of trusting the wrapped stream's position.
 class PaimonInputStream final : public paimon::InputStream {
 public:
     PaimonInputStream(std::unique_ptr<RandomAccessFile> file, std::shared_ptr<PaimonFileSystemStats> stats,
@@ -180,11 +193,7 @@ public:
     paimon::Status Seek(int64_t offset, paimon::SeekOrigin origin) override {
         int64_t new_position = offset;
         if (origin == paimon::SeekOrigin::FS_SEEK_CUR) {
-            auto result = GetPos();
-            if (!result.ok()) {
-                return result.status();
-            }
-            new_position += result.value();
+            new_position += _pos;
         } else if (origin == paimon::SeekOrigin::FS_SEEK_END) {
             auto result = Length();
             if (!result.ok()) {
@@ -192,35 +201,29 @@ public:
             }
             new_position += result.value();
         }
-        const Status status = _file->seek(new_position);
-        if (!status.ok()) {
-            return paimon::Status::IOError(
-                    fmt::format("Failed to seek file {}, reason: {}", _file->filename(), status.detailed_message()));
+        if (new_position < 0) {
+            return paimon::Status::Invalid(
+                    fmt::format("negative seek position {} for {}", new_position, _file->filename()));
         }
+        _pos = new_position;
         return paimon::Status::OK();
     }
 
-    paimon::Result<int64_t> GetPos() const override {
-        auto result = _file->position();
-        if (!result.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to get position for file {}, reason: {}",
-                                                       _file->filename(), result.status().detailed_message()));
-        }
-        return result.value();
-    }
+    paimon::Result<int64_t> GetPos() const override { return _pos; }
 
     paimon::Result<int64_t> Read(char* buffer, int64_t size) override {
         if (size < 0) {
             return paimon::Status::Invalid(fmt::format("negative read size {} for {}", size, _file->filename()));
         }
         const int64_t start_ns = MonotonicNanos();
-        auto result = _file->read(buffer, size);
+        auto result = _file->read_at(_pos, buffer, size);
         _stats->record_app_read(PaimonFileSystemStats::ReadType::SEQUENTIAL, result.ok() ? result.value() : 0,
                                 MonotonicNanos() - start_ns);
         if (!result.ok()) {
             return paimon::Status::IOError(fmt::format("Failed to read file {}, reason: {}", _file->filename(),
                                                        result.status().detailed_message()));
         }
+        _pos += result.value();
         return result.value();
     }
 
@@ -282,6 +285,8 @@ private:
 
     std::unique_ptr<RandomAccessFile> _file;
     std::shared_ptr<PaimonFileSystemStats> _stats;
+    // Sequential position of this stream; see the class comment.
+    int64_t _pos = 0;
     CacheInputStream* _cache_stream = nullptr;
     SharedBufferedInputStream* _shared_buffered_stream = nullptr;
 };
@@ -349,7 +354,8 @@ paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonFileSystem::Open(cons
             .max_buffer_size = config::io_coalesce_read_max_buffer_size};
     shared_buffered_input_stream->set_coalesce_options(coalesce_options);
 
-    auto cache_input_stream = std::make_shared<CacheInputStream>(shared_buffered_input_stream, filename, file_size, 0);
+    auto cache_input_stream = std::make_shared<CacheInputStream>(shared_buffered_input_stream, filename, file_size,
+                                                                 _datacache_options.modification_time);
     cache_input_stream->set_enable_populate_cache(_datacache_options.enable_populate_datacache);
     cache_input_stream->set_enable_async_populate_mode(_datacache_options.enable_datacache_async_populate_mode);
     cache_input_stream->set_enable_cache_io_adaptor(_datacache_options.enable_datacache_io_adaptor);
@@ -426,11 +432,28 @@ paimon::Status PaimonFileSystem::ListDir(
         return paimon::Status::IOError(
                 fmt::format("Cannot get status for {}, because it is not a directory.", directory));
     }
+    paimon::Status entry_status = paimon::Status::OK();
     const Status status = _file_system->iterate_dir2(directory, [&](const DirEntry& entry) {
-        file_status_list->emplace_back(
-                std::make_unique<PaimonBasicFileStatus>(std::string(entry.name), entry.is_dir.value_or(false)));
+        std::string full_path = join_path(directory, entry.name);
+        bool is_dir;
+        if (entry.is_dir.has_value()) {
+            is_dir = entry.is_dir.value();
+        } else {
+            auto is_dir_result = _file_system->is_directory(full_path);
+            if (!is_dir_result.ok()) {
+                entry_status = paimon::Status::IOError(
+                        fmt::format("Failed to check whether {} is a directory, reason: {}", full_path,
+                                    is_dir_result.status().detailed_message()));
+                return false;
+            }
+            is_dir = is_dir_result.value();
+        }
+        file_status_list->emplace_back(std::make_unique<PaimonBasicFileStatus>(std::move(full_path), is_dir));
         return true;
     });
+    if (!entry_status.ok()) {
+        return entry_status;
+    }
     if (!status.ok()) {
         return paimon::Status::IOError(
                 fmt::format("Failed to get status for {}, reason: {}", directory, status.detailed_message()));
@@ -462,11 +485,26 @@ paimon::Status PaimonFileSystem::ListFileStatus(
         return paimon::Status::OK();
     }
 
+    paimon::Status entry_status = paimon::Status::OK();
     const Status status = _file_system->iterate_dir2(path, [&](const DirEntry& entry) {
-        file_status_list->emplace_back(std::make_unique<PaimonFileStatus>(
-                std::string(entry.name), entry.size.value_or(0), entry.mtime.value_or(0), entry.is_dir.value_or(true)));
+        std::string full_path = join_path(path, entry.name);
+        if (entry.size.has_value() && entry.mtime.has_value() && entry.is_dir.has_value()) {
+            file_status_list->emplace_back(std::make_unique<PaimonFileStatus>(
+                    std::move(full_path), entry.size.value(), entry.mtime.value(), entry.is_dir.value()));
+            return true;
+        }
+        // Not every filesystem fills all DirEntry fields; fall back to a full status lookup.
+        auto status_result = GetFileStatus(full_path);
+        if (!status_result.ok()) {
+            entry_status = status_result.status();
+            return false;
+        }
+        file_status_list->emplace_back(std::move(status_result).value());
         return true;
     });
+    if (!entry_status.ok()) {
+        return entry_status;
+    }
     if (!status.ok()) {
         return paimon::Status::IOError(
                 fmt::format("Failed to list file status for {}, reason: {}", path, status.detailed_message()));
