@@ -208,22 +208,24 @@ public class JsonPathRewriteRule extends TransformationRule {
         }
 
         private Column createExtendedColumn(Table table, String path, ColumnAccessPath jsonPath) {
-            if (!table.containColumn(path)) {
-                Preconditions.checkState(table instanceof OlapTable, "Only support OlapTable");
-                // NOTE: The safety of adding a column dynamically is ensured by the fact that
-                // this rule is only applied during query planning, thus the Table here is already copied for the
-                // query. So this change would not affect the original table schema.
-                Column extendedColumn = new Column(path, jsonPath.getValueType(), true);
+            synchronized (table) {
+                if (!table.containColumn(path)) {
+                    Preconditions.checkState(table instanceof OlapTable, "Only support OlapTable");
+                    // NOTE: The safety of adding a column dynamically is ensured by the fact that
+                    // this rule is only applied during query planning, thus the Table here is already copied for the
+                    // query. So this change would not affect the original table schema.
+                    Column extendedColumn = new Column(path, jsonPath.getValueType(), true);
 
-                // Allocate the unique id for extended column
-                OlapTable olapTable = (OlapTable) table;
-                int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
-                extendedColumn.setUniqueId(nextUniqueId);
+                    // Allocate the unique id for extended column
+                    OlapTable olapTable = (OlapTable) table;
+                    int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
+                    extendedColumn.setUniqueId(nextUniqueId);
 
-                table.addColumn(extendedColumn);
-                return extendedColumn;
-            } else {
-                return table.getColumn(path);
+                    table.addColumn(extendedColumn);
+                    return extendedColumn;
+                } else {
+                    return table.getColumn(path);
+                }
             }
         }
 
