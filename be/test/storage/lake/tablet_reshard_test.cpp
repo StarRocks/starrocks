@@ -351,7 +351,8 @@ protected:
             MetadataOnlyMergeShape shape, bool enable_tde = false, bool with_del_file = false,
             bool skip_source_flush = false,
             const std::function<void(std::vector<std::shared_ptr<TabletMetadataPB>>&)>& mutate_sources = {},
-            int64_t* attempted_target_id = nullptr, int64_t* attempted_target_version = nullptr) {
+            int64_t* attempted_target_id = nullptr, int64_t* attempted_target_version = nullptr,
+            const std::function<void(int64_t, int64_t, int64_t)>& before_publish = {}) {
         const int64_t base_version = next_id();
         const int64_t target_version = base_version + 1;
         const int64_t source_a_id = next_id();
@@ -362,6 +363,7 @@ protected:
         prepare_tablet_dirs(source_a_id);
         prepare_tablet_dirs(source_b_id);
         prepare_tablet_dirs(target_id);
+        if (before_publish) before_publish(source_a_id, source_b_id, target_id);
 
         const bool old_tde = config::enable_transparent_data_encryption;
         config::enable_transparent_data_encryption = enable_tde;
@@ -1993,6 +1995,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_projected_target_domai
 
     int64_t target_id = 0;
     int64_t target_version = 0;
+    std::set<std::string> target_segment_root_before;
+    std::set<std::string> target_metadata_root_before;
     auto overflow_domain = [=](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
         auto* first = sources[0].get();
         auto* second = sources[1].get();
@@ -2013,23 +2017,187 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_projected_target_domai
         dcg.add_unique_column_ids()->add_column_ids(first->schema().column(1).unique_id());
         dcg.add_versions(first->version());
         dcg.add_shared_files(false);
+
+        // The second source's synthetic source RSSID projects onto the first
+        // target rowset. Both DCGs update c1, but use distinct real .cols
+        // inputs, so a late allocation gate must reach the rebuild callback.
+        const std::string conflicting_cols_name = "target_domain_overflow_conflict.cols";
+        write_c1_only_cols_file(second->id(), conflicting_cols_name, /*num_rows=*/1, [](int) { return 600; });
+        auto& conflicting_dcg = (*second->mutable_dcg_meta()->mutable_dcgs())[0];
+        conflicting_dcg.add_column_files(conflicting_cols_name);
+        conflicting_dcg.add_unique_column_ids()->add_column_ids(second->schema().column(1).unique_id());
+        conflicting_dcg.add_versions(second->version());
+        conflicting_dcg.add_shared_files(false);
     };
 
     // The source contexts are each individually valid. Their ordered merge maps
     // the second context into (INT32_MAX, UINT32_MAX], which must be rejected
     // before DCG/delvec/source-index/materializer output is attempted.
-    auto result = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
-                                                      /*with_del_file=*/true, /*skip_source_flush=*/false,
-                                                      overflow_domain, &target_id, &target_version);
+    auto result = publish_metadata_only_merge_fixture(
+            MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
+            /*with_del_file=*/true, /*skip_source_flush=*/false, overflow_domain, &target_id, &target_version,
+            [&](int64_t, int64_t, int64_t target) {
+                ASSIGN_OR_ABORT(target_segment_root_before,
+                                directory_inventory(_location_provider->segment_root_location(target)));
+                ASSIGN_OR_ABORT(target_metadata_root_before,
+                                directory_inventory(_location_provider->metadata_root_location(target)));
+            });
     EXPECT_TRUE(result.status().is_invalid_argument()) << result.status();
     EXPECT_EQ(0, dcg_rebuild_count);
     EXPECT_EQ(0, delvec_writer_count);
     EXPECT_EQ(0, source_flush_count);
     EXPECT_EQ(0, materialize_count);
+    ASSIGN_OR_ABORT(auto target_segment_root_after,
+                    directory_inventory(_location_provider->segment_root_location(target_id)));
+    ASSIGN_OR_ABORT(auto target_metadata_root_after,
+                    directory_inventory(_location_provider->metadata_root_location(target_id)));
+    EXPECT_EQ(target_segment_root_before, target_segment_root_after);
+    EXPECT_EQ(target_metadata_root_before, target_metadata_root_after);
     expect_target_version_not_published(target_id, target_version);
     auto* target_cache_entry = _update_manager->index_cache().get(target_id);
     EXPECT_EQ(nullptr, target_cache_entry);
     if (target_cache_entry != nullptr) _update_manager->index_cache().release(target_cache_entry);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_materializer_flush_failure_is_atomic_and_retries) {
+    auto materialized_metric = [] {
+        const std::string value =
+                bvar::Variable::describe_exposed("tablet_merge_sstable_meta_materialized_rebuild_total");
+        if (value.empty()) return int64_t{-1};
+        try {
+            return static_cast<int64_t>(std::stoll(value));
+        } catch (const std::exception&) {
+            return int64_t{-1};
+        }
+    };
+    auto force_fallback = [](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
+        sources[0]->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
+    };
+    const bool old_tde = config::enable_transparent_data_encryption;
+    DeferOp restore_tde([&] { config::enable_transparent_data_encryption = old_tde; });
+
+    for (bool enable_tde : {false, true}) {
+        SCOPED_TRACE(enable_tde ? "TDE" : "plaintext");
+        config::enable_transparent_data_encryption = enable_tde;
+        if (enable_tde) ensure_kek_in_key_cache();
+        int target_materialize_count = 0;
+        int64_t source_a_id = 0;
+        int64_t source_b_id = 0;
+        int64_t target_id = 0;
+        int64_t target_version = 0;
+        const int64_t metric_before = materialized_metric();
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("merge_sstables:target_pk_materialize", [&](void*) {
+            ++target_materialize_count;
+            set_failpoint_mode("fail_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+        });
+        sync->EnableProcessing();
+        DeferOp clear_callbacks([&] {
+            sync->ClearCallBack("merge_sstables:target_pk_materialize");
+            sync->DisableProcessing();
+            set_failpoint_mode("fail_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+        });
+
+        auto failed = publish_metadata_only_merge_fixture(
+                MetadataOnlyMergeShape::kPrivate, enable_tde, /*with_del_file=*/false, /*skip_source_flush=*/false,
+                force_fallback, &target_id, &target_version, [&](int64_t source_a, int64_t source_b, int64_t target) {
+                    source_a_id = source_a;
+                    source_b_id = source_b;
+                    EXPECT_EQ(target_id, target);
+                });
+        sync->ClearCallBack("merge_sstables:target_pk_materialize");
+        sync->DisableProcessing();
+        set_failpoint_mode("fail_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+
+        ASSERT_FALSE(failed.ok());
+        EXPECT_TRUE(failed.status().is_internal_error()) << failed.status();
+        EXPECT_TRUE(failed.status().message().contains("injected flush_pk_memtable failure")) << failed.status();
+        EXPECT_EQ(1, target_materialize_count);
+        if (metric_before >= 0) EXPECT_EQ(metric_before, materialized_metric());
+        expect_target_version_not_published(target_id, target_version);
+        auto* target_cache_entry = _update_manager->index_cache().get(target_id);
+        EXPECT_EQ(nullptr, target_cache_entry);
+        if (target_cache_entry != nullptr) _update_manager->index_cache().release(target_cache_entry);
+
+        ASSIGN_OR_ABORT(auto source_a, _tablet_manager->get_tablet_metadata(source_a_id, target_version - 1));
+        ASSIGN_OR_ABORT(auto source_b, _tablet_manager->get_tablet_metadata(source_b_id, target_version - 1));
+        expect_lifecycle_oracle(source_a, {{10, 100}}, {});
+        expect_lifecycle_oracle(source_b, {{60, 600}}, {});
+
+        std::unordered_map<int64_t, TabletMetadataPtr> retried;
+        ASSERT_OK(publish_resharding_merge({source_a, source_b}, target_id, target_version - 1, target_version,
+                                           next_id(), retried));
+        const auto& retry_target = retried.at(target_id);
+        ASSERT_GT(retry_target->sstable_meta().sstables_size(), 0);
+        _update_manager->unload_and_remove_primary_index(target_id);
+        ASSIGN_OR_ABORT(auto reopened_retry, _tablet_manager->get_tablet_metadata(target_id, retry_target->version()));
+        expect_lifecycle_oracle(reopened_retry, {{10, 100}, {60, 600}}, {});
+        if (metric_before >= 0) EXPECT_EQ(metric_before + 1, materialized_metric());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_post_helper_watermark_and_retries) {
+    constexpr uint32_t kRecoveryNextRowsetId = 6;
+    auto materialized_metric = [] {
+        const std::string value =
+                bvar::Variable::describe_exposed("tablet_merge_sstable_meta_materialized_rebuild_total");
+        if (value.empty()) return int64_t{-1};
+        try {
+            return static_cast<int64_t>(std::stoll(value));
+        } catch (const std::exception&) {
+            return int64_t{-1};
+        }
+    };
+    auto force_fallback = [](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
+        sources[0]->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
+    };
+    int64_t source_a_id = 0;
+    int64_t source_b_id = 0;
+    int64_t target_id = 0;
+    int64_t target_version = 0;
+    int post_helper_count = 0;
+    const int64_t metric_before = materialized_metric();
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("merge_sstables:after_target_pk_materialize", [&](void* arg) {
+        ++post_helper_count;
+        auto* candidate = static_cast<PersistentIndexSstableMetaPB*>(arg);
+        ASSERT_GT(candidate->sstables_size(), 0);
+        candidate->mutable_sstables(0)->set_max_rss_rowid(static_cast<uint64_t>(kRecoveryNextRowsetId) << 32);
+    });
+    sync->EnableProcessing();
+    DeferOp clear_callback([&] {
+        sync->ClearCallBack("merge_sstables:after_target_pk_materialize");
+        sync->DisableProcessing();
+    });
+
+    auto failed = publish_metadata_only_merge_fixture(
+            MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false, /*with_del_file=*/false,
+            /*skip_source_flush=*/false, force_fallback, &target_id, &target_version,
+            [&](int64_t source_a, int64_t source_b, int64_t) {
+                source_a_id = source_a;
+                source_b_id = source_b;
+            });
+    sync->ClearCallBack("merge_sstables:after_target_pk_materialize");
+    sync->DisableProcessing();
+
+    ASSERT_FALSE(failed.ok());
+    EXPECT_TRUE(failed.status().is_internal_error()) << failed.status();
+    EXPECT_EQ(1, post_helper_count);
+    if (metric_before >= 0) EXPECT_EQ(metric_before, materialized_metric());
+    expect_target_version_not_published(target_id, target_version);
+    auto* target_cache_entry = _update_manager->index_cache().get(target_id);
+    EXPECT_EQ(nullptr, target_cache_entry);
+    if (target_cache_entry != nullptr) _update_manager->index_cache().release(target_cache_entry);
+
+    ASSIGN_OR_ABORT(auto source_a, _tablet_manager->get_tablet_metadata(source_a_id, target_version - 1));
+    ASSIGN_OR_ABORT(auto source_b, _tablet_manager->get_tablet_metadata(source_b_id, target_version - 1));
+    expect_lifecycle_oracle(source_a, {{10, 100}}, {});
+    expect_lifecycle_oracle(source_b, {{60, 600}}, {});
+    std::unordered_map<int64_t, TabletMetadataPtr> retried;
+    ASSERT_OK(publish_resharding_merge({source_a, source_b}, target_id, target_version - 1, target_version, next_id(),
+                                       retried));
+    ASSERT_GT(retried.at(target_id)->sstable_meta().sstables_size(), 0);
+    if (metric_before >= 0) EXPECT_EQ(metric_before + 1, materialized_metric());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_identical_divergence_falls_back) {
@@ -3539,11 +3707,24 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_read_only_skip_stays_indexless
     txn_info.set_txn_id(next_id());
     txn_info.set_commit_time(1);
     txn_info.set_gtid(1);
+    int materialize_count = 0;
+    int metadata_reuse_finalize_count = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("merge_sstables:target_pk_materialize", [&](void*) { ++materialize_count; });
+    sync->SetCallBack("merge_tablet:metadata_reuse_finalize", [&](void*) { ++metadata_reuse_finalize_count; });
+    sync->EnableProcessing();
+    DeferOp clear_callbacks([&] {
+        sync->ClearCallBack("merge_sstables:target_pk_materialize");
+        sync->ClearCallBack("merge_tablet:metadata_reuse_finalize");
+        sync->DisableProcessing();
+    });
     ASSIGN_OR_ABORT(auto read_only,
                     lake::merge_tablet(_tablet_manager.get(), {left, right}, merging, left->version() + 1, txn_info,
                                        /*skip_sstable_merge=*/true));
     EXPECT_EQ(0, read_only->sstable_meta().sstables_size());
     EXPECT_TRUE(read_only->orphan_files().empty());
+    EXPECT_EQ(0, materialize_count);
+    EXPECT_EQ(0, metadata_reuse_finalize_count);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_tde_failure_retry_matrix) {
@@ -12135,13 +12316,19 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_pk_skips_pk_sstable_pipeli
 
     int source_flush_count = 0;
     int classifier_count = 0;
+    int materialize_count = 0;
+    int metadata_reuse_finalize_count = 0;
     auto* sync = SyncPoint::GetInstance();
     sync->SetCallBack("merge_sstables:source_pk_flush", [&](void*) { ++source_flush_count; });
     sync->SetCallBack("merge_sstables:metadata_classifier_entry", [&](void*) { ++classifier_count; });
+    sync->SetCallBack("merge_sstables:target_pk_materialize", [&](void*) { ++materialize_count; });
+    sync->SetCallBack("merge_tablet:metadata_reuse_finalize", [&](void*) { ++metadata_reuse_finalize_count; });
     sync->EnableProcessing();
     DeferOp clear_callbacks([&] {
         sync->ClearCallBack("merge_sstables:source_pk_flush");
         sync->ClearCallBack("merge_sstables:metadata_classifier_entry");
+        sync->ClearCallBack("merge_sstables:target_pk_materialize");
+        sync->ClearCallBack("merge_tablet:metadata_reuse_finalize");
         sync->DisableProcessing();
     });
 
@@ -12159,6 +12346,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_pk_skips_pk_sstable_pipeli
     EXPECT_OK(status);
     EXPECT_EQ(0, source_flush_count) << "non-PK writable merge must not enter source PK-index flush";
     EXPECT_EQ(0, classifier_count) << "non-PK writable merge must not enter the PK metadata classifier";
+    EXPECT_EQ(0, materialize_count);
+    EXPECT_EQ(0, metadata_reuse_finalize_count);
     if (!status.ok()) return;
 
     const auto& merged = tablet_metadatas.at(merged_tablet);
