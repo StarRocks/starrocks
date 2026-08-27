@@ -558,6 +558,9 @@ private:
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
     Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
+    // The stream every column's small index reads share, or nullptr to leave them on the
+    // per-column files. Opened on first use so a scan that reads no column never opens it.
+    io::SeekableInputStream* _shared_small_index_stream();
 
     // init column iterator for virtual column like '_tablet_id_', '_rowid_'
     Status _init_virtual_column_iterator(const ColumnId cid, const std::string_view col_name);
@@ -628,6 +631,10 @@ private:
     roaring::api::roaring_uint32_iterator_t _roaring_iter;
 
     std::unordered_map<ColumnId, std::unique_ptr<io::SeekableInputStream>> _column_files;
+    // Backing file for _shared_small_index_stream(). One per segment iterator, buffered to the
+    // width of the segment's small index region.
+    std::unique_ptr<RandomAccessFile> _small_index_file;
+    bool _small_index_stream_unavailable = false;
 
     SparseRange<> _scan_range;
     SparseRangeIterator<> _range_iter;
@@ -2011,6 +2018,62 @@ Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const 
     return Status::OK();
 }
 
+// One buffered stream for every column's small index reads, so that the tail index region is
+// fetched once instead of once per column.
+//
+// This is what makes the region pay off without a block cache. prefetch_small_index_region_once()
+// warms the cache and is therefore a no-op for a scan that bypasses it, but the region is
+// contiguous either way -- so a single stream whose buffer spans it turns the first column's read
+// into the only remote one. BufferInputStream fills forward from the read position and keeps its
+// buffer across any seek that lands inside the filled extent (buffer_stream.cc), which is exactly
+// the access pattern here: ascending offsets within one region.
+//
+// Returns nullptr, leaving every column on its own file, when there is no region to exploit. In
+// the legacy layout the indexes sit behind their own column's data pages, megabytes apart, so
+// consecutive reads would fall outside the window and each pay a discard and a refill.
+//
+// Not thread safe, and neither is the stream it hands out: BufferInputStream has a single buffer
+// and no locking. Safe today because both callers walk the columns serially --
+// _init_column_iterators() and _get_row_ranges_by_zone_map(). Parallelizing either means giving
+// each worker its own stream.
+io::SeekableInputStream* SegmentIterator::_shared_small_index_stream() {
+    if (_small_index_file != nullptr) {
+        return _small_index_file.get();
+    }
+    if (_small_index_stream_unavailable) {
+        return nullptr;
+    }
+    // Decided once per segment iterator; the flag keeps a failed or declined open from being
+    // retried for every column.
+    _small_index_stream_unavailable = true;
+
+    if (!config::enable_segment_shared_small_index_stream) {
+        return nullptr;
+    }
+    const uint64_t region_size = _segment->small_index_region_size();
+    if (region_size == 0) {
+        return nullptr;
+    }
+
+    const int64_t max_buffer = config::segment_shared_small_index_stream_max_buffer_bytes;
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                 .buffer_size = std::min(static_cast<int64_t>(region_size), max_buffer),
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
+    if (const auto* encryption_info = _segment->encryption_info(); encryption_info != nullptr) {
+        opts.encryption_info = *encryption_info;
+    }
+    auto res = _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info());
+    if (!res.ok()) {
+        // Not fatal: the per-column files are still there and still correct, only slower.
+        LOG(WARNING) << "failed to open shared small index stream for " << _segment->file_name() << ": "
+                     << res.status();
+        return nullptr;
+    }
+    _small_index_file = std::move(res).value();
+    _small_index_stream_unavailable = false;
+    return _small_index_file.get();
+}
+
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
@@ -2060,6 +2123,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         // segment-level zone map pruning pay for it, and the once_flag inside collapses the
         // repeat calls this site would otherwise make -- one per column.
         _segment->prefetch_small_index_region_once(rfile.get(), _opts.lake_io_opts.fill_data_cache);
+        // Small index reads go to the shared stream; data pages stay on this column's own file.
+        // Routing the data pages here too would evict the region from the very buffer this exists
+        // to hold.
+        iter_opts.index_read_file = _shared_small_index_stream();
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
@@ -4989,6 +5056,10 @@ void SegmentIterator::close() {
             _update_stats(rfile.get());
             rfile.reset();
         }
+    }
+    if (_small_index_file != nullptr) {
+        _update_stats(_small_index_file.get());
+        _small_index_file.reset();
     }
 
     STLClearObject(&_selection);

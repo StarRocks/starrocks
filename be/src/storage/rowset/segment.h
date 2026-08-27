@@ -261,6 +261,12 @@ public:
     static bool small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
                                                           uint64_t block_size);
 
+    // Extent of the small index region, zero when the segment predates the layout. Non-zero means
+    // every column's ordinal index and page zone map are contiguous here, which is what lets one
+    // buffered stream serve all of them.
+    uint64_t small_index_region_offset() const { return _small_index_region_offset; }
+    uint64_t small_index_region_size() const { return _small_index_region_size; }
+
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(const LakeIOOptions& lake_io_opts = {});

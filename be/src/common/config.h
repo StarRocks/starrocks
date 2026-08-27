@@ -442,6 +442,24 @@ CONF_mBool(enable_segment_tail_index_prefetch, "true");
 // as in the legacy layout.
 CONF_mInt64(segment_tail_index_prefetch_max_bytes, "16777216");
 
+// Read-time gate for serving a segment's small index reads from one shared buffered stream.
+// The prefetch above pays off only through a block cache: it warms the region so the per-column
+// index loads that follow hit the cache. A scan that bypasses the cache -- skip_local_disk_cache,
+// or a table with datacache disabled -- gets nothing from it, and still spends one remote read
+// per column on indexes that are now contiguous. Pointing every column's small index reads at a
+// single stream closes that gap without a cache: the first read's buffer fill covers the region,
+// and the rest are memcpy.
+//
+// Requires the tail index region. With the indexes scattered per column, consecutive reads land
+// outside the buffer window, so sharing a stream would pay a discard and a refill each time and
+// buy nothing -- which is why this is gated on the region existing, not on the config above.
+CONF_mBool(enable_segment_shared_small_index_stream, "true");
+
+// Upper bound on the shared small index stream's buffer. The buffer is sized to the region so
+// that one fill covers it; a region larger than this gets a buffer of this size instead, which
+// degrades to a few reads for the whole region rather than one per column.
+CONF_mInt64(segment_shared_small_index_stream_max_buffer_bytes, "4194304");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
