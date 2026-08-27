@@ -19,6 +19,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/raw_container_checked.h"
+#include "storage/rowset/alp_page.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
 
 namespace starrocks {
@@ -122,15 +123,80 @@ private:
     std::unique_ptr<BitShuffleDataDecoder> _bit_shuffle_decoder;
 };
 
+// Fully decodes an ALP_ENCODING data page at page-load time, mirroring
+// BitShuffleDataDecoder: the page cache then holds raw float/double values
+// and AlpPageDecoder is a plain memcpy decoder.
+class AlpDataDecoder : public DataDecoder {
+public:
+    AlpDataDecoder() = default;
+    ~AlpDataDecoder() override = default;
+
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                            std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) override {
+        if (page_slice->size < ALP_PAGE_HEADER_SIZE) {
+            return Status::Corruption(strings::Substitute("invalid ALP page size:$0", page_slice->size));
+        }
+        size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + 0);
+        size_t encoded_size = decode_fixed32_le((const uint8_t*)page_slice->data + 4);
+        size_t num_padded = decode_fixed32_le((const uint8_t*)page_slice->data + 8);
+        size_t size_of_element = decode_fixed32_le((const uint8_t*)page_slice->data + 12);
+        if (size_of_element != 4 && size_of_element != 8) {
+            return Status::Corruption(strings::Substitute("invalid ALP size_of_element:$0", size_of_element));
+        }
+        if (num_padded != alppage::padded_element_count(num_elements)) {
+            return Status::Corruption(
+                    strings::Substitute("ALP element count corrupted, padded:$0, num:$1", num_padded, num_elements));
+        }
+        if (encoded_size < ALP_PAGE_HEADER_SIZE || encoded_size > page_slice->size) {
+            return Status::Corruption(
+                    strings::Substitute("invalid ALP encoded size:$0, page size:$1", encoded_size, page_slice->size));
+        }
+
+        size_t header_size = ALP_PAGE_HEADER_SIZE;
+        size_t data_size = num_padded * size_of_element;
+
+        std::unique_ptr<std::vector<uint8_t>> decoded_page(new std::vector<uint8_t>());
+        size_t new_size = page_slice->size + data_size - (encoded_size - header_size);
+        RETURN_IF_ERROR(raw::stl_vector_resize_uninitialized_checked(decoded_page.get(), new_size));
+        memcpy(decoded_page->data(), page_slice->data, header_size);
+
+        const uint8_t* body = (const uint8_t*)page_slice->data + header_size;
+        size_t body_size = encoded_size - header_size;
+        if (size_of_element == 4) {
+            RETURN_IF_ERROR(alppage::alp_decode_body<float>(
+                    body, body_size, num_padded, reinterpret_cast<float*>(decoded_page->data() + header_size)));
+        } else {
+            RETURN_IF_ERROR(alppage::alp_decode_body<double>(
+                    body, body_size, num_padded, reinterpret_cast<double*>(decoded_page->data() + header_size)));
+        }
+
+        DCHECK(footer->has_type()) << "type must be set";
+        uint32_t null_size = 0;
+        if (footer->type() == DATA_PAGE) {
+            null_size = footer->data_page_footer().nullmap_size();
+        }
+        memcpy(decoded_page->data() + header_size + data_size, page_slice->data + encoded_size,
+               null_size + footer_size);
+
+        *page = std::move(decoded_page);
+        *page_slice = Slice((*page)->data(), header_size + data_size + null_size + footer_size);
+        return Status::OK();
+    }
+};
+
 static DataDecoder g_base_decoder;
 static BitShuffleDataDecoder g_bit_shuffle_decoder;
 static BinaryDictDataDecoder g_binary_dict_decoder;
 static DictDictDecoder g_dict_dict_decoder;
+static AlpDataDecoder g_alp_data_decoder;
 
 DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     switch (encoding) {
     case BIT_SHUFFLE: {
         return &g_bit_shuffle_decoder;
+    }
+    case ALP_ENCODING: {
+        return &g_alp_data_decoder;
     }
     case DICT_ENCODING: {
         return &g_binary_dict_decoder;
