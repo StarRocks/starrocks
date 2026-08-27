@@ -278,8 +278,8 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Instantaneous
-- Labels: `type` (`current`)
-- Description: Number of edit logs currently retained in BDB JE, counted from the oldest retained journal to the newest one written. The checkpoint daemon deletes old journals only after every registered FE has received the new image, so a registered FE that cannot be reached keeps this value climbing and gives early warning that the metadata disk is filling up. The value is read from the journal on every scrape, so it is accurate right after an FE restart and drops as soon as journals are actually deleted.
+- Labels: `type` (`current` or `starmgr_current`)
+- Description: Number of edit logs currently retained in BDB JE, counted from the oldest retained journal to the newest one written. The checkpoint daemon deletes old journals only after every registered FE has received the new image, so a registered FE that cannot be reached keeps this value climbing and gives early warning that the metadata disk is filling up. The value is read from the journal on every scrape, so it is accurate right after an FE restart and drops as soon as journals are actually deleted. `current` covers the FE metadata journal. `starmgr_current` covers the StarMgr journal, which in shared-data mode is stored in the same BDB JE environment but is cleaned up by its own checkpoint daemon, so it can grow independently and consume the same metadata disk; it reports 0 in shared-nothing mode.
 
 ## `fe_edit_log_read`
 

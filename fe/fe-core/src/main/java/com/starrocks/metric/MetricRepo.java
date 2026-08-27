@@ -91,6 +91,7 @@ import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.staros.StarOSBDBJEJournalSystem;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -653,6 +654,20 @@ public final class MetricRepo {
         };
         retainedEditLog.addLabel(new MetricLabel("type", "current"));
         STARROCKS_METRIC_REGISTER.addMetric(retainedEditLog);
+
+        // In shared-data mode StarMgr writes a "starmgr_"-prefixed journal into the SAME bdbje
+        // environment (StarRocksFEServer hands it GlobalStateMgr's BDBEnvironment) but cleans it up
+        // through its own CheckpointController. So it can be pinned on its own and fill the same
+        // metadata disk while the series above stays flat - it needs its own series.
+        GaugeMetric<Long> retainedStarMgrEditLog = new GaugeMetric<Long>(
+                "edit_log", MetricUnit.OPERATIONS, "number of starmgr edit logs retained in bdbje") {
+            @Override
+            public Long getValue() {
+                return getRetainedStarMgrJournalCount();
+            }
+        };
+        retainedStarMgrEditLog.addLabel(new MetricLabel("type", "starmgr_current"));
+        STARROCKS_METRIC_REGISTER.addMetric(retainedStarMgrEditLog);
 
         GaugeMetric<Long> snapshotLastSuccessTime = new GaugeMetric<Long>(
                 "cluster_snapshot_last_finished_time", MetricUnit.NOUNIT,
@@ -1404,6 +1419,19 @@ public final class MetricRepo {
         long oldestRetainedId = databaseNames.get(0);
         long maxJournalId = journal.getMaxJournalId();
         return maxJournalId < oldestRetainedId ? 0L : maxJournalId - oldestRetainedId + 1;
+    }
+
+    /**
+     * Same for the StarMgr journal, which shares the bdbje environment in shared-data mode. Returns
+     * 0 when there is no StarMgr journal at all: the journal system is only built by
+     * initialize(BDBEnvironment, ...), so it stays null in shared-nothing mode.
+     * <p>
+     * getServingState() rather than getCurrentState() on purpose - the latter constructs a second
+     * StarMgrServer when called from the checkpoint thread.
+     */
+    static long getRetainedStarMgrJournalCount() {
+        StarOSBDBJEJournalSystem journalSystem = StarMgrServer.getServingState().getJournalSystem();
+        return journalSystem == null ? 0L : getRetainedJournalCount(journalSystem.getJournal());
     }
 
     // to generate the metrics related to tablets of each backend
