@@ -732,6 +732,14 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     add_segment_span(&partial_bounds, 42, 42);
     partial_bounds.add_segment_metas()->set_filename("no_bounds.dat");
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(partial_bounds, co_range(40, 50)));
+
+    // A range bound at a different sort-key arity cannot safely prove kNo or endpoint ownership.
+    TabletRangePB arity_mismatch = co_range(40, 50);
+    VariantTuple two_column_lower_bound;
+    two_column_lower_bound.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(40)));
+    two_column_lower_bound.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(0)));
+    two_column_lower_bound.to_proto(arity_mismatch.mutable_lower_bound());
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(one_key, arity_mismatch));
 }
 
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_contiguous_overlap_interval) {
