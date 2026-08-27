@@ -631,6 +631,14 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
     if (!range.from_proto(range_pb).ok()) {
         return RangeOverlap::kUnknown;
     }
+    auto same_shape = [](const VariantTuple& lhs, const VariantTuple& rhs) {
+        if (lhs.size() != rhs.size()) return false;
+        for (size_t i = 0; i < lhs.size(); ++i) {
+            if (lhs[i].type()->type() != rhs[i].type()->type()) return false;
+        }
+        return true;
+    };
+
     VariantTuple envelope_min;
     VariantTuple envelope_max;
     for (const auto& segment_meta : rowset.segment_metas()) {
@@ -646,6 +654,12 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
         if (segment_min.empty() || segment_max.empty()) {
             return RangeOverlap::kUnknown;
         }
+        if (!same_shape(segment_min, segment_max) || segment_min.compare(segment_max) > 0) {
+            return RangeOverlap::kUnknown;
+        }
+        if (!envelope_min.empty() && !same_shape(envelope_min, segment_min)) {
+            return RangeOverlap::kUnknown;
+        }
         if (envelope_min.empty() || segment_min.compare(envelope_min) < 0) {
             envelope_min = segment_min;
         }
@@ -654,15 +668,11 @@ RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const
         }
     }
 
-    // Only trust an exact arity match. VariantTuple::compare orders a shorter prefix-equal tuple
-    // BELOW its longer form, so comparing a bound written at one sort-key arity against a range at
-    // another can flip the boundary case -- e.g. envelope (100) vs lower bound (100, MIN) would
-    // read as "range entirely above the envelope" even though key 100 is exactly the range's first
-    // key. Degrading to kUnknown keeps that case on the legacy path instead of proving a false kNo.
-    const size_t envelope_arity = envelope_min.size();
-    if (envelope_max.size() != envelope_arity ||
-        (!range.is_minimum() && range.lower_bound().size() != envelope_arity) ||
-        (!range.is_maximum() && range.upper_bound().size() != envelope_arity)) {
+    // Compare only tuples with identical arity and logical types. Besides DatumVariant::compare's
+    // same-type precondition, a shorter prefix-equal tuple sorts below its longer form and can turn
+    // an arity mismatch into a false kNo. Malformed or empty ranges likewise stay on the legacy path.
+    if ((!range.is_minimum() && !same_shape(envelope_min, range.lower_bound())) ||
+        (!range.is_maximum() && !same_shape(envelope_min, range.upper_bound())) || range.is_empty()) {
         return RangeOverlap::kUnknown;
     }
 

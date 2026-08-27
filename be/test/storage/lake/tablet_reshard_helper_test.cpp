@@ -748,6 +748,32 @@ TEST_F(TabletReshardHelperTest, test_classify_rowset_range_overlap) {
     TabletRangePB upper_arity_mismatch = co_range(40, 50);
     two_column_lower_bound.to_proto(upper_arity_mismatch.mutable_upper_bound());
     EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(one_key, upper_arity_mismatch));
+
+    // Malformed segment bounds must never prove that every sibling owns nothing.
+    RowsetMetadataPB inverted_segment;
+    add_segment_span(&inverted_segment, 80, 70);
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(inverted_segment, co_range(std::nullopt, 75)));
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(inverted_segment, co_range(75, std::nullopt)));
+
+    // DatumVariant comparison requires matching logical types. Mismatched segment or range-bound
+    // types must degrade before any compare instead of crashing or proving kNo.
+    auto write_bigint = [](TuplePB* tuple_pb, int64_t value) {
+        VariantTuple tuple;
+        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_BIGINT), Datum(value)));
+        tuple.to_proto(tuple_pb);
+    };
+    RowsetMetadataPB mismatched_segment_types;
+    auto* mismatched_segment = mismatched_segment_types.add_segment_metas();
+    VariantTuple int_min;
+    int_min.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(70)));
+    int_min.to_proto(mismatched_segment->mutable_sort_key_min());
+    write_bigint(mismatched_segment->mutable_sort_key_max(), 80);
+    EXPECT_EQ(RangeOverlap::kUnknown,
+              classify_rowset_range_overlap(mismatched_segment_types, co_range(std::nullopt, std::nullopt)));
+
+    TabletRangePB mismatched_range_type = co_range(40, 50);
+    write_bigint(mismatched_range_type.mutable_upper_bound(), 50);
+    EXPECT_EQ(RangeOverlap::kUnknown, classify_rowset_range_overlap(one_key, mismatched_range_type));
 }
 
 TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_each_contiguous_overlap_interval) {
