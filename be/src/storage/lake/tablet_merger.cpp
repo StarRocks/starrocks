@@ -1507,6 +1507,16 @@ bool idg_entry_has_active_key(const IndexDeltaGroupEntryPB& e) {
     return false;
 }
 
+std::unordered_set<uint32_t> collect_live_rssids(const TabletMetadataPB& metadata) {
+    std::unordered_set<uint32_t> live_rssids;
+    for (const auto& rowset : metadata.rowsets()) {
+        for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
+            live_rssids.insert(get_rssid(rowset, segment_pos));
+        }
+    }
+    return live_rssids;
+}
+
 // merge_idg_meta: remap each source tablet's IDG (.idx) entries into the merged tablet's
 // rssid space, dedup by .idx filename per target segment, and keep them newest-version
 // first. Unlike merge_dcg_meta there is no rebuild-on-conflict path: an .idx indexes
@@ -1542,22 +1552,17 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts, Tab
     std::map<uint32_t, std::vector<IndexDeltaGroupEntryPB>> work_by_target;
     // target rssid -> (.idx filename -> index into work_by_target[target]).
     std::map<uint32_t, std::unordered_map<std::string, size_t>> seen_files_by_target;
+    const auto target_live_rssids = collect_live_rssids(*new_metadata);
 
     for (const auto& context : merge_contexts) {
         if (!context.metadata()->has_idg_meta()) continue;
-        // Live source segments in THIS context.
-        std::unordered_set<uint32_t> source_live_rssids;
-        for (const auto& rowset : context.metadata()->rowsets()) {
-            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
-                source_live_rssids.insert(get_rssid(rowset, i));
-            }
-        }
+        const auto source_live_rssids = collect_live_rssids(*context.metadata());
         for (const auto& [segment_id, idg_ver] : context.metadata()->idg_meta().idgs()) {
             if (source_live_rssids.find(segment_id) == source_live_rssids.end()) {
                 continue; // stale idg entry: segment no longer in this source's rowsets
             }
             ASSIGN_OR_RETURN(uint32_t target_rssid, context.map_rssid(segment_id));
-            if (target_rssid_shared.find(target_rssid) == target_rssid_shared.end()) {
+            if (!target_live_rssids.contains(target_rssid)) {
                 continue; // defensive: target not a live merged segment
             }
             auto& entries = work_by_target[target_rssid];
@@ -1779,13 +1784,21 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     std::map<uint32_t, TargetDelvecState> target_states;
     std::unordered_map<std::string, DelvecFileInfo> actual_page_source_files;
     bool output_requires_encryption = false;
+    const auto target_live_rssids = collect_live_rssids(*new_metadata);
 
     for (const auto& ctx : merge_contexts) {
         if (!ctx.metadata()->has_delvec_meta()) {
             continue;
         }
+        const auto source_live_rssids = collect_live_rssids(*ctx.metadata());
         for (const auto& [segment_id, page] : ctx.metadata()->delvec_meta().delvecs()) {
+            if (!source_live_rssids.contains(segment_id)) {
+                continue;
+            }
             ASSIGN_OR_RETURN(uint32_t target, ctx.map_rssid(segment_id));
+            if (!target_live_rssids.contains(target)) {
+                continue;
+            }
 
             // Resolve file name from page version
             auto file_it = ctx.metadata()->delvec_meta().version_to_file().find(page.version());
@@ -2256,16 +2269,6 @@ StatusOr<bool> sstable_range_within_tablet(const PersistentIndexSstablePB& sst, 
         return false;
     }
     return true;
-}
-
-std::unordered_set<uint32_t> collect_live_rssids(const TabletMetadataPB& metadata) {
-    std::unordered_set<uint32_t> live_rssids;
-    for (const auto& rowset : metadata.rowsets()) {
-        for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
-            live_rssids.insert(get_rssid(rowset, segment_pos));
-        }
-    }
-    return live_rssids;
 }
 
 void order_and_assign_singleton_filesets(PersistentIndexSstableMetaPB* metadata) {
