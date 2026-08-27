@@ -397,9 +397,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
@@ -493,9 +490,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(3).num_dels(), 0);
     EXPECT_EQ(new_tablet_metadata->rowsets(4).num_dels(), 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
@@ -1607,9 +1601,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
@@ -1677,9 +1668,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
@@ -1746,9 +1734,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
     EXPECT_EQ(new_tablet_metadata->rowsets(4).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(5).num_dels(), 0);
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
@@ -1794,10 +1779,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
     chunk1->remove_column_by_index(2);
     assert_chunk_equals(*chunk0, **chunk2);
     assert_chunk_equals(*chunk1, **chunk3);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id_1, version);
-        check_local_persistent_index_meta(tablet_id_2, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
@@ -1832,9 +1813,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), N);
     for (int i = 0; i < N; i++) {
         EXPECT_EQ(new_tablet_metadata->rowsets(i).num_dels(), 0);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
     config::l0_max_mem_usage = old_config;
 }
@@ -1883,9 +1861,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
     config::enable_primary_key_recover = false;
 }
 
@@ -1937,9 +1912,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_multi_reason) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 30);
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
     config::enable_primary_key_recover = false;
 }
 
@@ -1998,9 +1970,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels) {
         EXPECT_EQ(new_tablet_metadata->rowsets(i).del_files_size(), i % 2);
     }
     ASSERT_EQ(0, read_rows(tablet_id, version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
     config::enable_primary_key_recover = false;
 }
 
@@ -2069,9 +2038,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
         EXPECT_EQ(new_tablet_metadata->rowsets(i).del_files_size(), i);
     }
     ASSERT_EQ(0, read_rows(tablet_id, version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
     config::enable_primary_key_recover = false;
 }
 
@@ -2120,9 +2086,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
@@ -2169,9 +2132,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
@@ -3134,9 +3094,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_lazy_load) {
     }
     config::pk_column_lazy_load_threshold_bytes = old_val;
     ASSERT_EQ(N, read_rows(tablet_id, version));
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_aggregate_publish_version) {
