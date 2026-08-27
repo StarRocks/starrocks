@@ -93,8 +93,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testConnectionTotalUsesLiveMapSize() {
         ExecuteEnv.setup();
         ConnectScheduler scheduler = ExecuteEnv.getInstance().getScheduler();
@@ -117,25 +115,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-
-    public void testSPMMetricsExposure() {
-        MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
-        MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);
-
-        MetricVisitor visitor = new PrometheusMetricVisitor("");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
-        MetricRepo.getMetric(visitor, params);
-        String output = visitor.build();
-
-        Assertions.assertTrue(output.contains("spm_baseline_count"));
-        Assertions.assertTrue(output.contains("spm_rewrite_total"));
-        Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
-        Assertions.assertTrue(output.contains("result=\"hit\""));
-        Assertions.assertTrue(output.contains("result=\"captured\""));
-    }
-
-    @Test
->>>>>>> d053949 ([BugFix] Prevent FE connection ID collisions after wrap (#78217))
     public void testAlterColumnMetricsExposure() {
         // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
         // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
