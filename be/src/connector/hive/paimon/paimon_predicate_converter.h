@@ -29,27 +29,27 @@ public:
 private:
     std::shared_ptr<paimon::Predicate> convert(Expr* conjunct, bool neg);
     std::shared_ptr<paimon::Predicate> convert_compound(TExprOpcode::type op_type, const std::vector<Expr*>* children,
-                                                         bool neg);
+                                                        bool neg);
     std::shared_ptr<paimon::Predicate> convert_null(int32_t field_index, const std::string& field_name,
-                                                     const paimon::FieldType& fieldType, bool neg);
+                                                    const paimon::FieldType& fieldType, bool neg);
     std::shared_ptr<paimon::Predicate> convert_equal(int32_t field_index, const std::string& field_name,
-                                                      const paimon::FieldType& fieldType,
-                                                      const paimon::Literal& literal, bool neg);
+                                                     const paimon::FieldType& fieldType, const paimon::Literal& literal,
+                                                     bool neg);
     std::shared_ptr<paimon::Predicate> convert_le(int32_t field_index, const std::string& field_name,
-                                                   const paimon::FieldType& fieldType, const paimon::Literal& literal,
-                                                   bool neg);
+                                                  const paimon::FieldType& fieldType, const paimon::Literal& literal,
+                                                  bool neg);
     std::shared_ptr<paimon::Predicate> convert_lt(int32_t field_index, const std::string& field_name,
-                                                   const paimon::FieldType& fieldType, const paimon::Literal& literal,
-                                                   bool neg);
+                                                  const paimon::FieldType& fieldType, const paimon::Literal& literal,
+                                                  bool neg);
     std::shared_ptr<paimon::Predicate> convert_ge(int32_t field_index, const std::string& field_name,
-                                                   const paimon::FieldType& fieldType, const paimon::Literal& literal,
-                                                   bool neg);
+                                                  const paimon::FieldType& fieldType, const paimon::Literal& literal,
+                                                  bool neg);
     std::shared_ptr<paimon::Predicate> convert_gt(int32_t field_index, const std::string& field_name,
-                                                   const paimon::FieldType& fieldType, const paimon::Literal& literal,
-                                                   bool neg);
+                                                  const paimon::FieldType& fieldType, const paimon::Literal& literal,
+                                                  bool neg);
     std::shared_ptr<paimon::Predicate> convert_in(int32_t field_index, const std::string& field_name,
-                                                   const paimon::FieldType& fieldType,
-                                                   const std::vector<paimon::Literal>& literals, bool neg);
+                                                  const paimon::FieldType& fieldType,
+                                                  const std::vector<paimon::Literal>& literals, bool neg);
     bool _ok_to_paimon_literal(Expr* lit);
     bool _ok_to_paimon_type(const TypeDescriptor& type);
     paimon::Literal translate_to_paimon_literal(Expr* lit);

@@ -28,8 +28,8 @@
 #include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/paimon_file_system.h"
+#include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
 #include "exprs/expr_context.h"
 #include "formats/arrow/arrow_column_converter.h"
@@ -77,7 +77,6 @@ void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemSta
 PaimonScanner::~PaimonScanner() = default;
 
 Status PaimonScanner::do_init(RuntimeState* runtime_state, const HdfsScannerContext& scanner_ctx) {
-
     return Status::OK();
 }
 
@@ -85,12 +84,14 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     _memory_pool = std::make_shared<TrackedPaimonMemoryPool>(runtime_state->query_mem_tracker_ptr().get());
     _max_chunk_size = runtime_state->chunk_size() ? runtime_state->chunk_size() : 4096;
-    _convert_context.timezone = runtime_state->timezone();
     const THdfsScanRange& scan_range = *_scanner_ctx->scan_range;
     const auto* table_descriptor = dynamic_cast<const PaimonTableDescriptor*>(_scanner_ctx->hive_table);
     if (table_descriptor == nullptr || table_descriptor->get_paimon_table_path().empty()) {
         return Status::InvalidArgument("Paimon native scan is missing table path in PaimonTableDescriptor");
     }
+    // Keep timestamp conversion aligned with the JNI reader, which converts
+    // timezone-aware timestamps with the catalog's time zone (see jni_scanner.cpp).
+    _convert_context.timezone = std::string(table_descriptor->get_time_zone());
     const std::string table_path(table_descriptor->get_paimon_table_path());
     if (!scan_range.__isset.paimon_split_info_binary || scan_range.paimon_split_info_binary.empty()) {
         return Status::InvalidArgument("Paimon native scan range is missing paimon_split_info_binary");
@@ -298,7 +299,7 @@ Status PaimonScanner::_next_arrow_record_batch() {
     auto batch_result = _reader->NextBatch();
     if (!batch_result.ok()) {
         return Status::InternalError(
-            fmt::format("Paimon reader failed to read next batch: {}", batch_result.status().ToString()));
+                fmt::format("Paimon reader failed to read next batch: {}", batch_result.status().ToString()));
     }
     auto& batch = batch_result.value();
     if (paimon::BatchReader::IsEofBatch(batch)) {
@@ -308,7 +309,7 @@ Status PaimonScanner::_next_arrow_record_batch() {
     auto arrow_result = arrow::ImportRecordBatch(batch.first.get(), batch.second.get());
     if (!arrow_result.ok()) {
         return Status::InternalError(
-                    fmt::format("failed to import Paimon Arrow batch: {}", arrow_result.status().ToString()));
+                fmt::format("failed to import Paimon Arrow batch: {}", arrow_result.status().ToString()));
     }
     _arrow_record_batch = std::move(arrow_result).ValueOrDie();
     return Status::OK();
@@ -337,7 +338,7 @@ Status PaimonScanner::_append_arrow_record_batch_to_chunk() {
 
 Status PaimonScanner::_fill_dst_chunk(ChunkPtr* chunk) {
     const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
-    _read_chunk->filter(_chunk_filter);
+    const size_t row_count = _read_chunk->filter(_chunk_filter);
     {
         SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
         for (size_t i = 0; i < materialized_columns.size(); ++i) {

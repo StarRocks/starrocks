@@ -441,9 +441,9 @@ paimon::Status PaimonFileSystem::ListDir(
         } else {
             auto is_dir_result = _file_system->is_directory(full_path);
             if (!is_dir_result.ok()) {
-                entry_status = paimon::Status::IOError(
-                        fmt::format("Failed to check whether {} is a directory, reason: {}", full_path,
-                                    is_dir_result.status().detailed_message()));
+                entry_status =
+                        paimon::Status::IOError(fmt::format("Failed to check whether {} is a directory, reason: {}",
+                                                            full_path, is_dir_result.status().detailed_message()));
                 return false;
             }
             is_dir = is_dir_result.value();

@@ -337,7 +337,8 @@ public class PaimonScanNode extends ScanNode {
     }
 
     // Split in the function will read by paimon-java or paimon-cpp
-    public void addSDKSplitScanRangeLocations(PaimonReaderMode paimonReaderMode, Split split, String predicateInfo, long totalFileLength) {
+    public void addSDKSplitScanRangeLocations(PaimonReaderMode paimonReaderMode, Split split, String predicateInfo,
+                                              long totalFileLength) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();

@@ -96,6 +96,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -3808,11 +3809,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public PaimonReaderMode getPaimonReaderMode() {
-        return PaimonReaderMode.valueOf(paimonReaderMode);
+        // The SET path is validated by PaimonReaderModeConverter, but the raw string can also be
+        // written through non-validated paths (e.g. the reflective setter), so parse defensively
+        // instead of throwing IllegalArgumentException at plan time.
+        try {
+            return PaimonReaderMode.valueOf(paimonReaderMode.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return PaimonReaderMode.AUTO;
+        }
     }
 
     public void setPaimonReaderMode(String paimonReaderMode) {
-        this.paimonReaderMode = paimonReaderMode;
+        this.paimonReaderMode = paimonReaderMode.toUpperCase(Locale.ROOT);
     }
 
     public boolean getAvroUseJNIReader() {

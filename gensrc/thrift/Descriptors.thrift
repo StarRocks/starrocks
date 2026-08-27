@@ -705,7 +705,6 @@ struct TPaimonTable {
 
     // Paimon TableSchema serialized as JSON at planning time
     6: optional string paimon_table_schema_json
-
 }
 
 struct TFlussTable {

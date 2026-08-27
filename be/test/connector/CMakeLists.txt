@@ -97,7 +97,7 @@ add_executable(connector_hive_test
         hive/scanner/jni_scanner_test.cpp
 )
 
-if (WITH_PAIMON_CPP)
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     target_sources(connector_hive_test PRIVATE
             hive/paimon/paimon_predicate_converter_test.cpp
             hive/paimon/paimon_file_system_test.cpp

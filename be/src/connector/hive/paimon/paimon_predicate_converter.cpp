@@ -27,17 +27,12 @@ namespace starrocks {
 
 PaimonPredicateConverter::PaimonPredicateConverter(const std::vector<SlotDescriptor*>& slots) : _slots(slots) {}
 std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert(const std::vector<Expr*>* conjuncts) {
-    if (VLOG_ROW_IS_ON) {
-        VLOG(10) << "PaimonPredicateConverter evaluating " << conjuncts->size() << " conjuncts";
-        for (size_t i = 0; i < conjuncts->size(); ++i) {
-            VLOG(10) << "Conjunct " << i << ": " << (*conjuncts)[i]->debug_string();
-        }
+    DLOG(INFO) << "PaimonPredicateConverter evaluating " << conjuncts->size() << " conjuncts";
+    for (size_t i = 0; i < conjuncts->size(); ++i) {
+        DLOG(INFO) << "Conjunct " << i << ": " << (*conjuncts)[i]->debug_string();
     }
     auto result = convert_compound(TExprOpcode::type::COMPOUND_AND, conjuncts, false);
-
-    if (VLOG_ROW_IS_ON) {
-        VLOG(10) << "PaimonPredicateConverter result: " << (result ? "predicate created" : "null predicate");
-    }
+    DLOG(INFO) << "PaimonPredicateConverter result: " << (result ? "predicate created" : "null predicate");
     return result;
 }
 
@@ -70,7 +65,7 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
                     break;
                 }
                 return convert_equal(i, std::string(slot->col_name()), translate_to_paimon_type(slot->type()),
-                                      ::paimon::Literal(true), neg);
+                                     ::paimon::Literal(true), neg);
             }
         }
     }
@@ -80,8 +75,13 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
         return nullptr;
     }
 
+    if (conjunct->get_num_children() == 0) {
+        return nullptr;
+    }
     Expr* left = conjunct->get_child(0);
-    DCHECK(left->is_slotref());
+    if (!left->is_slotref()) {
+        return nullptr;
+    }
     auto* ref = down_cast<const ColumnRef*>(left);
     for (size_t i = 0; i < _slots.size(); ++i) {
         SlotDescriptor* slot = _slots[i];
@@ -95,10 +95,10 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
                 std::string null_function_name;
                 if (conjunct->is_null_scalar_function(null_function_name)) {
                     if (null_function_name == "null") {
-                        VLOG(10) << "convert IS_NULL " << fieldName;
+                        DLOG(INFO) << "convert IS_NULL " << fieldName;
                         return convert_null(i, fieldName, fieldType, neg);
                     } else if (null_function_name == "not null") {
-                        VLOG(10) << "convert IS_NOT_NULL " << fieldName;
+                        DLOG(INFO) << "convert IS_NOT_NULL " << fieldName;
                         return convert_null(i, fieldName, fieldType, !neg);
                     }
                 }
@@ -138,7 +138,8 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
 }
 
 std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert_compound(TExprOpcode::type op_type,
-                                                                        const std::vector<Expr*>* children, bool neg) {
+                                                                                const std::vector<Expr*>* children,
+                                                                                bool neg) {
     std::vector<std::shared_ptr<::paimon::Predicate>> predicates;
     predicates.reserve(children->size());
     for (const auto& item : *children) {
@@ -255,7 +256,7 @@ paimon::Literal PaimonPredicateConverter::translate_to_paimon_literal(starrocks:
     }
 
     auto* vlit = down_cast<VectorizedLiteral*>(lit);
-    auto ptr = vlit->evaluate_checked(nullptr, nullptr).value();
+    const auto ptr = vlit->evaluate_checked(nullptr, nullptr).value();
     if (ptr->only_null()) {
         return ::paimon::Literal(paimon::FieldType::BOOLEAN);
     }
@@ -265,6 +266,7 @@ paimon::Literal PaimonPredicateConverter::translate_to_paimon_literal(starrocks:
 
     switch (paimon_data_type) {
     case ::paimon::FieldType::BOOLEAN:
+        return ::paimon::Literal(datum.get_int8() != 0);
     case ::paimon::FieldType::TINYINT:
         return ::paimon::Literal(datum.get_int8());
     case ::paimon::FieldType::SMALLINT:
@@ -327,15 +329,15 @@ bool PaimonPredicateConverter::_ok_to_paimon_type(const starrocks::TypeDescripto
     case LogicalType::TYPE_BINARY:
         return ::paimon::FieldType::BINARY;
     default:
-        throw std::runtime_error("unknown data type error");
+        return ::paimon::FieldType::UNKNOWN;
     }
 }
 
 void PaimonPredicateConverter::translate_to_paimon_in_list_literals(starrocks::Expr* in_list_expr,
-                                                           std::vector<::paimon::Literal>& ret) {
+                                                                    std::vector<::paimon::Literal>& ret) {
     for (int i = 1; i < in_list_expr->get_num_children(); i++) {
         ret.emplace_back(translate_to_paimon_literal(in_list_expr->get_child(i)));
     }
 }
-//
+
 } // namespace starrocks

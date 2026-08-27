@@ -87,7 +87,7 @@ target_link_libraries(ConnectorHive PUBLIC
 
 target_link_libraries(ConnectorHive PRIVATE Formats)
 
-if (WITH_PAIMON_CPP)
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     target_sources(ConnectorHive PRIVATE
             hive/paimon/paimon_predicate_converter.cpp
             hive/paimon/paimon_file_system.cpp
