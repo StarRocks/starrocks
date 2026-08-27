@@ -237,7 +237,7 @@ public class ResourceGroup {
         if (this.classifiers != null) {
             rg.classifiers = this.classifiers.stream()
                     .map(ResourceGroupClassifier::copy)
-                    .collect(Collectors.toList());
+                    .toList();
         }
         return rg;
     }
