@@ -245,9 +245,12 @@ jobs:
   build:
     runs-on: [self-hosted, sync-normal]
     needs: [thirdparty-info]
-    # celerdata-first: on main ci-pipeline builds sync PRs, so this compile-check
-    # (SKIP_OSS, no artifact) is skipped there; it still runs on release branches.
-    if: needs.thirdparty-info.result == 'success' && github.base_ref != 'main'
+    # celerdata-first: sync PRs now get their build+test from the general pipeline
+    # (CI PIPELINE on main / CI PIPELINE - BRANCH on release branches), so this
+    # Sync Build is retired. Kept as a (skipped) job so downstream `needs: build`
+    # and `needs.build.result == 'skipped'` references stay valid; branch
+    # protection (BE UT / FE UT) is now the real build/test gate.
+    if: false
     # Static, distinct name so this check never collides with ci-pipeline.yml's
     # `BUILD` context on main. `BUILD` is no longer a required check on release
     # branches, so this no longer needs to be named `BUILD`; and a `${{ }}`
@@ -401,13 +404,7 @@ jobs:
           (
             github.base_ref == 'main' ||
             needs.build.result == 'success' ||
-            (
-              needs.build.result == 'skipped' &&
-              needs.code-checker.result == 'success' &&
-              needs.code-checker.outputs.output1 != 'true' &&
-              needs.code-checker.outputs.output2 != 'true' &&
-              needs.code-checker.outputs.output3 != 'true'
-            )
+            needs.build.result == 'skipped'
           )
         env:
           REPO: ${{ github.repository }}
@@ -502,13 +499,7 @@ jobs:
           (
             github.base_ref == 'main' ||
             needs.build.result == 'success' ||
-            (
-              needs.build.result == 'skipped' &&
-              needs.code-checker.result == 'success' &&
-              needs.code-checker.outputs.output1 != 'true' &&
-              needs.code-checker.outputs.output2 != 'true' &&
-              needs.code-checker.outputs.output3 != 'true'
-            )
+            needs.build.result == 'skipped'
           ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
@@ -532,13 +523,7 @@ jobs:
           (
             github.base_ref == 'main' ||
             needs.build.result == 'success' ||
-            (
-              needs.build.result == 'skipped' &&
-              needs.code-checker.result == 'success' &&
-              needs.code-checker.outputs.output1 != 'true' &&
-              needs.code-checker.outputs.output2 != 'true' &&
-              needs.code-checker.outputs.output3 != 'true'
-            )
+            needs.build.result == 'skipped'
           ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
@@ -562,13 +547,7 @@ jobs:
           (
             github.base_ref == 'main' ||
             needs.build.result == 'success' ||
-            (
-              needs.build.result == 'skipped' &&
-              needs.code-checker.result == 'success' &&
-              needs.code-checker.outputs.output1 != 'true' &&
-              needs.code-checker.outputs.output2 != 'true' &&
-              needs.code-checker.outputs.output3 != 'true'
-            )
+            needs.build.result == 'skipped'
           ) &&
           contains(github.event.pull_request.title, '(sync #') &&
           contains(needs.pr-label.outputs.labels, 'sync') &&
@@ -586,17 +565,6 @@ jobs:
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: rebase
 
-      - name: notify
-        if: >
-          needs.build.result == 'failure' ||
-          (needs.build.result == 'success' && contains(needs.pr-label.outputs.labels, 'conflict')) ||
-          (needs.build.result == 'success' && contains(needs.pr-label.outputs.labels, 'ERROR'))
-        env:
-          build_res: ${{ needs.build.result }}
-        run: |
-          cd /var/lib/elastic-service && git pull
-          python3 lib/send_pr_notification.py ${PR_NUMBER} ${REPO} ${BRANCH} ${ACTION_URL} ${build_res}
-
   auto-merge:
     needs: [pr-label, code-checker, build, be-ut-refactor-compile]
     name: Auto Merge
@@ -613,13 +581,7 @@ jobs:
       (
         github.base_ref == 'main' ||
         needs.build.result == 'success' ||
-        (
-          needs.build.result == 'skipped' &&
-          needs.code-checker.result == 'success' &&
-          needs.code-checker.outputs.output1 != 'true' &&
-          needs.code-checker.outputs.output2 != 'true' &&
-          needs.code-checker.outputs.output3 != 'true'
-        )
+        needs.build.result == 'skipped'
       )
     steps:
       - name: clean

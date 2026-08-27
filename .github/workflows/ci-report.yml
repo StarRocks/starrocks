@@ -33,8 +33,13 @@ env:
 jobs:
   INFO:
     runs-on: [self-hosted, quick]
+    # Accept both pull_request and pull_request_target: ci-pipeline.yml (main)
+    # triggers on pull_request, while ci-pipeline-branch.yml triggers on
+    # pull_request_target. Without pull_request_target here, branch PRs would
+    # stop publishing test/coverage reports and notifications.
     if: >
-      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.event == 'pull_request' ||
+       github.event.workflow_run.event == 'pull_request_target') &&
       (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
@@ -148,25 +153,34 @@ jobs:
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           fi
 
-      - name: Report test results to CI Metrics
+      # Publish/report only if the producer job actually ran in THIS parent run.
+      # OSS XML is scoped by PR+branch (not run), so a skipped/absent producer
+      # would otherwise stamp stale XML onto the PR -- matters during the
+      # transitional pull_request + pull_request_target double-run.
+      - name: Producer ran?
+        id: producer_gate
         if: always()
+        run: |
+          set -uo pipefail
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="FE UT")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" = "success" ] || [ "$PCONCL" = "failure" ]; then
+            echo "ran=true" >> $GITHUB_OUTPUT
+          else
+            echo "ran=false" >> $GITHUB_OUTPUT
+            echo "::notice::producer 'FE UT' did not run this attempt (conclusion=$PCONCL); skip to avoid stale XML"
+          fi
+
+      - name: Report test results to CI Metrics
+        if: always() && steps.producer_gate.outputs.ran == 'true'
         continue-on-error: true
         env:
           CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
           CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
         run: |
           set -uo pipefail
-          # Gate: only report if the producer job actually ran in THIS parent run.
-          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
-          # stale XML from an earlier push, which must not be stamped onto this run.
-          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
-          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="FE UT")|.conclusion]|first // "absent"')
-          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
-            echo "::notice::producer 'FE UT' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
-            exit 0
-          fi
           CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
           printf '%s' "$CI_METRICS_CA" > "$CA"
           rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
@@ -180,7 +194,7 @@ jobs:
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v4
         id: publish_report
-        if: steps.download-ut-xml.outputs.size != '0'
+        if: steps.download-ut-xml.outputs.size != '0' && steps.producer_gate.outputs.ran == 'true'
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -552,25 +566,34 @@ jobs:
               --module "Java-Extensions"
           fi
 
-      - name: Report test results to CI Metrics
+      # Publish/report only if the producer job actually ran in THIS parent run.
+      # OSS XML is scoped by PR+branch (not run), so a skipped/absent producer
+      # would otherwise stamp stale XML onto the PR -- matters during the
+      # transitional pull_request + pull_request_target double-run.
+      - name: Producer ran?
+        id: producer_gate
         if: always()
+        run: |
+          set -uo pipefail
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="BE UT")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" = "success" ] || [ "$PCONCL" = "failure" ]; then
+            echo "ran=true" >> $GITHUB_OUTPUT
+          else
+            echo "ran=false" >> $GITHUB_OUTPUT
+            echo "::notice::producer 'BE UT' did not run this attempt (conclusion=$PCONCL); skip to avoid stale XML"
+          fi
+
+      - name: Report test results to CI Metrics
+        if: always() && steps.producer_gate.outputs.ran == 'true'
         continue-on-error: true
         env:
           CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
           CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
         run: |
           set -uo pipefail
-          # Gate: only report if the producer job actually ran in THIS parent run.
-          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
-          # stale XML from an earlier push, which must not be stamped onto this run.
-          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
-          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="BE UT")|.conclusion]|first // "absent"')
-          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
-            echo "::notice::producer 'BE UT' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
-            exit 0
-          fi
           CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
           printf '%s' "$CI_METRICS_CA" > "$CA"
           rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
@@ -584,7 +607,7 @@ jobs:
       - name: Publish UT Report
         uses: mikepenz/action-junit-report@v4
         id: publish_report
-        if: steps.download-ut-xml.outputs.size != '0'
+        if: steps.download-ut-xml.outputs.size != '0' && steps.producer_gate.outputs.ran == 'true'
         env:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -658,25 +681,34 @@ jobs:
           cd .actions/nose-report-action
           git clone https://github.com/StarRocks/action-junit-report.git .
 
-      - name: Report test results to CI Metrics
+      # Publish/report only if the producer job actually ran in THIS parent run.
+      # OSS XML is scoped by PR+branch (not run), so a skipped/absent producer
+      # would otherwise stamp stale XML onto the PR -- matters during the
+      # transitional pull_request + pull_request_target double-run.
+      - name: Producer ran?
+        id: producer_gate
         if: always()
+        run: |
+          set -uo pipefail
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="SQL-Tester")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" = "success" ] || [ "$PCONCL" = "failure" ]; then
+            echo "ran=true" >> $GITHUB_OUTPUT
+          else
+            echo "ran=false" >> $GITHUB_OUTPUT
+            echo "::notice::producer 'SQL-Tester' did not run this attempt (conclusion=$PCONCL); skip to avoid stale XML"
+          fi
+
+      - name: Report test results to CI Metrics
+        if: always() && steps.producer_gate.outputs.ran == 'true'
         continue-on-error: true
         env:
           CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
           CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
         run: |
           set -uo pipefail
-          # Gate: only report if the producer job actually ran in THIS parent run.
-          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
-          # stale XML from an earlier push, which must not be stamped onto this run.
-          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
-          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="SQL-Tester")|.conclusion]|first // "absent"')
-          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
-            echo "::notice::producer 'SQL-Tester' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
-            exit 0
-          fi
           CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
           printf '%s' "$CI_METRICS_CA" > "$CA"
           rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
@@ -689,7 +721,7 @@ jobs:
             sql-tester-result/*.xml || true
       - name: Publish SQL-Tester Report
         uses: ./.actions/nose-report-action
-        if: steps.prepare-tools.outcome == 'success'
+        if: steps.prepare-tools.outcome == 'success' && steps.producer_gate.outputs.ran == 'true'
         with:
           check_name: "SQL-Tester Report"
           fail_on_failure: true
@@ -732,25 +764,34 @@ jobs:
           cd .actions/nose-report-action
           git clone https://github.com/StarRocks/action-junit-report.git .
 
-      - name: Report test results to CI Metrics
+      # Publish/report only if the producer job actually ran in THIS parent run.
+      # OSS XML is scoped by PR+branch (not run), so a skipped/absent producer
+      # would otherwise stamp stale XML onto the PR -- matters during the
+      # transitional pull_request + pull_request_target double-run.
+      - name: Producer ran?
+        id: producer_gate
         if: always()
+        run: |
+          set -uo pipefail
+          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
+          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="ADMIT TEST")|.conclusion]|first // "absent"')
+          if [ "$PCONCL" = "success" ] || [ "$PCONCL" = "failure" ]; then
+            echo "ran=true" >> $GITHUB_OUTPUT
+          else
+            echo "ran=false" >> $GITHUB_OUTPUT
+            echo "::notice::producer 'ADMIT TEST' did not run this attempt (conclusion=$PCONCL); skip to avoid stale XML"
+          fi
+
+      - name: Report test results to CI Metrics
+        if: always() && steps.producer_gate.outputs.ran == 'true'
         continue-on-error: true
         env:
           CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
           CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
         run: |
           set -uo pipefail
-          # Gate: only report if the producer job actually ran in THIS parent run.
-          # OSS XML is scoped by PR+branch (not run/attempt); a skipped producer would leave
-          # stale XML from an earlier push, which must not be stamped onto this run.
-          PJOBS=$(curl -fsS -m 15 -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs?per_page=100" || echo '{"jobs":[]}')
-          PCONCL=$(printf '%s' "$PJOBS" | jq -r '[.jobs[]|select(.name=="ADMIT TEST")|.conclusion]|first // "absent"')
-          if [ "$PCONCL" != "success" ] && [ "$PCONCL" != "failure" ]; then
-            echo "::notice::producer 'ADMIT TEST' did not run this attempt (conclusion=$PCONCL); skip metrics report to avoid stale XML"
-            exit 0
-          fi
           CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"
           printf '%s' "$CI_METRICS_CA" > "$CA"
           rm -rf ./ci-tool-metrics && cp -rf /var/lib/ci-tool ./ci-tool-metrics && (cd ./ci-tool-metrics && git pull -q || true)
@@ -763,7 +804,7 @@ jobs:
             admit-result/*.xml || true
       - name: Publish Admit Report
         uses: ./.actions/nose-report-action
-        if: steps.prepare-tools.outcome == 'success'
+        if: steps.prepare-tools.outcome == 'success' && steps.producer_gate.outputs.ran == 'true'
         with:
           check_name: "Admit Report"
           fail_on_failure: true

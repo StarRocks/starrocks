@@ -1,7 +1,16 @@
 name: CI PIPELINE - BRANCH
 
 on:
-  pull_request:
+  # celerdata-first: resolve this workflow from the default branch (main) for
+  # ALL branch* PRs, so the sync gate and future pipeline changes live in one
+  # place instead of being copied onto every release branch. pull_request_target
+  # always runs the copy on the default branch; the `branches` filter still
+  # matches the PR's base ref (branch-3.5/4.0/4.1/26.2), never main. This repo
+  # has no external contributors, so exposing secrets to branch PRs is safe.
+  # NOTE: jobs that need the PR's code must check out refs/pull/N/merge
+  # explicitly (see schema-compatibility / repo-handbook) because
+  # pull_request_target defaults the checkout to the base branch.
+  pull_request_target:
     types:
       - opened
       - synchronize
@@ -12,7 +21,12 @@ on:
 permissions: write-all
 
 concurrency:
-  group: ${{ github.event.number }}
+  # Include the event name so this pull_request_target run does not share a
+  # concurrency group with the legacy pull_request copy still living on the
+  # release branches -- otherwise the two runs would cancel-in-progress each
+  # other. Once the release-branch copies stop triggering, this can revert to
+  # just github.event.number.
+  group: ${{ github.event_name }}-${{ github.event.number }}
   cancel-in-progress: true
 
 jobs:
@@ -123,6 +137,15 @@ jobs:
     needs: basic-checker
     name: Repo Handbook
     if: needs.basic-checker.outputs.PASS == 'true'
+    # This job checks out the PR merge ref and runs its (PR-controlled) Python.
+    # Under pull_request_target the workflow default is write-all; drop this job
+    # to read-only so a malicious PR cannot use the persisted token to mutate
+    # repository resources. contents: read covers checkout / git inspection;
+    # pull-requests: read is required because under pull_request_target
+    # dorny/paths-filter lists changed files via the pull-request API.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -149,6 +172,11 @@ jobs:
 
       - uses: actions/checkout@v6
         if: steps.path-filter.outputs.handbook == 'true'
+        with:
+          # pull_request_target defaults the checkout to the base branch (no PR
+          # changes). Check out the PR merge ref so the handbook tooling tests
+          # run against the PR's changes, matching pull_request behavior.
+          ref: refs/pull/${{ github.event.number }}/merge
 
       - name: Handbook Tool Tests
         if: steps.path-filter.outputs.handbook == 'true'
@@ -166,6 +194,16 @@ jobs:
     needs: basic-checker
     name: Schema Compatibility
     if: needs.basic-checker.outputs.PASS == 'true'
+    # This job checks out the PR merge ref and runs its (PR-controlled) Python.
+    # Under pull_request_target the workflow default is write-all; drop this job
+    # to read-only so a malicious PR cannot use the persisted token to mutate
+    # repository resources. contents: read still covers the private-repo
+    # `git fetch origin` in Compute Merge Base; pull-requests: read is required
+    # because under pull_request_target dorny/paths-filter lists changed files
+    # via the pull-request API.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: dorny/paths-filter@v3
         id: path-filter
@@ -184,6 +222,11 @@ jobs:
         if: steps.path-filter.outputs.schema == 'true'
         with:
           fetch-depth: 0
+          # pull_request_target defaults the checkout to the base branch (no PR
+          # changes). Check out the PR merge ref so the schema diff sees the
+          # PR's gensrc changes; merge-base(base, merge-ref) is the base tip, so
+          # `--mode changed` still diffs exactly the PR delta.
+          ref: refs/pull/${{ github.event.number }}/merge
 
       - name: Compute Merge Base
         if: steps.path-filter.outputs.schema == 'true'
