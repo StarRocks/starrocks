@@ -2135,6 +2135,75 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_parallel_matches_seri
     }
 }
 
+// A scalar max-RSSID rebuild watermark is only safe when rowset RSSIDs increase with rowset version.
+// MERGE can produce the opposite order: an earlier rowset may have a larger RSSID than a later rowset.
+// Reproduce the resulting checkpoint gap without cross-publish or concurrent resharding. The first
+// rowset is persisted in an SST while the later, lower-RSSID rowset remains in the active memtable;
+// after commit and a cold reload, both real rowsets must still be represented by the rebuilt index.
+TEST_F(LakePersistentIndexTest, test_cold_reload_preserves_non_monotonic_rssid_tail_after_partial_checkpoint) {
+    constexpr uint32_t kEarlierHighRssid = 100;
+    constexpr uint32_t kLaterLowRssid = 50;
+    constexpr int64_t kEarlierVersion = 2;
+    constexpr int64_t kLaterVersion = 3;
+
+    auto md = make_varchar_pk_metadata();
+    md->set_version(kLaterVersion);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
+
+    std::vector<std::string> high_keys;
+    std::vector<std::string> low_keys;
+    append_cold_rowset(md.get(), /*start=*/0, /*n=*/1, kEarlierHighRssid, &high_keys);
+    append_cold_rowset(md.get(), /*start=*/100, /*n=*/1, kLaterLowRssid, &low_keys);
+    ASSERT_EQ(2, md->rowsets_size());
+    md->mutable_rowsets(0)->set_version(kEarlierVersion);
+    md->mutable_rowsets(1)->set_version(kLaterVersion);
+    ASSERT_GT(md->rowsets(0).id(), md->rowsets(1).id());
+
+    ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
+    Tablet tablet(_tablet_mgr.get(), md->id());
+    auto checkpointed = std::make_shared<TabletMetadata>();
+    checkpointed->CopyFrom(*md);
+
+    {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+        ASSERT_OK(index->init(md));
+
+        const Slice high_key(high_keys[0]);
+        const IndexValue high_value((static_cast<uint64_t>(kEarlierHighRssid) << 32));
+        ASSERT_OK(index->insert(1, &high_key, &high_value, kEarlierVersion));
+        ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+
+        const Slice low_key(low_keys[0]);
+        const IndexValue low_value((static_cast<uint64_t>(kLaterLowRssid) << 32));
+        ASSERT_OK(index->insert(1, &low_key, &low_value, kLaterVersion));
+
+        std::array<Slice, 2> keys = {high_key, low_key};
+        std::array<IndexValue, 2> before_reload;
+        ASSERT_OK(index->get(keys.size(), keys.data(), before_reload.data()));
+        EXPECT_EQ(high_value, before_reload[0]);
+        EXPECT_EQ(low_value, before_reload[1]);
+
+        MetaFileBuilder builder(tablet, checkpointed);
+        ASSERT_OK(index->commit(&builder));
+    }
+
+    ASSERT_EQ(1, checkpointed->sstable_meta().sstables_size());
+    EXPECT_EQ(static_cast<uint64_t>(kEarlierHighRssid) << 32, checkpointed->sstable_meta().sstables(0).max_rss_rowid());
+
+    auto reloaded = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
+    ASSERT_OK(reloaded->init(checkpointed));
+    auto reloaded_metadata = std::make_shared<TabletMetadata>();
+    reloaded_metadata->CopyFrom(*checkpointed);
+    MetaFileBuilder reload_builder(tablet, reloaded_metadata);
+    ASSERT_OK(reloaded->load_from_lake_tablet(_tablet_mgr.get(), checkpointed, kLaterVersion, &reload_builder));
+
+    std::array<Slice, 2> keys = {Slice(high_keys[0]), Slice(low_keys[0])};
+    std::array<IndexValue, 2> after_reload;
+    ASSERT_OK(reloaded->get(keys.size(), keys.data(), after_reload.data()));
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(kEarlierHighRssid) << 32), after_reload[0]);
+    EXPECT_EQ(IndexValue(static_cast<uint64_t>(kLaterLowRssid) << 32), after_reload[1]);
+}
+
 // A del file that did NOT originate from the rebuilt rowset must run get()+filter and drop deletes
 // that are too old for the current index entry. too_old = origin_rowset_id + op_offset: keys whose
 // current rssid (value >> 32) is <= too_old get erased; keys with a newer rssid keep their value.
