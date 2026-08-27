@@ -1283,9 +1283,45 @@ Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
     return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
 }
 
+static Status check_combined_txn_log_coverage(const CombinedTxnLogPB& logs,
+                                              const std::set<int64_t>& expected_tablet_ids) {
+    if (expected_tablet_ids.empty()) {
+        return Status::OK();
+    }
+    std::set<int64_t> present;
+    for (const auto& log : logs.txn_logs()) {
+        present.insert(log.tablet_id());
+    }
+    std::string missing;
+    size_t missing_count = 0;
+    for (int64_t expected_id : expected_tablet_ids) {
+        if (present.count(expected_id) > 0) {
+            continue;
+        }
+        // Cap the id list: a whole node's contribution can go missing at once, and this string
+        // ends up in a load error that gets logged and returned to the client.
+        if (missing_count < 16) {
+            missing.append(missing.empty() ? "" : ",").append(std::to_string(expected_id));
+        }
+        ++missing_count;
+    }
+    if (missing_count > 0) {
+        return Status::InternalError(
+                fmt::format("refuse to write incomplete combined txn log: missing {} of {} tablets [{}{}]",
+                            missing_count, expected_tablet_ids.size(), missing, missing_count > 16 ? ",..." : ""));
+    }
+    return Status::OK();
+}
+
 DEFINE_FAIL_POINT(put_combined_txn_log_success);
 DEFINE_FAIL_POINT(put_combined_txn_log_fail);
-Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs) {
+Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs,
+                                           const std::set<int64_t>& expected_tablet_ids) {
+    // Ahead of the fail points on purpose: this is an invariant on the object we are about to
+    // write, not part of the write itself, so a fail point that stubs out the object-store call
+    // must not be able to skip it -- otherwise put_combined_txn_log_success silently disables the
+    // check and no test using that fail point can observe it.
+    RETURN_IF_ERROR(check_combined_txn_log_coverage(logs, expected_tablet_ids));
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_success, Status::OK());
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_fail, Status::InternalError("write combined_txn_log_fail"));
     if (UNLIKELY(logs.txn_logs_size() == 0)) {
