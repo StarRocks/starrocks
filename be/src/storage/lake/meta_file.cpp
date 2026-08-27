@@ -1185,8 +1185,8 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
         // whose rows are live and not delvec-masked. The next upsert of such a key finds nothing,
         // writes no delete-vector mark, and leaves two live rows -- which a later index rebuild
         // reports as "insert found duplicate key" (issue #78224).
-        const uint32_t local_idx = off >= 0 ? get_segment_idx(rowset_pb, static_cast<int32_t>(off))
-                                            : get_max_segment_idx(rowset_pb);
+        const uint32_t local_idx =
+                off >= 0 ? get_segment_idx(rowset_pb, static_cast<int32_t>(off)) : get_max_segment_idx(rowset_pb);
         _pending_rowset_data.del_op_offsets.push_back(static_cast<int64_t>(seg_base) + local_idx);
         _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : 0);
     }
