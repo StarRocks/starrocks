@@ -1,0 +1,61 @@
+-- name: test_range_orderby_partitioned @cloud @sequential
+-- SQL integration: a partitioned range-distributed PRIMARY KEY table whose ORDER BY differs
+-- from the primary key. Tablet ranges are per physical partition, so a split of one partition
+-- must leave the others untouched, and partition pruning must keep working alongside a
+-- predicate on the sort key.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    dt date not null,
+    id int not null,
+    score int not null,
+    tag varchar(256) not null
+)
+primary key(dt, id)
+partition by range(dt) (
+    partition p1 values less than ('2026-01-02'),
+    partition p2 values less than ('2026-01-03'),
+    partition p3 values less than ('2026-01-04')
+)
+order by(score, tag)
+properties('replication_num' = '1');
+
+-- Fill p1 heavily and leave p2/p3 tiny, so only p1 is worth splitting.
+insert into t
+select '2026-01-01', x, 100000 - x, repeat(md5(cast(x as varchar)), 6)
+from table(generate_series(1, 20000)) as g(x);
+insert into t values
+    ('2026-01-02', 1, 500, 'p2a'),
+    ('2026-01-02', 2, 600, 'p2b'),
+    ('2026-01-03', 1, 700, 'p3a');
+
+select count(*) from t;
+select count(*) from t where dt = '2026-01-02';
+select count(*) from t where dt < '2026-01-02' and score > 99000;
+
+[UC]alter table t split tablet partition(p1) properties('tablet_reshard_target_size' = '1024');
+
+shell: n=1; for i in $(seq 1 55); do n=$(${mysql_cmd} -Ne "select count(1) from information_schema.tablet_reshard_jobs where db_name='db_${uuid0}' and job_state not in ('FINISHED','ABORTED')" 2>/dev/null); [ "$n" = "0" ] && break; sleep 2; done; echo "pending=$n"
+
+-- Only p1 was over the target, so only p1 fanned out.
+select partition_name, buckets > 1 as did_split from information_schema.partitions_meta
+    where db_name = 'db_${uuid0}' and table_name = 't' order by partition_name;
+
+select count(*), sum(score) from t;
+select score, length(tag) from t where dt = '2026-01-01' and id = 777;
+select * from t where dt = '2026-01-02' order by id;
+
+-- Writes land correctly in the split partition and in an untouched one.
+insert into t values ('2026-01-01', 777, 1, 'moved'), ('2026-01-03', 2, 800, 'p3b');
+select score, length(tag) from t where dt = '2026-01-01' and id = 777;
+select * from t where dt >= '2026-01-03' order by id;
+select count(*) from t;
+
+truncate table t partition (p2);
+select count(*) from t;
+select count(*) from t where dt = '2026-01-02';
+
+drop database db_${uuid0} force;
