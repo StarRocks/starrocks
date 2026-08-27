@@ -43,8 +43,8 @@ public:
 
 private:
     Status _next_arrow_record_batch();
-    Status _append_arrow_record_batch_to_chunk();
-    Status _fill_dst_chunk(ChunkPtr* chunk);
+    Status _append_arrow_record_batch_to_chunk(ChunkPtr& chunk);
+    Status _fill_dst_chunk(ChunkPtr& chunk);
     bool _arrow_record_batch_is_exhausted() const;
 
     int64_t _max_chunk_size = 4096;
@@ -59,7 +59,10 @@ private:
     ObjectPool _pool;
     std::vector<std::unique_ptr<ConvertFuncTree>> _convert_functions;
     std::vector<Expr*> _cast_exprs;
-    ChunkPtr _read_chunk;
+    // Prototype of the read-side chunk (raw arrow-facing column types, keyed by slot id).
+    // Never holds data: do_get_next() clones a fresh chunk from it per call, because
+    // downstream operators keep returned chunks and their columns alive across calls.
+    ChunkPtr _read_chunk_template;
     Filter _chunk_filter;
     Filter _conjunct_filter;
     ArrowConvertContext _convert_context;

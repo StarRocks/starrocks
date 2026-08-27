@@ -172,7 +172,7 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
                 fmt::format("failed to create Paimon split reader: {}", reader_result.status().ToString()));
     }
     _reader = std::move(reader_result).value();
-    _read_chunk = std::make_shared<Chunk>();
+    _read_chunk_template = std::make_shared<Chunk>();
     for (size_t i = 0; i < materialized_columns.size(); ++i) {
         SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
         std::shared_ptr<arrow::DataType> arrow_type;
@@ -186,8 +186,7 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
         MutableColumnPtr column;
         RETURN_IF_ERROR(create_arrow_column(arrow_type.get(), slot_desc, &column, _convert_functions[i].get(),
                                             &_cast_exprs[i], _pool, true));
-        column->reserve(_max_chunk_size);
-        _read_chunk->append_column(std::move(column), slot_desc->id());
+        _read_chunk_template->append_column(std::move(column), slot_desc->id());
     }
     _arrow_record_batch_start_idx = 0;
     _scanner_eof = false;
@@ -198,16 +197,17 @@ Status PaimonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) 
     if (_scanner_eof) {
         return Status::EndOfFile("no data");
     }
-    _read_chunk->reset();
     if (_arrow_record_batch_is_exhausted()) {
         // Nothing is buffered yet, so an EndOfFile here propagates to the caller as-is.
         RETURN_IF_ERROR(_next_arrow_record_batch());
     }
+    // Downstream operators keep returned chunks and their columns alive across calls, so
+    // every call materializes into a freshly cloned chunk; _read_chunk_template never holds data.
+    *chunk = _read_chunk_template->clone_empty_with_slot(_max_chunk_size);
     // Emit min(_max_chunk_size, remaining rows of the current batch) rows; a chunk
     // smaller than _max_chunk_size at a batch tail is fine.
-    RETURN_IF_ERROR(_append_arrow_record_batch_to_chunk());
-    *chunk = _read_chunk->clone_empty_with_slot(_max_chunk_size);
-    RETURN_IF_ERROR(_fill_dst_chunk(chunk));
+    RETURN_IF_ERROR(_append_arrow_record_batch_to_chunk(*chunk));
+    RETURN_IF_ERROR(_fill_dst_chunk(*chunk));
     // Unlike other hive-family scanners there is no need to fill not-existed or partition
     // columns here: schema evolution is resolved inside paimon-cpp, and paimon partition
     // columns are materialized by the reader as regular data columns.
@@ -222,7 +222,7 @@ void PaimonScanner::do_close(RuntimeState*) noexcept {
         _reader->Close();
         _reader.reset();
     }
-    _read_chunk.reset();
+    _read_chunk_template.reset();
     _convert_functions.clear();
     _cast_exprs.clear();
     _chunk_filter.clear();
@@ -315,7 +315,7 @@ Status PaimonScanner::_next_arrow_record_batch() {
     return Status::OK();
 }
 
-Status PaimonScanner::_append_arrow_record_batch_to_chunk() {
+Status PaimonScanner::_append_arrow_record_batch_to_chunk(ChunkPtr& chunk) {
     DCHECK(_arrow_record_batch != nullptr);
     SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
     const size_t num_rows =
@@ -325,7 +325,7 @@ Status PaimonScanner::_append_arrow_record_batch_to_chunk() {
     for (size_t i = 0; i < materialized_columns.size(); ++i) {
         SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
         _convert_context.set_current_column(slot_desc->col_name(), slot_desc->type());
-        Column* column = _read_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id());
+        Column* column = chunk->get_column_raw_ptr_by_slot_id(slot_desc->id());
         const auto arrow_column = _arrow_record_batch->GetColumnByName(std::string(materialized_columns[i].name()));
         RETURN_IF_ERROR(convert_arrow_array_to_column(_convert_functions[i].get(), num_rows, arrow_column.get(), column,
                                                       _arrow_record_batch_start_idx, /*chunk_start_idx=*/0,
@@ -336,16 +336,18 @@ Status PaimonScanner::_append_arrow_record_batch_to_chunk() {
     return Status::OK();
 }
 
-Status PaimonScanner::_fill_dst_chunk(ChunkPtr* chunk) {
+Status PaimonScanner::_fill_dst_chunk(ChunkPtr& chunk) {
     const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
-    const size_t row_count = _read_chunk->filter(_chunk_filter);
+    const size_t row_count = chunk->filter(_chunk_filter);
     {
         SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
         for (size_t i = 0; i < materialized_columns.size(); ++i) {
             SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
-            ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, _read_chunk.get()));
+            // Each cast only reads its own slot's raw column, so replacing the slot's
+            // column right after evaluating it keeps the conversion in place.
+            ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, chunk.get()));
             column = ColumnHelper::unfold_const_column(slot_desc->type(), row_count, column);
-            (*chunk)->get_column_by_slot_id(slot_desc->id()) = std::move(column);
+            chunk->get_column_by_slot_id(slot_desc->id()) = std::move(column);
         }
     }
     return Status::OK();
