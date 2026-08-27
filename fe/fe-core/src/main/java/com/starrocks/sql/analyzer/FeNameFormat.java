@@ -94,7 +94,11 @@ public class FeNameFormat {
         if (Strings.isNullOrEmpty(name)) {
             ErrorReport.reportSemanticException(wrongNameError, wrongNameArgs);
         }
-        if (name.length() > maxLength) {
+        // Count Unicode code points, not UTF-16 code units: MySQL measures identifier limits in characters
+        // (a supplementary character counts as one), and the previous format regexes did too (their {1,N}
+        // quantifiers match one code point per repetition). String.length() would count a surrogate pair as
+        // two and wrongly reject an otherwise-valid name near the limit.
+        if (name.codePointCount(0, name.length()) > maxLength) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TOO_LONG_IDENT, name, maxLength);
         }
         if (!name.matches(regex)) {

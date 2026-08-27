@@ -129,6 +129,20 @@ public class FeNameFormatTest {
     }
 
     @Test
+    public void testCheckNameCountsCodePointsNotCodeUnits() {
+        // A supplementary character (surrogate pair) is one identifier character -- matching MySQL, which measures
+        // identifier limits in characters, and the old {1,N} regex quantifiers (one code point per repetition). It
+        // must count as one toward the limit, not two (its UTF-16 String.length()). TABLE_NAME_REGEX ("^[^\0]+$")
+        // allows arbitrary non-NUL characters, so this isolates the length-counting behaviour.
+        String emoji = new String(Character.toChars(0x1F600)); // U+1F600: String.length()==2, one code point
+        // 1024 code points (String.length()==2048) equals the table-name limit and must be accepted
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkTableName(emoji.repeat(1024)));
+        // 1025 code points exceeds the limit and reports ERR_TOO_LONG_IDENT rather than a format error
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkTableName(emoji.repeat(1025)));
+    }
+
+    @Test
     public void testCheckNamespace() {
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("abc"));
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2"));
