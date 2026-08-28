@@ -11706,24 +11706,24 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_hot_sibling_id_space_does_not_
         by_id[rowset.id()] = &rowset;
     }
 
-    // The complete carried floor is origin_rowset_id 766, so the hot tablet receives
-    // offset 12 - 766 = -754. Its live rowsets remain above every projected dead
-    // reference while the complete projected space starts at the cold tablet's ceiling.
+    // The cold context's atoms union into [10,12) and pack to [1,3). The hot
+    // context then packs its sparse runs from cursor 3, preserving every live
+    // rowset and direct-reference atom without allocating the intervening gaps.
     ASSERT_TRUE(by_id.count(2));
     ASSERT_TRUE(by_id.count(5));
     ASSERT_TRUE(by_id.count(6));
     ASSERT_TRUE(by_id.count(8));
 
-    // The two dead-reference fields are shifted by the same offset as the live ids.
-    // The minimum reference lands exactly at base.next_rowset_id instead of below zero.
+    // Direct references use their authoritative primary runs: raw max-compact 797
+    // maps to 4, while raw delete origin 766 maps to 3. Occurrence aliases do not
+    // participate in either mapping.
     const auto* compaction_output = by_id[6];
     EXPECT_EQ(4u, compaction_output->max_compact_input_rowset_id());
     ASSERT_EQ(1, compaction_output->del_files_size());
     EXPECT_EQ(3u, compaction_output->del_files(0).origin_rowset_id());
 
-    // Every value carried by the hot sibling must stay above the cold sibling's live
-    // rowset id. Under the old live-only floor, max_compact_input_rowset_id 797
-    // landed exactly on 11 and origin_rowset_id 766 underflowed to -20.
+    // Each hot run is packed after the cold run, so every carried value remains
+    // above the cold rowset's target RSSID without retaining sparse source gaps.
     for (const auto& rowset : merged->rowsets()) {
         if (rowset.id() == 2) continue;
         EXPECT_GT(rowset.id(), 2u);
@@ -11733,13 +11733,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_hot_sibling_id_space_does_not_
         }
     }
 
-    // Future writes must not reuse an occupied id.
+    // The packed-run cursor is authoritative for future writes.
     EXPECT_EQ(9u, merged->next_rowset_id());
 }
 
-// A later input's compacted-away reference can numerically equal an earlier
-// input's live rowset id. The reference must be included in the source floor so
-// the two unrelated identifiers remain disjoint in the merged namespace.
+// A later context's compacted-away reference can numerically equal an earlier
+// context's live rowset id. Both contribute primary atoms; packing the contexts'
+// runs in order keeps the unrelated identifiers disjoint in the target namespace.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_dead_reference_does_not_collide_with_earlier_live_rowset) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -11808,10 +11808,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dead_reference_does_not_collid
     EXPECT_EQ(8u, merged->next_rowset_id());
 }
 
-// A same-UID sibling copy is discarded by merge_rowsets, so its historical
-// references must not lower the later input's floor. Otherwise an ancient
-// reference on the discarded copy can force a positive lift that projects an
-// otherwise-valid high-ID rowset beyond the supported signed allocation domain.
+// A same-UID sibling occurrence is not emitted, so its historical references
+// contribute no primary atoms or target slots. Only its physical rowset/segment
+// occurrences alias to the selected canonical target; an unrelated high-ID
+// canonical therefore still packs inside the supported target domain.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_lower_rssid_floor) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -11900,7 +11900,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     prepare_tablet_dirs(wide_tablet);
     prepare_tablet_dirs(merged_tablet);
 
-    // ctx[0]: data(v1) -> predicate(v10). Its next_rowset_id (3) is the base watermark.
+    // ctx[0]: data(v1) -> predicate(v10). Their two canonical singleton atoms pack first.
     TabletMetadataPB low_meta;
     low_meta.set_id(low_tablet);
     low_meta.set_version(base_version);
@@ -11910,8 +11910,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     ASSERT_OK(put_tablet_metadata(low_meta));
 
     // ctx[1]: the same v10 delete predicate, cross-published onto a sibling whose id
-    // counter ran far ahead. Predicates dedup by version, so this is the whole tablet
-    // and merge_rowsets emits nothing from it.
+    // counter ran far ahead. Predicates dedup by version, so this context contributes
+    // no canonical atom, run, occurrence alias, or target slot.
     constexpr uint32_t kFarAheadPredicateId = 2'100'000'000;
     TabletMetadataPB predicate_only_meta;
     predicate_only_meta.set_id(predicate_only_tablet);
@@ -11920,8 +11920,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     add_rowset_with_predicate(&predicate_only_meta, kFarAheadPredicateId, /*version=*/10, /*has_predicate=*/true);
     ASSERT_OK(put_tablet_metadata(predicate_only_meta));
 
-    // ctx[2]: two live rowsets ~1e8 ids apart. Lifting its floor (5) onto ctx[1]'s raw
-    // id would map the top one to 2'199'999'996 > INT32_MAX.
+    // ctx[2]: two live rowsets ~1e8 ids apart. They form two singleton runs, so the
+    // numeric gap and ctx[1]'s unused raw predicate id do not consume target space.
     constexpr uint32_t kWideSpanTopId = 100'000'000;
     TabletMetadataPB wide_meta;
     wide_meta.set_id(wide_tablet);
@@ -11967,9 +11967,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     }
     EXPECT_EQ(1, predicate_count);
 
-    // ctx[1]'s floor is its discarded predicate id, so it shifts down to the base
-    // watermark 3 and reserves exactly that one slot. ctx[2] is then lifted to 4
-    // instead of to 2'100'000'001, and its span survives intact.
+    // ctx[1] contributes nothing. ctx[2]'s two singleton runs pack at targets 3
+    // and 4, and the authoritative cursor advances to exactly 5.
     EXPECT_EQ((std::vector<uint32_t>{1, 2, 3, 4}), rowset_ids);
     EXPECT_EQ(5, merged->next_rowset_id());
 }
@@ -12030,6 +12029,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_reserves_d
     ASSERT_EQ(2, merged->rowsets(0).segment_metas_size());
     EXPECT_EQ(0, lake::get_segment_idx(merged->rowsets(0), 0));
     EXPECT_EQ(100, lake::get_segment_idx(merged->rowsets(0), 1));
+    EXPECT_TRUE(merged->rowsets(0).overlapped());
     EXPECT_EQ(102, merged->next_rowset_id());
 }
 
@@ -12306,6 +12306,24 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_reconciles_segment_shared_flag
     ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({selected_source, duplicate_source}));
     ASSERT_EQ(1, merged->rowsets_size());
     EXPECT_TRUE(merged->rowsets(0).segment_metas(0).shared());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_overlapped_without_segment_union_expansion) {
+    auto selected_source = make_allocator_source(next_id(), 12);
+    auto* selected = add_allocator_rowset(selected_source.get(), 10, 1, "overlapped_same_0.dat", 0);
+    add_allocator_segment(selected, "overlapped_same_1.dat", 1);
+    selected->set_overlapped(false);
+
+    auto duplicate_source = make_allocator_source(next_id(), 22);
+    auto* duplicate = add_allocator_rowset(duplicate_source.get(), 20, 1, "overlapped_same_0.dat", 0);
+    add_allocator_segment(duplicate, "overlapped_same_1.dat", 1);
+    duplicate->mutable_uid()->CopyFrom(selected->uid());
+    duplicate->set_overlapped(true);
+
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({selected_source, duplicate_source}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    ASSERT_EQ(2, merged->rowsets(0).segment_metas_size());
+    EXPECT_FALSE(merged->rowsets(0).overlapped());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_del_declaration_conflict) {
@@ -13121,18 +13139,9 @@ TEST_F(LakeTabletReshardTest, test_publish_resharding_tablet_slot_dedup) {
     }
 }
 
-// merge_sstables projects each child's sstable.max_rss_rowid by adding the
-// child's rssid_offset to the high word (tablet_merger.cpp:615-618). The
-// projected high word can exceed every rowset.id in the merged metadata —
-// e.g. a delete-only sstable from a child contributes a high rssid that has
-// no matching rowset. update_next_rowset_id must consider the projected
-// sstable highs; otherwise next_rowset_id is set too low and a SPLIT child
-// inheriting this metadata will write new sstables whose max_rss_rowid is
-// LESS than existing inherited sstables' projected max_rss_rowid, breaking
-// the ascending-order invariant that LakePersistentIndex::commit() enforces.
-// Downstream symptom: COMPACTION publish on the SPLIT child fails with
-// "sstables are not ordered, last_max_rss_rowid=A : max_rss_rowid=B" and
-// the next reshard job parks in PREPARING.
+// Both shared source segments resolve through occurrence aliases to the same
+// canonical target RSSID. With the canonical atoms and authoritative cursor
+// already fixed, identical DCG declarations deduplicate to one passthrough entry.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_preserves_passthrough) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -15106,9 +15115,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_skips_stale_source_entry) 
     }
 }
 
-// MERGE: two children with DISTINCT private segments each carry their own real .idx.
-// After merge both survive: one at the natural rssid, the other at the offset-remapped rssid
-// (proves a non-first-source entry is remapped, not dropped).
+// Two contexts with distinct private segments each contribute a canonical atom
+// [1,2). Their primary runs pack to different target RSSIDs, and both real .idx
+// entries survive under those targets rather than being dropped.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_remaps_private_segments) {
     const int64_t base_version = 1, new_version = 2;
     const int64_t child_a = next_id(), child_b = next_id(), merged_tablet = next_id();

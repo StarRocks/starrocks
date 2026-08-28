@@ -286,12 +286,6 @@ public:
                                       static_cast<int64_t>(iter->source_begin)};
     }
 
-    StatusOr<std::optional<int64_t>> conservative_context_delta() const {
-        if (_runs.size() != 1 || !_occurrence_aliases.empty()) return std::optional<int64_t>{};
-        return std::optional<int64_t>{static_cast<int64_t>(_runs.front().target_begin) -
-                                      static_cast<int64_t>(_runs.front().source_begin)};
-    }
-
     bool has_divergent_occurrence_alias(uint32_t source) const {
         return std::binary_search(_divergent_alias_keys.begin(), _divergent_alias_keys.end(), source);
     }
@@ -337,10 +331,10 @@ struct PlannedCanonicalRowset {
     int output_index = -1;
 };
 
-// Plan the exact rowsets merge_rowsets will emit in (version, old-tablet-index)
-// order. This is the single source of truth for duplicate decisions: offset
-// preparation uses it to ignore discarded sibling copies, and merge_rowsets
-// uses the recorded canonical index instead of recomputing dedup independently.
+// Plan the exact rowsets that materialization will emit in (version, old-tablet-index)
+// order. This is the single source of truth for duplicate decisions: allocation
+// planning reconciles sibling occurrences into canonical atoms and occurrence
+// aliases, then materialization uses the recorded canonical index directly.
 StatusOr<RowsetEmissionPlan> build_rowset_emission_plan(const std::vector<TabletMergeContext>& merge_contexts,
                                                         bool discard_empty_rowsets) {
     RowsetEmissionPlan plan(merge_contexts.size());
@@ -465,13 +459,15 @@ Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* o
         return Status::OK();
     };
     RETURN_IF_ERROR(ingest(*canonical));
+    const size_t canonical_segment_count = by_index.size();
     if (occurrence != nullptr) RETURN_IF_ERROR(ingest(*occurrence));
+    const bool segment_union_expanded = by_index.size() > canonical_segment_count;
     canonical->clear_segment_metas();
     for (auto& [index, segment] : by_index) {
         (void)index;
         canonical->add_segment_metas()->Swap(&segment);
     }
-    if (canonical->segment_metas_size() > 1) canonical->set_overlapped(true);
+    if (segment_union_expanded) canonical->set_overlapped(true);
     return Status::OK();
 }
 
@@ -2842,6 +2838,11 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
     }
 
     const auto target_live_rssids = collect_live_rssids(target);
+    std::vector<std::unordered_set<uint32_t>> source_live_rssids;
+    source_live_rssids.reserve(contexts.size());
+    for (const auto& context : contexts) {
+        source_live_rssids.emplace_back(collect_live_rssids(*context.metadata()));
+    }
     MergeSstableMetaResult result;
     result.mode = MergeSstableMetaMode::kIdentical;
     for (const auto& canonical_sstable : canonical_sstables) {
@@ -2854,8 +2855,7 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
             }
             std::optional<uint32_t> common_target;
             for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
-                const auto source_live = collect_live_rssids(*contexts[context_index].metadata());
-                if (!source_live.contains(*source_rssid)) {
+                if (!source_live_rssids[context_index].contains(*source_rssid)) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }
                 ASSIGN_OR_RETURN(auto mapped,
@@ -2885,18 +2885,17 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
             }
             const uint64_t source_begin = static_cast<uint32_t>(canonical_sstable.rssid_offset());
             const uint32_t source_high = extract_rss_rowid_high(canonical_sstable.max_rss_rowid());
-            const auto canonical_live = collect_live_rssids(canonical_metadata);
             ASSIGN_OR_RETURN(auto common_delta,
                              prove_legacy_sstable_affine_domain(canonical_sstable, allocation_plan.projections.front(),
-                                                                canonical_live, target_live_rssids,
+                                                                source_live_rssids.front(), target_live_rssids,
                                                                 allocation_plan.target_next_rowset_id));
             if (!common_delta.has_value()) {
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
             }
             for (size_t context_index = 1; context_index < contexts.size(); ++context_index) {
-                const auto source_live = collect_live_rssids(*contexts[context_index].metadata());
-                if (!legacy_sstable_occurrence_agrees(allocation_plan.projections[context_index], source_live,
-                                                      target_live_rssids, source_begin, source_high, *common_delta,
+                if (!legacy_sstable_occurrence_agrees(allocation_plan.projections[context_index],
+                                                      source_live_rssids[context_index], target_live_rssids,
+                                                      source_begin, source_high, *common_delta,
                                                       allocation_plan.target_next_rowset_id)) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
                 }
