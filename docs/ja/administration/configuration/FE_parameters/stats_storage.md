@@ -579,7 +579,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位：-
 - 変更可能：Yes
 - 説明：非同期マテリアライズドビューを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトの分散方法として使用するかどうか。この設定はテーブルには影響しません。この設定と `enable_range_distribution` の両方が `true` で、かつ共有データモードである場合にのみ、デフォルトで Range-based Distribution セマンティクスが選択されます。それ以外の場合、テーブルが range 分散になる環境であっても、マテリアライズドビューは従来のデフォルト分散動作（増分維持されるマテリアライズドビューはキー列による hash、それ以外は random）を使用します。
-- 導入時期：v4.2.0
+- 導入時期：v26.2
 
 ### `tablet_reshard_max_parallel_tablets`
 

@@ -579,7 +579,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to use the Range-based Distribution semantic as the default distribution of an asynchronous materialized view that is created without a `DISTRIBUTED BY` clause. Tables are not affected by this configuration. The default selects the Range-based Distribution semantic only when this configuration and `enable_range_distribution` are both `true`, in shared-data mode. Otherwise the materialized view uses the previous default distribution behavior (a materialized view that is maintained incrementally defaults to hash over its key columns, and any other materialized view to random), even where a table would be range-distributed.
-- Introduced in: v4.2.0
+- Introduced in: v26.2
 
 ### `tablet_reshard_max_parallel_tablets`
 

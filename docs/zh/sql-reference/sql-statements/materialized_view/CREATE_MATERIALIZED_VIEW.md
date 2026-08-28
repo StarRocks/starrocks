@@ -198,11 +198,7 @@ AS
 
 **distribution_desc**（选填）
 
-<<<<<<< HEAD
-异步物化视图的分布方式。StarRocks 支持哈希分桶和随机分桶（自 3.1 版本起）。在存算分离模式下启用 `enable_range_distribution` 时，省略该参数会选择 Range 分布。否则，非以增量方式维护的物化视图使用随机分桶，并由 StarRocks 自动设置分桶数量。以增量方式维护的物化视图（`refresh_mode` 为 `INCREMENTAL`，或定义支持增量刷新的 `AUTO`）使用不同的分布规则。详细信息，请参见[增量物化视图](#增量物化视图)。
-=======
-异步物化视图的分布方式。StarRocks 支持哈希分桶和随机分桶（自 3.1 版本起）。在存算分离模式下同时启用 `enable_range_distribution` 与 `enable_mv_range_distribution` 时，省略该参数会选择 Range 分布。否则，`refresh_mode` 非 `INCREMENTAL` 的物化视图使用随机分桶，并由 StarRocks 自动设置分桶数量。`refresh_mode` 为 `INCREMENTAL` 的物化视图使用不同的分布规则。详细信息，请参见[增量物化视图](#增量物化视图)。
->>>>>>> 2075a8709ea... [Enhancement] Add enable_mv_range_distribution to gate the MV range distribution default (#78230)
+异步物化视图的分布方式。StarRocks 支持哈希分桶和随机分桶（自 3.1 版本起）。在存算分离模式下同时启用 `enable_range_distribution` 与 `enable_mv_range_distribution` 时，省略该参数会选择 Range 分布。否则，非以增量方式维护的物化视图使用随机分桶，并由 StarRocks 自动设置分桶数量。以增量方式维护的物化视图（`refresh_mode` 为 `INCREMENTAL`，或定义支持增量刷新的 `AUTO`）使用不同的分布规则。详细信息，请参见[增量物化视图](#增量物化视图)。
 
 :::info
 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。

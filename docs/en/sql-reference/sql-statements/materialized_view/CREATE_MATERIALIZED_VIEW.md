@@ -200,11 +200,7 @@ Comment on the materialized view. Note that `COMMENT` must be placed after `mv_n
 
 **distribution_desc** (optional)
 
-<<<<<<< HEAD
-The distribution strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). In shared-data mode, if `enable_range_distribution` is enabled, omitting this parameter selects range distribution. Otherwise, a materialized view that is not maintained incrementally uses random bucketing, and StarRocks automatically sets the number of buckets. A materialized view that is maintained incrementally -- `refresh_mode` `INCREMENTAL`, or `AUTO` where the definition supports it -- follows different distribution rules. For details, see [Incremental Materialized View](#incremental-materialized-view).
-=======
-The distribution strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). In shared-data mode, if `enable_range_distribution` and `enable_mv_range_distribution` are both enabled, omitting this parameter selects range distribution. Otherwise, a materialized view whose `refresh_mode` is not `INCREMENTAL` uses random bucketing, and StarRocks automatically sets the number of buckets. Materialized views whose `refresh_mode` is `INCREMENTAL` follow different distribution rules. For details, see [Incremental Materialized View](#incremental-materialized-view).
->>>>>>> 2075a8709ea... [Enhancement] Add enable_mv_range_distribution to gate the MV range distribution default (#78230)
+The distribution strategy of the asynchronous materialized view. StarRocks supports hash bucketing and random bucketing (from v3.1 onwards). In shared-data mode, if `enable_range_distribution` and `enable_mv_range_distribution` are both enabled, omitting this parameter selects range distribution. Otherwise, a materialized view that is not maintained incrementally uses random bucketing, and StarRocks automatically sets the number of buckets. A materialized view that is maintained incrementally -- `refresh_mode` `INCREMENTAL`, or `AUTO` where the definition supports it -- follows different distribution rules. For details, see [Incremental Materialized View](#incremental-materialized-view).
 
 > **NOTE**
 >
