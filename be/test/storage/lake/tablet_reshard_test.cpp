@@ -1192,10 +1192,9 @@ protected:
         return segment_file_size;
     }
 
-    std::pair<uint64_t, int64_t> write_two_column_bundled_segment(int64_t tablet_id, const std::string& bundle_name,
-                                                                  int num_rows,
-                                                                  const std::function<int(int)>& source_value_of,
-                                                                  int key_start = 0) {
+    std::vector<std::pair<uint64_t, int64_t>> write_two_column_bundled_segments(
+            int64_t tablet_id, const std::string& bundle_name, int num_rows,
+            const std::function<int(int)>& source_value_of, int key_start = 0) {
         const std::string slice_name = fmt::format("{}.slice_{}", bundle_name, next_id());
         const uint64_t slice_size =
                 write_two_column_segment(tablet_id, slice_name, num_rows, source_value_of, key_start);
@@ -1203,10 +1202,21 @@ protected:
         ASSIGN_OR_ABORT(auto reader, fs::new_random_access_file(slice_path));
         ASSIGN_OR_ABORT(auto slice_contents, reader->read_all());
 
+        const std::string empty_slice_name = fmt::format("{}.empty_slice_{}", bundle_name, next_id());
+        const uint64_t empty_slice_size =
+                write_two_column_segment(tablet_id, empty_slice_name, 0, source_value_of, key_start + num_rows);
+        const std::string empty_slice_path = _tablet_manager->segment_location(tablet_id, empty_slice_name);
+        ASSIGN_OR_ABORT(auto empty_reader, fs::new_random_access_file(empty_slice_path));
+        ASSIGN_OR_ABORT(auto empty_slice_contents, empty_reader->read_all());
+
         const std::string prefix = "tablet-merge-bundle-prefix";
-        write_file(_tablet_manager->segment_location(tablet_id, bundle_name), prefix + slice_contents);
+        const int64_t slice_offset = prefix.size();
+        const int64_t empty_slice_offset = slice_offset + static_cast<int64_t>(slice_size);
+        write_file(_tablet_manager->segment_location(tablet_id, bundle_name),
+                   prefix + slice_contents + empty_slice_contents);
         CHECK_OK(fs::delete_file(slice_path));
-        return {slice_size, static_cast<int64_t>(prefix.size())};
+        CHECK_OK(fs::delete_file(empty_slice_path));
+        return {{slice_size, slice_offset}, {empty_slice_size, empty_slice_offset}};
     }
 
     // Write a real .cols file for column c1 only, with `num_rows` entries.
@@ -10138,9 +10148,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     const std::string base_name = "cross_target_shared_base.dat";
     const std::string cols_name = "cross_target.cols";
     const std::string idx_name = "cross_target.idx";
-    const auto [base_size, base_offset] =
-            write_two_column_bundled_segment(source_a_id, base_name, 2, [](int key) { return key * 10; });
+    const auto bundled_segments =
+            write_two_column_bundled_segments(source_a_id, base_name, 2, [](int key) { return key * 10; });
+    ASSERT_EQ(2, bundled_segments.size());
+    const auto [base_size, base_offset] = bundled_segments[0];
+    const auto [empty_size, empty_offset] = bundled_segments[1];
     ASSERT_GT(base_offset, 0);
+    ASSERT_GT(empty_offset, base_offset);
     const uint64_t cols_size =
             write_c1_only_cols_file(source_a_id, cols_name, 2, [](int row) { return (row + 1) * 1000; });
     const auto idx_file = write_sidecar_payload(_tablet_manager->segment_location(source_a_id, idx_name),
@@ -10158,11 +10172,19 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
         source->mutable_range()->set_upper_bound_included(false);
         auto* rowset = source->mutable_rowsets(0);
         rowset->set_num_rows(2);
-        rowset->set_data_size(base_size);
+        rowset->set_data_size(base_size + empty_size);
         rowset->mutable_range()->CopyFrom(source->range());
         rowset->mutable_segment_metas(0)->set_size(base_size);
         rowset->mutable_segment_metas(0)->set_bundle_file_offset(base_offset);
         rowset->mutable_segment_metas(0)->set_num_rows(2);
+        auto* empty_segment = rowset->add_segment_metas();
+        empty_segment->set_filename(base_name);
+        empty_segment->set_size(empty_size);
+        empty_segment->set_bundle_file_offset(empty_offset);
+        empty_segment->set_num_rows(0);
+        empty_segment->set_segment_idx(1);
+        empty_segment->set_shared(rowset->segment_metas(0).shared());
+        source->set_next_rowset_id(3);
         add_dcg_with_columns(source, /*segment_id=*/1, cols_name, {1002}, /*version=*/1);
         auto* dcg = &(*source->mutable_dcg_meta()->mutable_dcgs())[1];
         dcg->add_column_file_sizes(cols_size);
@@ -10185,8 +10207,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     ASSERT_EQ(2, merged->dcg_meta().dcgs_size());
     ASSERT_EQ(2, merged->idg_meta().idgs_size());
     for (const auto& rowset : merged->rowsets()) {
-        ASSERT_EQ(1, rowset.segment_metas_size());
-        EXPECT_TRUE(rowset.segment_metas(0).shared());
+        ASSERT_EQ(2, rowset.segment_metas_size());
+        EXPECT_TRUE(std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                                [](const auto& segment) { return segment.shared(); }));
+        EXPECT_TRUE(std::all_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                                [](const auto& segment) { return segment.has_bundle_file_offset(); }));
     }
     for (const auto& [rssid, dcg] : merged->dcg_meta().dcgs()) {
         (void)rssid;
@@ -10210,14 +10235,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
 
     TabletMetadataPB compacted(*reopened);
     compacted.set_version(reopened->version() + 1);
-    RowsetMetadataPB retired;
-    RowsetMetadataPB retained;
-    for (const auto& rowset : compacted.rowsets()) {
-        if (rowset.id() == 1) retired.CopyFrom(rowset);
-        if (rowset.id() == 2) retained.CopyFrom(rowset);
-    }
-    ASSERT_TRUE(retired.has_id());
-    ASSERT_TRUE(retained.has_id());
+    ASSERT_EQ(2, compacted.rowsets_size());
+    RowsetMetadataPB retired(compacted.rowsets(0));
+    RowsetMetadataPB retained(compacted.rowsets(1));
     compacted.clear_rowsets();
     compacted.add_rowsets()->CopyFrom(retained);
     compacted.clear_compaction_inputs();
@@ -10225,7 +10245,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     const std::string compacted_name = "cross_target_compacted.dat";
     const uint64_t compacted_size = write_two_column_segment(target_id, compacted_name, 1, [](int) { return 1000; });
     auto* output = compacted.add_rowsets();
-    output->set_id(3);
+    output->set_id(compacted.next_rowset_id());
     output->set_version(compacted.version());
     output->set_num_rows(1);
     output->set_data_size(compacted_size);
@@ -10239,10 +10259,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     output_segment->set_size(compacted_size);
     output_segment->set_num_rows(1);
     lake::tablet_reshard_helper::set_rowset_uid(output);
-    compacted.set_next_rowset_id(4);
-    compacted.mutable_dcg_meta()->mutable_dcgs()->erase(1);
-    compacted.mutable_idg_meta()->mutable_idgs()->erase(1);
-    compacted.mutable_delvec_meta()->mutable_delvecs()->erase(1);
+    compacted.set_next_rowset_id(output->id() + 1);
+    compacted.mutable_dcg_meta()->mutable_dcgs()->erase(retired.id());
+    compacted.mutable_idg_meta()->mutable_idgs()->erase(retired.id());
+    compacted.mutable_delvec_meta()->mutable_delvecs()->erase(retired.id());
     compacted.clear_orphan_files();
     auto add_orphan = [&](const std::string& name, int64_t size, bool shared, int64_t version) {
         auto* orphan = compacted.add_orphan_files();
@@ -10314,12 +10334,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_different_base_si
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_target_physical_slice_declaration_conflict_before_io) {
     struct DeclarationConflict {
         const char* name;
+        const char* expected_error;
         std::function<void(SegmentMetadataPB*)> apply;
     };
     const std::vector<DeclarationConflict> conflicts = {
-            {"bundle offset presence", [](SegmentMetadataPB* segment) { segment->set_bundle_file_offset(0); }},
-            {"size presence", [](SegmentMetadataPB* segment) { segment->clear_size(); }},
-            {"unknown field",
+            {"bundle offset presence", "bundled and standalone",
+             [](SegmentMetadataPB* segment) { segment->set_bundle_file_offset(0); }},
+            {"size presence", "physical segment slice", [](SegmentMetadataPB* segment) { segment->clear_size(); }},
+            {"unknown field", "physical segment slice",
              [](SegmentMetadataPB* segment) {
                  segment->GetReflection()->MutableUnknownFields(segment)->AddVarint(1000, 1);
              }},
@@ -10340,7 +10362,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_target_physical_
 
             MergePhaseCounts counts;
             auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
-            EXPECT_TRUE(status.message().contains("physical segment slice")) << status;
+            EXPECT_TRUE(status.message().contains(conflict.expected_error)) << status;
             EXPECT_TRUE(status.message().contains(filename)) << status;
         }
     }
@@ -10465,6 +10487,26 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_mixed_bundle_presence_
 
         MergePhaseCounts counts;
         auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains("bundled")) << status;
+        EXPECT_TRUE(status.message().contains("standalone")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_canonical_filename_bundle_form_before_io) {
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(fmt::format("{} source first", reverse_sources ? "bundled" : "standalone"));
+        const std::string filename = fmt::format("cross_canonical_bundle_form_{}.dat", next_id());
+        auto standalone = make_preflight_sidecar_source(next_id(), filename);
+        auto bundled = make_preflight_sidecar_source(next_id(), filename);
+        auto* bundled_segment = bundled->mutable_rowsets(0)->mutable_segment_metas(0);
+        bundled_segment->set_size(128);
+        bundled_segment->set_bundle_file_offset(128);
+        std::vector<TabletMetadataPtr> sources = {standalone, bundled};
+        if (reverse_sources) std::swap(sources[0], sources[1]);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains(filename)) << status;
         EXPECT_TRUE(status.message().contains("bundled")) << status;
         EXPECT_TRUE(status.message().contains("standalone")) << status;
     }
@@ -12477,6 +12519,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_accepts_up
     auto source = make_allocator_source(next_id(), std::numeric_limits<uint32_t>::max());
     auto* rowset = add_allocator_rowset(source.get(), kSourceRowset, 1, "upper_half_0.dat", 0);
     add_allocator_segment(rowset, "upper_half_10.dat", 10);
+    rowset->set_max_compact_input_rowset_id(std::numeric_limits<uint32_t>::max());
+
+    ASSIGN_OR_ABORT(const uint32_t expected_cursor, repeated_merge_cursor_oracle({source}));
+    EXPECT_EQ(12, expected_cursor) << "[UINT32_MAX, 2^32) recovery atom must pack with the upper-half extent";
 
     auto merged_or = publish_allocator_merge({source});
     ASSERT_OK(merged_or.status());
@@ -12485,7 +12531,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_accepts_up
     EXPECT_EQ(1, merged->rowsets(0).id());
     ASSERT_EQ(2, merged->rowsets(0).segment_metas_size());
     EXPECT_EQ(11, merged->rowsets(0).id() + lake::get_segment_idx(merged->rowsets(0), 1));
-    EXPECT_EQ(12, merged->next_rowset_id());
+    ASSERT_TRUE(merged->rowsets(0).has_max_compact_input_rowset_id());
+    EXPECT_EQ(11, merged->rowsets(0).max_compact_input_rowset_id());
+    EXPECT_EQ(expected_cursor, merged->next_rowset_id());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_reserves_duplicate_high_segment_idx) {

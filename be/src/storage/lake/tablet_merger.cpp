@@ -521,10 +521,18 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
         std::string declaration_key;
         std::vector<SegmentMetadataPB*> references;
     };
+    std::map<std::string, bool> bundled_by_filename;
     std::map<std::pair<std::string, int64_t>, PhysicalSliceDeclaration> declarations_by_physical_slice;
     for (auto& canonical : *canonicals) {
         RETURN_IF_ERROR(validate_physical_rowset_shape(canonical.source_form_rowset));
         for (auto& segment : *canonical.source_form_rowset.mutable_segment_metas()) {
+            auto [form, form_inserted] =
+                    bundled_by_filename.try_emplace(segment.filename(), segment.has_bundle_file_offset());
+            if (!form_inserted && form->second != segment.has_bundle_file_offset()) {
+                return Status::Corruption(
+                        fmt::format("tablet merge physical segment file {} mixes bundled and standalone forms",
+                                    segment.filename()));
+            }
             const auto slice = std::pair{segment.filename(),
                                          segment.has_bundle_file_offset() ? segment.bundle_file_offset() : int64_t{0}};
             const auto declaration_key = normalized_physical_base_key(segment);
@@ -3235,10 +3243,6 @@ Status validate_source_rssid_domain(const TabletMetadataPB& metadata) {
         const uint64_t segment_span = rowset.segment_metas_size() == 0 ? 1 : max_segment_idx + 1;
         if (uint64_t{rowset.id()} + segment_span > kSourceRssidExclusiveLimit) {
             return Status::InvalidArgument("tablet merge source rowset extent exceeds the uint32 RSSID domain");
-        }
-        if (rowset.has_max_compact_input_rowset_id() &&
-            uint64_t{rowset.max_compact_input_rowset_id()} + 1 > kSourceRssidExclusiveLimit) {
-            return Status::InvalidArgument("tablet merge source recovery key exceeds the uint32 RSSID domain");
         }
         for (const auto& del : rowset.del_files()) {
             const uint64_t replay_offset = del.has_op_offset() ? uint64_t{del.op_offset()} : max_segment_idx;
