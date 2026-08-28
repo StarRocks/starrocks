@@ -15,6 +15,8 @@ Enable Group Provider in StarRocks to authenticate, and authorize user groups fr
 
 From v3.5.0 onwards, StarRocks supports Group Provider to collect group information from external authentication systems for user group management.
 
+From v4.2 onwards, a group provider can also be supplied by a static extension. This lets a deployment resolve groups from a system that StarRocks does not support natively. A provider that opts in also receives the security integration and the credential the session authenticated with, which is what a lookup keyed on something other than the user name needs. See [Develop Static Extensions](../management/extensions.md).
+
 :::note A group provider is not the only source of groups
 
 A security integration can also take a login's groups from the identity provider that authenticated it, without any group provider: an LDAP integration from the group membership attribute of the user's own entry, and a JWT or OAuth 2.0 integration from a claim of the verified token. Set `group_source` on the integration; see [Authenticate with Security Integration](./authentication/security_integration.md). Groups resolved that way are used for exactly the same things as the groups of a group provider.
@@ -79,6 +81,20 @@ ldap_cache_arg ::=
 ```
 
 <UnixFileSyntax />
+
+- Extension group provider:
+
+```SQL
+CREATE GROUP PROVIDER <group_provider_name>
+PROPERTIES (
+    "type" = "extension",
+    "provider_factory_class" = "",
+    [extension_properties]
+)
+
+extension_properties ::=
+    "<property_name>" = "<property_value>" [, ...]
+```
 
 ### Parameters
 
@@ -196,6 +212,18 @@ If a refresh cannot reach the LDAP server, StarRocks keeps serving the previous 
 Dropping the cache immediately turns a brief LDAP outage into a cluster-wide login failure when `permitted_groups` is configured, because an empty group set can never intersect the allowed list. Raising this value trades a longer window of stale group information for tolerance of directory downtime.
 :::
 
+#### Extension group provider parameters
+
+##### `provider_factory_class`
+
+The fully qualified name of the factory class that the extension registers. StarRocks passes the remaining properties to that factory unchanged, so their names and meanings are defined by the extension, not by StarRocks.
+
+:::note
+The extension must be deployed on every FE node of the cluster. An FE that cannot resolve the factory class logs a warning and the provider resolves to an empty set of groups on that node.
+
+`ALTER GROUP PROVIDER` can change `provider_factory_class` and any property the provider already has. A property that the extension defines but the provider does not yet carry cannot be added this way; drop and recreate the provider instead.
+:::
+
 ### Example
 
 Suppose an LDAP server contains the following group and member information.
@@ -281,6 +309,46 @@ In this example, since `ldap_user_search_attr` is not configured, the system wil
 2. During group search, use the DN recorded during authentication as key to search user's groups.
 
 This approach is particularly suitable for Microsoft AD environments, as group members in AD may lack simple username attributes.
+
+### Extension Example
+
+An extension supplies a factory and the provider it creates:
+
+```Java
+public class MyGroupProviderFactory implements ExtensionGroupProviderFactory {
+    @Override
+    public GroupProvider create(String name, Map<String, String> properties) throws DdlException {
+        return new MyGroupProvider(name, properties);
+    }
+}
+```
+
+To resolve groups from the authentication context of the session instead of from the user name alone, the provider also implements `AccessControlContextAwareGroupProvider`.
+
+The extension registers the factory under its own class when it is loaded:
+
+```Java
+@SRModule(name = "my-groups")
+public class MyExtension implements StarRocksExtension {
+    @Override
+    public void onLoad(ExtensionContext ctx) {
+        ctx.register(MyGroupProviderFactory.class, new MyGroupProviderFactory());
+    }
+}
+```
+
+Build the extension as described in [Develop Static Extensions](../management/extensions.md), place the resulting `*-ext.jar` in the `ext_dir` directory of each FE, and restart the cluster. Then create the group provider:
+
+```SQL
+CREATE GROUP PROVIDER my_groups
+PROPERTIES (
+    "type" = "extension",
+    "provider_factory_class" = "com.example.MyGroupProviderFactory",
+    "my_property" = "my_value"
+);
+```
+
+Because the factory is named in the definition, several extensions can each register their own factory and coexist in one cluster.
 
 ## Alter a group provider
 
