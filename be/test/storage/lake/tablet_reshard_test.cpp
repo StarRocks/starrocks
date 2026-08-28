@@ -10295,6 +10295,39 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_different_base_si
     EXPECT_TRUE(status.message().contains("physical base")) << status;
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_target_physical_slice_declaration_conflict_before_io) {
+    struct DeclarationConflict {
+        const char* name;
+        std::function<void(SegmentMetadataPB*)> apply;
+    };
+    const std::vector<DeclarationConflict> conflicts = {
+            {"bundle offset presence", [](SegmentMetadataPB* segment) { segment->set_bundle_file_offset(0); }},
+            {"size presence", [](SegmentMetadataPB* segment) { segment->clear_size(); }},
+            {"unknown field",
+             [](SegmentMetadataPB* segment) {
+                 segment->GetReflection()->MutableUnknownFields(segment)->AddVarint(1000, 1);
+             }},
+    };
+
+    for (const auto& conflict : conflicts) {
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("{}; {} declaration first", conflict.name,
+                                     reverse_sources ? "conflicting" : "canonical"));
+            const std::string filename = fmt::format("cross_target_slice_conflict_{}.dat", next_id());
+            auto canonical = make_preflight_sidecar_source(next_id(), filename);
+            auto conflicting = make_preflight_sidecar_source(next_id(), filename);
+            conflict.apply(conflicting->mutable_rowsets(0)->mutable_segment_metas(0));
+            std::vector<TabletMetadataPtr> sources = {canonical, conflicting};
+            if (reverse_sources) std::swap(sources[0], sources[1]);
+
+            MergePhaseCounts counts;
+            auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+            EXPECT_TRUE(status.message().contains("physical segment slice")) << status;
+            EXPECT_TRUE(status.message().contains(filename)) << status;
+        }
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_delvec_page_out_of_bounds_before_io) {
     auto source = make_preflight_sidecar_source(next_id(), "delvec_bounds.dat");
     DelVector delvec;

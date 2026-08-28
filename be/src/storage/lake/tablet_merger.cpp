@@ -469,18 +469,35 @@ Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* o
     return Status::OK();
 }
 
-void normalize_cross_target_physical_ownership(std::vector<CanonicalAllocationPlan>* canonicals) {
-    std::map<std::string, std::vector<SegmentMetadataPB*>> references_by_physical_base;
+Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocationPlan>* canonicals) {
+    struct PhysicalSliceDeclaration {
+        std::string declaration_key;
+        std::vector<SegmentMetadataPB*> references;
+    };
+    std::map<std::pair<std::string, int64_t>, PhysicalSliceDeclaration> declarations_by_physical_slice;
     for (auto& canonical : *canonicals) {
         for (auto& segment : *canonical.source_form_rowset.mutable_segment_metas()) {
-            references_by_physical_base[normalized_physical_base_key(segment)].emplace_back(&segment);
+            const auto slice = std::pair{segment.filename(),
+                                         segment.has_bundle_file_offset() ? segment.bundle_file_offset() : int64_t{0}};
+            const auto declaration_key = normalized_physical_base_key(segment);
+            auto [iter, inserted] = declarations_by_physical_slice.try_emplace(slice);
+            if (inserted) {
+                iter->second.declaration_key = declaration_key;
+            } else if (iter->second.declaration_key != declaration_key) {
+                return Status::Corruption(
+                        fmt::format("tablet merge physical segment slice {} at bundle offset {} has conflicting "
+                                    "declarations",
+                                    slice.first, slice.second));
+            }
+            iter->second.references.emplace_back(&segment);
         }
     }
-    for (auto& [physical_base, references] : references_by_physical_base) {
-        (void)physical_base;
-        if (references.size() < 2) continue;
-        for (auto* segment : references) segment->set_shared(true);
+    for (auto& [slice, declaration] : declarations_by_physical_slice) {
+        (void)slice;
+        if (declaration.references.size() < 2) continue;
+        for (auto* segment : declaration.references) segment->set_shared(true);
     }
+    return Status::OK();
 }
 
 Status validate_del_replay_span(uint32_t origin, uint32_t offset) {
@@ -623,7 +640,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
         }
     }
 
-    normalize_cross_target_physical_ownership(&result.canonicals);
+    RETURN_IF_ERROR(normalize_cross_target_physical_ownership(&result.canonicals));
 
     std::vector<std::vector<std::pair<uint64_t, uint64_t>>> atoms(contexts.size());
     std::vector<std::vector<std::pair<uint64_t, uint64_t>>> extents(contexts.size());
