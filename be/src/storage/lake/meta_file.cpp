@@ -1196,27 +1196,6 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     return Status::OK();
 }
 
-// This function cleans up the SSTable metadata after an alter operation that changes the persistent index type.
-void MetaFileBuilder::_sstable_meta_clean_after_alter_type() {
-    // Check if the persistent index type is LOCAL or if the persistent index is disabled,
-    // and there are SSTables present.
-    if ((_tablet_meta->persistent_index_type() == PersistentIndexTypePB::LOCAL ||
-         !_tablet_meta->enable_persistent_index()) &&
-        _tablet_meta->sstable_meta().sstables_size() > 0) {
-        // Iterate through all SSTables and move them to orphan files.
-        for (const auto& sstable : _tablet_meta->sstable_meta().sstables()) {
-            FileMetaPB file_meta;
-            file_meta.set_name(sstable.filename());
-            file_meta.set_size(sstable.filesize());
-            file_meta.set_shared(sstable.shared());
-            file_meta.set_version(sstable.generation_version());
-            _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
-        }
-        // Clear the SSTable metadata.
-        _tablet_meta->clear_sstable_meta();
-    }
-}
-
 Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata) {
     auto version = _tablet_meta->version();
 
@@ -1225,9 +1204,6 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
         TRACE_COUNTER_SCOPE_LATENCY_US("finalize_delvec_write_us");
         RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
     }
-
-    // Clean up SSTable metadata after an alter operation that changes the persistent index type
-    _sstable_meta_clean_after_alter_type();
 
     if (skip_write_tablet_metadata) {
         // Put metadata into cache only.

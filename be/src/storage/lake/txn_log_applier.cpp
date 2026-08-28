@@ -92,9 +92,9 @@ void archive_current_schema_into_history(TabletMetadataPB* metadata) {
     }
 }
 
-Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
-                            TabletManager* tablet_mgr) {
+Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
+<<<<<<< HEAD
         if (alter_meta.has_enable_persistent_index()) {
             auto update_mgr = tablet_mgr->update_mgr();
             metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
@@ -122,6 +122,25 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
             // Try to remove the index from the index cache
             (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
         }
+=======
+        // `enable_persistent_index` and `persistent_index_type` are deliberately NOT applied.
+        //
+        // A shared-data tablet has exactly one primary-key index implementation left, the cloud-native
+        // one: force_cloud_native_pk_persistent_index() rewrites every primary-key tablet's metadata to
+        // enabled + CLOUD_NATIVE as it is loaded, and LakePrimaryIndex::_do_lake_load unconditionally
+        // builds a LakePersistentIndex. The two fields are therefore immutable in practice, and writing
+        // them here was the only way a value contradicting that could enter a live publish's metadata --
+        // this function's output is both persisted and cached (put_tablet_metadata /
+        // cache_tablet_metadata), neither of which normalizes.
+        //
+        // FE already rejects such a request (SchemaChangeHandler refuses to disable the persistent index
+        // or to select LOCAL for a primary-key table), so ignoring it costs nothing on a matched pair;
+        // for an older FE mid-rolling-upgrade, or a replayed txn log, the alter now no-ops instead of
+        // planting a LOCAL that later deletes the tablet's index. For a non-primary-key tablet both
+        // fields are inert -- every reader of them requires enabled + CLOUD_NATIVE, i.e. asks "is this a
+        // cloud-native primary-key index".
+        //
+>>>>>>> b736f83d64e... [Refactor] Stop applying the PK persistent index type from an alter-meta log (#78264)
         // A range-carrying update is a metadata-only trailing sort-key ADD: the schema arity grows by
         // one or more and every tablet bound gains one trailing NULL sentinel per added column.
         // Validate the change against the
@@ -430,7 +449,7 @@ public:
         }
         if (log.has_op_alter_metadata()) {
             DCHECK_EQ(_base_version + 1, _new_version);
-            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
+            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata());
         }
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication(), log.txn_id()));
@@ -505,6 +524,7 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+<<<<<<< HEAD
         // local persistent index will update index version, so we need to load first
         // still need prepare primary index even when this iteration produced no
         // rowset changes (legacy "empty compaction", admin no-op publish, or
@@ -512,6 +532,13 @@ public:
         if (_index_entry == nullptr && (_has_no_op_apply || _has_empty_publish ||
                                         (_metadata->enable_persistent_index() &&
                                          _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
+=======
+        // Still need to prepare the primary index even when this iteration produced no rowset changes
+        // (legacy "empty compaction" or admin no-op publish). The old companion condition -- a LOCAL
+        // persistent index, which had to be loaded so that its index version could be updated -- went
+        // away with the LOCAL implementation itself.
+        if (_index_entry == nullptr && _has_no_op_apply) {
+>>>>>>> b736f83d64e... [Refactor] Stop applying the PK persistent index type from an alter-meta log (#78264)
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -999,7 +1026,7 @@ public:
             RETURN_IF_ERROR(apply_replication_log(log.op_replication()));
         }
         if (log.has_op_alter_metadata()) {
-            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
+            return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata());
         }
         return Status::OK();
     }
