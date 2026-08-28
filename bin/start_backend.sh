@@ -130,7 +130,7 @@ if [[ "${RUN_NUMA}" -ne "-1" ]]; then
 fi
 
 final_java_opt=${JAVA_OPTS}
-# Compatible with scenarios upgraded from jdk9~jdk16
+# JAVA_OPTS_FOR_JDK_9_AND_LATER is no longer supported, warn loudly if it is still set
 if [ ! -z "${JAVA_OPTS_FOR_JDK_9_AND_LATER}" ] ; then
     component_name="StarRocks BE"
     component_conf_file="$STARROCKS_HOME/conf/be.conf"
@@ -138,8 +138,7 @@ if [ ! -z "${JAVA_OPTS_FOR_JDK_9_AND_LATER}" ] ; then
         component_name="StarRocks CN"
         component_conf_file="$STARROCKS_HOME/conf/cn.conf"
     fi
-    warn_deprecated_java_opts "$component_name" "JAVA_OPTS_FOR_JDK_9_AND_LATER" "$component_conf_file"
-    final_java_opt=${JAVA_OPTS_FOR_JDK_9_AND_LATER}
+    warn_removed_java_opts "$component_name" "JAVA_OPTS_FOR_JDK_9_AND_LATER" "$component_conf_file"
 fi
 
 # Appending the option to avoid "process heaper" stack overflow exceptions.
