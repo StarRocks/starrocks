@@ -269,6 +269,7 @@ public class ConnectProcessor {
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
                 .setErrorCode(ctx.getNormalizedErrorCode())
+                .setErrorMessage(auditedErrorMessage(ctx.getState().getErrorMessage(), origStmt))
                 .setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
@@ -376,6 +377,20 @@ public class ConnectProcessor {
             MetricRepo.HISTO_CACHE_MISS_RATIO.update((long) (auditEvent.getCacheMissRatio() * 10));
         }
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(auditEvent);
+    }
+
+    // The statement is redacted with the "key" = value context still in hand, but a parser error
+    // quotes the offending token on its own, where nothing marks it as a credential: for
+    // PROPERTIES ("aws.s3.secret_key" = AKIA...) the statement is audited as *** while the message
+    // would carry the key verbatim. Drop the message instead of recording a secret.
+    static String auditedErrorMessage(String errorMessage, String origStmt) {
+        if (Strings.isNullOrEmpty(errorMessage) || !Config.enable_audit_sql) {
+            return "";
+        }
+        if (origStmt != null && !origStmt.equals(SqlCredentialRedactor.redact(origStmt))) {
+            return "";
+        }
+        return errorMessage;
     }
 
     private String formatStmt(String origStmt, StatementBase parsedStmt) {

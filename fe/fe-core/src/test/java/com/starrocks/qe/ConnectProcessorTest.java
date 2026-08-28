@@ -1094,6 +1094,110 @@ public class ConnectProcessorTest extends DDLTestBase {
                 auditEvent.queriedRelations);
     }
 
+    // ErrorCode only carries a coarse category, so a failure must also record the message.
+    @Test
+    public void testAuditRecordsErrorMessageOnFailure() throws Exception {
+        auditBuilder.reset();
+
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString("select * from no_such_table_post1799");
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        myContext.setDatabase("testDb1");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR.name(), auditEvent.state);
+        Assertions.assertEquals(AuditEvent.normalizeErrorMessage(myContext.getState().getErrorMessage()),
+                auditEvent.errorMessage, "the audit event must carry the message the client received");
+        Assertions.assertTrue(auditEvent.errorMessage.contains("no_such_table_post1799"),
+                "unexpected message: " + auditEvent.errorMessage);
+    }
+
+    // A parser error quotes the offending token with no key beside it, so a credential in it can no
+    // longer be recognised - the audited statement is redacted while the message would not be.
+    @Test
+    public void testAuditedErrorMessageDropsMessageWhenStatementCarriesCredentials() {
+        String stmt = "CREATE EXTERNAL CATALOG c PROPERTIES (\"aws.s3.secret_key\" = AKIA123SECRET)";
+        String message = "Getting syntax error at line 1, column 60. Detail message: Unexpected input "
+                + "'AKIA123SECRET', the most similar input is {SINGLE_QUOTED_TEXT, DOUBLE_QUOTED_TEXT}.";
+        Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage(message, stmt));
+
+        // A statement without credentials keeps its message.
+        String plain = "SELECT * FROM no_such_table";
+        Assertions.assertEquals("Unknown table 'no_such_table'.",
+                ConnectProcessor.auditedErrorMessage("Unknown table 'no_such_table'.", plain));
+
+        // Nothing to record for a successful statement, and nothing when SQL auditing is off.
+        Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage("", plain));
+        Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage(null, plain));
+        boolean original = Config.enable_audit_sql;
+        try {
+            Config.enable_audit_sql = false;
+            Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage("Unknown table 'x'.", plain));
+        } finally {
+            Config.enable_audit_sql = original;
+        }
+    }
+
+    // The message quotes the statement that enable_audit_sql=false withholds.
+    @Test
+    public void testAuditOmitsErrorMessageWhenSqlAuditDisabled() throws Exception {
+        auditBuilder.reset();
+
+        boolean original = Config.enable_audit_sql;
+        try {
+            Config.enable_audit_sql = false;
+
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select * from no_such_table_post1799");
+            ConnectContext ctx =
+                    initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+            ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            myContext.setDatabase("testDb1");
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+            processor.processOnce();
+
+            AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+            Assertions.assertEquals(QueryState.MysqlStateType.ERR.name(), auditEvent.state);
+            Assertions.assertEquals("?", auditEvent.stmt);
+            Assertions.assertEquals("", auditEvent.errorMessage);
+        } finally {
+            Config.enable_audit_sql = original;
+        }
+    }
+
+    // ignore_empty only helps if a successful statement really leaves the field empty.
+    @Test
+    public void testAuditLeavesErrorMessageEmptyOnSuccess() throws Exception {
+        auditBuilder.reset();
+
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        myContext.setDatabase("testDb1");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        Assertions.assertNotEquals(QueryState.MysqlStateType.ERR.name(), auditEvent.state);
+        Assertions.assertEquals("", auditEvent.errorMessage);
+    }
+
     // A forwarding follower never analyzes the statement, so its local parse tree still carries
     // CTE aliases and unqualified names. When the Leader resolved the relations and shipped them
     // back, the follower must log the Leader's list rather than its own inaccurate collection.
