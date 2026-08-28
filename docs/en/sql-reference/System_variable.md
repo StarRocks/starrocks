@@ -1537,7 +1537,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### paimon_reader_mode
 
-* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` preserves the default behavior: it uses the StarRocks native reader for supported raw files and otherwise uses the JNI reader. The legacy `paimon_force_jni_reader` variable forces the JNI reader only when this variable is `AUTO`. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader for Paimon `DataSplit` scan ranges and uses the JNI reader for other split types. `NATIVE` requires BEs built with paimon-cpp support.
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
 * **Default**: AUTO
 * **Data type**: String
 * **Introduced in**: v4.2

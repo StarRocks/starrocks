@@ -1305,7 +1305,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### paimon_reader_mode
 
-* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 保持默认行为：对于支持的 Raw File 使用 StarRocks 原生 Reader，否则使用 JNI Reader。历史变量 `paimon_force_jni_reader` 仅在本变量为 `AUTO` 时强制使用 JNI Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 对 Paimon `DataSplit` Scan Range 使用 paimon-cpp 原生 Reader，对其他 Split 类型使用 JNI Reader。使用 `NATIVE` 要求 BE 已集成 paimon-cpp。
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
 * 默认值：AUTO
 * 类型：String
 * 引入版本：v4.2

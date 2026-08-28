@@ -106,7 +106,12 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
             if (node_type == TExprNodeType::type::BINARY_PRED) {
                 Expr* lit = conjunct->get_child(1);
                 if (_ok_to_paimon_literal(lit)) {
-                    ::paimon::Literal&& literal = translate_to_paimon_literal(conjunct->get_child(1));
+                    // `col <=> NULL` matches exactly the rows where col IS NULL, but paimon leaf
+                    // functions are null-false, so Equal(null) would filter those rows out.
+                    if (op_type == TExprOpcode::EQ_FOR_NULL && lit->node_type() == TExprNodeType::NULL_LITERAL) {
+                        return convert_null(i, fieldName, fieldType, neg);
+                    }
+                    ::paimon::Literal&& literal = translate_to_paimon_literal(lit);
                     switch (op_type) {
                     case TExprOpcode::EQ:
                     case TExprOpcode::EQ_FOR_NULL:

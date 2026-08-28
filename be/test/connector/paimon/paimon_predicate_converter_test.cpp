@@ -78,6 +78,14 @@ TExprNode create_boolean_literal_node(bool value) {
     return node;
 }
 
+TExprNode create_null_literal_node() {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::NULL_LITERAL);
+    node.__set_type(gen_type_desc(TPrimitiveType::BOOLEAN));
+    node.__set_num_children(0);
+    return node;
+}
+
 TExprNode create_tinyint_literal_node(int8_t value) {
     TExprNode node;
     node.__set_node_type(TExprNodeType::INT_LITERAL);
@@ -148,6 +156,26 @@ TEST(PaimonPredicateConverterTest, KeepsTinyintLiteralAsPaimonTinyint) {
     ASSERT_EQ(1, leaf->Literals().size());
     EXPECT_EQ(paimon::FieldType::TINYINT, leaf->Literals()[0].GetType());
     EXPECT_EQ(-1, leaf->Literals()[0].GetValue<int8_t>());
+}
+
+TEST(PaimonPredicateConverterTest, ConvertsNullSafeEqualNullToIsNull) {
+    SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
+    PaimonPredicateConverter converter({&isolation});
+
+    TExprNode predicate_node = create_binary_predicate_node(TPrimitiveType::BOOLEAN);
+    predicate_node.__set_opcode(TExprOpcode::EQ_FOR_NULL);
+    TestExpr predicate(predicate_node);
+    ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
+    VectorizedLiteral null_literal(create_null_literal_node());
+    predicate.add_child(&isolation_ref);
+    predicate.add_child(&null_literal);
+
+    std::vector<Expr*> conjuncts{&predicate};
+    auto leaf = as_leaf_predicate(converter.convert(&conjuncts));
+    ASSERT_NE(nullptr, leaf);
+    EXPECT_EQ("isolation", leaf->FieldName());
+    EXPECT_EQ(paimon::Function::Type::IS_NULL, leaf->GetFunction().GetType());
+    EXPECT_TRUE(leaf->Literals().empty());
 }
 
 TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonLiteralRightOperand) {
