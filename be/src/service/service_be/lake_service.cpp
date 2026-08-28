@@ -286,6 +286,19 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
 
+    for (const auto& resharding_tablet_info : request->resharding_tablet_infos()) {
+        if (!resharding_tablet_info.has_splitting_tablet_info()) {
+            continue;
+        }
+        const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
+        const int split_count = splitting_tablet_info.new_tablet_ids_size();
+        if (split_count <= 1) {
+            cntl->SetFailed(fmt::format("splitting tablet {} requires at least 2 new tablet ids, got {}",
+                                        splitting_tablet_info.old_tablet_id(), split_count));
+            return;
+        }
+    }
+
     int task_num = request->tablet_ids_size();
 
     // Prepare publish tablet infos
