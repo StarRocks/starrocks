@@ -719,39 +719,30 @@ protected:
         static constexpr int64_t kBaseVersion = 1;
         static constexpr int64_t kMergedVersion = 2;
         static constexpr uint32_t kSourceLiveRssid = 107;
-        static constexpr uint32_t kFinalLiveRssid = 1;
-        static constexpr int32_t kContextOffset = -106;
 
-        int64_t cold_tablet = 0;
-        int64_t hot_tablet = 0;
         int64_t merged_tablet = 0;
         std::string source_filename;
-        std::string source_path;
-        std::string segment_filename;
-        std::string live_key;
         std::shared_ptr<TabletMetadataPB> cold_metadata;
         std::shared_ptr<TabletMetadataPB> hot_metadata;
-        PersistentIndexSstablePB source_pb;
     };
 
     BelowFloorLegacyFixture make_below_floor_legacy_fixture(
             const std::string& source_filename, const std::vector<std::pair<std::string, std::string>>& entries,
-            uint32_t source_high, bool encrypted = false, bool filter_live_row_with_delvec = false) {
+            uint32_t source_high) {
         BelowFloorLegacyFixture fixture;
-        fixture.cold_tablet = next_id();
-        fixture.hot_tablet = next_id();
+        const int64_t cold_tablet = next_id();
+        const int64_t hot_tablet = next_id();
         fixture.merged_tablet = next_id();
         fixture.source_filename = source_filename;
-        fixture.source_path = _tablet_manager->sst_location(fixture.hot_tablet, source_filename);
-        fixture.segment_filename = source_filename + ".dat";
-        fixture.live_key = encode_int_primary_key(20);
-        prepare_tablet_dirs(fixture.cold_tablet);
-        prepare_tablet_dirs(fixture.hot_tablet);
+        const std::string source_path = _tablet_manager->sst_location(hot_tablet, source_filename);
+        const std::string segment_filename = source_filename + ".dat";
+        prepare_tablet_dirs(cold_tablet);
+        prepare_tablet_dirs(hot_tablet);
         prepare_tablet_dirs(fixture.merged_tablet);
 
         const uint64_t segment_size = write_two_column_segment(
-                fixture.hot_tablet, fixture.segment_filename, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
-        const auto source_file = write_raw_pk_sstable(fixture.source_path, entries, encrypted);
+                hot_tablet, segment_filename, /*num_rows=*/1, [](int key) { return key * 10; }, 20);
+        const auto source_file = write_raw_pk_sstable(source_path, entries);
 
         auto make_metadata = [&](int64_t tablet_id) {
             auto metadata = std::make_shared<TabletMetadataPB>();
@@ -764,10 +755,10 @@ protected:
             return metadata;
         };
 
-        fixture.cold_metadata = make_metadata(fixture.cold_tablet);
+        fixture.cold_metadata = make_metadata(cold_tablet);
         fixture.cold_metadata->set_next_rowset_id(1);
 
-        fixture.hot_metadata = make_metadata(fixture.hot_tablet);
+        fixture.hot_metadata = make_metadata(hot_tablet);
         fixture.hot_metadata->set_next_rowset_id(BelowFloorLegacyFixture::kSourceLiveRssid + 1);
         auto* rowset = fixture.hot_metadata->add_rowsets();
         rowset->set_id(BelowFloorLegacyFixture::kSourceLiveRssid);
@@ -776,7 +767,7 @@ protected:
         rowset->set_data_size(segment_size);
         rowset->set_overlapped(false);
         auto* segment = rowset->add_segment_metas();
-        segment->set_filename(fixture.segment_filename);
+        segment->set_filename(segment_filename);
         segment->set_size(segment_size);
         segment->set_num_rows(1);
 
@@ -795,14 +786,6 @@ protected:
         source_pb->mutable_fileset_id()->set_lo(0x24680);
         source_pb->set_generation_version(17);
 
-        if (filter_live_row_with_delvec) {
-            DelVector delvec;
-            const uint32_t deleted_rowid = 0;
-            delvec.init(BelowFloorLegacyFixture::kBaseVersion, &deleted_rowid, 1);
-            add_delvec(fixture.hot_metadata.get(), fixture.hot_tablet, BelowFloorLegacyFixture::kBaseVersion,
-                       BelowFloorLegacyFixture::kSourceLiveRssid, source_filename + ".dv", delvec.save());
-        }
-        fixture.source_pb.CopyFrom(*source_pb);
         return fixture;
     }
 
@@ -1454,8 +1437,6 @@ protected:
         TxnInfoPB txn_info;
         int64_t base_version;
         int64_t new_version;
-        int64_t target_tablet_id;
-        std::vector<std::string> source_sst_paths;
     };
 
     StatusOr<Issue11935MergeFixture> make_issue11935_merge_fixture(
@@ -1465,7 +1446,6 @@ protected:
         Issue11935MergeFixture fixture;
         fixture.base_version = 600;
         fixture.new_version = 601;
-        fixture.target_tablet_id = target_tablet_id;
         prepare_tablet_dirs(child_a);
         prepare_tablet_dirs(child_b);
         prepare_tablet_dirs(target_tablet_id);
@@ -1481,8 +1461,6 @@ protected:
         const uint64_t stale_size =
                 write_versioned_pk_sstable(_tablet_manager->sst_location(child_b, stale_live_filename),
                                            {{raw_int_primary_key(0), 513, 1, 0}, {raw_int_primary_key(1), 513, 1, 0}});
-        fixture.source_sst_paths = {_tablet_manager->sst_location(child_a, tombstone_filename),
-                                    _tablet_manager->sst_location(child_b, stale_live_filename)};
         auto make_metadata = [&](int64_t tablet_id, int lower, int upper) {
             auto metadata = std::make_shared<TabletMetadataPB>();
             metadata->set_id(tablet_id);
@@ -2880,7 +2858,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml
                 test_case.source_high);
         if (test_case.force_exact_zero) {
             fixture.hot_metadata->mutable_sstable_meta()->mutable_sstables(0)->set_max_rss_rowid(0);
-            fixture.source_pb.set_max_rss_rowid(0);
             ASSERT_EQ(0, fixture.hot_metadata->sstable_meta().sstables(0).max_rss_rowid());
         }
         auto merged_or = merge_modern_shared_occurrences(fixture.cold_metadata, fixture.hot_metadata,

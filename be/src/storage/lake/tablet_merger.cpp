@@ -207,18 +207,8 @@ struct TargetDelvecState {
 
 // Union |source| into |target|. If |target| is empty, it becomes a copy of |source|.
 void union_delvec(DelVector* target, DelVector& source, int64_t version) {
-    Roaring merged_bitmap;
-    if (target->roaring()) {
-        merged_bitmap = *target->roaring();
-    }
-    if (source.roaring()) {
-        merged_bitmap |= *source.roaring();
-    }
-    std::vector<uint32_t> all_dels;
-    for (auto it = merged_bitmap.begin(); it != merged_bitmap.end(); ++it) {
-        all_dels.push_back(*it);
-    }
-    target->init(version, all_dels.data(), all_dels.size());
+    const Roaring empty;
+    target->union_with(version, source.roaring() != nullptr ? *source.roaring() : empty);
 }
 
 // Duplicate detection for merge: two rowsets are the same logical rowset across
@@ -793,8 +783,6 @@ Status verify_dcg_entry_consistency(const DeltaColumnGroupVerPB& existing, int j
 
 struct DcgSurvivingEntry {
     size_t old_tablet_index;
-    uint32_t original_segment_id;
-    int entry_index;
     // Single-entry normalized copy of the source DCG entry (all 5 fields at
     // index 0 of the resulting PB). Keeping entries in single-entry form keeps
     // bookkeeping and downstream emission uniform.
@@ -834,8 +822,6 @@ inline std::vector<bool> mark_conflicting_dcg_entries(const std::vector<DcgSurvi
 
 struct DcgSourceRowsetReference {
     size_t old_tablet_index;
-    const RowsetMetadataPB* rowset = nullptr;
-    int segment_position = 0;
     const TabletRangePB* effective_range = nullptr; // rowset.range() else ctx tablet range; null = unbounded
 };
 
@@ -879,8 +865,6 @@ Status dcg_pass1_collect_entries_and_sources(const std::vector<TabletMergeContex
                 uint32_t target_rssid = *target_or;
                 DcgSourceRowsetReference source_reference;
                 source_reference.old_tablet_index = old_tablet_index;
-                source_reference.rowset = &rowset;
-                source_reference.segment_position = segment_position;
                 if (rowset.has_range()) {
                     source_reference.effective_range = &rowset.range();
                 } else if (context.metadata()->has_range()) {
@@ -919,8 +903,6 @@ Status dcg_pass1_collect_entries_and_sources(const std::vector<TabletMergeContex
 
                 DcgSurvivingEntry entry;
                 entry.old_tablet_index = old_tablet_index;
-                entry.original_segment_id = segment_id;
-                entry.entry_index = entry_index;
                 entry.single_entry = make_single_entry_dcg(normalized, entry_index);
 
                 const size_t new_entry_index = target_work.entries.size();
