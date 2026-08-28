@@ -35,10 +35,8 @@
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
-#include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
-#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/pk_index_utils.h"
@@ -53,6 +51,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
@@ -2473,22 +2472,6 @@ Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& me
         return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
     }
     return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
-}
-
-Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir) {
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry == nullptr) {
-        return Status::OK();
-    }
-    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& index = index_entry->value();
-
-    // release when function end
-    DeferOp index_defer([&]() { _index_cache.release(index_entry); });
-    _index_cache.update_object_size(index_entry, index.memory_usage());
-    RETURN_IF_ERROR(index.major_compaction(data_dir, tablet_id, index.get_index_lock()));
-    index.set_local_pk_index_write_amp_score(0.0);
-    return Status::OK();
 }
 
 bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {
