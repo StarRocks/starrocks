@@ -5020,6 +5020,10 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private static boolean addTouchesKeyDerivedRangeSortKey(OlapTable table, ColumnDef columnDef) {
         long baseIndexMetaId = table.getBaseIndexMetaId();
+        // Mirrors the implicit-key rule in addColumnInternal's AGG_KEYS branch. That branch now rejects
+        // the no-agg-no-KEY shape unless allow_implicit_key_column_in_agg_add_column is set, and it
+        // throws before this routing decision has any effect, so this predicate stays as-is. Keep the
+        // two in sync if either changes.
         boolean addedIsKey = columnDef.isKey()
                 || (table.getKeysType() == KeysType.AGG_KEYS && columnDef.getAggregateType() == null);
         if (!addedIsKey) {

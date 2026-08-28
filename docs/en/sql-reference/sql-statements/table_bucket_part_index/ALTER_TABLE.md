@@ -509,7 +509,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 Note:
 
 1. If you add a value column to an Aggregate table, you need to specify agg_type.
-2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
+2. If you add a key column, you need to specify the KEY keyword. On an Aggregate table, a column that specifies neither `agg_type` nor `KEY` is ambiguous and is rejected, because creating a key column would change the table's aggregation key and rewrite existing data. Set the FE configuration item `allow_implicit_key_column_in_agg_add_column` to `true` to restore the previous behavior, where such a column became a key column.
 3. You cannot add a column that already exists in the base index to the rollup. (You can recreate a rollup if needed.)
 4. On range-distribution tables in shared-data clusters, adding a key column (which joins the range sort key) is supported for Duplicate Key, Aggregate, and Unique Key tables, from v4.2 onwards. The operation triggers an online rewrite, and the added key column must have a constant `DEFAULT` value. It is not supported for Primary Key tables, or for tables that have a rollup or synchronous materialized view.
 
@@ -541,7 +541,7 @@ Note:
 
 1. If you add a value column to an Aggregate table, you need to specify `agg_type`.
 
-2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword.
+2. If you add a key column, you need to specify the KEY keyword. On an Aggregate table, a column that specifies neither `agg_type` nor `KEY` is ambiguous and is rejected. Set the FE configuration item `allow_implicit_key_column_in_agg_add_column` to `true` to restore the previous behavior.
 
 3. You cannot add a column that already exists in the base index to the rollup. (You can create another rollup if needed.)
 
@@ -1096,7 +1096,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 
