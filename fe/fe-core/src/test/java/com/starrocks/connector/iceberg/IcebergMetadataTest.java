@@ -639,9 +639,21 @@ public class IcebergMetadataTest extends TableTestBase {
     public void testDropTableWithMissingMetadataFile() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 
         String missingMetadata = "File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json";
+
+        // The statistics cleanup issues real DML, which has no warehouse to run in here; it has a test
+        // of its own below.
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {
+            }
+
+            @Mock
+            public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName) {
+            }
+        };
 
         // CachingIcebergCatalog wraps the load failure, so NotFoundException only shows up as a cause.
         new Expectations(icebergHiveCatalog) {
@@ -659,17 +671,28 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         metadata.dropTable(connectContext, new DropTableStmt(true,
-                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
-                        "iceberg_db", "table1")), null, NodePosition.ZERO), true));
+                new TableName(CATALOG_NAME, "iceberg_db", "table1"), true));
     }
 
     @Test
     public void testDropTableWithMissingMetadataFileNotWrapped() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 
         // Without the caching catalog the raw NotFoundException reaches IcebergMetadata.
+
+        // The statistics cleanup issues real DML, which has no warehouse to run in here; it has a test
+        // of its own below.
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {
+            }
+
+            @Mock
+            public void dropExternalHistogramStatsMetaAndData(String catalogName, String dbName, String tableName) {
+            }
+        };
         new Expectations(icebergHiveCatalog) {
             {
                 icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
@@ -683,15 +706,14 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         metadata.dropTable(connectContext, new DropTableStmt(false,
-                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
-                        "iceberg_db", "table1")), null, NodePosition.ZERO), false));
+                new TableName(CATALOG_NAME, "iceberg_db", "table1"), false));
     }
 
     @Test
     public void testDropTableKeepsFailingWhenMetadataIsUnreadable() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 
         // Unreadable, not missing: the metadata may be intact, so dropping the entry would orphan the data.
         new Expectations(icebergHiveCatalog) {
@@ -708,15 +730,14 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assertions.assertThrows(StarRocksConnectorException.class, () ->
                 metadata.dropTable(connectContext, new DropTableStmt(true,
-                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
-                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
+                        new TableName(CATALOG_NAME, "iceberg_db", "table1"), true)));
     }
 
     @Test
     public void testDropTableWithMissingMetadataFileDropsStatistics() throws AlreadyExistsException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         String dbName = "iceberg_db";
         String tableName = "table_missing_meta";
 
@@ -734,33 +755,27 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logAddAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
-                walApplier.apply(job);
+            public void logAddAnalyzeJob(AnalyzeJob job) {
             }
 
             @Mock
-            public void logRemoveAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
-                walApplier.apply(job);
+            public void logRemoveAnalyzeJob(AnalyzeJob job) {
             }
 
             @Mock
-            public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
-                walApplier.apply(meta);
+            public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
             }
 
             @Mock
-            public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
-                walApplier.apply(meta);
+            public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
             }
 
             @Mock
-            public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
-                walApplier.apply(meta);
+            public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
             }
 
             @Mock
-            public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
-                walApplier.apply(meta);
+            public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta) {
             }
         };
 
@@ -788,8 +803,7 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         metadata.dropTable(connectContext, new DropTableStmt(true,
-                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME, dbName, tableName)),
-                        null, NodePosition.ZERO), true));
+                new TableName(CATALOG_NAME, dbName, tableName), true));
 
         // A table recreated under the same name must not inherit the leftovers of the broken one.
         Assertions.assertTrue(analyzeMgr.getAllAnalyzeJobList().stream()
@@ -807,7 +821,7 @@ public class IcebergMetadataTest extends TableTestBase {
     public void testDropTableKeepsFailingWhenAnotherTableMetadataIsMissing() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 
         // The table being dropped is healthy; the missing file belongs to a table its foreign key
         // constraint refers to, which getTable() loads too.
@@ -825,8 +839,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assertions.assertThrows(StarRocksConnectorException.class, () ->
                 metadata.dropTable(connectContext, new DropTableStmt(true,
-                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
-                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
+                        new TableName(CATALOG_NAME, "iceberg_db", "table1"), true)));
     }
 
     @Test
