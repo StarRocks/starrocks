@@ -351,7 +351,7 @@ private:
         }
         then_columns.emplace_back(else_column);
         size_t size = when_columns[0]->size();
-        if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType>) {
+        if constexpr (lt_is_collection<ResultType> || lt_is_collection<WhenType> || ResultType == TYPE_VARIANT) {
             // construct result column
             bool res_nullable = false;
             for (const auto& col : then_columns) {
@@ -518,7 +518,7 @@ private:
             when_columns_has_null |= column->has_null();
         }
 
-        if constexpr (lt_is_collection<ResultType>) {
+        if constexpr (lt_is_collection<ResultType> || ResultType == TYPE_VARIANT) {
             // construct nullable result column
             bool res_nullable = false;
             for (const auto& col : then_columns) {
