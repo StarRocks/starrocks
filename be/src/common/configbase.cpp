@@ -16,7 +16,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include   <strings.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cerrno>
