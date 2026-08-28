@@ -317,7 +317,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         // at function entry alone does not bound the sum of concurrent copies below the urgent threshold.
         int64_t empty_publish_estimate = compute_lake_publish_estimate(metadata->SpaceUsedLong());
         PublishMemReservation empty_publish_resv(RuntimeEnv::GetInstance()->lake_publish_mem_tracker(),
-                                                 empty_publish_estimate, g_lake_publish_oversized_inflight);
+                                                 empty_publish_estimate, g_lake_publish_oversized_inflight,
+                                                 RuntimeEnv::GetInstance()->process_mem_tracker());
         if (!empty_publish_resv.admitted()) {
             g_lake_publish_mem_rejected << 1;
             return Status::ResourceBusy("publish throttled: lake publish memory limit");
@@ -438,7 +439,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     // shortly after, so it adds no new latency class to the hot path.
     int64_t lake_publish_estimate = compute_lake_publish_estimate(base_metadata->SpaceUsedLong());
     PublishMemReservation lake_publish_resv(RuntimeEnv::GetInstance()->lake_publish_mem_tracker(),
-                                            lake_publish_estimate, g_lake_publish_oversized_inflight);
+                                            lake_publish_estimate, g_lake_publish_oversized_inflight,
+                                            RuntimeEnv::GetInstance()->process_mem_tracker());
     if (!lake_publish_resv.admitted()) {
         g_lake_publish_mem_rejected << 1;
         return Status::ResourceBusy("publish throttled: lake publish memory limit");
