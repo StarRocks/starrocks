@@ -867,6 +867,18 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
+     * The amount of free space (in bytes) bdb-je tries to keep on the volume holding `meta_dir`.
+     * The same value gates FE startup: the FE refuses to start when the free space is below it.
+     * <p>
+     * The default equals the bdb-je default. Lowering it is the recovery path for an FE that cannot
+     * start on a nearly full metadata volume: it lets bdb-je open and reclaim its own reserved files.
+     * Note that bdb-je needs this headroom for its housekeeping, so a value far below the default
+     * leaves an FE that starts but may reject metadata writes. Takes effect after a restart.
+     */
+    @ConfField
+    public static long bdbje_free_disk_size = 5L * 1024 * 1024 * 1024;
+
+    /**
      * Timeout seconds for doing checkpoint
      */
     @ConfField(mutable = true)
