@@ -42,6 +42,7 @@ public class CachingPaimonCatalog extends CachingCatalog {
 
     private final String catalogName;
     private final ExecutorService refreshExecutor;
+    private final long refreshIntervalSec;
     private final Map<Identifier, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<Identifier, TableRevision> lastRefreshedRevision = new ConcurrentHashMap<>();
     private final Map<Identifier, Long> lastRefreshTime = new ConcurrentHashMap<>();
@@ -51,10 +52,12 @@ public class CachingPaimonCatalog extends CachingCatalog {
     private record TableRevision(long snapshotId, long schemaId) {
     }
 
-    public CachingPaimonCatalog(String catalogName, Catalog wrapped, Options options, ExecutorService refreshExecutor) {
+    public CachingPaimonCatalog(String catalogName, Catalog wrapped, Options options, ExecutorService refreshExecutor,
+                                long refreshIntervalSec) {
         super(wrapped, options);
         this.catalogName = catalogName;
         this.refreshExecutor = refreshExecutor;
+        this.refreshIntervalSec = refreshIntervalSec;
     }
 
     @Override
@@ -80,7 +83,8 @@ public class CachingPaimonCatalog extends CachingCatalog {
      * refreshed to. Runs on the background pool, the caller never waits for it.
      */
     public void maybeRefreshAsync(Identifier id, long observedSnapshotId) {
-        if (!Config.enable_paimon_query_triggered_refresh || observedSnapshotId < 0) {
+        // zero or less turns query-triggered refresh off, as it turns off Caffeine's refreshAfterWrite for iceberg
+        if (refreshIntervalSec <= 0 || observedSnapshotId < 0) {
             return;
         }
         // same exclusions as the access time ledger: neither kind of table goes stale
@@ -92,8 +96,7 @@ public class CachingPaimonCatalog extends CachingCatalog {
             return;
         }
         Long refreshedAt = lastRefreshTime.get(id);
-        if (refreshedAt != null && System.currentTimeMillis() - refreshedAt
-                < Config.paimon_query_triggered_refresh_min_interval_secs * 1000) {
+        if (refreshedAt != null && System.currentTimeMillis() - refreshedAt < refreshIntervalSec * 1000) {
             return;
         }
         if (!refreshInFlight.add(id)) {
@@ -129,6 +132,8 @@ public class CachingPaimonCatalog extends CachingCatalog {
             // a schema-only ALTER TABLE bumps the schema id without creating a snapshot
             long latestSchemaId = dataTable.schemaManager().latest().map(TableSchema::id).orElse(-1L);
             TableRevision latest = new TableRevision(latestSnapshotId, latestSchemaId);
+            // stamped even when nothing moved, and by the daemon too: it means "the lake was just probed",
+            // which is what the query-triggered interval should be measured from
             lastRefreshTime.put(id, System.currentTimeMillis());
             if (latest.equals(lastRefreshedRevision.get(id))) {
                 return;

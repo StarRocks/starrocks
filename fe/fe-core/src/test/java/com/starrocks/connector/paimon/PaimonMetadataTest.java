@@ -402,8 +402,15 @@ public class PaimonMetadataTest {
         // default max-num is 0, i.e. no partition cache at all
         options.set(CatalogOptions.CACHE_PARTITION_MAX_NUM, 1000L);
         // inline executor: the queued refresh runs before maybeRefreshAsync returns
+        return newCachingCatalog(wrapped, 60L);
+    }
+
+    private static CachingPaimonCatalog newCachingCatalog(Catalog wrapped, long refreshIntervalSec) {
+        Options options = new Options();
+        options.set(CatalogOptions.CACHE_PARTITION_MAX_NUM, 1000L);
+        // inline executor: the queued refresh runs before maybeRefreshAsync returns
         return new CachingPaimonCatalog("paimon_catalog", wrapped, options,
-                MoreExecutors.newDirectExecutorService());
+                MoreExecutors.newDirectExecutorService(), refreshIntervalSec);
     }
 
     @Test
@@ -507,29 +514,20 @@ public class PaimonMetadataTest {
                 returns(5L, 9L, 9L);
             }
         };
-        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog, 3600L);
         cachingCatalog.getTable(id);
-        long interval = Config.paimon_query_triggered_refresh_min_interval_secs;
-        try {
-            Config.paimon_query_triggered_refresh_min_interval_secs = 3600L;
-            // stamps the refresh time
-            cachingCatalog.maybeRefreshAsync(id, 5L);
-            assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
 
-            // within the interval the next snapshot is left to the background daemon
-            cachingCatalog.maybeRefreshAsync(id, 9L);
-            assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
+        // stamps the refresh time
+        cachingCatalog.maybeRefreshAsync(id, 5L);
+        assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
 
-            Config.paimon_query_triggered_refresh_min_interval_secs = 0L;
-            cachingCatalog.maybeRefreshAsync(id, 9L);
-            assertEquals(CachingPaimonCatalog.revision(9L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
-        } finally {
-            Config.paimon_query_triggered_refresh_min_interval_secs = interval;
-        }
+        // within the interval the next snapshot is left to the background daemon
+        cachingCatalog.maybeRefreshAsync(id, 9L);
+        assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
     }
 
     @Test
-    public void testQueryTriggeredRefreshCanBeDisabled(@Mocked FileStoreTable paimonTable,
+    public void testQueryTriggeredRefreshOffWhenIntervalNotPositive(@Mocked FileStoreTable paimonTable,
                                                        @Mocked SnapshotManager snapshotManager) throws Exception {
         Identifier id = new Identifier("db", "tbl");
         new Expectations() {
@@ -544,16 +542,11 @@ public class PaimonMetadataTest {
                 minTimes = 0;
             }
         };
-        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog, 0L);
         cachingCatalog.getTable(id);
-        boolean enabled = Config.enable_paimon_query_triggered_refresh;
-        try {
-            Config.enable_paimon_query_triggered_refresh = false;
-            cachingCatalog.maybeRefreshAsync(id, 6L);
-            assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
-        } finally {
-            Config.enable_paimon_query_triggered_refresh = enabled;
-        }
+
+        cachingCatalog.maybeRefreshAsync(id, 6L);
+        assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
     }
 
     @Test
@@ -867,7 +860,7 @@ public class PaimonMetadataTest {
         // same chain PaimonConnector builds
         Catalog unwrapped = CatalogFactory.createUnwrappedCatalog(context, CatalogFactory.class.getClassLoader());
         CachingPaimonCatalog realCatalog = new CachingPaimonCatalog("paimon_catalog", unwrapped, catalogOptions,
-                MoreExecutors.newDirectExecutorService());
+                MoreExecutors.newDirectExecutorService(), 60L);
 
         realCatalog.createDatabase("test_db", true);
         Schema.Builder schemaBuilder = Schema.newBuilder();

@@ -1463,24 +1463,6 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it.
 - Introduced in: v2.5.5
 
-### `enable_paimon_query_triggered_refresh`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether a query that observes a new Paimon snapshot may queue a refresh of that table's cached metadata. Paimon resolves the current snapshot on every scan, so data is always current, while the cached schema and partition list only advance when the table is refreshed. With this enabled the cached metadata catches up shortly after a query, instead of waiting for the next background refresh round. The refresh runs on a background thread pool; the query never waits for it.
-- Introduced in: v4.2.0
-
-### `paimon_query_triggered_refresh_min_interval_secs`
-
-- Default: 60
-- Type: Long
-- Unit: Seconds
-- Is mutable: Yes
-- Description: The minimum interval between two query-triggered refreshes of the same Paimon table. It caps the amount of refresh work a frequently committing table can queue. Refreshes skipped because of this interval are still covered by the periodic background refresh. Only takes effect when `enable_paimon_query_triggered_refresh` is `true`.
-- Introduced in: v4.2.0
-
 ### `refresh_other_fe_dispatch_executor_thread_num`
 
 - Default: 4
