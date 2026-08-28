@@ -40,17 +40,24 @@ namespace starrocks::lake {
 //                               try_consume would reject it forever (FE retries indefinitely) -> a
 //                               permanent partition wedge. Admit at most ONE oversized publish
 //                               process-wide via the atomic slot, WITHOUT charging the shared tracker,
-//                               so normal-sized publishes keep flowing. Peak bound: limit + one oversized.
+//                               so normal-sized publishes keep flowing, AND only when the process has
+//                               headroom for the estimate (the slot bounds how many oversized publishes
+//                               run, not how big they are). Peak bound: limit + one oversized.
 //   5. otherwise             -> normal: atomic try_consume(estimate) reserve-or-fail; reject -> FE retries.
 //
-// No decision anywhere depends on live consumption(), so there is no check-then-act race: "oversized"
-// is a comparison of two stable values (estimate this call, limit fixed at init), and admission of an
-// oversized publish is a single compare_exchange on the slot.
+// Route selection never depends on live consumption(), so there is no check-then-act race in choosing a
+// route: "oversized" is a comparison of two stable values (estimate this call, limit fixed at init), and
+// admission of an oversized publish is a single compare_exchange on the slot. The one consumption-based
+// test is the process-headroom check inside route 4, which can only turn an admit into a reject, never
+// the reverse, so a concurrent allocation racing it is strictly safer than not checking at all.
 class PublishMemReservation {
 public:
     // `oversized_slot` is a process-wide atomic shared by all publishes on this node (the caller passes
     // the file-global g_lake_publish_oversized_inflight; tests pass a local).
-    PublishMemReservation(MemTracker* tracker, int64_t estimate, std::atomic<bool>& oversized_slot)
+    // `process_tracker` (optional) is the process-wide tracker. It is consulted ONLY on the oversized
+    // route, to require that the process can actually absorb a publish that the shared budget cannot.
+    PublishMemReservation(MemTracker* tracker, int64_t estimate, std::atomic<bool>& oversized_slot,
+                          MemTracker* process_tracker = nullptr)
             : _tracker(tracker), _oversized_slot(&oversized_slot) {
         if (_tracker == nullptr) {
             _admitted = true; // gate not wired: never block publishing
@@ -75,6 +82,26 @@ public:
         }
         if (estimate > limit) {
             // Oversized: admit at most one process-wide, without charging the shared tracker.
+            //
+            // The slot bounds the COUNT of concurrent oversized publishes (one) but not their SIZE, and
+            // this route charges nothing, so on its own it admits an arbitrarily large publish as long as
+            // the entry backstop has not already tripped. That backstop asks "is usage already above the
+            // urgent percent", not "does this fit": at 80% usage with an 85% threshold, a publish
+            // estimated well above the remaining 20% is still let through and can drive the node into
+            // OOM. That is the exact failure this gate exists to prevent, in the case where the metadata
+            // is largest. So require the process to have room for the estimate first.
+            //
+            // This does not reintroduce the wedge route 4 exists to avoid. Rejection here is retryable
+            // backpressure, and an oversized estimate is by definition only a fraction of the process
+            // limit, so an idle node always has the headroom to admit it. The only case that never fits
+            // is an estimate larger than the whole process, which would OOM rather than succeed.
+            if (process_tracker != nullptr) {
+                const int64_t process_limit = process_tracker->limit();
+                if (process_limit > 0 && estimate > process_limit - process_tracker->consumption()) {
+                    _admitted = false; // not enough process headroom -> reject (retryable), take no slot
+                    return;
+                }
+            }
             bool expected = false;
             if (_oversized_slot->compare_exchange_strong(expected, true)) {
                 _holds_oversized_slot = true;
