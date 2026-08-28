@@ -52,8 +52,8 @@ StatusOr<ssize_t> parse_decay_ms(const std::string& option, const std::string& v
     char* end = nullptr;
     long long parsed = std::strtoll(value.c_str(), &end, 10);
     if (value.empty() || end != value.c_str() + value.size() || errno != 0 || parsed < -1) {
-        return Status::InvalidArgument(fmt::format(
-                "invalid value of jemalloc option '{}': '{}', expect an integer >= -1", option, value));
+        return Status::InvalidArgument(
+                fmt::format("invalid value of jemalloc option '{}': '{}', expect an integer >= -1", option, value));
     }
     return static_cast<ssize_t>(parsed);
 }

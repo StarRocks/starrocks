@@ -106,8 +106,9 @@ TEST_F(JemallocConfUpdaterTest, reject_immutable_option) {
     const auto before = updater.applied_options();
 
     // Changed.
-    Status st = updater.update("percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
-                               "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
+    Status st = updater.update(
+            "percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+            "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
     EXPECT_TRUE(st.is_not_supported()) << st;
     EXPECT_TRUE(st.message().find("percpu_arena") != std::string::npos) << st;
 
@@ -117,14 +118,16 @@ TEST_F(JemallocConfUpdaterTest, reject_immutable_option) {
     EXPECT_TRUE(st.message().find("lg_prof_sample (added)") != std::string::npos) << st;
 
     // Removed.
-    st = updater.update("percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
-                        "metadata_thp:auto,background_thread:true,prof:true");
+    st = updater.update(
+            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+            "metadata_thp:auto,background_thread:true,prof:true");
     EXPECT_TRUE(st.is_not_supported()) << st;
     EXPECT_TRUE(st.message().find("prof_active (removed)") != std::string::npos) << st;
 
     // A mutable option changed together with an immutable one is rejected as well.
-    st = updater.update("percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:6000,"
-                        "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
+    st = updater.update(
+            "percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:6000,"
+            "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
     EXPECT_TRUE(st.is_not_supported()) << st;
 
     EXPECT_EQ(before, updater.applied_options());
@@ -134,8 +137,8 @@ TEST_F(JemallocConfUpdaterTest, reject_invalid_value) {
     auto& updater = JemallocConfUpdater::instance();
     const auto before = updater.applied_options();
 
-    for (const auto& conf : {make_conf("abc", "5000", "false"), make_conf("-2", "5000", "false"),
-                             make_conf("5000", "5000", "yes")}) {
+    for (const auto& conf :
+         {make_conf("abc", "5000", "false"), make_conf("-2", "5000", "false"), make_conf("5000", "5000", "yes")}) {
         Status st = updater.update(conf);
         EXPECT_TRUE(st.is_invalid_argument()) << st;
         // Nothing is applied when a single value is invalid.
@@ -149,8 +152,9 @@ TEST_F(JemallocConfUpdaterTest, update_without_change_is_a_noop) {
     EXPECT_EQ("5000", updater.applied_options()["dirty_decay_ms"]);
 
     // The option order does not matter either.
-    ASSERT_OK(updater.update("prof_active:false,prof:true,background_thread:true,metadata_thp:auto,"
-                             "dirty_decay_ms:5000,muzzy_decay_ms:5000,oversize_threshold:0,percpu_arena:percpu"));
+    ASSERT_OK(
+            updater.update("prof_active:false,prof:true,background_thread:true,metadata_thp:auto,"
+                           "dirty_decay_ms:5000,muzzy_decay_ms:5000,oversize_threshold:0,percpu_arena:percpu"));
     EXPECT_EQ("5000", updater.applied_options()["muzzy_decay_ms"]);
 }
 

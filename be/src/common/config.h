@@ -126,8 +126,8 @@ CONF_Bool(enable_jemalloc_memory_tracker, "true");
 // was started with prof:true.
 // NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
 CONF_mString(jemalloc_conf,
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
-            "background_thread:true,prof:true,prof_active:false");
+             "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
+             "background_thread:true,prof:true,prof_active:false");
 
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
