@@ -443,26 +443,6 @@ enum TTableType {
     JDBC_TABLE = 9,
     PAIMON_TABLE = 10,
     VIEW = 20,
-<<<<<<< HEAD
-    MATERIALIZED_VIEW,
-    FILE_TABLE,
-    DELTALAKE_TABLE,
-    TABLE_FUNCTION_TABLE,
-    ODPS_TABLE,
-    LOGICAL_ICEBERG_METADATA_TABLE,
-    ICEBERG_REFS_TABLE,
-    ICEBERG_HISTORY_TABLE,
-    ICEBERG_METADATA_LOG_ENTRIES_TABLE,
-    ICEBERG_SNAPSHOTS_TABLE,
-    ICEBERG_MANIFESTS_TABLE,
-    ICEBERG_FILES_TABLE,
-    ICEBERG_PARTITIONS_TABLE,
-    BENCHMARK_TABLE,
-    ICEBERG_PROPERTIES_TABLE,
-    LANCE_TABLE,
-    FLUSS_TABLE,
-    STARROCKS_TABLE
-=======
     MATERIALIZED_VIEW = 21,
     FILE_TABLE = 22,
     DELTALAKE_TABLE = 23,
@@ -479,8 +459,11 @@ enum TTableType {
     BENCHMARK_TABLE = 34,
     ICEBERG_PROPERTIES_TABLE = 35,
     LANCE_TABLE = 36,
-    FLUSS_TABLE = 37
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+    FLUSS_TABLE = 37,
+
+    // Downstream-only members live at >= 300 (the range the rule above
+    // reserves for extensions).
+    STARROCKS_TABLE = 300
 }
 
 enum TKeysType {
@@ -655,7 +638,7 @@ struct TIcebergDataFile {
     8: optional string partition_null_fingerprint;
     9: optional TIcebergFileContent file_content;
     10: optional string referenced_data_file;
-<<<<<<< HEAD
+    11: optional TIcebergDataFileExt ext;
 
     // Enterprise-only fields start at 50, reserve some fields for upstream StarRocks so a sync
     // never collides on ordinals.
@@ -683,9 +666,6 @@ struct TIcebergPreviousDeleteFile {
     // Byte length of the delete file (DeleteFile.fileSizeInBytes); lets the BE merge path
     // avoid get_file_size, which is unsupported on object storage.
     8: optional i64 file_size_in_bytes
-=======
-    11: optional TIcebergDataFileExt ext;
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct THiveFileInfo {
@@ -710,14 +690,11 @@ struct TSinkCommitInfo {
     100: optional bool is_overwrite;
     101: optional string staging_dir
     102: optional bool is_rewrite;
-<<<<<<< HEAD
+    103: optional TSinkCommitInfoExt ext;
 
     // Enterprise-only fields start at 150, reserve some fields for upstream StarRocks so a sync
     // never collides on ordinals.
     150: optional list<TIcebergPreviousDeleteFile> rewritten_delete_files
-=======
-    103: optional TSinkCommitInfoExt ext;
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TSnapshotInfo {

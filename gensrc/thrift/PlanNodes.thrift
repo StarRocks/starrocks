@@ -53,56 +53,6 @@ include "DataCache.thrift"
 //   - append new members with the next free value; never renumber or reuse one;
 //   - values >= 300 are reserved for extension fields and must not be used here.
 enum TPlanNodeType {
-<<<<<<< HEAD
-  OLAP_SCAN_NODE,
-  MYSQL_SCAN_NODE,
-  CSV_SCAN_NODE,
-  SCHEMA_SCAN_NODE,
-  HASH_JOIN_NODE,
-  MERGE_JOIN_NODE,
-  AGGREGATION_NODE,
-  PRE_AGGREGATION_NODE,
-  SORT_NODE,
-  EXCHANGE_NODE,
-  MERGE_NODE,
-  SELECT_NODE,
-  CROSS_JOIN_NODE,
-  META_SCAN_NODE,
-  ANALYTIC_EVAL_NODE,
-  OLAP_REWRITE_NODE,
-  KUDU_SCAN_NODE,
-  FILE_SCAN_NODE,
-  EMPTY_SET_NODE,
-  UNION_NODE,
-  ES_SCAN_NODE,
-  ES_HTTP_SCAN_NODE,
-  REPEAT_NODE,
-  ASSERT_NUM_ROWS_NODE,
-  INTERSECT_NODE,
-  EXCEPT_NODE,
-  ADAPTER_NODE,
-  HDFS_SCAN_NODE,
-  PROJECT_NODE,
-  TABLE_FUNCTION_NODE,
-  DECODE_NODE,
-  JDBC_SCAN_NODE,
-  LAKE_SCAN_NODE,
-  NESTLOOP_JOIN_NODE,
-
-  STREAM_SCAN_NODE,
-  STREAM_JOIN_NODE,
-  STREAM_AGG_NODE,
-  LAKE_META_SCAN_NODE,
-  CAPTURE_VERSION_NODE,
-  RAW_VALUES_NODE,
-  FETCH_NODE,
-  LOOKUP_NODE,
-  BENCHMARK_SCAN_NODE,
-  LAKE_CACHE_STATS_SCAN_NODE,
-  CHANGES_SCAN_NODE,
-  ENFORCE_UNIQUE_ROW_LOCATOR_NODE,
-  STARROCKS_SCAN_NODE
-=======
   OLAP_SCAN_NODE = 0,
   MYSQL_SCAN_NODE = 1,
   CSV_SCAN_NODE = 2,
@@ -148,8 +98,14 @@ enum TPlanNodeType {
   LOOKUP_NODE = 41,
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
-  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
+
+  // Downstream-only members live at >= 300 (the range the rule above reserves
+  // for extensions). One-time migration when values were pinned:
+  // CHANGES_SCAN_NODE 44->300, ENFORCE_UNIQUE_ROW_LOCATOR_NODE 45->44,
+  // STARROCKS_SCAN_NODE 46->301. FE and BE must not mix across that change.
+  CHANGES_SCAN_NODE = 300,
+  STARROCKS_SCAN_NODE = 301
 }
 
 // phases of an execution node
@@ -599,7 +555,6 @@ struct TBenchmarkScanRange {
   2: optional i64 row_count
 }
 
-<<<<<<< HEAD
 // How the BE derives one partition/tablet's changes for a CHANGES range.
 enum TChangeDerivationMode {
     // Diff adjacent versions along the version chain over (base_version, head_version].
@@ -657,14 +612,14 @@ struct TStarRocksScanRange {
   2: optional Types.TNetworkAddress remote_be
   3: optional TStarRocksScanTransport transport
   4: optional i64 packet_seq
-=======
+}
+
 // Extension point for TScanRange. DO NOT MODIFY: do not add fields here, and
 // do not rename, renumber or remove it. The field numbers inside are allocated
 // separately, so anything added here collides with them, and renaming or
 // removing it breaks whatever fills it in. New TScanRange fields belong on
 // TScanRange itself, whose remaining numbers are free.
 struct TScanRangeExt {
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -682,13 +637,10 @@ struct TScanRange {
   30: optional TBinlogScanRange binlog_scan_range
 
   40: optional TBenchmarkScanRange benchmark_scan_range
-<<<<<<< HEAD
+  41: optional TScanRangeExt ext
 
   50: optional TChangesScanRange changes_scan_range
   51: optional TStarRocksScanRange starrocks_scan_range
-=======
-  41: optional TScanRangeExt ext
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TMySQLScanNode {
@@ -796,12 +748,11 @@ struct TSchemaScanNode {
   26: optional list<TFrontend> frontends;
 
   101: optional string catalog_name;
-<<<<<<< HEAD
   102: optional i64 bookmark_id
   103: optional i64 db_id
-=======
-  102: optional TSchemaScanNodeExt ext;
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+  // Ids 102/103 are occupied by bookmark_id/db_id above; upstream reserves
+  // them and likewise declares ext on id 104.
+  104: optional TSchemaScanNodeExt ext;
 }
 
 enum TAccessPathType {
@@ -1889,16 +1840,12 @@ struct TPlanNode {
 
   85: optional TCacheStatsScanNode cache_stats_scan_node;
 
-<<<<<<< HEAD
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node;
+  87: optional TPlanNodeExt ext
 
   150: optional TChangesScanNode changes_scan_node;
 
   151: optional TStarRocksScanNode starrocks_scan_node;
-=======
-  86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
-  87: optional TPlanNodeExt ext
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

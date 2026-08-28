@@ -138,81 +138,6 @@ struct TTextFileDesc {
 //   - values >= 300 are reserved for extension fields and must not be used here.
 enum TSchemaTableType {
     SCH_AUTHORS= 0,
-<<<<<<< HEAD
-    SCH_CHARSETS,
-    SCH_COLLATIONS,
-    SCH_COLLATION_CHARACTER_SET_APPLICABILITY,
-    SCH_COLUMNS,
-    SCH_COLUMN_PRIVILEGES,
-    SCH_CREATE_TABLE,
-    SCH_ENGINES,
-    SCH_EVENTS,
-    SCH_FILES,
-    SCH_GLOBAL_STATUS,
-    SCH_GLOBAL_VARIABLES,
-    SCH_KEY_COLUMN_USAGE,
-    SCH_MATERIALIZED_VIEWS,
-    SCH_OPEN_TABLES,
-    SCH_PARTITIONS,
-    SCH_PLUGINS,
-    SCH_PROCESSLIST,
-    SCH_PROFILES,
-    SCH_REFERENTIAL_CONSTRAINTS,
-    SCH_PROCEDURES,
-    SCH_SCHEMATA,
-    SCH_SCHEMA_PRIVILEGES,
-    SCH_SESSION_STATUS,
-    SCH_SESSION_VARIABLES,
-    SCH_STATISTICS,
-    SCH_STATUS,
-    SCH_TABLES,
-    SCH_TABLES_CONFIG,
-    SCH_TABLE_CONSTRAINTS,
-    SCH_TABLE_NAMES,
-    SCH_TABLE_PRIVILEGES,
-    SCH_TRIGGERS,
-    SCH_USER_PRIVILEGES,
-    SCH_VARIABLES,
-    SCH_VIEWS,
-    SCH_TASKS,
-    SCH_TASK_RUNS,
-    SCH_VERBOSE_SESSION_VARIABLES,
-    SCH_BE_TABLETS,
-    SCH_BE_METRICS,
-    SCH_BE_TXNS,
-    SCH_BE_CONFIGS,
-    SCH_LOADS,
-    SCH_LOAD_TRACKING_LOGS,
-    SCH_FE_TABLET_SCHEDULES,
-    SCH_BE_COMPACTIONS,
-    SCH_BE_THREADS,
-    SCH_BE_LOGS,
-    SCH_BE_BVARS,
-    SCH_BE_CLOUD_NATIVE_COMPACTIONS,
-
-    STARROCKS_ROLE_EDGES,
-    STARROCKS_GRANT_TO_ROLES,
-    STARROCKS_GRANT_TO_USERS,
-    SCH_ROUTINE_LOAD_JOBS,
-    SCH_STREAM_LOADS,
-    SCH_PIPE_FILES,
-    SCH_PIPES,
-    SCH_FE_METRICS,
-    STARROCKS_OBJECT_DEPENDENCIES,
-    SYS_FE_LOCKS,
-    SYS_FE_MEMORY_USAGE,
-    SCH_PARTITIONS_META,
-    SCH_BE_DATACACHE_METRICS,
-    SCH_TEMP_TABLES,
-    SYS_USERS,
-    SCH_COLUMN_STATS_USAGE,
-    SCH_ANALYZE_STATUS,
-
-    SCH_CLUSTER_SNAPSHOTS,
-    SCH_CLUSTER_SNAPSHOT_JOBS,
-    SCH_KEYWORDS,
-    SCH_APPLICABLE_ROLES,
-=======
     SCH_CHARSETS = 1,
     SCH_COLLATIONS = 2,
     SCH_COLLATION_CHARACTER_SET_APPLICABILITY = 3,
@@ -278,7 +203,7 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META = 62,
     SCH_BE_DATACACHE_METRICS = 63,
     SCH_TEMP_TABLES = 64,
-    
+
     SCH_COLUMN_STATS_USAGE = 65,
     SCH_ANALYZE_STATUS = 66,
 
@@ -287,37 +212,32 @@ enum TSchemaTableType {
 
     SCH_KEYWORDS = 69,
     SCH_APPLICABLE_ROLES = 70,
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 
     SCH_WAREHOUSE_METRICS = 71,
     SCH_WAREHOUSE_QUERIES = 72,
 
-<<<<<<< HEAD
-    SCH_TABLET_RESHARD_JOBS,
-    SCH_RECYCLEBIN_CATALOGS,
-    SCH_FE_THREADS,
-=======
     SCH_TABLET_RESHARD_JOBS = 73,
     SCH_RECYCLEBIN_CATALOGS = 74,
 
     SCH_FE_THREADS = 75,
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 
     SCH_BE_TABLET_WRITE_LOG = 76,
 
-<<<<<<< HEAD
-    SCH_MATERIALIZED_VIEW_REFRESH_JOBS,
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS = 77,
 
-    SCH_ICEBERG_MAINTENANCE_TASKS,
+    // Downstream-only members live at >= 300 (the range the rule above
+    // reserves for extensions). One-time migration when values were pinned:
+    // SYS_USERS 65->300, the 13 members after it realigned down by one to
+    // upstream's values, SCH_ICEBERG_MAINTENANCE_TASKS 79->301. FE and BE
+    // must not mix across that change.
+    SYS_USERS = 300,
+    SCH_ICEBERG_MAINTENANCE_TASKS = 301,
 
     // Used by epack
     STARROCKS_POLICY_REFERENCES = 20000,
     SCH_TABLE_BOOKMARK_SUMMARY = 20001,
     SCH_TABLE_BOOKMARK_PARTITIONS = 20002,
     SCH_TABLE_BOOKMARK_REFERENCES = 20003
-=======
-    SCH_MATERIALIZED_VIEW_REFRESH_JOBS = 77
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 enum THdfsCompression {

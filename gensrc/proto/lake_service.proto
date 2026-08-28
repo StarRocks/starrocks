@@ -358,8 +358,6 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
-<<<<<<< HEAD
-=======
 // Extension point for TabletDataSnapshotPB. DO NOT MODIFY: do not add fields
 // here, and do not rename, renumber or remove it. The field numbers inside are
 // allocated separately, so anything added here collides with them, and
@@ -370,21 +368,19 @@ message TabletDataSnapshotExtPB {
 }
 
 // Placeholder for external cluster snapshot feature.
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 message TabletDataSnapshotPB {
     optional int64 tablet_id = 1;
     repeated string new_data_files = 2;
     repeated string new_metadata_files = 3;
     repeated string new_schema_files = 4;
-<<<<<<< HEAD
     // Segment index sidecars (vector .vi / inverted-IDG .idx). Separate from new_data_files because
     // they are copied tolerantly (skip_if_not_exists): an async-built .vi can be referenced by tablet
     // metadata before its file exists (deferred build; or a reshard-merge that inherits an inflated
     // build watermark), so a not-yet-built .vi is skipped rather than failing the whole snapshot.
     repeated string new_index_data_files = 5;
-=======
-    optional TabletDataSnapshotExtPB ext = 5;
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+    // Tag 5 is occupied by new_index_data_files above; upstream reserves it
+    // and likewise declares ext on tag 6.
+    optional TabletDataSnapshotExtPB ext = 6;
 }
 
 message UploadSnapshotFilesRequestPB {

@@ -2650,11 +2650,10 @@ struct TCloudTabletMeta {
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
     10: optional i32 compression_level;
-<<<<<<< HEAD
     11: optional bool enable_change_data_capture;
-=======
-    11: optional TCloudTabletMetaExt ext;
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+    // Id 11 is occupied by enable_change_data_capture above; upstream reserves
+    // it and likewise declares ext on id 12.
+    12: optional TCloudTabletMetaExt ext;
 }
 
 struct TGetTabletMetadataResponse {

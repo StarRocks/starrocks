@@ -154,7 +154,9 @@ struct TCreateTabletReq {
     // New fields should be added above this comment.
     // NOTE: If you add a new field here that ends up in tablet metadata,
     // also update TCloudTabletMeta in FrontendService.thrift to keep the two paths in sync.
-    28: optional TCreateTabletReqExt ext
+    // Id 28 is occupied by enable_change_data_capture above; upstream reserves
+    // it and likewise declares ext on id 29.
+    29: optional TCreateTabletReqExt ext
 }
 
 struct TDropTabletReq {
@@ -541,25 +543,6 @@ struct TRestoreTabletResult {
 //   - append new members with the next free value; never renumber or reuse one;
 //   - values >= 300 are reserved for extension fields and must not be used here.
 enum TTabletMetaType {
-<<<<<<< HEAD
-    PARTITIONID,
-    INMEMORY,
-    ENABLE_PERSISTENT_INDEX,
-    WRITE_QUORUM,
-    REPLICATED_STORAGE,
-    DISABLE_BINLOG,
-    BINLOG_CONFIG,
-    BUCKET_SIZE,
-    PRIMARY_INDEX_CACHE_EXPIRE_SEC,
-    STORAGE_TYPE,
-    MUTABLE_BUCKET_NUM,
-    ENABLE_LOAD_PROFILE,
-    BASE_COMPACTION_FORBIDDEN_TIME_RANGES,
-    FLAT_JSON_CONFIG,
-    ENABLE_FILE_BUNDLING,
-    COMPACTION_STRATEGY,
-    CHANGE_DATA_CAPTURE
-=======
     PARTITIONID = 0,
     INMEMORY = 1,
     ENABLE_PERSISTENT_INDEX = 2,
@@ -575,7 +558,11 @@ enum TTabletMetaType {
     BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 12,
     FLAT_JSON_CONFIG = 13,
     ENABLE_FILE_BUNDLING = 14,
-    COMPACTION_STRATEGY = 15
+    COMPACTION_STRATEGY = 15,
+
+    // Downstream-only members live at >= 300 (the range the rule above
+    // reserves for extensions).
+    CHANGE_DATA_CAPTURE = 300
 }
 
 // Extension point for TTabletMetaInfo. DO NOT MODIFY: do not add fields here,
@@ -584,7 +571,6 @@ enum TTabletMetaType {
 // renaming or removing it breaks whatever fills it in. New TTabletMetaInfo
 // fields belong on TTabletMetaInfo itself, whose remaining numbers are free.
 struct TTabletMetaInfoExt {
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct TTabletMetaInfo {
@@ -604,11 +590,10 @@ struct TTabletMetaInfo {
     13: optional bool bundle_tablet_metadata;
     14: optional TCompactionStrategy compaction_strategy;
     15: optional Types.TTabletRange tablet_range;
-<<<<<<< HEAD
     16: optional bool enable_change_data_capture;
-=======
-    16: optional TTabletMetaInfoExt ext;
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+    // Id 16 is occupied by enable_change_data_capture above; upstream reserves
+    // it and likewise declares ext on id 17.
+    17: optional TTabletMetaInfoExt ext;
 }
 
 struct TUpdateTabletMetaInfoReq {

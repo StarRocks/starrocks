@@ -51,28 +51,6 @@ include "PlanNodes.thrift"
 //   - append new members with the next free value; never renumber or reuse one;
 //   - values >= 300 are reserved for extension fields and must not be used here.
 enum TDataSinkType {
-<<<<<<< HEAD
-    DATA_STREAM_SINK,
-    RESULT_SINK,
-    DATA_SPLIT_SINK,
-    MYSQL_TABLE_SINK,
-    EXPORT_SINK,
-    OLAP_TABLE_SINK,
-    MEMORY_SCRATCH_SINK,
-    MULTI_CAST_DATA_STREAM_SINK,
-    SCHEMA_TABLE_SINK,
-    ICEBERG_TABLE_SINK,
-    HIVE_TABLE_SINK,
-    TABLE_FUNCTION_TABLE_SINK,
-    BLACKHOLE_TABLE_SINK,
-    DICTIONARY_CACHE_SINK,
-    MULTI_OLAP_TABLE_SINK,
-    SPLIT_DATA_STREAM_SINK,
-    NOOP_SINK,
-    ICEBERG_DELETE_SINK,
-    ICEBERG_ROW_DELTA_SINK,
-    REMOTE_SCAN_RESULT_SINK
-=======
     DATA_STREAM_SINK = 0,
     RESULT_SINK = 1,
     DATA_SPLIT_SINK = 2,
@@ -91,8 +69,11 @@ enum TDataSinkType {
     SPLIT_DATA_STREAM_SINK = 15,
     NOOP_SINK = 16,
     ICEBERG_DELETE_SINK = 17,
-    ICEBERG_ROW_DELTA_SINK = 18
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+    ICEBERG_ROW_DELTA_SINK = 18,
+
+    // Downstream-only members live at >= 300 (the range the rule above
+    // reserves for extensions).
+    REMOTE_SCAN_RESULT_SINK = 300
 }
 
 enum TResultSinkType {
@@ -330,7 +311,7 @@ struct TIcebergTableSink {
     //   IcebergDeleteSink   (delete only) → delete_compression_type
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
-<<<<<<< HEAD
+    12: optional TIcebergTableSinkExt ext
 
     // Enterprise-only fields start at 50, reserve some fields for upstream StarRocks so a sync
     // never collides on ordinals.
@@ -338,9 +319,6 @@ struct TIcebergTableSink {
     50: optional i32 format_version
     // Per-data-file previous deletes (old DV / position deletes) to merge into the new DV.
     51: optional list<Types.TIcebergPreviousDeleteFile> previous_delete_files
-=======
-    12: optional TIcebergTableSinkExt ext
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
 }
 
 struct THiveTableSink {
@@ -391,9 +369,6 @@ struct TDataSink {
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
-<<<<<<< HEAD
-  30: optional TRemoteScanResultSink remote_scan_result_sink
-=======
   18: optional TDataSinkExt ext
->>>>>>> 19d7350071d... [Refactor] Pin shared enum values and add extension points to shared containers (#78108)
+  30: optional TRemoteScanResultSink remote_scan_result_sink
 }
