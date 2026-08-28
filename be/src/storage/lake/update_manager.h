@@ -243,8 +243,6 @@ public:
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
-    Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
-
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
     int64_t get_index_memory_size(int64_t tablet_id) const;
