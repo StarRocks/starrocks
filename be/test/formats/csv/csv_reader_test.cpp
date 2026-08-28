@@ -105,6 +105,349 @@ protected:
     starrocks::CSVParseOptions _parse_options;
 };
 
+<<<<<<< HEAD
+=======
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_single_delimiter) {
+    MockCSVReader reader(_parse_options);
+
+    // Test basic splitting
+    starrocks::CSVReader::Record record1{"a,b,c", 5};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("a", fields1[0].to_string());
+    EXPECT_EQ("b", fields1[1].to_string());
+    EXPECT_EQ("c", fields1[2].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_empty_fields) {
+    MockCSVReader reader(_parse_options);
+
+    // Test empty fields
+    starrocks::CSVReader::Record record1{",,", 2};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("", fields1[0].to_string());
+    EXPECT_EQ("", fields1[1].to_string());
+    EXPECT_EQ("", fields1[2].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_ends_with_delimiter) {
+    MockCSVReader reader(_parse_options);
+
+    // Test string ending with delimiter
+    starrocks::CSVReader::Record record1{"a,b,", 4};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("a", fields1[0].to_string());
+    EXPECT_EQ("b", fields1[1].to_string());
+    EXPECT_EQ("", fields1[2].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_starts_with_delimiter) {
+    MockCSVReader reader(_parse_options);
+
+    // Test string starting with delimiter
+    starrocks::CSVReader::Record record1{",a,b", 4};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("", fields1[0].to_string());
+    EXPECT_EQ("a", fields1[1].to_string());
+    EXPECT_EQ("b", fields1[2].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_single_field) {
+    MockCSVReader reader(_parse_options);
+
+    // Test single field (no delimiters)
+    starrocks::CSVReader::Record record1{"single_field", 12};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(1, fields1.size());
+    EXPECT_EQ("single_field", fields1[0].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_empty_string) {
+    MockCSVReader reader(_parse_options);
+
+    // Test empty string
+    starrocks::CSVReader::Record record1{"", 0};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(1, fields1.size());
+    EXPECT_EQ("", fields1[0].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_multi_character_delimiter) {
+    starrocks::CSVParseOptions options;
+    options.column_delimiter = "||";
+    options.row_delimiter = "\n";
+    options.trim_space = false;
+
+    MockCSVReader reader(options);
+
+    // Test multi-character delimiter
+    starrocks::CSVReader::Record record1{"a||b||c", 7};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("a", fields1[0].to_string());
+    EXPECT_EQ("b", fields1[1].to_string());
+    EXPECT_EQ("c", fields1[2].to_string());
+}
+
+// The multi-character delimiter path splits records in its own loop, so trim_space has to be
+// covered there as well and not only for a single-character delimiter.
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_multi_char_delimiter_with_trim_space) {
+    starrocks::CSVParseOptions options;
+    options.column_delimiter = "||";
+    options.row_delimiter = "\n";
+    options.trim_space = true;
+
+    MockCSVReader reader(options);
+
+    starrocks::CSVReader::Record record1{" a || b || c ", 13};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("a", fields1[0].to_string());
+    EXPECT_EQ("b", fields1[1].to_string());
+    EXPECT_EQ("c", fields1[2].to_string());
+
+    // Empty leading and trailing fields, which reach trim with a zero length. This is the
+    // multi-character counterpart of test_split_record_trim_space_empty_field.
+    starrocks::CSVReader::Record record2{"||x||", 5};
+    starrocks::CSVReader::Fields fields2;
+    reader.split_record(record2, &fields2);
+
+    EXPECT_EQ(3, fields2.size());
+    EXPECT_EQ("", fields2[0].to_string());
+    EXPECT_EQ("x", fields2[1].to_string());
+    EXPECT_EQ("", fields2[2].to_string());
+
+    // Fields that hold nothing but spaces must be trimmed down to empty ones.
+    starrocks::CSVReader::Record record3{" || x || ", 9};
+    starrocks::CSVReader::Fields fields3;
+    reader.split_record(record3, &fields3);
+
+    EXPECT_EQ(3, fields3.size());
+    EXPECT_EQ("", fields3[0].to_string());
+    EXPECT_EQ("x", fields3[1].to_string());
+    EXPECT_EQ("", fields3[2].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_with_trim_space) {
+    starrocks::CSVParseOptions options;
+    options.column_delimiter = ",";
+    options.row_delimiter = "\n";
+    options.trim_space = true;
+
+    MockCSVReader reader(options);
+
+    // Test with trim_space enabled
+    starrocks::CSVReader::Record record1{" a , b , c ", 11};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("a", fields1[0].to_string());
+    EXPECT_EQ("b", fields1[1].to_string());
+    EXPECT_EQ("c", fields1[2].to_string());
+}
+
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_large_data) {
+    MockCSVReader reader(_parse_options);
+
+    // Test with larger data to verify performance optimization
+    std::string large_data;
+    for (int i = 0; i < 1000; ++i) {
+        if (i > 0) large_data += ",";
+        large_data += "field" + std::to_string(i);
+    }
+
+    starrocks::CSVReader::Record record1{large_data.c_str(), large_data.size()};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(1000, fields1.size());
+    EXPECT_EQ("field0", fields1[0].to_string());
+    EXPECT_EQ("field999", fields1[999].to_string());
+}
+
+// Regression test for issue #51725: when the input uses Windows-style CRLF
+// line endings and the last column of each row is enclosed, the closing
+// enclose byte and the preceding '\r' must both be stripped from the
+// emitted value. The previous code dropped only the closing enclose, so
+// the emitted value ended with "'\r".
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_last_field) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'{\"x\":1}'\r\nb,'{\"y\":2}'\r\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(2u, rows.size());
+    ASSERT_EQ(2u, rows[0].size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("{\"x\":1}", rows[0][1]);
+    ASSERT_EQ(2u, rows[1].size());
+    EXPECT_EQ("b", rows[1][0]);
+    EXPECT_EQ("{\"y\":2}", rows[1][1]);
+}
+
+// The CRLF fix targets the row-terminator transition out of ENCLOSE. An
+// enclosed non-final column is followed directly by a column delimiter
+// (not '\r'), so its behavior must remain unchanged.
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_non_final_field) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "'v1','v2','v3'\r\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(1u, rows.size());
+    ASSERT_EQ(3u, rows[0].size());
+    EXPECT_EQ("v1", rows[0][0]);
+    EXPECT_EQ("v2", rows[0][1]);
+    EXPECT_EQ("v3", rows[0][2]);
+}
+
+// Regression guard: LF line endings with enclose must still parse
+// correctly (the pre-existing, working case).
+TEST_F(CSVReaderTest, test_more_rows_enclose_lf_last_field) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'{\"x\":1}'\nb,'{\"y\":2}'\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(2u, rows.size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("{\"x\":1}", rows[0][1]);
+    EXPECT_EQ("b", rows[1][0]);
+    EXPECT_EQ("{\"y\":2}", rows[1][1]);
+}
+
+// Regression guard: without an enclose char the state-machine parser is
+// not used, but the legacy next_record path is. This test documents the
+// current behavior (trailing '\r' stays in the last column) so future
+// changes to that code path trip this assertion deliberately.
+TEST_F(CSVReaderTest, test_more_rows_no_enclose_crlf_preserved) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, 0);
+    std::string data = "a,b\r\nc,d\r\n";
+    StringCSVReader reader(options, data);
+
+    starrocks::CSVReader::Record record;
+    ASSERT_TRUE(reader.next_record(&record).ok());
+    starrocks::CSVReader::Fields fields;
+    reader.split_record(record, &fields);
+    ASSERT_EQ(2u, fields.size());
+    EXPECT_EQ("a", fields[0].to_string());
+    // The legacy fast path leaves '\r' attached to the last column; this
+    // is a separate, pre-existing behavior that the enclose CRLF fix does
+    // not touch.
+    EXPECT_EQ("b\r", fields[1].to_string());
+}
+
+// Regression guard: the double-enclose escape form ('') inside a quoted
+// value must still work after the CRLF fix.
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_with_escaped_enclose) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'it''s fine'\r\n";
+    StringCSVReader reader(options, data);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(1u, rows.size());
+    ASSERT_EQ(2u, rows[0].size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("it's fine", rows[0][1]);
+}
+
+// Exercises the readMore() path inside the CRLF fix: feeding data one
+// byte at a time forces the buffer to hold only '\r' when the closing
+// enclose is consumed, so _buff.available() < 2 triggers readMore to
+// pull in the '\n'. Covers the buffer-boundary scenario flagged in
+// code review.
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_buffer_boundary) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'{\"x\":1}'\r\nb,'{\"y\":2}'\r\n";
+    StringCSVReader reader(options, data, 1);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(2u, rows.size());
+    ASSERT_EQ(2u, rows[0].size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("{\"x\":1}", rows[0][1]);
+    ASSERT_EQ(2u, rows[1].size());
+    EXPECT_EQ("b", rows[1][0]);
+    EXPECT_EQ("{\"y\":2}", rows[1][1]);
+}
+
+// Regression test for the empty-field trim crash: an EMPTY field parsed with
+// trim_space enabled must not crash. split_record() calls trim(value, 0) for
+// an empty field, and the previous trim() computed `end = len - 1`, which
+// underflows to SIZE_MAX when len == 0 -- value[SIZE_MAX] is then read out of
+// bounds and the BE crashes. Under ASAN the unfixed code aborts here; the
+// fixed trim() returns an empty slice.
+TEST_F(CSVReaderTest, test_split_record_trim_space_empty_field) {
+    starrocks::CSVParseOptions options;
+    options.column_delimiter = ",";
+    options.row_delimiter = "\n";
+    options.trim_space = true;
+
+    MockCSVReader reader(options);
+
+    // Leading empty field, a value, and a trailing empty field.
+    starrocks::CSVReader::Record record1{",x,", 3};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("", fields1[0].to_string());
+    EXPECT_EQ("x", fields1[1].to_string());
+    EXPECT_EQ("", fields1[2].to_string());
+
+    // All-empty record: every field goes through trim(_, 0).
+    starrocks::CSVReader::Record record2{",,", 2};
+    starrocks::CSVReader::Fields fields2;
+    reader.split_record(record2, &fields2);
+    EXPECT_EQ(3, fields2.size());
+    EXPECT_EQ("", fields2[0].to_string());
+    EXPECT_EQ("", fields2[1].to_string());
+    EXPECT_EQ("", fields2[2].to_string());
+
+    // All-spaces field must trim to empty (exercises the end == begin path).
+    starrocks::CSVReader::Record record3{"   ", 3};
+    starrocks::CSVReader::Fields fields3;
+    reader.split_record(record3, &fields3);
+    EXPECT_EQ(1, fields3.size());
+    EXPECT_EQ("", fields3[0].to_string());
+}
+
+>>>>>>> 7521d92 ([Refactor] Deduplicate the space-trim helper into base/string (#78342))
 // Regression test for the multi-char column-delimiter buffer-expansion use-after-free:
 // is_column_delimiter() caches base_ptr = _buff.base_ptr(), then mid-match calls readMore(),
 // which can expand the buffer via _storage.resize() (reallocation frees the old storage). The

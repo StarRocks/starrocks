@@ -16,10 +16,13 @@
 
 #include <unordered_set>
 
+#include "base/string/trim.h"
+
 namespace starrocks {
 
 using Field = Slice;
 
+<<<<<<< HEAD
 static std::pair<const char*, size_t> trim(const char* value, size_t len) {
     size_t begin = 0;
 
@@ -36,6 +39,8 @@ static std::pair<const char*, size_t> trim(const char* value, size_t len) {
     return std::make_pair(value + begin, end - begin + 1);
 }
 
+=======
+>>>>>>> 7521d92 ([Refactor] Deduplicate the space-trim helper into base/string (#78342))
 inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
     if (LIKELY(_column_delimiter_length == 1)) {
         if (*(_buff.position()) == _parse_options.column_delimiter[0]) {
@@ -564,12 +569,31 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         for (size_t i = 0; i < size; ++i, ++ptr) {
             if (*ptr == _parse_options.column_delimiter[0]) {
                 if (_parse_options.trim_space) {
+<<<<<<< HEAD
                     std::pair<const char*, size_t> newPos = trim(value, ptr - value);
                     columns->emplace_back(newPos.first, newPos.second);
+=======
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(end - value)});
+                    columns->emplace_back(field.data(), field.size());
+>>>>>>> 7521d92 ([Refactor] Deduplicate the space-trim helper into base/string (#78342))
                 } else {
                     columns->emplace_back(value, ptr - value);
                 }
+<<<<<<< HEAD
                 value = ptr + 1;
+=======
+                break;
+            } else {
+                // Found delimiter, add the field
+                if (_parse_options.trim_space) {
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(next_delimiter - value)});
+                    columns->emplace_back(field.data(), field.size());
+                } else {
+                    columns->emplace_back(value, next_delimiter - value);
+                }
+                value = next_delimiter + 1;
+                ptr = next_delimiter + 1;
+>>>>>>> 7521d92 ([Refactor] Deduplicate the space-trim helper into base/string (#78342))
             }
         }
     } else {
@@ -580,8 +604,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
                                             _column_delimiter_length));
             if (ptr != nullptr) {
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
                     columns->emplace_back(value, ptr - value);
                 }
@@ -590,12 +614,23 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         } while (ptr != nullptr);
 
         ptr = record.data + size;
+<<<<<<< HEAD
     }
     if (_parse_options.trim_space) {
         std::pair<const char*, size_t> newPos = trim(value, ptr - value);
         columns->emplace_back(newPos.first, newPos.second);
     } else {
         columns->emplace_back(value, ptr - value);
+=======
+
+        // Add the last field for multi-character delimiter case
+        if (_parse_options.trim_space) {
+            std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+            columns->emplace_back(field.data(), field.size());
+        } else {
+            columns->emplace_back(value, ptr - value);
+        }
+>>>>>>> 7521d92 ([Refactor] Deduplicate the space-trim helper into base/string (#78342))
     }
 }
 
