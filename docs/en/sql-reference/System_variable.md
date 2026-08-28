@@ -368,6 +368,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
 
+### cbo_push_down_count_aggregate
+
+* **Description**: Controls whether `count(*)`/`count(col)` aggregates participate in `PushDownAggregateRule`'s push-down-below-join optimization, alongside the already-pushable `sum`/`max`/`min`/`hll_union`/`bitmap_union`/`percentile_union` functions. When enabled (default), the optimizer may push a `count` down to a narrower, join-key-only group-by on one side of an `INNER`/`CROSS` join (only the left/child-0 side, since count over a join is a cross product and cannot be recovered by summing partials from both sides) before rebuilding the top-level aggregate via the existing `COUNT -> SUM` rollup; whether the push-down is actually applied to a given query still depends on the `cbo_push_down_aggregate_mode` cost heuristic, exactly as for the other pushable functions. `count(col)` is never pushed when `col` comes from a `CASE WHEN`/`IF()` branch, because a never-firing branch must roll up to `0` for `count` (not `NULL`, as for `sum`). Disable this to fall back to the prior behavior of leaving `count` above the join.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: Boolean
+
 ### cbo_use_correlated_predicate_estimate
 
 * **Description**: Session flag that controls whether the optimizer applies a correlation-aware heuristic when estimating selectivity for conjunctive equality predicates across multiple columns. When enabled (default), the estimator applies exponential-decay weights to the selectivities of additional columns beyond the primary multi-column stats or most selective predicate, reducing the multiplicative impact of further predicates (weights: 0.5, 0.25, 0.125 for up to three additional columns). When disabled, no decay is applied (decay factor = 1) and the estimator multiplies full selectivities for those columns (stronger independence assumption). This flag is checked by StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity to choose the decay factor in both the multi-column-statistics path and the fallback path, thereby affecting cardinality estimates used by the CBO.

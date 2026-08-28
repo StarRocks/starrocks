@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,116 @@ public class AggregatePushDownTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
         connectContext.getSessionVariable().setEnableEliminateAgg(false);
+    }
+
+    @Test
+    public void testCountNotPushedIntoConstantKeyUnionBranch() throws Exception {
+        // A group-by key can be erased without ever crossing a join: a UNION branch projecting a constant
+        // (`select 1 as k ... group by k`) leaves the pushed context with a column-less group-by, so the
+        // partial aggregate lands ungrouped in every branch and each emits a phantom row. With all inputs
+        // empty the query would then return one `(1, 0)` group instead of no rows at all.
+        String constKeyUnion = getFragmentPlan(
+                "select k, count(*) from (select 1 as k from t0 union all select 1 from t1) u group by k");
+        Assertions.assertEquals(1, StringUtils.countMatches(constKeyUnion, ":AGGREGATE "), constKeyUnion);
+        assertNotContains(constKeyUnion, "group by: \n");
+
+        // Sanity: a UNION whose key is a real column still pushes a count into both branches.
+        String colKeyUnion = getFragmentPlan(
+                "select k, count(*) from (select v1 as k from t0 union all select v4 from t1) u group by k");
+        Assertions.assertEquals(3, StringUtils.countMatches(colKeyUnion, ":AGGREGATE "), colKeyUnion);
+    }
+
+    @Test
+    public void testCountNotPushedBelowKeylessJoin() throws Exception {
+        // A count() pushed down with an empty group-by set degenerates into a scalar aggregate
+        // that always emits exactly one row, even when its side has zero input rows. Re-joining
+        // that phantom row through a keyless join (CROSS JOIN, or an INNER JOIN whose condition
+        // contributes no columns) would corrupt the join's cardinality instead of correctly
+        // producing no rows/groups, so both the collector and the rewriter must refuse to push count()
+        // in that shape (PushDownAggregateUtils#isUngroupedCountPush).
+        String crossJoinPlan = getFragmentPlan("select t1.v4, count(*) from t0, t1 group by t1.v4");
+        Assertions.assertEquals(1, StringUtils.countMatches(crossJoinPlan, ":AGGREGATE "));
+        assertNotContains(crossJoinPlan, "group by: \n");
+
+        String constCondPlan =
+                getFragmentPlan("select t1.v4, count(*) from t0 inner join t1 on 1 = 1 group by t1.v4");
+        Assertions.assertEquals(1, StringUtils.countMatches(constCondPlan, ":AGGREGATE "));
+        assertNotContains(constCondPlan, "group by: \n");
+
+        // Grouping on a constant is ungrouped too, even though the group-by map is not empty: the entry
+        // carries an expression that uses no column, so the pushed count would again be a scalar
+        // aggregate emitting a phantom row for an empty child.
+        String constGroupByPlan = getFragmentPlan("select 1 + 1, count(*) from t0, t1 group by 1 + 1");
+        Assertions.assertEquals(1, StringUtils.countMatches(constGroupByPlan, ":AGGREGATE "), constGroupByPlan);
+        assertNotContains(constGroupByPlan, "group by: \n");
+
+        // Same constant group-by over a real equi-join still pushes: the on-predicate column supplies the
+        // grouping key the constant does not.
+        String constGroupByEquiPlan =
+                getFragmentPlan("select 1 + 1, count(*) from t0 join t1 on t0.v1 = t1.v4 group by 1 + 1");
+        Assertions.assertEquals(2, StringUtils.countMatches(constGroupByEquiPlan, ":AGGREGATE "), constGroupByEquiPlan);
+
+        // A group-by expression spanning both sides of a keyless join is NOT ungrouped: the rewriter
+        // flattens `t0.v1 + t1.v4` into its component columns before reaching the join, so child 0 keeps
+        // `v1` as its grouping key and the pushed count stays correct (an empty t0 produces no rows).
+        String derivedGroupByPlan =
+                getFragmentPlan("select t0.v1 + t1.v4, count(*) from t0, t1 group by t0.v1 + t1.v4");
+        Assertions.assertEquals(2, StringUtils.countMatches(derivedGroupByPlan, ":AGGREGATE "), derivedGroupByPlan);
+        assertContains(derivedGroupByPlan, "output: count(*)\n  |  group by: 1: v1");
+
+        // Sanity: a real equi-join still gets count() pushed below it (the two-stage aggregate
+        // this whole feature exists for), since the join column populates a non-empty group-by
+        // set on the pushed side.
+        String realJoinPlan =
+                getFragmentPlan("select t0.v1, count(*) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(realJoinPlan, ":AGGREGATE "));
+    }
+
+    @Test
+    public void testCountPushedBelowSemiAntiJoin() throws Exception {
+        // A semi/anti join only filters its preserved side: it neither duplicates those rows nor pads them
+        // with NULLs, and it decides row by row on the on-predicate columns, which the pushed group-by set
+        // always contains. sum(partial_count) over the surviving groups is therefore the true count.
+        //
+        // Rejecting these would not merely forgo a count push down. A count that cannot land on a side
+        // aborts the whole push down for that side, so it would also cancel the sum/min/max push downs that
+        // already worked below semi joins -- which is what regressed TPC-DS Q14 (its `ss_item_sk IN (...)`
+        // becomes a LEFT SEMI JOIN).
+        String semiPlan = getFragmentPlan(
+                "select t0.v1, count(*) from t0 where t0.v1 in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(semiPlan, ":AGGREGATE "), semiPlan);
+
+        String antiPlan = getFragmentPlan(
+                "select t0.v1, count(*) from t0 where t0.v1 not in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(antiPlan, ":AGGREGATE "), antiPlan);
+
+        String mixedPlan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2), count(*) from t0 where t0.v1 in (select t1.v4 from t1) group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(mixedPlan, ":AGGREGATE "), mixedPlan);
+    }
+
+    @Test
+    public void testCountNotLeftAboveJoinWhenOtherAggPushed() throws Exception {
+        // Pushing ANY aggregation to a join child collapses that child to one row per group key.
+        // count(*) is the only whitelisted function sensitive to that collapse, so if count() is
+        // stripped from a side (because it may only land on one side of the join) the remaining
+        // aggregations must not be pushed either -- otherwise the count() left above the join
+        // counts the collapsed rows instead of the real join rows.
+        //
+        // t0 = {(1,10),(1,20)}, t1 = {(1),(1),(1)} joins to 6 rows: sum = 90, count = 6.
+        // Collapsing t0 to a single (v1=1, sum=30) row would yield count = 3.
+        String plan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2), count(*) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE "), plan);
+
+        String leftJoinPlan = getFragmentPlan(
+                "select t0.v1, sum(t1.v5), count(*) from t0 left join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(1, StringUtils.countMatches(leftJoinPlan, ":AGGREGATE "), leftJoinPlan);
+
+        // Sanity: sum() alone is insensitive to the collapse, so it is still pushed below the join.
+        String sumOnlyPlan = getFragmentPlan(
+                "select t0.v1, sum(t0.v2) from t0 join t1 on t0.v1 = t1.v4 group by t0.v1");
+        Assertions.assertEquals(2, StringUtils.countMatches(sumOnlyPlan, ":AGGREGATE "), sumOnlyPlan);
     }
 
     @Test
