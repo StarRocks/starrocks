@@ -589,16 +589,24 @@ public class RangeDistributionGuardTest {
                 "AGGREGATE KEY(k1)\n" +
                 "order by(k1)\n" +
                 "properties('replication_num' = '1');");
-        // No KEY keyword and no aggregate -> AGG promotion turns this into a key.
-        com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
-                UtFrameUtils.parseStmtWithNewParser(
-                        "alter table t_guard_addagg add column c_promoted int default '0'", connectContext);
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getTable("test", "t_guard_addagg");
-        AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
-                .analyzeAndCreateJob(stmt.getAlterClauseList(),
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
-        assertMetadataOnlyJob(job);
+        // No KEY keyword and no aggregate -> AGG promotion turns this into a key. That promotion is
+        // rejected by default now, so exercise the routing predicate under the legacy config, which is
+        // the mode where the promotion still happens.
+        boolean savedAllowImplicitKey = Config.allow_implicit_key_column_in_agg_add_column;
+        Config.allow_implicit_key_column_in_agg_add_column = true;
+        try {
+            com.starrocks.sql.ast.AlterTableStmt stmt = (com.starrocks.sql.ast.AlterTableStmt)
+                    UtFrameUtils.parseStmtWithNewParser(
+                            "alter table t_guard_addagg add column c_promoted int default '0'", connectContext);
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", "t_guard_addagg");
+            AlterJobV2 job = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                    .analyzeAndCreateJob(stmt.getAlterClauseList(),
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test"), table);
+            assertMetadataOnlyJob(job);
+        } finally {
+            Config.allow_implicit_key_column_in_agg_add_column = savedAllowImplicitKey;
+        }
     }
 
     /**

@@ -117,6 +117,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 存储
 
+### `allow_implicit_key_column_in_agg_add_column`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在聚合表上执行 `ALTER TABLE ... ADD COLUMN` 时，如果新列既未指定聚合函数，也未指定 `KEY` 关键字，是否允许将该列创建为 Key 列。此类语句存在歧义，并且创建 Key 列会改变表的聚合键并重写已有数据。设置为 `false` 时，该语句会被拒绝，报错信息会同时说明两种写法。设置为 `true` 可恢复此前静默创建 Key 列的行为。该参数可动态修改，但除非使用 `WITH PERSISTENT` 设置，否则重启后不会保留。
+- 引入版本: v4.2.0
+
 ### `alter_table_timeout_second`
 
 - 默认值: 86400
