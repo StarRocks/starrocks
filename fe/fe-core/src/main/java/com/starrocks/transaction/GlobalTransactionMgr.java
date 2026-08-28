@@ -321,7 +321,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
      * @throws StarRocksException
      * @throws TransactionCommitFailedException
      * @note it is necessary to optimize the `lock` mechanism and `lock` scope resulting from wait lock long time
-     * @note callers should get db.write lock before call this api
+     * @note Unlike commitAndPublishTransaction and commitPreparedTransaction, this variant takes NO lock of its
+     * own: the caller must hold a WRITE lock on every table the txn writes (in practice
+     * lockTable[s]WithIntensiveDbLock, as CompactionScheduler / BrokerLoadJob / SparkLoadJob / ReplicationJob
+     * do) across this whole call. That lock is not only for metadata safety -- it is what keeps partition
+     * version allocation and TransactionGraph.add() in the same order per table. Committing without it builds
+     * the publish dependency graph in the wrong order, which fails silently here and surfaces later as stuck
+     * or thrashing version publishing. See TransactionGraph.add() for the full contract.
      */
     @NotNull
     public VisibleStateWaiter commitTransaction(long dbId, long transactionId,
