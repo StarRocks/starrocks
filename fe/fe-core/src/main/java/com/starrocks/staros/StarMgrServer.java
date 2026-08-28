@@ -24,6 +24,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.journal.JournalType;
 import com.starrocks.journal.StarMgrCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.lake.StarOSAgent;
@@ -227,7 +228,7 @@ public class StarMgrServer {
     public void startCheckpointController() {
         // start checkpoint thread after everything is ready
         checkpointController = new CheckpointController(
-                "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR);
+                "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR, JournalType.STAR_MGR);
         checkpointController.start();
     }
 

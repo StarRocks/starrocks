@@ -50,6 +50,11 @@ public interface Journal {
     // Get all the dbs' name
     List<Long> getDatabaseNames();
 
+    // Oldest journal id cached by the latest metadata lookup, or -1 if unavailable.
+    default long getMinJournalId() {
+        return -1L;
+    }
+
     // only support batch write
     // start batch write
     void batchWriteBegin() throws InterruptedException, JournalException;

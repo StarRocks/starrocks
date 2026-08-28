@@ -16,7 +16,6 @@
 package com.starrocks.journal;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
@@ -52,8 +51,7 @@ public class JournalWriter {
     // other threads can put log to this queue by calling Editlog.logEdit()
     private final BlockingQueue<JournalTask> journalQueue;
     private final Journal journal;
-    // whether this writer serves the FE metadata journal (as opposed to StarMgr's)
-    private final boolean globalStateJournal;
+    private final JournalType journalType;
 
     // used for checking if edit log need to roll
     protected long rollJournalCounter = 0;
@@ -97,21 +95,18 @@ public class JournalWriter {
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
-        // StarMgr builds its own JournalWriter over the same class with a "starmgr_" prefix, and its
-        // journal is reclaimed by a separate CheckpointController. Only the unprefixed FE metadata
-        // journal feeds the retained-journal counters, so that what accumulates here matches what that
-        // controller resets.
         // Tolerates a null journal: test doubles subclass this writer via super(null, queue).
-        this.globalStateJournal = journal != null && Strings.isNullOrEmpty(journal.getPrefix());
+        this.journalType = journal == null ? null : JournalType.fromPrefix(journal.getPrefix());
     }
 
     /**
      * reset journal id & roll journal as a start
      */
     public void init(long maxJournalId) throws JournalException {
-        if (journal != null) {
-            MetricRepo.resetEditLogRetained(globalStateJournal);
+        if (journal == null || journalType == null) {
+            throw new IllegalStateException("journal is required to initialize JournalWriter");
         }
+        MetricRepo.initializeEditLogRetained(journalType, journal.getMinJournalId(), maxJournalId);
         this.nextVisibleJournalId = maxJournalId + 1;
         this.lastCommittedJournalId = maxJournalId;
         this.writerState.set(WriterState.RUNNING);
@@ -396,8 +391,9 @@ public class JournalWriter {
                     currentBatchTasks.size(), durationMs, journalQueue.size());
             lastSlowEditLogTimeNs = currentTimeNs;
         }
-        if (batchCommitted && journal != null) {
-            MetricRepo.recordEditLogBatch(globalStateJournal, currentBatchTasks.size(), currentBatchBytes);
+        if (batchCommitted && journalType != null) {
+            MetricRepo.recordEditLogBatch(
+                    journalType, lastCommittedJournalId, currentBatchTasks.size(), currentBatchBytes);
         }
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) currentBatchTasks.size());

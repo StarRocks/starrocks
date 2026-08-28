@@ -285,14 +285,14 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Type: Instantaneous
 - Labels: `journal` (`fe_meta` or `star_mgr`)
-- Description: Number of successfully committed edit logs observed by the current Leader FE since leader activation or the last full cleanup. A full cleanup means that only the current journal database remains; partial cleanup does not reduce the value, making the metric a conservative estimate. `fe_meta` and `star_mgr` are tracked independently because they have separate checkpoint controllers. An unreachable registered FE prevents cleanup and leaves the affected series climbing. The value resets to zero after a full cleanup, FE restart, or Leader change. Non-Leader FEs report zero.
+- Description: Number of edit logs currently retained in the journal databases. Successful commits advance the cached maximum ID, and cleanup advances the cached oldest ID. Metrics collection does not read BDB JE. `fe_meta` and `star_mgr` are tracked independently because they have separate checkpoint controllers. An unreachable registered FE prevents cleanup and leaves the affected series climbing. Non-Leader FEs report zero.
 
-## `fe_edit_log_retained_bytes`
+## `fe_edit_log_retained_bytes_estimate`
 
 - Unit: Bytes
 - Type: Instantaneous
 - Labels: `journal` (`fe_meta` or `star_mgr`)
-- Description: Logical bytes of successfully committed edit logs observed in the same window as [`fe_edit_log_retained`](#fe_edit_log_retained). It is updated once per committed journal batch and metrics collection does not read BDB JE. Use it to observe backlog growth rather than exact disk usage: it excludes data retained before the current Leader's observation window and BDB JE storage overhead, and partial cleanup can temporarily overestimate the remaining bytes.
+- Description: Estimated logical bytes for [`fe_edit_log_retained`](#fe_edit_log_retained). StarRocks multiplies the retained count by the average serialized entry size observed from successful commits since the current Leader's writer started. The value is `-1` until at least one entry has been observed after startup, then converges as more entries are written. Metrics collection does not read BDB JE. This is not physical disk usage and excludes BDB JE storage overhead.
 
 ## `fe_edit_log_size_bytes`
 
@@ -334,15 +334,15 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `type` (`success` or `failed`) and `node` (target FE node name)
-- Description: Number of attempts by the Leader FE to push a newly generated image file to another FE node, counted once per target node per attempt. Old edit logs are deleted only after every node has the new image, so a `failed` series identifies the target FE preventing `fe_edit_log_retained` from returning to zero.
+- Labels: `type` (`success` or `failed`), `journal` (`fe_meta` or `star_mgr`), and `node` (target FE node name)
+- Description: Number of attempts by the Leader FE to push a newly generated FE metadata or StarMgr image file to another FE node, counted once per target node per attempt. Old edit logs are deleted only after every node has the new image, so the `journal` and `node` labels identify the journal cleanup and target FE involved in a failed delivery.
 
 ## `fe_image_write`
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `type` (`success` or `failed`)
-- Description: Number of image generation attempts, counted once per checkpoint round that actually needs a new image. Rounds where the image is already up to date are not counted.
+- Labels: `type` (`success` or `failed`) and `journal` (`fe_meta` or `star_mgr`)
+- Description: Number of FE metadata or StarMgr image generation attempts, counted once per checkpoint round that actually needs a new image. Rounds where the image is already up to date are not counted.
 
 ## `fe_loading_broker_load_job`
 

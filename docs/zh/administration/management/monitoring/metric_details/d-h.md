@@ -285,14 +285,14 @@ description: "Alphabetical d - h"
 - 单位: 个
 - 类型: 瞬时值
 - 标签: `journal`（`fe_meta` 或 `star_mgr`）
-- 描述: 当前 Leader FE 自当选 Leader 或上次完整清理以来观测到的、已成功提交的编辑日志条数。完整清理指仅剩当前 journal database；partial cleanup 不降低该值，因此该指标是保守估算。FE metadata 与 StarMgr 由各自独立的 checkpoint controller 清理，分别使用 `fe_meta` 和 `star_mgr` 统计。无法访问的已注册 FE 会阻止清理，使对应序列持续增长。完整清理、FE 重启或 Leader 切换后该值归零；非 Leader FE 上报 0。
+- 描述: journal database 当前实际保留的编辑日志条数。成功提交后推进缓存的最大 ID，清理后推进缓存的最旧 ID。采集指标时不会读取 BDB JE。FE metadata 与 StarMgr 由各自独立的 checkpoint controller 清理，分别使用 `fe_meta` 和 `star_mgr` 统计。无法访问的已注册 FE 会阻止清理，使对应序列持续增长；非 Leader FE 上报 0。
 
-## `fe_edit_log_retained_bytes`
+## `fe_edit_log_retained_bytes_estimate`
 
 - 单位: 字节
 - 类型: 瞬时值
 - 标签: `journal`（`fe_meta` 或 `star_mgr`）
-- 描述: 与 [`fe_edit_log_retained`](#fe_edit_log_retained) 相同观测窗口内，已成功提交的编辑日志逻辑字节数。每个成功提交的 journal batch 仅更新一次，采集指标时不会读取 BDB JE。该指标适合观察积压增长趋势，而非精确磁盘占用：不含当前 Leader 观测窗口开始前已保留的数据和 BDB JE 存储开销，partial cleanup 后还可能暂时高估剩余字节数。
+- 描述: [`fe_edit_log_retained`](#fe_edit_log_retained) 对应的逻辑字节估算值。StarRocks 使用 retained count，乘以当前 Leader 的 writer 启动后从成功提交中观测到的平均单条序列化大小。启动后尚未观测到任何新条目时该值为 `-1`；写入样本增加后估算值逐步收敛。采集指标时不会读取 BDB JE。该指标不是物理磁盘占用，不包含 BDB JE 存储开销。
 
 ## `fe_edit_log_size_bytes`
 
@@ -334,15 +334,15 @@ description: "Alphabetical d - h"
 
 - 单位: 次
 - 类型: 累积值
-- 标签: `type`（`success` 或 `failed`）和 `node`（目标 FE 节点名称）
-- 描述: Leader FE 向其他 FE 节点推送新生成 image 文件的次数，每次尝试按目标节点各计一次。只有当所有节点都拿到新 image 之后才会删除旧的元数据日志，因此 `failed` 序列可以直接定位阻止 `fe_edit_log_retained` 归零的目标 FE。
+- 标签: `type`（`success` 或 `failed`）、`journal`（`fe_meta` 或 `star_mgr`）和 `node`（目标 FE 节点名称）
+- 描述: Leader FE 向其他 FE 节点推送新生成的 FE metadata 或 StarMgr image 文件的次数，每次尝试按目标节点各计一次。只有当所有节点都拿到新 image 之后才会删除旧的编辑日志，因此 `journal` 和 `node` 标签可以定位推送失败涉及的 journal 清理链路和目标 FE。
 
 ## `fe_image_write`
 
 - 单位: 次
 - 类型: 累积值
-- 标签: `type` (`success` 或 `failed`)
-- 描述: 生成 image 的尝试次数，每一轮确实需要生成新 image 的 checkpoint 计一次。image 已是最新、无需生成的轮次不计入。
+- 标签: `type`（`success` 或 `failed`）和 `journal`（`fe_meta` 或 `star_mgr`）
+- 描述: 生成 FE metadata 或 StarMgr image 的尝试次数，每一轮确实需要生成新 image 的 checkpoint 计一次。image 已是最新、无需生成的轮次不计入。
 
 ## `fe_loading_broker_load_job`
 

@@ -137,6 +137,7 @@ import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.JournalType;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -1682,7 +1683,8 @@ public class GlobalStateMgr {
         }
 
         // start checkpoint thread
-        checkpointController = new CheckpointController("global_state_checkpoint_controller", journal, "");
+        checkpointController = new CheckpointController(
+                "global_state_checkpoint_controller", journal, "", JournalType.FE_META);
         checkpointController.start();
 
         keyRotationDaemon.start();

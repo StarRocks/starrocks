@@ -45,6 +45,7 @@ import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalType;
 import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageFormatVersion;
@@ -92,7 +93,7 @@ public class CheckpointController extends LeaderDaemon {
     private final Journal journal;
     // subDir comes after base imageDir, to distinguish different module's image dir
     private final String subDir;
-    private final boolean belongToGlobalStateMgr;
+    private final JournalType journalType;
 
     // Package-private so same-package tests can assert on the cleared-on-demotion contract
     // without reflection.
@@ -117,10 +118,23 @@ public class CheckpointController extends LeaderDaemon {
     volatile HttpURLConnection inFlightConnection;
 
     public CheckpointController(String name, Journal journal, String subDir) {
+        this(name, journal, subDir, journal == null
+                ? (Strings.isNullOrEmpty(subDir) ? JournalType.FE_META : JournalType.STAR_MGR)
+                : JournalType.fromPrefix(journal.getPrefix()));
+    }
+
+    public CheckpointController(String name, Journal journal, String subDir, JournalType journalType) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
         this.subDir = subDir;
-        this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
+        if (journalType == null) {
+            throw new IllegalArgumentException("journal type is required");
+        }
+        this.journalType = journalType;
+        if (journal != null && journal.getPrefix() != null &&
+                JournalType.fromPrefix(journal.getPrefix()) != journalType) {
+            throw new IllegalArgumentException("Journal prefix does not match journal type " + journalType);
+        }
         nodesToPushImage = new HashSet<>();
         this.clusterSnapshotInfo = null;
     }
@@ -217,7 +231,7 @@ public class CheckpointController extends LeaderDaemon {
     public long getImageJournalId() {
         long imageJournalId = 0;
         try {
-            Storage storage = new Storage(MetaHelper.getImageFileDir(belongToGlobalStateMgr));
+            Storage storage = new Storage(MetaHelper.getImageFileDir(journalType.isGlobalStateJournal()));
             // get max image version
             imageJournalId = storage.getImageJournalId();
         } catch (IOException e) {
@@ -235,12 +249,8 @@ public class CheckpointController extends LeaderDaemon {
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
             createImageRet = createImage(needClusterSnapshotInfo);
-            if (belongToGlobalStateMgr && MetricRepo.hasInit && !isStopRequested()) {
-                if (createImageRet.first) {
-                    MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
-                } else {
-                    MetricRepo.COUNTER_IMAGE_WRITE_FAILED.increase(1L);
-                }
+            if (!isStopRequested()) {
+                MetricRepo.recordImageWrite(journalType, createImageRet.first);
             }
         }
         if (createImageRet.first) {
@@ -352,7 +362,7 @@ public class CheckpointController extends LeaderDaemon {
             return;
         }
 
-        if (belongToGlobalStateMgr) {
+        if (journalType.isGlobalStateJournal()) {
             downloadImage(ImageFormatVersion.v2, MetaHelper.getImageFileDir(true));
             GlobalStateMgr.getCurrentState().setImageJournalId(journalId);
         } else {
@@ -463,7 +473,7 @@ public class CheckpointController extends LeaderDaemon {
                 TStartCheckpointRequest request = new TStartCheckpointRequest();
                 request.setEpoch(epoch);
                 request.setJournal_id(journalId);
-                request.setIs_global_state_mgr(belongToGlobalStateMgr);
+                request.setIs_global_state_mgr(journalType.isGlobalStateJournal());
                 TStartCheckpointResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(frontend.getHost(), frontend.getRpcPort()),
@@ -489,7 +499,7 @@ public class CheckpointController extends LeaderDaemon {
     }
 
     private CheckpointWorker getCheckpointWorker() {
-        if (belongToGlobalStateMgr) {
+        if (journalType.isGlobalStateJournal()) {
             return GlobalStateMgr.getCurrentState().getCheckpointWorker();
         } else {
             return StarMgrServer.getCurrentState().getCheckpointWorker();
@@ -513,12 +523,8 @@ public class CheckpointController extends LeaderDaemon {
         }
         List<Long> databaseNamesAfter = journal.getDatabaseNames();
         if (journalDatabaseDeleted(databaseNamesBefore, databaseNamesAfter)) {
-            // Keep a conservative value after partial cleanup. Reset only when this journal has
-            // been cleaned down to its current database; FE metadata and StarMgr use independent
-            // observation baselines because their checkpoint controllers run independently.
-            if (journalFullyCleaned(databaseNamesAfter)) {
-                MetricRepo.resetEditLogRetained(belongToGlobalStateMgr);
-            }
+            long oldestJournalId = databaseNamesAfter.isEmpty() ? -1L : databaseNamesAfter.get(0);
+            MetricRepo.updateEditLogRetainedOldestJournalId(journalType, oldestJournalId);
             LOG.info("Delete old edit log succeeded: deleteVersion={}, imageVersion={}, "
                             + "minReplayedJournalId={}, prefix={}, databasesBefore={}, databasesAfter={}",
                     deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(),
@@ -543,10 +549,6 @@ public class CheckpointController extends LeaderDaemon {
         return after.isEmpty() || after.get(0) > before.get(0);
     }
 
-    static boolean journalFullyCleaned(List<Long> databaseNames) {
-        return databaseNames != null && databaseNames.size() <= 1;
-    }
-
     // Package-private so same-package tests can exercise the per-node push failure path.
     void pushImage(long imageVersion) {
         Iterator<String> iterator = nodesToPushImage.iterator();
@@ -565,12 +567,13 @@ public class CheckpointController extends LeaderDaemon {
             }
 
             boolean pushSuccess = true;
-            ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
+            ImageFormatVersion formatVersion =
+                    journalType.isGlobalStateJournal() ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
             String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
                     + "/put?version=" + imageVersion
                     + "&port=" + Config.http_port
                     + "&subdir=" + subDir
-                    + "&for_global_state=" + belongToGlobalStateMgr
+                    + "&for_global_state=" + journalType.isGlobalStateJournal()
                     + "&image_format_version=" + formatVersion.toString();
             try {
                 MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> {
@@ -585,10 +588,10 @@ public class CheckpointController extends LeaderDaemon {
                 });
 
                 LOG.info("push image successfully, url = {}", url);
-                MetricRepo.recordImagePush(frontend.getNodeName(), true);
+                MetricRepo.recordImagePush(journalType, frontend.getNodeName(), true);
             } catch (IOException e) {
                 pushSuccess = false;
-                MetricRepo.recordImagePush(frontend.getNodeName(), false);
+                MetricRepo.recordImagePush(journalType, frontend.getNodeName(), false);
                 LOG.error("Push image failed: imageVersion={}, nodeName={}, host={}, subDir={}",
                         imageVersion, frontend.getNodeName(), frontend.getHost(), subDir, e);
             } finally {

@@ -285,14 +285,14 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - タイプ: 瞬時値
 - ラベル: `journal`（`fe_meta` または `star_mgr`）
-- 説明: 現在の Leader FE が Leader になった時点、または最後の完全なクリーンアップ以降に観測した、正常にコミットされた編集ログの件数です。完全なクリーンアップとは、現在の journal database だけが残っている状態を指します。partial cleanup では値を減らさないため、このメトリクスは保守的な推定値です。FE metadata と StarMgr は別々の checkpoint controller でクリーンアップされるため、`fe_meta` と `star_mgr` で個別に集計されます。到達不能な登録済み FE があるとクリーンアップが妨げられ、該当する系列が増え続けます。完全なクリーンアップ、FE の再起動、または Leader の変更後に 0 に戻り、非 Leader FE は 0 を報告します。
+- 説明: journal database に現在保持されている編集ログの件数です。正常なコミット後にキャッシュされた最大 ID を進め、クリーンアップ後にキャッシュされた最小 ID を進めます。メトリクス収集時に BDB JE を読み取りません。FE metadata と StarMgr は別々の checkpoint controller でクリーンアップされるため、`fe_meta` と `star_mgr` で個別に集計されます。到達不能な登録済み FE があるとクリーンアップが妨げられ、該当する系列が増え続けます。非 Leader FE は 0 を報告します。
 
-## `fe_edit_log_retained_bytes`
+## `fe_edit_log_retained_bytes_estimate`
 
 - 単位: バイト
 - タイプ: 瞬時値
 - ラベル: `journal`（`fe_meta` または `star_mgr`）
-- 説明: [`fe_edit_log_retained`](#fe_edit_log_retained) と同じ観測期間内に正常にコミットされた編集ログの論理バイト数です。正常にコミットされた journal batch ごとに 1 回だけ更新され、メトリクス収集時に BDB JE を読み取りません。正確なディスク使用量ではなく、バックログの増加傾向を観測するために使用してください。現在の Leader の観測開始前から保持されていたデータと BDB JE のストレージオーバーヘッドは含まれず、partial cleanup 後は残りのバイト数を一時的に過大評価する場合があります。
+- 説明: [`fe_edit_log_retained`](#fe_edit_log_retained) に対応する論理バイト数の推定値です。StarRocks は retained count に、現在の Leader の writer が起動してから正常なコミットで観測したエントリの平均シリアライズサイズを乗算します。起動後に新しいエントリが 1 件も観測されていない間は `-1` で、書き込みサンプルが増えるにつれて推定値が収束します。メトリクス収集時に BDB JE を読み取りません。この値は物理ディスク使用量ではなく、BDB JE のストレージオーバーヘッドを含みません。
 
 ## `fe_edit_log_size_bytes`
 
@@ -334,15 +334,15 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `type`（`success` または `failed`）と `node`（対象 FE のノード名）
-- 説明: Leader FE が新しく生成したイメージファイルを他の FE ノードにプッシュした回数。試行ごとに対象ノード単位で計上されます。すべてのノードが新しいイメージを受け取った後にのみ古い編集ログが削除されるため、`failed` 系列から `fe_edit_log_retained` が 0 に戻るのを妨げている対象 FE を特定できます。
+- ラベル: `type`（`success` または `failed`）、`journal`（`fe_meta` または `star_mgr`）、`node`（対象 FE のノード名）
+- 説明: Leader FE が新しく生成した FE metadata または StarMgr のイメージファイルを他の FE ノードにプッシュした回数。試行ごとに対象ノード単位で計上されます。すべてのノードが新しいイメージを受け取った後にのみ古い編集ログが削除されるため、`journal` と `node` ラベルから、プッシュ失敗に関係する journal のクリーンアップ処理と対象 FE を特定できます。
 
 ## `fe_image_write`
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `type` (`success` または `failed`)
-- 説明: イメージ生成の試行回数。新しいイメージの生成が実際に必要なチェックポイントのラウンドごとに 1 回計上されます。イメージが既に最新で生成が不要なラウンドは計上されません。
+- ラベル: `type`（`success` または `failed`）と `journal`（`fe_meta` または `star_mgr`）
+- 説明: FE metadata または StarMgr のイメージ生成の試行回数。新しいイメージの生成が実際に必要なチェックポイントのラウンドごとに 1 回計上されます。イメージが既に最新で生成が不要なラウンドは計上されません。
 
 ## `fe_loading_broker_load_job`
 

@@ -24,6 +24,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.JournalType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
@@ -140,8 +141,8 @@ public class MetricRepoTest extends PlanTestBase {
 
     @Test
     public void testJournalAndImageMetricsExposure() {
-        MetricRepo.recordImagePush("metric-success-node", true);
-        MetricRepo.recordImagePush("metric-failed-node", false);
+        MetricRepo.recordImagePush(JournalType.FE_META, "metric-success-node", true);
+        MetricRepo.recordImagePush(JournalType.STAR_MGR, "metric-failed-node", false);
 
         // same prefix MetricsAction uses, so the asserted names are the ones operators scrape
         MetricVisitor visitor = new PrometheusMetricVisitor("starrocks_fe");
@@ -149,26 +150,31 @@ public class MetricRepoTest extends PlanTestBase {
         MetricRepo.getMetric(visitor, params);
         String output = visitor.build();
 
-        // Count and bytes are separate metric names, each carrying its own unit - a single
+        // Count and estimated bytes are separate metric names, each carrying its own unit - a single
         // # TYPE / # HELP line is emitted per name, so they cannot share one.
         Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log_retained gauge"), output);
-        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_edit_log_retained_bytes gauge"), output);
+        Assertions.assertTrue(output.contains(
+                "# TYPE starrocks_fe_edit_log_retained_bytes_estimate gauge"), output);
         Assertions.assertTrue(output.contains("starrocks_fe_edit_log_retained{is_leader=\"true\", journal=\"fe_meta\""),
                 output);
         Assertions.assertTrue(output.contains("starrocks_fe_edit_log_retained{is_leader=\"true\", journal=\"star_mgr\""),
                 output);
         Assertions.assertTrue(output.contains(
-                "starrocks_fe_edit_log_retained_bytes{is_leader=\"true\", journal=\"fe_meta\""), output);
+                "starrocks_fe_edit_log_retained_bytes_estimate{is_leader=\"true\", journal=\"fe_meta\""), output);
         Assertions.assertTrue(output.contains(
-                "starrocks_fe_edit_log_retained_bytes{is_leader=\"true\", journal=\"star_mgr\""), output);
+                "starrocks_fe_edit_log_retained_bytes_estimate{is_leader=\"true\", journal=\"star_mgr\""), output);
         // and they must not be re-introduced as labels on the old shared name
         Assertions.assertFalse(output.contains("starrocks_fe_edit_log{type="), output);
 
         // image outcomes DO share a name: same quantity, same unit, two results
-        Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"success\""), output);
-        Assertions.assertTrue(output.contains("starrocks_fe_image_write{type=\"failed\""), output);
-        Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"success\""), output);
-        Assertions.assertTrue(output.contains("starrocks_fe_image_push{type=\"failed\""), output);
+        Assertions.assertTrue(output.contains(
+                "starrocks_fe_image_write{type=\"success\", journal=\"fe_meta\""), output);
+        Assertions.assertTrue(output.contains(
+                "starrocks_fe_image_write{type=\"failed\", journal=\"star_mgr\""), output);
+        Assertions.assertTrue(output.contains(
+                "starrocks_fe_image_push{type=\"success\", journal=\"fe_meta\""), output);
+        Assertions.assertTrue(output.contains(
+                "starrocks_fe_image_push{type=\"failed\", journal=\"star_mgr\""), output);
         Assertions.assertTrue(output.contains("node=\"metric-success-node\""), output);
         Assertions.assertTrue(output.contains("node=\"metric-failed-node\""), output);
         Assertions.assertTrue(output.contains("# TYPE starrocks_fe_image_write counter"), output);
@@ -176,32 +182,54 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testImageMetricsAreIndependentByJournal() {
+        long feWriteBefore = MetricRepo.getImageWriteCount(JournalType.FE_META, true);
+        long starMgrWriteBefore = MetricRepo.getImageWriteCount(JournalType.STAR_MGR, false);
+        long fePushBefore = MetricRepo.getImagePushCount(JournalType.FE_META, "shared-node", true);
+        long starMgrPushBefore = MetricRepo.getImagePushCount(JournalType.STAR_MGR, "shared-node", false);
+
+        MetricRepo.recordImageWrite(JournalType.FE_META, true);
+        MetricRepo.recordImageWrite(JournalType.STAR_MGR, false);
+        MetricRepo.recordImagePush(JournalType.FE_META, "shared-node", true);
+        MetricRepo.recordImagePush(JournalType.STAR_MGR, "shared-node", false);
+
+        Assertions.assertEquals(feWriteBefore + 1L,
+                MetricRepo.getImageWriteCount(JournalType.FE_META, true));
+        Assertions.assertEquals(starMgrWriteBefore + 1L,
+                MetricRepo.getImageWriteCount(JournalType.STAR_MGR, false));
+        Assertions.assertEquals(fePushBefore + 1L,
+                MetricRepo.getImagePushCount(JournalType.FE_META, "shared-node", true));
+        Assertions.assertEquals(starMgrPushBefore + 1L,
+                MetricRepo.getImagePushCount(JournalType.STAR_MGR, "shared-node", false));
+    }
+
+    @Test
     public void testEditLogRetainedMetricsAreIndependent() {
-        MetricRepo.resetEditLogRetained(true);
-        MetricRepo.resetEditLogRetained(false);
+        MetricRepo.resetEditLogRetained(JournalType.FE_META);
+        MetricRepo.resetEditLogRetained(JournalType.STAR_MGR);
         try {
-            MetricRepo.recordEditLogBatch(true, 3L, 300L);
-            MetricRepo.recordEditLogBatch(false, 5L, 700L);
+            MetricRepo.recordEditLogBatch(JournalType.FE_META, 3L, 3L, 300L);
+            MetricRepo.recordEditLogBatch(JournalType.STAR_MGR, 5L, 5L, 700L);
 
-            Assertions.assertEquals(3L, MetricRepo.getEditLogRetainedCount(true));
-            Assertions.assertEquals(300L, MetricRepo.getEditLogRetainedBytes(true));
-            Assertions.assertEquals(5L, MetricRepo.getEditLogRetainedCount(false));
-            Assertions.assertEquals(700L, MetricRepo.getEditLogRetainedBytes(false));
+            Assertions.assertEquals(3L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+            Assertions.assertEquals(300L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
+            Assertions.assertEquals(5L, MetricRepo.getEditLogRetainedCount(JournalType.STAR_MGR));
+            Assertions.assertEquals(700L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.STAR_MGR));
 
-            MetricRepo.resetEditLogRetained(true);
-            Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedCount(true));
-            Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedBytes(true));
-            Assertions.assertEquals(5L, MetricRepo.getEditLogRetainedCount(false));
-            Assertions.assertEquals(700L, MetricRepo.getEditLogRetainedBytes(false));
+            MetricRepo.resetEditLogRetained(JournalType.FE_META);
+            Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+            Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
+            Assertions.assertEquals(5L, MetricRepo.getEditLogRetainedCount(JournalType.STAR_MGR));
+            Assertions.assertEquals(700L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.STAR_MGR));
         } finally {
-            MetricRepo.resetEditLogRetained(true);
-            MetricRepo.resetEditLogRetained(false);
+            MetricRepo.resetEditLogRetained(JournalType.FE_META);
+            MetricRepo.resetEditLogRetained(JournalType.STAR_MGR);
         }
     }
 
     @Test
     public void testEditLogRetainedRecordAndResetAreSerialized() throws Exception {
-        MetricRepo.resetEditLogRetained(true);
+        MetricRepo.resetEditLogRetained(JournalType.FE_META);
         ExecutorService executor = Executors.newFixedThreadPool(6);
         CountDownLatch start = new CountDownLatch(1);
         List<Future<?>> futures = new ArrayList<>();
@@ -210,7 +238,7 @@ public class MetricRepoTest extends PlanTestBase {
                 futures.add(executor.submit(() -> {
                     start.await();
                     for (int i = 0; i < 5000; i++) {
-                        MetricRepo.recordEditLogBatch(true, 1L, 100L);
+                        MetricRepo.recordEditLogBatch(JournalType.FE_META, 1L, 1L, 100L);
                     }
                     return null;
                 }));
@@ -219,7 +247,7 @@ public class MetricRepoTest extends PlanTestBase {
                 futures.add(executor.submit(() -> {
                     start.await();
                     for (int i = 0; i < 5000; i++) {
-                        MetricRepo.resetEditLogRetained(true);
+                        MetricRepo.resetEditLogRetained(JournalType.FE_META);
                     }
                     return null;
                 }));
@@ -230,11 +258,12 @@ public class MetricRepoTest extends PlanTestBase {
                 future.get(10, TimeUnit.SECONDS);
             }
 
-            long count = MetricRepo.getEditLogRetainedCount(true);
-            Assertions.assertEquals(count * 100L, MetricRepo.getEditLogRetainedBytes(true));
+            long count = MetricRepo.getEditLogRetainedCount(JournalType.FE_META);
+            Assertions.assertEquals(count * 100L,
+                    MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
         } finally {
             executor.shutdownNow();
-            MetricRepo.resetEditLogRetained(true);
+            MetricRepo.resetEditLogRetained(JournalType.FE_META);
         }
     }
 

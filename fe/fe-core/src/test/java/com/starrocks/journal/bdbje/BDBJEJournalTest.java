@@ -205,11 +205,15 @@ public class BDBJEJournalTest {
 
         Assertions.assertEquals(Arrays.asList(1L), journal.getDatabaseNames());
         Assertions.assertEquals(3, journal.getMaxJournalId());
+        Assertions.assertEquals(1, journal.getMinJournalId());
         journal.rollJournal(4);
         Assertions.assertEquals(3, journal.getMaxJournalId());
+        Assertions.assertEquals(1, journal.getMinJournalId());
         Assertions.assertEquals(Arrays.asList(1L, 4L), journal.getDatabaseNames());
         journal.deleteJournals(4);
         Assertions.assertEquals(Arrays.asList(4L), journal.getDatabaseNames());
+        Assertions.assertEquals(3, journal.getMaxJournalId());
+        Assertions.assertEquals(4, journal.getMinJournalId());
 
         journal.close();
     }
