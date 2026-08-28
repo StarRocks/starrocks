@@ -10,6 +10,7 @@ Map the local scripts and GitHub workflows that enforce structural rules, run va
 - [`build-support/check_gensrc_schema_compatibility.py`](../../build-support/check_gensrc_schema_compatibility.py)
 - [`.github/workflows/ci-pipeline.yml`](../../.github/workflows/ci-pipeline.yml)
 - [`.github/workflows/ci-pipeline-branch.yml`](../../.github/workflows/ci-pipeline-branch.yml)
+- [`.github/workflows/context-celer-package.yml`](../../.github/workflows/context-celer-package.yml)
 
 ## Commands
 

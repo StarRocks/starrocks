@@ -1,0 +1,270 @@
+name: CONTEXT CELER PACKAGE
+
+# Publishes a BE/FE package for context-celer into the inspection layout, so PRs targeting the
+# branch can reuse it instead of compiling BE from scratch every time.
+#
+# Why this exists: elastic-build.sh already reuses a prebuilt package when a PR does not touch
+# the corresponding source tree -- get_build_necessary() calls get_inspection_package(), which
+# lists oss://<bucket>/<branch>/Release/inspection/pr/ubuntu/ and hands back a tarball. main has
+# that directory because INSPECTION PIPELINE runs on a cron and fills it. context-celer had only
+# .../Release/pr/ (packages from PR builds, which the reuse path does not look at), so every PR
+# paid a full BE compile: ~20 minutes of a ~40 minute run, on a branch whose PRs almost never
+# touch be/.
+#
+# Dispatching INSPECTION PIPELINE by hand would also work -- it takes BRANCH and COMMIT_ID, and
+# its build job runs for a manual trigger when IS_REBUILD is set -- but its be-ut job carries no
+# job-level `if`, so a dispatch also starts BE UT (Release and ASAN, 150-minute timeouts each),
+# FE UT, clang-tidy and the system-test matrix. This workflow is the packaging step alone.
+#
+# This file lives on the DEFAULT branch on purpose, even though everything it touches belongs to
+# context-celer. GitHub only honours `schedule` and `workflow_dispatch` for workflow files present
+# on the default branch: a copy on context-celer is registered by nothing and can be dispatched by
+# nothing (the API answers "not found on the default branch"). Every branch-specific value below is
+# therefore explicit rather than inherited from the ref -- checkout pins `ref: context-celer`, the
+# OSS prefix is built from BRANCH, and elastic-build.sh is passed --branch -- so running from main
+# operates on context-celer's code and artifacts. INSPECTION PIPELINE is arranged the same way:
+# it lives on the default branch and serves other branches through a BRANCH input.
+# Do not "tidy" this onto context-celer; it stops running entirely.
+
+on:
+  schedule:
+    # 18:00 UTC = 02:00 CST: after the day's commits have landed on the branch and before the
+    # next morning's PRs, and clear of INSPECTION PIPELINE's own crons (00:00, 04:30, 11:00 UTC).
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      COMMIT_ID:
+        description: "Commit to package (default: current context-celer HEAD)"
+        required: false
+        type: string
+      FORCE:
+        description: "Build even when a usable package already exists"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # This is the switch that decides where the package lands. elastic-build.sh sets
+  # package_path_tmp="inspection/" only under IS_INSPECTION, producing
+  #   oss://<bucket>/<branch>/<build_type>/inspection/pr/<distro>/<commit>/be/<pkg>-BE.tar.gz
+  # Without it the package goes to .../pr/<pr_number>/be/ instead, which get_inspection_package
+  # never reads -- the build would succeed and reuse would still never happen.
+  IS_INSPECTION: true
+  BRANCH: context-celer
+  # get_inspection_package hardcodes "Release" and "ubuntu" in the prefix it lists (it does NOT
+  # interpolate BUILD_TYPE), so these two are the only combination a PR can consume.
+  BUILD_TYPE: Release
+  LINUX_DISTRO: ubuntu
+
+jobs:
+  decide:
+    runs-on: [self-hosted, quick]
+    name: DECIDE
+    outputs:
+      needed: ${{ steps.decide.outputs.needed }}
+      commit_id: ${{ steps.resolve.outputs.commit_id }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - name: CLEAN
+        run: |
+          # All jobs of this repo share one workspace per runner, so nuking it forces the next
+          # actions/checkout into a full re-clone (handbook/domains/ci-and-tooling.md).
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
+
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          ref: context-celer
+          # Full history: the decision below asks whether be/ changed between an already-published
+          # commit and the target, which needs both of them present.
+          fetch-depth: 0
+
+      - name: Resolve target commit
+        id: resolve
+        env:
+          INPUT_COMMIT: ${{ inputs.COMMIT_ID }}
+        run: |
+          if [[ -n "${INPUT_COMMIT}" ]]; then
+            commit_id=$(git rev-parse "${INPUT_COMMIT}^{commit}")
+          else
+            commit_id=$(git rev-parse HEAD)
+          fi
+          echo "commit_id=${commit_id}" >> $GITHUB_OUTPUT
+          echo "::notice::Target commit ${commit_id} ($(git log -1 --format=%s "${commit_id}" | cut -c1-72))"
+
+      # A PR reuses BOTH binaries, not just BE: get_build_necessary() asks
+      # get_inspection_package for BE when pr_be_change is false and for FE when pr_fe_change and
+      # pr_pom_change are false, and a PR with all three false takes the newest package outright.
+      # So a package that is fresh for BE and months old for FE would have PRs on this branch --
+      # an FE-heavy branch -- testing a stale FE and reporting the result against its HEAD.
+      # The freshness question is therefore "did any build input move", covering the union of both
+      # consumer rules (be/ thirdparty/ for BE, fe/ java-extensions/ pom.xml for FE) plus gensrc/,
+      # whose generated thrift and protobuf reach both binaries and which neither rule mentions.
+      #
+      # Age matters independently: OSS deletes these objects after three days (the reason
+      # INSPECTION PIPELINE's own schedule exists, per the comment at the top of that file), so a
+      # package can be usable today and gone before the next nightly. Whatever package this run
+      # would rely on is refreshed once it is MAX_AGE_DAYS old, well inside that window.
+      - name: Decide whether to build
+        id: decide
+        env:
+          COMMIT_ID: ${{ steps.resolve.outputs.commit_id }}
+          FORCE: ${{ inputs.FORCE }}
+          # Two days against OSS's three-day deletion: one nightly of margin.
+          MAX_AGE_DAYS: 2
+        run: |
+          set -o pipefail
+
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          prefix="oss://${owner}-ci-release/${BRANCH}/${BUILD_TYPE}/inspection/pr/${LINUX_DISTRO}/"
+          echo "Inspection prefix: ${prefix}"
+
+          decide() {
+            echo "needed=$1" >> $GITHUB_OUTPUT
+            echo "reason=$2" >> $GITHUB_OUTPUT
+            echo "::notice::needed=$1 -- $2"
+            exit 0
+          }
+
+          if [[ "${FORCE}" == "true" ]]; then
+            decide true "FORCE requested"
+          fi
+
+          # Collect "<mtime-epoch> <commit>" per published BE object, newest first. The commit is
+          # the 40-character directory in the object path, not a field of the file name: parsing
+          # the name means splitting on "-", and this branch's name contains one.
+          candidates=$(
+            /var/local/env/ossutil64 --config-file /root/.ossutilconfig ls "${prefix}" 2>/dev/null \
+              | grep -E "${prefix}[0-9a-f]{40}/be/[^[:space:]]+-BE\.tar\.gz" \
+              | while read -r d t tz rest; do
+                  url=$(echo "${rest}" | awk '{print $NF}')
+                  sha=$(echo "${url}" | sed -E "s|.*/([0-9a-f]{40})/be/.*|\1|")
+                  epoch=$(date -d "${d} ${t} ${tz}" +%s 2>/dev/null || echo 0)
+                  echo "${epoch} ${sha}"
+                done \
+              | sort -rn -u || true
+          )
+
+          if [[ -z "${candidates}" ]]; then
+            decide true "no BE package published for ${BRANCH} yet"
+          fi
+          echo "Published packages (newest first):"
+          echo "${candidates}" | while read -r e s; do echo "  ${s:0:7}  $(date -d @${e} '+%Y-%m-%d %H:%M' 2>/dev/null || echo unknown)"; done
+
+          # The package this run would rely on is the newest one a PR could legitimately consume:
+          # the target itself, or an ancestor with no build-input diff to the target.
+          usable_sha=""
+          usable_epoch=0
+          while read -r epoch sha; do
+            [[ -z "${sha}" ]] && continue
+            if [[ "${sha}" == "${COMMIT_ID}" ]]; then
+              usable_sha="${sha}"; usable_epoch="${epoch}"; break
+            fi
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "  ${sha:0:7}: not in this clone, skipping"
+              continue
+            fi
+            if ! git merge-base --is-ancestor "${sha}" "${COMMIT_ID}" 2>/dev/null; then
+              echo "  ${sha:0:7}: not an ancestor of the target, skipping"
+              continue
+            fi
+            changed=$(git diff --name-only "${sha}" "${COMMIT_ID}" \
+              -- be/ thirdparty/ gensrc/ fe/ java-extensions/ pom.xml || true)
+            if [[ -z "${changed}" ]]; then
+              usable_sha="${sha}"; usable_epoch="${epoch}"; break
+            fi
+            echo "  ${sha:0:7}: build inputs changed ($(echo "${changed}" | wc -l | tr -d ' ') files)"
+          done <<< "${candidates}"
+
+          if [[ -z "${usable_sha}" ]]; then
+            decide true "build inputs changed since every published package"
+          fi
+
+          age_days=$(( ( $(date +%s) - usable_epoch ) / 86400 ))
+          echo "Usable package: ${usable_sha:0:7}, ${age_days} day(s) old"
+          if [[ "${usable_epoch}" -eq 0 ]]; then
+            decide true "could not read the age of package ${usable_sha:0:7}; refreshing rather than risking an expired object"
+          fi
+          if [[ "${age_days}" -ge "${MAX_AGE_DAYS}" ]]; then
+            decide true "package ${usable_sha:0:7} is ${age_days} day(s) old and OSS deletes these after 3"
+          fi
+
+          if [[ "${usable_sha}" == "${COMMIT_ID}" ]]; then
+            decide false "commit ${COMMIT_ID:0:7} is already packaged and ${age_days} day(s) old"
+          fi
+          decide false "build inputs unchanged since packaged commit ${usable_sha:0:7} (${age_days} day(s) old)"
+
+  build:
+    runs-on: [self-hosted, normal]
+    name: BUILD PACKAGE
+    needs: decide
+    if: needs.decide.outputs.needed == 'true'
+    # elastic-build.sh waits 540 * 10s = 90 minutes for the build to report back; this outer
+    # bound only keeps the job alive long enough for that wait to produce a real message.
+    timeout-minutes: 120
+    env:
+      # elastic-build.sh reads the commit from --pr in inspection mode: it does
+      # `git reset ${PR_ID} --hard` and uses ${PR_ID} as the directory in the object path.
+      PR_NUMBER: ${{ needs.decide.outputs.commit_id }}
+    steps:
+      - name: CLEAN
+        run: |
+          # All jobs of this repo share one workspace per runner, so nuking it forces the next
+          # actions/checkout into a full re-clone (handbook/domains/ci-and-tooling.md).
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || { rm -rf ${{ github.workspace }}; mkdir -p ${{ github.workspace }}; }
+
+      - name: UPDATE ECI & RUN BUILD
+        id: run_build
+        shell: bash
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          # No --with-gcov / --with-trivy: INSPECTION PIPELINE passes both, but coverage
+          # instrumentation is paid for by every PR that later deploys this package, and the
+          # trivy scan belongs to the release pipeline rather than to a package refresh.
+          #
+          # --branch is explicit because elastic-build.sh hardcodes BRANCH="main" internally and
+          # honours only the flag, not the environment.
+          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} \
+            --pr ${PR_NUMBER} --build ${BUILD_TYPE} --linuxdistro ${LINUX_DISTRO}
+
+      - name: Package result
+        run: |
+          echo "### context-celer package refreshed" >> $GITHUB_STEP_SUMMARY
+          echo "- commit: \`${PR_NUMBER}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- reason: ${{ needs.decide.outputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "- BE: ${{ steps.run_build.outputs.BE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- FE: ${{ steps.run_build.outputs.FE_OUTPUT_TAR }}" >> $GITHUB_STEP_SUMMARY
+
+      # Assert the package really landed where the reuse path reads, rather than trusting the
+      # build's own report. A package under .../pr/ instead of .../inspection/pr/ builds and
+      # uploads successfully and is silently never reused, which is the failure this workflow
+      # exists to prevent.
+      - name: Verify the package is reusable
+        run: |
+          set -o pipefail
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          prefix="oss://${owner}-ci-release/${BRANCH}/${BUILD_TYPE}/inspection/pr/${LINUX_DISTRO}/"
+          expected="${prefix}${PR_NUMBER}/be/"
+          echo "Expecting a BE tarball under ${expected}"
+          found=$(/var/local/env/ossutil64 --config-file /root/.ossutilconfig ls "${expected}" 2>/dev/null \
+            | grep -oE "${expected}[^[:space:]]+-BE\.tar\.gz" || true)
+          if [[ -z "${found}" ]]; then
+            echo "::error::No BE tarball under ${expected}. The build finished but the package is not where get_inspection_package looks, so no PR will reuse it."
+            exit 1
+          fi
+          echo "::notice::Reusable BE package: ${found}"
+
+      - name: Clean ECI
+        if: always()
+        run: |
+          echo "ECI: ${{ steps.run_build.outputs.ECI_ID }}"
+          eci rm ${{ steps.run_build.outputs.ECI_ID }} || true
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_build.outputs.RES_FILE }}
+          rm -f ${{ steps.run_build.outputs.RES_LOG }}
+          git -C ${{ github.workspace }} clean -ffdxq 2>/dev/null || rm -rf ${{ github.workspace }}/*
