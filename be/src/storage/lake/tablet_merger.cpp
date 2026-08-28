@@ -429,6 +429,22 @@ std::string normalized_physical_base_key(const SegmentMetadataPB& segment) {
     return normalized.SerializeAsString();
 }
 
+Status validate_physical_segment_shape(const SegmentMetadataPB& segment) {
+    if (segment.has_bundle_file_offset() && segment.bundle_file_offset() < 0) {
+        return Status::Corruption(fmt::format("tablet merge segment {} has negative bundle_file_offset {}",
+                                              segment.filename(), segment.bundle_file_offset()));
+    }
+    if (segment.has_size() && segment.size() < 0) {
+        return Status::Corruption(
+                fmt::format("tablet merge segment {} has negative size {}", segment.filename(), segment.size()));
+    }
+    if (segment.has_bundle_file_offset() && !segment.has_size()) {
+        return Status::Corruption(fmt::format("tablet merge segment {} has bundle_file_offset {} but no size",
+                                              segment.filename(), segment.bundle_file_offset()));
+    }
+    return Status::OK();
+}
+
 Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* occurrence) {
     const bool overlapped = canonical->overlapped() || (occurrence != nullptr && occurrence->overlapped());
     std::map<uint32_t, SegmentMetadataPB> by_index;
@@ -477,6 +493,7 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
     std::map<std::pair<std::string, int64_t>, PhysicalSliceDeclaration> declarations_by_physical_slice;
     for (auto& canonical : *canonicals) {
         for (auto& segment : *canonical.source_form_rowset.mutable_segment_metas()) {
+            RETURN_IF_ERROR(validate_physical_segment_shape(segment));
             const auto slice = std::pair{segment.filename(),
                                          segment.has_bundle_file_offset() ? segment.bundle_file_offset() : int64_t{0}};
             const auto declaration_key = normalized_physical_base_key(segment);

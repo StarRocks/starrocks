@@ -1194,6 +1194,23 @@ protected:
         return segment_file_size;
     }
 
+    std::pair<uint64_t, int64_t> write_two_column_bundled_segment(int64_t tablet_id, const std::string& bundle_name,
+                                                                  int num_rows,
+                                                                  const std::function<int(int)>& source_value_of,
+                                                                  int key_start = 0) {
+        const std::string slice_name = fmt::format("{}.slice_{}", bundle_name, next_id());
+        const uint64_t slice_size =
+                write_two_column_segment(tablet_id, slice_name, num_rows, source_value_of, key_start);
+        const std::string slice_path = _tablet_manager->segment_location(tablet_id, slice_name);
+        ASSIGN_OR_ABORT(auto reader, fs::new_random_access_file(slice_path));
+        ASSIGN_OR_ABORT(auto slice_contents, reader->read_all());
+
+        const std::string prefix = "tablet-merge-bundle-prefix";
+        write_file(_tablet_manager->segment_location(tablet_id, bundle_name), prefix + slice_contents);
+        CHECK_OK(fs::delete_file(slice_path));
+        return {slice_size, static_cast<int64_t>(prefix.size())};
+    }
+
     // Write a real .cols file for column c1 only, with `num_rows` entries.
     // cell_value(row) supplies the c1 value at segment row |row|.
     uint64_t write_c1_only_cols_file(int64_t tablet_id, const std::string& cols_filename, int num_rows,
@@ -10125,7 +10142,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     const std::string base_name = "cross_target_shared_base.dat";
     const std::string cols_name = "cross_target.cols";
     const std::string idx_name = "cross_target.idx";
-    const uint64_t base_size = write_two_column_segment(source_a_id, base_name, 2, [](int key) { return key * 10; });
+    const auto [base_size, base_offset] =
+            write_two_column_bundled_segment(source_a_id, base_name, 2, [](int key) { return key * 10; });
+    ASSERT_GT(base_offset, 0);
     const uint64_t cols_size =
             write_c1_only_cols_file(source_a_id, cols_name, 2, [](int row) { return (row + 1) * 1000; });
     const auto idx_file = write_sidecar_payload(_tablet_manager->segment_location(source_a_id, idx_name),
@@ -10146,6 +10165,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
         rowset->set_data_size(base_size);
         rowset->mutable_range()->CopyFrom(source->range());
         rowset->mutable_segment_metas(0)->set_size(base_size);
+        rowset->mutable_segment_metas(0)->set_bundle_file_offset(base_offset);
         rowset->mutable_segment_metas(0)->set_num_rows(2);
         add_dcg_with_columns(source, /*segment_id=*/1, cols_name, {1002}, /*version=*/1);
         auto* dcg = &(*source->mutable_dcg_meta()->mutable_dcgs())[1];
@@ -10324,6 +10344,61 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_target_physical_
             auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
             EXPECT_TRUE(status.message().contains("physical segment slice")) << status;
             EXPECT_TRUE(status.message().contains(filename)) << status;
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_invalid_physical_segment_shape_before_io) {
+    struct InvalidShape {
+        const char* name;
+        bool same_filename;
+        const char* error_field;
+        std::function<void(SegmentMetadataPB*, SegmentMetadataPB*)> apply;
+    };
+    const std::vector<InvalidShape> invalid_shapes = {
+            {"negative offset versus absent", true, "bundle_file_offset",
+             [](SegmentMetadataPB*, SegmentMetadataPB* right) { right->set_bundle_file_offset(-1); }},
+            {"negative offset versus explicit zero", true, "bundle_file_offset",
+             [](SegmentMetadataPB* left, SegmentMetadataPB* right) {
+                 left->set_bundle_file_offset(0);
+                 right->set_bundle_file_offset(-1);
+             }},
+            {"negative size", true, "size",
+             [](SegmentMetadataPB* left, SegmentMetadataPB* right) {
+                 left->set_size(-1);
+                 right->set_size(-1);
+             }},
+            {"single bundled missing size", false, "size",
+             [](SegmentMetadataPB* left, SegmentMetadataPB*) {
+                 left->set_bundle_file_offset(0);
+                 left->clear_size();
+             }},
+            {"all bundled missing size", true, "size",
+             [](SegmentMetadataPB* left, SegmentMetadataPB* right) {
+                 for (auto* segment : {left, right}) {
+                     segment->set_bundle_file_offset(0);
+                     segment->clear_size();
+                 }
+             }},
+    };
+
+    for (const auto& invalid : invalid_shapes) {
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("{}; {} source first", invalid.name, reverse_sources ? "right" : "left"));
+            const std::string stem = fmt::format("invalid_segment_shape_{}", next_id());
+            auto left = make_preflight_sidecar_source(next_id(), stem + "_left.dat");
+            auto right = make_preflight_sidecar_source(next_id(), invalid.same_filename
+                                                                          ? left->rowsets(0).segment_metas(0).filename()
+                                                                          : stem + "_right.dat");
+            invalid.apply(left->mutable_rowsets(0)->mutable_segment_metas(0),
+                          right->mutable_rowsets(0)->mutable_segment_metas(0));
+            std::vector<TabletMetadataPtr> sources = {left, right};
+            if (reverse_sources) std::swap(sources[0], sources[1]);
+
+            MergePhaseCounts counts;
+            auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+            EXPECT_TRUE(status.message().contains("segment")) << status;
+            EXPECT_TRUE(status.message().contains(invalid.error_field)) << status;
         }
     }
 }
