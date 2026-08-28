@@ -584,10 +584,15 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             // deduplicates the children's copies of it by that uid. An entry here would then be
             // ORed into the parent view against the sibling's opposite verdict -- deleting every row.
             if (replace_segments.count(static_cast<int>(local_id)) > 0) {
-                const auto& unowned_rowids = state.upserts(local_id)->unowned_rowids();
+                auto unowned_rowids = state.upserts(local_id)->take_unowned_rowids();
                 if (!unowned_rowids.empty()) {
                     auto& seg_deletes = new_deletes[rowset_id + global_segment_id];
-                    seg_deletes.insert(seg_deletes.end(), unowned_rowids.begin(), unowned_rowids.end());
+                    if (seg_deletes.empty()) {
+                        seg_deletes = std::move(unowned_rowids);
+                    } else {
+                        seg_deletes.reserve(seg_deletes.size() + unowned_rowids.size());
+                        seg_deletes.insert(seg_deletes.end(), unowned_rowids.begin(), unowned_rowids.end());
+                    }
                 }
             }
             if (state.auto_increment_deletes(local_id) != nullptr) {

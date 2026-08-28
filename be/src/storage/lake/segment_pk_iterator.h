@@ -120,7 +120,11 @@ public:
     // resolved, and the private file is exactly what stops the tablet range from clipping them back
     // out (see UpdateManager::publish_primary_key_tablet). Masking them in the segment's delete
     // vector is what makes them unreadable.
-    const std::vector<uint32_t>& unowned_rowids() const { return _unowned_rowids; }
+    //
+    // Handed over rather than lent: the delete vector is the only consumer, and a publish holds one
+    // iterator per segment of the rowset at once, so leaving a copy behind while the caller builds
+    // its own would double the peak for rows nobody reads again.
+    std::vector<uint32_t> take_unowned_rowids() { return std::move(_unowned_rowids); }
 
 private:
     Status _load();
