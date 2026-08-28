@@ -1725,25 +1725,23 @@ protected:
 
     StatusOr<uint32_t> repeated_merge_cursor_oracle(const std::vector<TabletMetadataPtr>& sources) {
         struct Family {
-            size_t selected_context = 0;
-            const RowsetMetadataPB* selected = nullptr;
+            size_t selected_context;
+            const RowsetMetadataPB* selected;
             uint32_t final_max_segment_idx = 0;
         };
         std::map<std::pair<int64_t, int64_t>, Family> families;
         for (size_t context_index = 0; context_index < sources.size(); ++context_index) {
             for (const auto& rowset : sources[context_index]->rowsets()) {
                 if (!rowset.has_uid()) return Status::Corruption("repeated lifecycle rowset is missing uid");
-                auto [it, inserted] = families.emplace(std::pair{rowset.uid().hi(), rowset.uid().lo()},
-                                                       Family{.selected_context = context_index, .selected = &rowset});
+                auto it = families.try_emplace(std::pair{rowset.uid().hi(), rowset.uid().lo()},
+                                               Family{.selected_context = context_index, .selected = &rowset})
+                                  .first;
                 auto& family = it->second;
                 for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
                     const auto& segment = rowset.segment_metas(segment_index);
                     family.final_max_segment_idx = std::max(
                             family.final_max_segment_idx,
                             segment.has_segment_idx() ? segment.segment_idx() : static_cast<uint32_t>(segment_index));
-                }
-                if (!inserted && family.selected == nullptr) {
-                    return Status::Corruption("repeated lifecycle family has no selected rowset");
                 }
             }
         }
@@ -10334,6 +10332,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_target_physical_
             const std::string filename = fmt::format("cross_target_slice_conflict_{}.dat", next_id());
             auto canonical = make_preflight_sidecar_source(next_id(), filename);
             auto conflicting = make_preflight_sidecar_source(next_id(), filename);
+            canonical->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(128);
+            conflicting->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(128);
             conflict.apply(conflicting->mutable_rowsets(0)->mutable_segment_metas(0));
             std::vector<TabletMetadataPtr> sources = {canonical, conflicting};
             if (reverse_sources) std::swap(sources[0], sources[1]);
@@ -10359,6 +10359,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_invalid_physical_segme
             {"negative offset versus explicit zero", true, "bundle_file_offset",
              [](SegmentMetadataPB* left, SegmentMetadataPB* right) {
                  left->set_bundle_file_offset(0);
+                 left->set_size(128);
                  right->set_bundle_file_offset(-1);
              }},
             {"negative size", true, "size",
@@ -10435,8 +10436,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_bundle_slice_end_overf
         auto overflowing =
                 make_preflight_sidecar_source(next_id(), fmt::format("overflowing_bundle_{}.dat", next_id()));
         auto* segment = overflowing->mutable_rowsets(0)->mutable_segment_metas(0);
-        segment->set_bundle_file_offset(std::numeric_limits<int64_t>::max() - 7);
-        segment->set_size(8);
+        segment->set_bundle_file_offset(std::numeric_limits<int64_t>::max() - 11);
+        segment->set_size(12);
         auto valid = make_preflight_sidecar_source(next_id(), fmt::format("valid_bundle_peer_{}.dat", next_id()));
         std::vector<TabletMetadataPtr> sources = {overflowing, valid};
         if (reverse_sources) std::swap(sources[0], sources[1]);
@@ -10445,6 +10446,85 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_bundle_slice_end_overf
         auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
         EXPECT_TRUE(status.message().contains("bundle")) << status;
         EXPECT_TRUE(status.message().contains("size")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_mixed_bundle_presence_after_segment_union_before_io) {
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(fmt::format("{} source first", reverse_sources ? "standalone" : "bundled"));
+        auto bundled = make_preflight_sidecar_source(next_id(), fmt::format("mixed_bundle_{}.dat", next_id()));
+        auto standalone = make_preflight_sidecar_source(next_id(), fmt::format("mixed_standalone_{}.dat", next_id()));
+        auto* bundled_rowset = bundled->mutable_rowsets(0);
+        auto* standalone_rowset = standalone->mutable_rowsets(0);
+        bundled_rowset->mutable_segment_metas(0)->set_bundle_file_offset(0);
+        bundled_rowset->mutable_segment_metas(0)->set_size(128);
+        standalone_rowset->mutable_segment_metas(0)->set_segment_idx(1);
+        standalone_rowset->mutable_uid()->CopyFrom(bundled_rowset->uid());
+        std::vector<TabletMetadataPtr> sources = {bundled, standalone};
+        if (reverse_sources) std::swap(sources[0], sources[1]);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains("bundled")) << status;
+        EXPECT_TRUE(status.message().contains("standalone")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_uniform_bundle_presence_after_segment_union) {
+    for (bool bundled : {false, true}) {
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("{}; {} source first", bundled ? "bundled" : "standalone",
+                                     reverse_sources ? "right" : "left"));
+            auto left = make_preflight_sidecar_source(next_id(), fmt::format("uniform_left_{}.dat", next_id()));
+            auto right = make_preflight_sidecar_source(next_id(), fmt::format("uniform_right_{}.dat", next_id()));
+            auto* left_rowset = left->mutable_rowsets(0);
+            auto* right_rowset = right->mutable_rowsets(0);
+            right_rowset->mutable_segment_metas(0)->set_segment_idx(1);
+            right_rowset->mutable_uid()->CopyFrom(left_rowset->uid());
+            if (bundled) {
+                left_rowset->mutable_segment_metas(0)->set_bundle_file_offset(0);
+                left_rowset->mutable_segment_metas(0)->set_size(128);
+                right_rowset->mutable_segment_metas(0)->set_bundle_file_offset(128);
+                right_rowset->mutable_segment_metas(0)->set_size(128);
+            }
+            std::vector<TabletMetadataPtr> sources = {left, right};
+            if (reverse_sources) std::swap(sources[0], sources[1]);
+
+            MergePhaseCounts counts;
+            ASSIGN_OR_ABORT(auto merged, merge_with_phase_counts(sources, next_id(), /*target_version=*/2, &counts));
+            ASSERT_EQ(1, merged->rowsets_size());
+            ASSERT_EQ(2, merged->rowsets(0).segment_metas_size());
+            EXPECT_EQ(bundled ? 2 : 0, std::count_if(merged->rowsets(0).segment_metas().begin(),
+                                                     merged->rowsets(0).segment_metas().end(), [](const auto& segment) {
+                                                         return segment.has_bundle_file_offset();
+                                                     }));
+            EXPECT_EQ(1, counts.materialize);
+            EXPECT_EQ(0, counts.dcg_writes);
+            EXPECT_EQ(0, counts.delvec_writes);
+            EXPECT_EQ(0, counts.source_flushes);
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_undersized_bundle_slice_before_io) {
+    for (int64_t size : {int64_t{0}, int64_t{1}, int64_t{11}}) {
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("size {}; {} source first", size,
+                                     reverse_sources ? "standalone" : "undersized bundled"));
+            auto undersized =
+                    make_preflight_sidecar_source(next_id(), fmt::format("undersized_bundle_{}.dat", next_id()));
+            auto* segment = undersized->mutable_rowsets(0)->mutable_segment_metas(0);
+            segment->set_bundle_file_offset(0);
+            segment->set_size(size);
+            auto standalone =
+                    make_preflight_sidecar_source(next_id(), fmt::format("undersized_peer_{}.dat", next_id()));
+            std::vector<TabletMetadataPtr> sources = {undersized, standalone};
+            if (reverse_sources) std::swap(sources[0], sources[1]);
+
+            MergePhaseCounts counts;
+            auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+            EXPECT_TRUE(status.message().contains("footer trailer")) << status;
+        }
     }
 }
 

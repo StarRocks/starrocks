@@ -141,7 +141,7 @@ inline uint64_t encode_rss_rowid(uint32_t rssid_high, uint64_t rowid_low) {
 // BEFORE update_canonical's union_range mutates the canonical's stored range
 // — otherwise the convex hull would swallow gaps and the coverage / gap
 // detection would fail.
-using CanonicalContribMap = std::unordered_map<int, std::vector<TabletRangePB>>;
+using CanonicalContribMap = std::unordered_map<size_t, std::vector<TabletRangePB>>;
 
 struct DelvecSourceRef {
     const TabletMergeContext* ctx;
@@ -300,7 +300,6 @@ private:
 
 struct CanonicalAllocationPlan {
     size_t selected_context_index = 0;
-    int output_index = -1;
     RowsetMetadataPB source_form_rowset;
     std::optional<int64_t> schema_id;
     std::vector<TabletRangePB> contributor_ranges;
@@ -430,6 +429,7 @@ std::string normalized_physical_base_key(const SegmentMetadataPB& segment) {
 }
 
 Status validate_physical_segment_shape(const SegmentMetadataPB& segment) {
+    constexpr int64_t kSegmentFooterTrailerSize = 12;
     if (!segment.has_filename() || segment.filename().empty()) {
         return Status::Corruption("tablet merge segment has a missing or empty filename");
     }
@@ -446,12 +446,31 @@ Status validate_physical_segment_shape(const SegmentMetadataPB& segment) {
                                               segment.filename(), segment.bundle_file_offset()));
     }
     if (segment.has_bundle_file_offset()) {
+        if (segment.size() < kSegmentFooterTrailerSize) {
+            return Status::Corruption(
+                    fmt::format("tablet merge bundled segment {} size {} is smaller than the {}-byte footer trailer",
+                                segment.filename(), segment.size(), kSegmentFooterTrailerSize));
+        }
         const uint64_t bundle_end =
                 static_cast<uint64_t>(segment.bundle_file_offset()) + static_cast<uint64_t>(segment.size());
         if (bundle_end > std::numeric_limits<int64_t>::max()) {
             return Status::Corruption(
                     fmt::format("tablet merge segment {} bundle_file_offset {} plus size {} exceeds int64 range",
                                 segment.filename(), segment.bundle_file_offset(), segment.size()));
+        }
+    }
+    return Status::OK();
+}
+
+Status validate_physical_rowset_shape(const RowsetMetadataPB& rowset) {
+    std::optional<bool> bundled;
+    for (const auto& segment : rowset.segment_metas()) {
+        RETURN_IF_ERROR(validate_physical_segment_shape(segment));
+        if (!bundled.has_value()) {
+            bundled = segment.has_bundle_file_offset();
+        } else if (*bundled != segment.has_bundle_file_offset()) {
+            return Status::Corruption(
+                    fmt::format("tablet merge rowset {} mixes bundled and standalone segments", rowset.id()));
         }
     }
     return Status::OK();
@@ -504,8 +523,8 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
     };
     std::map<std::pair<std::string, int64_t>, PhysicalSliceDeclaration> declarations_by_physical_slice;
     for (auto& canonical : *canonicals) {
+        RETURN_IF_ERROR(validate_physical_rowset_shape(canonical.source_form_rowset));
         for (auto& segment : *canonical.source_form_rowset.mutable_segment_metas()) {
-            RETURN_IF_ERROR(validate_physical_segment_shape(segment));
             const auto slice = std::pair{segment.filename(),
                                          segment.has_bundle_file_offset() ? segment.bundle_file_offset() : int64_t{0}};
             const auto declaration_key = normalized_physical_base_key(segment);
@@ -617,7 +636,6 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
             }
             auto& canonical = result.canonicals[decision.canonical_index];
             canonical.selected_context_index = context_index;
-            canonical.output_index = decision.canonical_index;
             canonical.source_form_rowset.CopyFrom(rowset);
             RETURN_IF_ERROR(
                     tablet_reshard_helper::update_rowset_range(&canonical.source_form_rowset, metadata.range()));
@@ -806,8 +824,9 @@ Status materialize_planned_rowsets(const TabletMergeAllocationPlan& plan, Tablet
             if (decision.emit && decision.non_pk_skip_dedup_fired) g_tablet_merge_non_pk_skip_dedup_total << 1;
         }
     }
-    for (const auto& canonical : plan.canonicals) {
-        if (canonical.output_index != target->rowsets_size()) {
+    for (size_t canonical_index = 0; canonical_index < plan.canonicals.size(); ++canonical_index) {
+        const auto& canonical = plan.canonicals[canonical_index];
+        if (canonical_index != static_cast<size_t>(target->rowsets_size())) {
             return Status::InternalError("tablet merge canonical plan is out of materialization order");
         }
         RowsetMetadataPB output(canonical.source_form_rowset);
@@ -828,7 +847,7 @@ Status materialize_planned_rowsets(const TabletMergeAllocationPlan& plan, Tablet
             (*target->mutable_rowset_to_schema())[mapped_id] = *canonical.schema_id;
         }
         if (canonical_contribs != nullptr && !canonical.source_form_rowset.has_delete_predicate()) {
-            (*canonical_contribs)[canonical.output_index] = canonical.contributor_ranges;
+            (*canonical_contribs)[canonical_index] = canonical.contributor_ranges;
         }
     }
     return Status::OK();
@@ -1809,11 +1828,11 @@ StatusOr<std::vector<CanonicalGapSpec>> compute_synthesized_gap_specs(TabletMana
     const TabletSchemaCSPtr current_schema =
             new_metadata.has_schema() ? TabletSchema::create(new_metadata.schema()) : nullptr;
     for (const auto& [canonical_index, contrib] : canonical_contribs) {
-        if (canonical_index < 0 || canonical_index >= new_metadata.rowsets_size()) {
+        if (canonical_index >= static_cast<size_t>(new_metadata.rowsets_size())) {
             return Status::InternalError(
                     fmt::format("compute_synthesized_gap_specs: invalid canonical_index {}", canonical_index));
         }
-        const auto& canonical = new_metadata.rowsets(canonical_index);
+        const auto& canonical = new_metadata.rowsets(static_cast<int>(canonical_index));
         // segment_metas_size() alone is insufficient because a rowset can own only
         // non-shared segments. Only synthesize gap bits when at least one segment is
         // actually shared.
