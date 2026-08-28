@@ -127,6 +127,11 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
                 }
             }
             if (node_type == TExprNodeType::IN_PRED && conjunct->get_num_children() > 1) {
+                for (int child = 1; child < conjunct->get_num_children(); ++child) {
+                    if (!_ok_to_paimon_literal(conjunct->get_child(child))) {
+                        return nullptr;
+                    }
+                }
                 std::vector<::paimon::Literal> literals;
                 translate_to_paimon_in_list_literals(conjunct, literals);
                 return convert_in(i, fieldName, fieldType, literals, (op_type == TExprOpcode::FILTER_NOT_IN) ^ neg);
@@ -226,6 +231,11 @@ std::shared_ptr<paimon::Predicate> PaimonPredicateConverter::convert_in(int32_t 
 }
 
 bool PaimonPredicateConverter::_ok_to_paimon_literal(starrocks::Expr* lit) {
+    // translate_to_paimon_literal down_casts to VectorizedLiteral, so anything that is
+    // not a literal (e.g. a function call on the right-hand side) must be rejected here.
+    if (!lit->is_literal()) {
+        return false;
+    }
     TExprNodeType::type node_type = lit->node_type();
     LogicalType ltype = lit->type().type;
     if (node_type == TExprNodeType::type::NULL_LITERAL) {

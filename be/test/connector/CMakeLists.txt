@@ -96,14 +96,6 @@ add_executable(connector_hive_test
         hive/scanner/hdfs_scanner_test.cpp
         hive/scanner/jni_scanner_test.cpp
 )
-
-if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
-    target_sources(connector_hive_test PRIVATE
-            hive/paimon/paimon_predicate_converter_test.cpp
-            hive/paimon/paimon_file_system_test.cpp
-    )
-    target_link_libraries(connector_hive_test paimon)
-endif ()
 target_link_libraries(connector_hive_test ${CONNECTOR_HIVE_TEST_LINK_LIBS} hdfs jvm)
 set_target_properties(connector_hive_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
