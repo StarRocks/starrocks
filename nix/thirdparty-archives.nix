@@ -569,7 +569,7 @@ let
       "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
       "hadoop-3.4.3-src.tar.gz"
       "ragel-6.10.tar.gz"
-      "hyperscan-5.3.0.aarch64.tar.gz"
+      "vectorscan-5.4.12.tar.gz"
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"

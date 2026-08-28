@@ -722,9 +722,6 @@ if [[ -d $TP_SOURCE_DIR/$HYPERSCAN_SOURCE ]] ; then
     if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
         apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.4.0.patch
         touch $PATCHED_MARK
-    elif [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.3.0.aarch64" ]; then
-        apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.3.0.aarch64.patch
-        touch $PATCHED_MARK
     fi
     cd -
     echo "Finished patching $HYPERSCAN_SOURCE"
