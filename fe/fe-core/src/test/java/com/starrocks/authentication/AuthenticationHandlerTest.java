@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -130,5 +131,42 @@ public class AuthenticationHandlerTest {
         ldapGroupProvider2.setUserToGroupCache(groups2);
         Assertions.assertEquals(Set.of("group3", "group4"),
                 ldapGroupProvider2.getGroup(authCtx.getCurrentUserIdentity(), authCtx.getDistinguishedName()));
+    }
+
+    /**
+     * Test case: Resolve groups through a group provider that consumes the session's
+     * {@link AccessControlContext}
+     * Test point: {@code resolveGroupsFromProviders} hands the context to the provider when it
+     * implements {@link AccessControlContextAwareGroupProvider} and a context is available, and the
+     * overload that takes no context keeps resolving through the plain {@code GroupProvider} contract.
+     * <p>
+     * The second assertion is the one that guards the change: every built-in provider and every
+     * existing caller goes through the overload without a context, so its behaviour has to stay
+     * exactly as it was.
+     */
+    @Test
+    public void testResolveGroupsFromProvidersAcceptsContextAwareProviders() {
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, ExtensionGroupProvider.TYPE);
+        // Borrowed double. Returns a different group set depending on whether a context is passed,
+        // which is exactly what this test needs to tell the two dispatch paths apart.
+        properties.put(ExtensionGroupProvider.PROVIDER_FACTORY_CLASS_PROPERTY,
+                ExtensionGroupProviderTest.ContextAwareFactory.class.getName());
+
+        String groupName = "extension_group_provider";
+        authenticationMgr.replayCreateGroupProvider(groupName, properties);
+
+        UserIdentity user = new UserIdentity("test_user", "%");
+
+        Assertions.assertEquals(Set.of("context_group"),
+                AuthenticationHandler.resolveGroupsFromProviders(user, "test_user", List.of(groupName),
+                        new AccessControlContext()));
+
+        // Same provider, no context. Must fall back to the contract every built-in provider uses.
+        Assertions.assertEquals(Set.of("no_context_group"),
+                AuthenticationHandler.resolveGroupsFromProviders(user, "test_user", List.of(groupName)));
     }
 }
