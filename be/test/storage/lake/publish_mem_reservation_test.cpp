@@ -123,6 +123,61 @@ TEST(PublishMemReservationTest, OversizedSingleSlotLifecycle) {
     }
 }
 
+// --- Oversized requires PROCESS headroom, not just a free slot -----------------------------------
+// The slot bounds how MANY oversized publishes run (one), not how BIG they are, and this route charges
+// nothing. Without a headroom test an oversized publish is admitted while the process is already close
+// to its limit and can push it over, which is the failure the gate exists to prevent.
+TEST(PublishMemReservationTest, OversizedRejectedWithoutProcessHeadroom) {
+    MemTracker t(1000 * KB, "p3-test", nullptr);
+    MemTracker proc(10000 * KB, "p3-test-process", nullptr);
+    std::atomic<bool> slot{false};
+
+    // Process is at 9500 of 10000 KB, so only 500 KB of headroom is left.
+    proc.consume(9500 * KB);
+    {
+        PublishMemReservation big(&t, 5000 * KB, slot, &proc); // oversized, and 5000 > 500 headroom
+        EXPECT_FALSE(big.admitted());
+        EXPECT_FALSE(big.holds_oversized_slot());
+    }
+    EXPECT_FALSE(slot.load()); // a rejected oversized must not take (or leak) the slot
+    EXPECT_EQ(0, t.consumption());
+
+    // Free the process memory: the same publish is now admissible, so this is retryable backpressure
+    // rather than the permanent wedge the oversized route exists to avoid.
+    proc.release(9500 * KB);
+    {
+        PublishMemReservation big(&t, 5000 * KB, slot, &proc);
+        EXPECT_TRUE(big.admitted());
+        EXPECT_TRUE(big.holds_oversized_slot());
+        EXPECT_EQ(0, t.consumption()); // still does not charge the shared tracker
+    }
+    EXPECT_FALSE(slot.load());
+}
+
+// A null process tracker keeps the previous behavior, so callers that do not pass one are unaffected.
+TEST(PublishMemReservationTest, OversizedWithoutProcessTrackerAdmits) {
+    MemTracker t(1000 * KB, "p3-test", nullptr);
+    std::atomic<bool> slot{false};
+    {
+        PublishMemReservation big(&t, 5000 * KB, slot); // no process tracker supplied
+        EXPECT_TRUE(big.admitted());
+        EXPECT_TRUE(big.holds_oversized_slot());
+    }
+    EXPECT_FALSE(slot.load());
+}
+
+// An unlimited process tracker (limit <= 0) must not be read as "zero headroom".
+TEST(PublishMemReservationTest, OversizedWithUnlimitedProcessTrackerAdmits) {
+    MemTracker t(1000 * KB, "p3-test", nullptr);
+    MemTracker proc(-1, "p3-test-process-unlimited", nullptr);
+    std::atomic<bool> slot{false};
+    {
+        PublishMemReservation big(&t, 5000 * KB, slot, &proc);
+        EXPECT_TRUE(big.admitted());
+    }
+    EXPECT_FALSE(slot.load());
+}
+
 // --- Oversized under heavy concurrency: at most ONE admitted at a time (the TOCTOU race) -------
 TEST(PublishMemReservationTest, OversizedConcurrencyRaceFree) {
     MemTracker t(1000 * KB, "p3-test", nullptr);
