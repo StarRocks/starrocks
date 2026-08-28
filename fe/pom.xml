@@ -67,7 +67,7 @@ under the License.
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
-        <nimbusds.version>9.37.2</nimbusds.version>
+        <nimbusds.version>9.37.4</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <paimon.version>1.2.0</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
