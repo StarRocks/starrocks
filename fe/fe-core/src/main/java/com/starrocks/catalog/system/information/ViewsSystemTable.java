@@ -287,25 +287,47 @@ public class ViewsSystemTable extends SystemTable {
         if (db == null) {
             return true;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
         String dbName = db.getFullName();
-        try {
-            List<Table> tables = listingViews ? db.getViews() :
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-            OUTER:
-            for (Table table : tables) {
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
-                } catch (AccessDeniedException e) {
-                    continue;
-                }
+        // Snapshot the table list without holding any lock: Database#getViews and
+        // LocalMetastore#getTables both copy out of the idToTable ConcurrentHashMap. Each table
+        // is then locked individually below with an intensive table lock (IS on the db + READ on
+        // the table), as InformationSchemaDataSource has done since #73936.
+        //
+        // A DB-wide READ lock must not be used here, because this method runs in two very
+        // different scopes: the thrift `listTableStatus` handler, which holds no meta lock, and
+        // SchemaTableEvaluateRule during optimization, which runs inside PlannerMetaLocker and
+        // therefore already holds an INTENTION_SHARED lock on every database referenced by the
+        // query. Hierarchical locking forbids requesting a plain database READ lock inside an
+        // intention scope - MultiUserLock#tryLock throws NotSupportLockException - which fails
+        // the whole query, both for information_schema itself and for every user database the
+        // query touches. The intensive lock is reentrant in that scope, and it still conflicts
+        // with the table WRITE lock taken by ALTER VIEW, so the view definition read below is
+        // actually protected.
+        List<Table> tables = listingViews ? db.getViews() :
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+        OUTER:
+        for (Table table : tables) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
 
-                if (!PatternMatcher.matchPattern(paramPattern, table.getName(), matcher, caseSensitive)) {
-                    continue;
-                }
-                if (!Strings.isNullOrEmpty(paramTableName) &&
-                        !table.getName().equalsIgnoreCase(paramTableName)) {
+            if (!PatternMatcher.matchPattern(paramPattern, table.getName(), matcher, caseSensitive)) {
+                continue;
+            }
+            if (!Strings.isNullOrEmpty(paramTableName) &&
+                    !table.getName().equalsIgnoreCase(paramTableName)) {
+                continue;
+            }
+
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
+                // The list above was snapshotted unlocked; skip if a concurrent DROP removed
+                // the table before we acquired the lock.
+                if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), table.getId()) == null) {
                     continue;
                 }
 
@@ -349,9 +371,9 @@ public class ViewsSystemTable extends SystemTable {
                 if (limit > 0 && result.size() >= limit) {
                     return false;
                 }
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return true;
     }
