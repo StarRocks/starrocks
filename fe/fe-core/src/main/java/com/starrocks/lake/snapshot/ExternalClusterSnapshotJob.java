@@ -131,6 +131,18 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     @Override
     protected void runUploadingJob(SnapshotJobContext context) throws StarRocksException {
         AgentBatchTask batchTask = getLakeSnapshotBatchTask();
+        // AgentBatchTask is transient. A job loaded directly from an FE image therefore has an empty
+        // batch even though its persisted diff still has partitions to upload. Rebuild before treating
+        // the vacuously-finished empty batch as success.
+        if (batchTask.getTaskNum() == 0) {
+            if (snapshotDiff == null) {
+                throw new StarRocksException("snapshot diff is null when resuming external snapshot upload");
+            }
+            if (hasPendingUploads()) {
+                createUploadClusterSnapshotTasks();
+                return;
+            }
+        }
         if (!batchTask.isFinished()) {
             LOG.info("data snapshot tasks not finished. job: {}", getId());
             List<AgentTask> tasks = batchTask.getUnfinishedTasks(2000);
@@ -191,8 +203,25 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         return snapshotDiff;
     }
 
+    private boolean hasPendingUploads() {
+        return snapshotDiff != null
+                && (!snapshotDiff.getAddedPartitions().isEmpty() || !snapshotDiff.getChangedPartitions().isEmpty());
+    }
+
+    boolean hasCorruptedChangedPartitions() {
+        return snapshotDiff != null && snapshotDiff.getChangedPartitions().stream()
+                .anyMatch(change -> change.getCurrentPartitionInfo() == null);
+    }
+
     @Override
     public void replay() {
+        if ((getState() == ClusterSnapshotJobState.UPLOADING || getState() == ClusterSnapshotJobState.CLEANING)
+                && hasCorruptedChangedPartitions()) {
+            setErrMsg("changed partition info is missing from persisted snapshot diff");
+            setState(ClusterSnapshotJobState.ERROR);
+            LOG.warn("Stop malformed legacy external snapshot job during replay: {}", getId());
+            return;
+        }
         switch (getState()) {
             case INITIALIZING:
             case SNAPSHOTING:
@@ -323,7 +352,9 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
     private void createUploadClusterSnapshotTasks() throws StarRocksException {
         long vTabletId = getVirtualTabletId();
-        lakeSnapshotBatchTask = new AgentBatchTask();
+        // Build into a local batch and publish it only once it is complete: a throw half way through
+        // would otherwise leave tasks that are never submitted, and hence never respond, in the field.
+        AgentBatchTask batchTask = new AgentBatchTask();
         for (PartitionVersionInfo partition : snapshotDiff.getAddedPartitions()) {
             // try to reuse the aggregator node id if possible
             long aggregatorNodeId = chooseAggregatorNodeId(partition.getAggregatorNodeId());
@@ -339,10 +370,13 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                     partition.getVersion(), partition.isFileBundling(), false, vTabletId,
                     GlobalStateMgr.getCurrentState().getNextId());
             task.setComputeNodeTablets(computeNodeTablets);
-            lakeSnapshotBatchTask.addTask(task);
+            batchTask.addTask(task);
         }
 
         for (PartitionVersionChangeInfo partition : snapshotDiff.getChangedPartitions()) {
+            if (partition.getCurrentPartitionInfo() == null) {
+                throw new StarRocksException("changed partition info is missing from persisted snapshot diff");
+            }
             // try to reuse the aggregator node id if possible
             long aggregatorNodeId = chooseAggregatorNodeId(partition.getCurrentPartitionInfo().getAggregatorNodeId());
             if (aggregatorNodeId == 0) {
@@ -359,9 +393,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                     partition.getCurrentPartitionInfo().isFileBundling(), false, vTabletId,
                     GlobalStateMgr.getCurrentState().getNextId());
             task.setComputeNodeTablets(computeNodeTablets);
-            lakeSnapshotBatchTask.addTask(task);
+            batchTask.addTask(task);
         }
 
+        lakeSnapshotBatchTask = batchTask;
         AgentTaskQueue.addBatchTask(lakeSnapshotBatchTask);
         AgentTaskExecutor.submit(lakeSnapshotBatchTask);
         LOG.debug("Finish create cluster snapshot tasks. job: {}, vTabletId: {}, task count: {}", getId(), vTabletId,
@@ -370,7 +405,8 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
     void createDeleteClusterSnasphotTasks() throws StarRocksException {
         long vTabletId = getVirtualTabletId();
-        lakeSnapshotBatchTask = new AgentBatchTask();
+        // See createUploadClusterSnapshotTasks: publish the batch only once it is complete.
+        AgentBatchTask batchTask = new AgentBatchTask();
         for (PartitionVersionInfo partition : snapshotDiff.getDeletedPartitions()) {
             long aggregatorNodeId = chooseAggregatorNodeId(partition.getAggregatorNodeId());
             if (aggregatorNodeId == 0) {
@@ -381,10 +417,13 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(),
                     -1, -1, true, true, vTabletId, GlobalStateMgr.getCurrentState().getNextId());
-            lakeSnapshotBatchTask.addTask(task);
+            batchTask.addTask(task);
         }
 
         for (PartitionVersionChangeInfo partition : snapshotDiff.getChangedPartitions()) {
+            if (partition.getCurrentPartitionInfo() == null) {
+                throw new StarRocksException("changed partition info is missing from persisted snapshot diff");
+            }
             long aggregatorNodeId = chooseAggregatorNodeId(partition.getCurrentPartitionInfo().getAggregatorNodeId());
             if (aggregatorNodeId == 0) {
                 throw new StarRocksException("failed to choose aggregator node for cluster snapshot task");
@@ -397,9 +436,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             List<TComputeNodeTablets> computeNodeTablets =
                             collectComputeNodeTablets(partition.getCurrentPartitionInfo().getTabletIds());
             task.setComputeNodeTablets(computeNodeTablets);
-            lakeSnapshotBatchTask.addTask(task);
+            batchTask.addTask(task);
         }
 
+        lakeSnapshotBatchTask = batchTask;
         AgentTaskQueue.addBatchTask(lakeSnapshotBatchTask);
         AgentTaskExecutor.submit(lakeSnapshotBatchTask);
         LOG.debug("Finish create delete cluster snapshot tasks. job: {}, vTabletId: {}, task count: {}", getId(), vTabletId,
@@ -714,8 +754,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
      * Information about a partition with version change
      */
     private static class PartitionVersionChangeInfo {
+        @SerializedName(value = "currentPartitionInfo")
         private final PartitionVersionInfo currentPartitionInfo;
+        @SerializedName(value = "prevVersion")
         private long prevVersion;
+        @SerializedName(value = "isPreviousFileBundling")
         private boolean isPreviousFileBundling;
 
         public PartitionVersionChangeInfo(long prevVersion, boolean isPreviousFileBundling, 

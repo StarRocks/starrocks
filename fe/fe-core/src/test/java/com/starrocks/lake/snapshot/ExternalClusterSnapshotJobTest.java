@@ -15,6 +15,8 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.common.collect.Lists;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.common.AlreadyExistsException;
@@ -31,7 +33,9 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.lake.snapshot.ClusterSnapshotJobScheduler;
 import com.starrocks.leader.CheckpointController;
+import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -458,6 +462,7 @@ public class ExternalClusterSnapshotJobTest {
         ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot", storageVolumeName,
                 System.currentTimeMillis());
         job.setState(ClusterSnapshotJobState.UPLOADING);
+        setSnapshotDiff(job, createEmptySnapshotDiff());
 
         CheckpointController feController = new CheckpointController("fe", null, "");
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
@@ -828,6 +833,137 @@ public class ExternalClusterSnapshotJobTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    public void testChangedPartitionsSurviveGsonRoundTripAndCanDispatchCleanup() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+
+        Object diff = createEmptySnapshotDiff();
+        List<Object> deletedPartitions = (List<Object>) diff.getClass().getMethod("getDeletedPartitions").invoke(diff);
+        List<Object> changedPartitions = (List<Object>) diff.getClass().getMethod("getChangedPartitions").invoke(diff);
+        deletedPartitions.add(newPartitionVersionInfo(1, 2, 3, 4, 10L, Lists.newArrayList(1001L)));
+        Object current = newPartitionVersionInfo(5, 6, 7, 8, 2L, Lists.newArrayList(2001L));
+        changedPartitions.add(newPartitionVersionChangeInfo(1L, true, current));
+        setSnapshotDiff(job, diff);
+
+        // Exactly what the edit log and the image store: a copyForPersist run through StarRocks' Gson.
+        String json = GsonUtils.GSON.toJson(job.copyForPersist());
+        ExternalClusterSnapshotJob restored = GsonUtils.GSON.fromJson(json, ExternalClusterSnapshotJob.class);
+
+        Object restoredDiff = getSnapshotDiff(restored);
+        Assertions.assertNotNull(restoredDiff);
+        List<Object> restoredChanged =
+                (List<Object>) restoredDiff.getClass().getMethod("getChangedPartitions").invoke(restoredDiff);
+        Assertions.assertEquals(1, restoredChanged.size());
+
+        Object restoredChange = restoredChanged.get(0);
+        Object restoredCurrent =
+                restoredChange.getClass().getMethod("getCurrentPartitionInfo").invoke(restoredChange);
+        Assertions.assertNotNull(restoredCurrent, "currentPartitionInfo must survive persistence");
+        Assertions.assertEquals(1L, restoredChange.getClass().getMethod("getPrevVersion").invoke(restoredChange));
+        Assertions.assertTrue(
+                (Boolean) restoredChange.getClass().getMethod("isPreviousFileBundling").invoke(restoredChange));
+        Assertions.assertEquals(2L, restoredCurrent.getClass().getMethod("getVersion").invoke(restoredCurrent));
+        Assertions.assertEquals(Lists.newArrayList(2001L),
+                restoredCurrent.getClass().getMethod("getTabletIds").invoke(restoredCurrent));
+
+        // The restored job must still be able to dispatch its cleanup. This used to throw NPE on the
+        // null currentPartitionInfo, leaving the snapshot un-expirable and its remote files undeleted.
+        mockAggregatorSuccess();
+        mockWarehouseAliveNodes();
+        mockWarehouseAssign();
+        mockGetVirtualTabletId();
+
+        restored.createDeleteClusterSnasphotTasks();
+        Assertions.assertEquals(2, restored.getLakeSnapshotBatchTask().getAllTasks().size());
+    }
+
+    @Test
+    public void testLegacyEmptyChangedPartitionStopsUploadingJobDuringJournalReplay() throws Exception {
+        ExternalClusterSnapshotJob current = new ExternalClusterSnapshotJob(
+                2L, "current_snapshot", storageVolumeName, System.currentTimeMillis());
+        current.getSnapshot().setClusterSnapshotInfo(createCompleteClusterSnapshotInfo(1L, 2L, 3L, 4L, 20L));
+        current.setState(ClusterSnapshotJobState.UPLOADING);
+        setSnapshotDiff(current, createSnapshotDiffWithChangedPartition());
+
+        JsonObject legacyJson = GsonUtils.GSON.toJsonTree(current).getAsJsonObject();
+        JsonArray emptyChanges = new JsonArray();
+        emptyChanges.add(new JsonObject());
+        legacyJson.getAsJsonObject("snapshotDiff").add("changedPartitions", emptyChanges);
+        ExternalClusterSnapshotJob legacy = GsonUtils.GSON.fromJson(legacyJson, ExternalClusterSnapshotJob.class);
+        Assertions.assertTrue(legacy.hasCorruptedChangedPartitions());
+
+        ClusterSnapshotLog log = new ClusterSnapshotLog();
+        log.setSnapshotJob(legacy);
+        clusterSnapshotMgr.replayLog(log);
+
+        ExternalClusterSnapshotJob stopped =
+                (ExternalClusterSnapshotJob) clusterSnapshotMgr.getAutomatedSnapshotJobs().get(legacy.getId());
+        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, stopped.getState());
+        Assertions.assertTrue(stopped.getErrMsg().contains("changed partition info is missing"));
+    }
+
+    @Test
+    public void testLegacyEmptyChangedPartitionSkipsPendingCleanupAfterImageLoad() throws Exception {
+        ExternalClusterSnapshotJob current = new ExternalClusterSnapshotJob(
+                2L, "current_snapshot", storageVolumeName, System.currentTimeMillis());
+        current.getSnapshot().setClusterSnapshotInfo(createCompleteClusterSnapshotInfo(1L, 2L, 3L, 4L, 20L));
+        current.setState(ClusterSnapshotJobState.FINISHED);
+        current.setCleaningCompleted(false);
+        setSnapshotDiff(current, createSnapshotDiffWithChangedPartition());
+        JsonObject legacyJson = GsonUtils.GSON.toJsonTree(current).getAsJsonObject();
+        JsonArray emptyChanges = new JsonArray();
+        emptyChanges.add(new JsonObject());
+        legacyJson.getAsJsonObject("snapshotDiff").add("changedPartitions", emptyChanges);
+        ExternalClusterSnapshotJob legacy = GsonUtils.GSON.fromJson(legacyJson, ExternalClusterSnapshotJob.class);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(legacy.getId(), legacy);
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(feController, starMgrController);
+        java.lang.reflect.Method retry = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        retry.setAccessible(true);
+        retry.invoke(scheduler);
+
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, legacy.getState());
+        Assertions.assertTrue(legacy.isCleaningCompleted());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testUploadingJobLoadedFromImageRebuildsTransientTasks() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+        setSnapshotDiff(job, createSnapshotDiffWithAddedPartition(false));
+
+        String json = GsonUtils.GSON.toJson(job.copyForPersist());
+        ExternalClusterSnapshotJob restored = GsonUtils.GSON.fromJson(json, ExternalClusterSnapshotJob.class);
+        Assertions.assertEquals(0, restored.getLakeSnapshotBatchTask().getTaskNum());
+
+        mockAggregatorSuccess();
+        mockWarehouseAssign();
+        mockGetVirtualTabletId();
+        restored.run(createSnapshotJobContext(null, null));
+
+        Assertions.assertEquals(ClusterSnapshotJobState.UPLOADING, restored.getState());
+        Assertions.assertTrue(restored.getLakeSnapshotBatchTask().getTaskNum() > 0);
+    }
+
+    @Test
+    public void testUploadingJobLoadedFromImageRejectsMissingDiff() {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        job.run(createSnapshotJobContext(null, null));
+
+        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
+        Assertions.assertTrue(job.getErrMsg().contains("snapshot diff is null"));
+    }
+
+    @Test
     public void testPartitionKeyEqualityAndHash() throws Exception {
         Object key1 = newPartitionKey(1, 2, 3, 4);
         Object key2 = newPartitionKey(1, 2, 3, 4);
@@ -1128,6 +1264,12 @@ public class ExternalClusterSnapshotJobTest {
         java.lang.reflect.Field snapshotDiffField = ExternalClusterSnapshotJob.class.getDeclaredField("snapshotDiff");
         snapshotDiffField.setAccessible(true);
         snapshotDiffField.set(job, diff);
+    }
+
+    private Object getSnapshotDiff(ExternalClusterSnapshotJob job) throws Exception {
+        java.lang.reflect.Field snapshotDiffField = ExternalClusterSnapshotJob.class.getDeclaredField("snapshotDiff");
+        snapshotDiffField.setAccessible(true);
+        return snapshotDiffField.get(job);
     }
 
     private Object newPartitionKey(long dbId, long tableId, long partId, long physicalPartId) throws Exception {

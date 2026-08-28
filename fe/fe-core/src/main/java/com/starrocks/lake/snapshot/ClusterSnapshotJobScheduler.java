@@ -151,6 +151,13 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
             if (!extJob.isFinished() || extJob.isCleaningCompleted()) {
                 continue;
             }
+            if (extJob.hasCorruptedChangedPartitions()) {
+                // The details were lost by an older serializer and cannot be used to build a cleanup
+                // request. Abandon this best-effort cleanup instead of retrying the same error forever.
+                extJob.setCleaningCompleted(true);
+                LOG.warn("Skip pending cleanup for malformed legacy external snapshot job: {}", extJob.getId());
+                continue;
+            }
 
             try {
                 AgentBatchTask batchTask = extJob.getLakeSnapshotBatchTask();
