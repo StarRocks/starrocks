@@ -41,12 +41,6 @@ public class DataSkew {
         }
     }
 
-    public enum SkewType {
-        NOT_SKEWED,
-        SKEWED_NULL,
-        SKEWED_MCV
-    }
-
     public enum AdditionalInfo {
         NONE,
         UNKNOWN_STATS,
@@ -55,17 +49,17 @@ public class DataSkew {
         NO_MCV
     }
 
-    public record SkewInfo(SkewType type, AdditionalInfo additionalInfo, Optional<List<Pair<String, Long>>> maybeMcvs) {
-        public SkewInfo(SkewType type) {
-            this(type, AdditionalInfo.NONE, Optional.empty());
+    public record SkewInfo(boolean nullSkewed, AdditionalInfo additionalInfo, Optional<List<Pair<String, Long>>> maybeMcvs) {
+        public SkewInfo(boolean nullSkewed) {
+            this(nullSkewed, AdditionalInfo.NONE, Optional.empty());
         }
 
-        public SkewInfo(SkewType type, AdditionalInfo additionalInfo) {
-            this(type, additionalInfo, Optional.empty());
+        public SkewInfo(boolean nullSkewed, AdditionalInfo additionalInfo) {
+            this(nullSkewed, additionalInfo, Optional.empty());
         }
 
         public boolean isSkewed() {
-            return type != SkewType.NOT_SKEWED;
+            return nullSkewed || maybeMcvs.isPresent();
         }
 
         public Optional<Map<String, Long>> getMcvs() {
@@ -178,31 +172,22 @@ public class DataSkew {
         final var rowCount = statistics.getOutputRowCount();
         if (rowCount < 1 || (statistics.isTableRowCountMayInaccurate() && shouldEnforceRowCountAccuracy())) {
             // Without sufficient information we can not make a decision.
-            return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.INACCURATE_ROW_COUNT);
+            return new SkewInfo(false, AdditionalInfo.INACCURATE_ROW_COUNT);
         }
 
         final var nullSkewInfo = getNullSkewInfo(columnStatistic, thresholds);
         final var mcvSkewInfo = getMcvSkewInfo(statistics, columnStatistic, thresholds);
 
-        if (nullSkewInfo.skewed && mcvSkewInfo.skewed) {
-            // If there is skew in the MCVs as well as NULLs, we decide for the one that is more skewed.
-            if (nullSkewInfo.nullSkewFactor.get() >= mcvSkewInfo.mcvSkewFactor.get()) {
-                return new SkewInfo(SkewType.SKEWED_NULL);
-            } else {
-                return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
-            }
-        } else if (nullSkewInfo.skewed) {
-            return new SkewInfo(SkewType.SKEWED_NULL);
-        } else if (mcvSkewInfo.skewed) {
-            return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
+        if (nullSkewInfo.skewed || mcvSkewInfo.skewed) {
+            return new SkewInfo(nullSkewInfo.skewed, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
         }
 
         if (columnStatistic.isUnknown()) {
-            return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.UNKNOWN_STATS);
+            return new SkewInfo(false, AdditionalInfo.UNKNOWN_STATS);
         }
 
         // Can not deduce skew.
-        return new SkewInfo(SkewType.NOT_SKEWED, mcvSkewInfo.additionalInfo);
+        return new SkewInfo(false, mcvSkewInfo.additionalInfo);
     }
 
     public static SkewCandidates getSkewCandidates(@NotNull Statistics statistics,
