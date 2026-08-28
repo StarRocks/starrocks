@@ -92,6 +92,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：true の場合、生成された Log4j2 設定は、ローテーションされた監査ログファイル名 (fe.audit.log.*) に ".gz" 接尾辞を追加し、Log4j2 がロールオーバー時に圧縮された (.gz) アーカイブ監査ログファイルを生成するようにします。この設定は、FE 起動時に Log4jConfig.initLogging で読み込まれ、監査ログの RollingFile アペンダーに適用されます。アクティブな監査ログではなく、ローテーション/アーカイブされたファイルにのみ影響します。値は起動時に初期化されるため、変更を有効にするには FE の再起動が必要です。監査ログのローテーション設定 (`audit_log_dir`、`audit_log_roll_interval`、`audit_roll_maxsize`、`audit_log_roll_num`) とともに使用します。
 - 導入時期：3.2.12
 
+### `audit_log_error_message_max_length`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：文字
+- 変更可能：Yes
+- 説明：ステートメントが失敗した場合に監査ログの `ErrorMessage` フィールドへ記録される最大長です。長さは UTF-16 コードユニットで数えるため、絵文字などの基本多言語面外の文字は 2 としてカウントされます。これを超えるエラーメッセージは切り詰められ、末尾に `... /* truncated, audit_log_error_message_max_length=<value> */` が付きます（この接尾辞は上限に含まれません）。`0` に設定するとエラーメッセージは記録されず、監査レコードにこのフィールドは現れません。エラーメッセージはステートメントを失敗させた値やエラー箇所のトークンを含むため、`enable_sql_desensitize_in_log` が `true` の場合、および `enable_audit_sql` が `false` の場合も記録されません。
+- 導入時期：4.2.0
+
 ### `audit_log_json_format`
 
 - デフォルト：false
