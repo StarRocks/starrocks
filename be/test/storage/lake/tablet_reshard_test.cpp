@@ -12041,6 +12041,270 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_legacy_compressed_gap_f
     expect_metadata_fallback_lifecycle(result, {{10, 100}, {60, 600}, {70, 700}}, {{10, 1010}, {70, 700}}, {60});
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_legacy_raw_zero_reuses) {
+    ASSIGN_OR_ABORT(auto result,
+                    publish_metadata_only_merge_fixture(
+                            MetadataOnlyMergeShape::kPrivate, false, false, true, [&](auto& sources) {
+                                const std::string extra_name = "affine_raw_zero_extra.dat";
+                                const uint64_t extra_size = write_two_column_segment(
+                                        sources[1]->id(), extra_name, 1, [](int key) { return key * 10; }, 70);
+                                auto* extra = add_allocator_rowset(sources[1].get(), 100,
+                                                                   sources[1]->rowsets(0).version(), extra_name, 0);
+                                extra->mutable_segment_metas(0)->set_size(extra_size);
+                                sources[1]->set_next_rowset_id(101);
+                            }));
+    const auto& target = result.published.at(result.target_tablet_id);
+    ASSERT_EQ(2, target.sstable_meta().sstables_size());
+    auto legacy = std::find_if(target.sstable_meta().sstables().begin(), target.sstable_meta().sstables().end(),
+                               [](const auto& sst) { return !sst.has_shared_rssid(); });
+    ASSERT_NE(target.sstable_meta().sstables().end(), legacy);
+    EXPECT_EQ(2, legacy->rssid_offset());
+    EXPECT_EQ(static_cast<uint64_t>(2) << 32, legacy->max_rss_rowid());
+    EXPECT_EQ(4, target.next_rowset_id());
+
+    auto target_ptr = std::make_shared<TabletMetadataPB>(target);
+    _update_manager->unload_and_remove_primary_index(target.id());
+    ASSIGN_OR_ABORT(auto values, load_index_values(target_ptr, target.id(), {encode_int_primary_key(/*key=*/60)}));
+    ASSERT_EQ(1, values.size());
+    EXPECT_EQ(2, values[0].get_value() >> 32) << "stored raw RSSID 0 must use the accumulated output offset";
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_legacy_alias_exclusive_end_reuses) {
+    ASSIGN_OR_ABORT(
+            auto result,
+            publish_metadata_only_merge_fixture(
+                    MetadataOnlyMergeShape::kPrivate, false, false, true, [&](auto& sources) {
+                        lake::tablet_reshard_helper::set_rowset_uid(sources[0]->mutable_rowsets(0));
+                        auto* exclusive_alias =
+                                add_allocator_rowset(sources[1].get(), 6, sources[1]->rowsets(0).version(),
+                                                     sources[0]->rowsets(0).segment_metas(0).filename(), 0);
+                        exclusive_alias->mutable_segment_metas(0)->CopyFrom(sources[0]->rowsets(0).segment_metas(0));
+                        exclusive_alias->mutable_uid()->CopyFrom(sources[0]->rowsets(0).uid());
+                        sources[1]->set_next_rowset_id(7);
+                    }));
+    const auto& target = result.published.at(result.target_tablet_id);
+    ASSERT_EQ(2, target.sstable_meta().sstables_size());
+    auto legacy = std::find_if(target.sstable_meta().sstables().begin(), target.sstable_meta().sstables().end(),
+                               [](const auto& sst) { return !sst.has_shared_rssid(); });
+    ASSERT_NE(target.sstable_meta().sstables().end(), legacy);
+    EXPECT_EQ(2, legacy->rssid_offset());
+    EXPECT_EQ(static_cast<uint64_t>(2) << 32, legacy->max_rss_rowid());
+    EXPECT_EQ(3, target.next_rowset_id());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_legacy_uint32_exclusive_end_does_not_enumerate) {
+    bool materialized = false;
+    int classifier_visited_runs = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { materialized = true; });
+    sync->SetCallBack("affine_delta:visited_run", [&](void*) {
+        if (materialized) ++classifier_visited_runs;
+    });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->ClearCallBack("materialize_planned_rowsets:entry");
+        sync->ClearCallBack("affine_delta:visited_run");
+        sync->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto result, publish_metadata_only_merge_fixture(
+                                         MetadataOnlyMergeShape::kPrivate, false, false, true, [](auto& sources) {
+                                             auto* legacy = sources[1]->mutable_sstable_meta()->mutable_sstables(0);
+                                             legacy->set_rssid_offset(std::numeric_limits<int32_t>::max());
+                                             legacy->set_max_rss_rowid(
+                                                     static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) << 32);
+                                         }));
+    const auto& target = result.published.at(result.target_tablet_id);
+    EXPECT_EQ(0, target.sstable_meta().sstables_size());
+    EXPECT_LE(classifier_visited_runs, 1) << "the widened [INT32_MAX, 2^32) domain must not be enumerated";
+    for (const auto& filename : result.source_sst_filenames) {
+        EXPECT_EQ(1, std::count_if(target.orphan_files().begin(), target.orphan_files().end(),
+                                   [&](const auto& orphan) { return orphan.name() == filename; }));
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_legacy_proof_visits_runs_not_rssids) {
+    bool materialized = false;
+    int classifier_visited_runs = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { materialized = true; });
+    sync->SetCallBack("affine_delta:visited_run", [&](void*) {
+        if (materialized) ++classifier_visited_runs;
+    });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->ClearCallBack("materialize_planned_rowsets:entry");
+        sync->ClearCallBack("affine_delta:visited_run");
+        sync->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto result,
+                    publish_metadata_only_merge_fixture(
+                            MetadataOnlyMergeShape::kPrivate, false, false, true, [&](auto& sources) {
+                                const std::string high_name = "affine_visited_high.dat";
+                                const uint64_t high_size = write_two_column_segment(
+                                        sources[1]->id(), high_name, 1, [](int key) { return key * 10; }, 70);
+                                auto* high = add_allocator_segment(sources[1]->mutable_rowsets(0), high_name, 4095);
+                                high->set_size(high_size);
+
+                                const std::string extra_name = "affine_visited_extra.dat";
+                                const uint64_t extra_size = write_two_column_segment(
+                                        sources[1]->id(), extra_name, 1, [](int key) { return key * 10; }, 80);
+                                auto* extra = add_allocator_rowset(sources[1].get(), 10000,
+                                                                   sources[1]->rowsets(0).version(), extra_name, 0);
+                                extra->mutable_segment_metas(0)->set_size(extra_size);
+                                sources[1]->set_next_rowset_id(10001);
+                                sources[1]->mutable_sstable_meta()->mutable_sstables(0)->set_max_rss_rowid(
+                                        static_cast<uint64_t>(4100) << 32);
+                            }));
+    const auto& target = result.published.at(result.target_tablet_id);
+    ASSERT_EQ(2, target.sstable_meta().sstables_size());
+    auto legacy = std::find_if(target.sstable_meta().sstables().begin(), target.sstable_meta().sstables().end(),
+                               [](const auto& sst) { return !sst.has_shared_rssid(); });
+    ASSERT_NE(target.sstable_meta().sstables().end(), legacy);
+    EXPECT_EQ(2, legacy->rssid_offset());
+    EXPECT_EQ(static_cast<uint64_t>(4097) << 32, legacy->max_rss_rowid());
+    EXPECT_EQ(1, classifier_visited_runs) << "a 4096-RSSID affine domain must visit one translation run";
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_identical_common_nonzero_delta_reuses) {
+    ASSIGN_OR_ABORT(auto result,
+                    publish_metadata_only_merge_fixture(
+                            MetadataOnlyMergeShape::kIdentical, false, false, true, [&](auto& sources) {
+                                for (auto& source : sources) {
+                                    source->mutable_rowsets(0)->set_id(5);
+                                    source->set_next_rowset_id(6);
+                                }
+
+                                const auto file = write_raw_pk_sstable(
+                                        _tablet_manager->sst_location(
+                                                sources[0]->id(), sources[0]->sstable_meta().sstables(0).filename()),
+                                        {{encode_int_primary_key(10),
+                                          serialize_index_values({{sources[0]->version(), 0, 0}})}});
+                                for (auto& source : sources) {
+                                    auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
+                                    sst->set_filesize(file.filesize);
+                                    sst->set_encryption_meta(file.encryption_meta);
+                                    sst->mutable_range()->CopyFrom(file.range);
+                                    sst->clear_shared_rssid();
+                                    sst->clear_shared_version();
+                                    sst->set_rssid_offset(5);
+                                    sst->set_max_rss_rowid(static_cast<uint64_t>(5) << 32);
+                                }
+                            }));
+    const auto& target = result.published.at(result.target_tablet_id);
+    ASSERT_EQ(1, target.sstable_meta().sstables_size());
+    const auto& output = target.sstable_meta().sstables(0);
+    EXPECT_TRUE(output.shared());
+    EXPECT_EQ(1, output.rssid_offset());
+    EXPECT_EQ(static_cast<uint64_t>(1) << 32, output.max_rss_rowid());
+    EXPECT_EQ(2, target.next_rowset_id());
+
+    auto target_ptr = std::make_shared<TabletMetadataPB>(target);
+    _update_manager->unload_and_remove_primary_index(target.id());
+    ASSIGN_OR_ABORT(auto values, load_index_values(target_ptr, target.id(), {encode_int_primary_key(/*key=*/10)}));
+    ASSERT_EQ(1, values.size());
+    EXPECT_EQ(1, values[0].get_value() >> 32);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_identical_occurrence_disagreement_falls_back) {
+    ASSIGN_OR_ABORT(auto result,
+                    publish_metadata_only_merge_fixture(
+                            MetadataOnlyMergeShape::kIdentical, false, false, true, [&](auto& sources) {
+                                const std::string high_name = "affine_identical_disagreement_high.dat";
+                                const uint64_t high_size = write_two_column_segment(
+                                        sources[0]->id(), high_name, 1, [](int key) { return key * 10; }, 80);
+                                auto* left_high = add_allocator_segment(sources[0]->mutable_rowsets(0), high_name, 1);
+                                left_high->set_size(high_size);
+                                left_high->set_shared(true);
+                                auto* right_high = add_allocator_segment(sources[1]->mutable_rowsets(0), high_name, 1);
+                                right_high->CopyFrom(*left_high);
+                                sources[0]->mutable_rowsets(0)->set_id(5);
+                                sources[0]->set_next_rowset_id(7);
+                                sources[1]->mutable_rowsets(0)->set_id(6);
+                                sources[1]->set_next_rowset_id(8);
+
+                                const auto file = write_raw_pk_sstable(
+                                        _tablet_manager->sst_location(
+                                                sources[0]->id(), sources[0]->sstable_meta().sstables(0).filename()),
+                                        {{encode_int_primary_key(10),
+                                          serialize_index_values({{sources[0]->version(), 0, 0}})}});
+                                for (auto& source : sources) {
+                                    auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
+                                    sst->set_filesize(file.filesize);
+                                    sst->set_encryption_meta(file.encryption_meta);
+                                    sst->mutable_range()->CopyFrom(file.range);
+                                    sst->clear_shared_rssid();
+                                    sst->clear_shared_version();
+                                    sst->set_rssid_offset(5);
+                                    sst->set_max_rss_rowid(static_cast<uint64_t>(6) << 32);
+                                }
+                            }));
+    const auto& target = result.published.at(result.target_tablet_id);
+    EXPECT_EQ(0, target.sstable_meta().sstables_size());
+    for (const auto& filename : result.source_sst_filenames) {
+        EXPECT_EQ(1, std::count_if(target.orphan_files().begin(), target.orphan_files().end(),
+                                   [&](const auto& orphan) { return orphan.name() == filename; }));
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_identical_prior_offset_reuses) {
+    ASSIGN_OR_ABORT(auto result,
+                    publish_metadata_only_merge_fixture(
+                            MetadataOnlyMergeShape::kIdentical, false, false, true, [&](auto& sources) {
+                                const std::string high_name = "affine_identical_prior_high.dat";
+                                const uint64_t high_size = write_two_column_segment(
+                                        sources[0]->id(), high_name, 1, [](int key) { return key * 10; }, 80);
+                                auto* left_high = add_allocator_segment(sources[0]->mutable_rowsets(0), high_name, 3);
+                                left_high->set_size(high_size);
+                                left_high->set_shared(true);
+                                auto* right_high = add_allocator_segment(sources[1]->mutable_rowsets(0), high_name, 3);
+                                right_high->CopyFrom(*left_high);
+
+                                const std::string live_name = "affine_identical_prior_live.dat";
+                                const uint64_t live_size = write_two_column_segment(
+                                        sources[0]->id(), live_name, 1, [](int key) { return key * 10; }, 90);
+                                auto* left_live = add_allocator_rowset(sources[0].get(), 5,
+                                                                       sources[0]->rowsets(0).version(), live_name, 0);
+                                left_live->mutable_segment_metas(0)->set_size(live_size);
+                                left_live->mutable_segment_metas(0)->set_shared(true);
+                                auto* right_live = add_allocator_rowset(sources[1].get(), 5,
+                                                                        sources[1]->rowsets(0).version(), live_name, 0);
+                                right_live->mutable_segment_metas(0)->CopyFrom(left_live->segment_metas(0));
+                                right_live->mutable_uid()->CopyFrom(left_live->uid());
+                                for (auto& source : sources) {
+                                    source->set_next_rowset_id(6);
+                                }
+                                const auto file = write_raw_pk_sstable(
+                                        _tablet_manager->sst_location(
+                                                sources[0]->id(), sources[0]->sstable_meta().sstables(0).filename()),
+                                        {{encode_int_primary_key(10),
+                                          serialize_index_values({{sources[0]->version(), 0, 0}})}});
+                                for (auto& source : sources) {
+                                    auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
+                                    sst->set_filesize(file.filesize);
+                                    sst->set_encryption_meta(file.encryption_meta);
+                                    sst->mutable_range()->CopyFrom(file.range);
+                                    sst->clear_shared_rssid();
+                                    sst->clear_shared_version();
+                                    sst->set_rssid_offset(5);
+                                    sst->set_max_rss_rowid(static_cast<uint64_t>(5) << 32);
+                                }
+                            }));
+    const auto& target = result.published.at(result.target_tablet_id);
+    ASSERT_EQ(1, target.sstable_meta().sstables_size());
+    const auto& output = target.sstable_meta().sstables(0);
+    EXPECT_TRUE(output.shared());
+    EXPECT_EQ(5, output.rssid_offset());
+    EXPECT_EQ(static_cast<uint64_t>(5) << 32, output.max_rss_rowid());
+
+    auto target_ptr = std::make_shared<TabletMetadataPB>(target);
+    _update_manager->unload_and_remove_primary_index(target.id());
+    ASSIGN_OR_ABORT(auto values, load_index_values(target_ptr, target.id(), {encode_int_primary_key(/*key=*/10)}));
+    ASSERT_EQ(1, values.size());
+    EXPECT_EQ(5, values[0].get_value() >> 32);
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_affine_legacy_alias_interior_rejected_before_materialize) {
     int materialize_count = 0;
     auto* sync = SyncPoint::GetInstance();

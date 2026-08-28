@@ -278,6 +278,7 @@ public:
                 [](uint64_t value, const RssidTranslationRun& run) { return value < run.source_begin; });
         if (iter == _runs.begin()) return std::optional<int64_t>{};
         --iter;
+        TEST_SYNC_POINT_CALLBACK("affine_delta:visited_run", const_cast<RssidTranslationRun*>(&*iter));
         if (begin < iter->source_begin || end > iter->source_end) return std::optional<int64_t>{};
         auto alias = std::lower_bound(_divergent_alias_keys.begin(), _divergent_alias_keys.end(), begin);
         if (alias != _divergent_alias_keys.end() && *alias < end) return std::optional<int64_t>{};
@@ -2199,6 +2200,45 @@ Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, in
     return Status::OK();
 }
 
+bool legacy_sstable_occurrence_agrees(const RssidProjection& projection,
+                                      const std::unordered_set<uint32_t>& source_live_rssids,
+                                      const std::unordered_set<uint32_t>& target_live_rssids, uint64_t source_begin,
+                                      uint32_t source_high, int64_t delta, uint32_t target_end) {
+    if (!source_live_rssids.contains(source_high)) return false;
+    const int64_t projected_begin = static_cast<int64_t>(source_begin) + delta;
+    const int64_t projected_high = static_cast<int64_t>(source_high) + delta;
+    if (projected_begin < 0 || projected_begin > std::numeric_limits<int32_t>::max() || projected_high < 0 ||
+        projected_high >= target_end || !target_live_rssids.contains(static_cast<uint32_t>(projected_high))) {
+        return false;
+    }
+    for (uint32_t source : source_live_rssids) {
+        if (source < source_begin || source > source_high) continue;
+        auto mapped = projection.map_occurrence_rssid(source);
+        const int64_t expected = static_cast<int64_t>(source) + delta;
+        if (!mapped.ok() || expected < 0 || expected >= target_end || mapped.value() != expected ||
+            !target_live_rssids.contains(mapped.value())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+StatusOr<std::optional<int64_t>> prove_legacy_sstable_affine_domain(
+        const PersistentIndexSstablePB& sst, const RssidProjection& projection,
+        const std::unordered_set<uint32_t>& source_live_rssids, const std::unordered_set<uint32_t>& target_live_rssids,
+        uint32_t target_end) {
+    if (sst.rssid_offset() < 0) return std::optional<int64_t>{};
+    const uint64_t source_begin = static_cast<uint32_t>(sst.rssid_offset());
+    const uint32_t source_high = extract_rss_rowid_high(sst.max_rss_rowid());
+    if (source_high < source_begin) return std::optional<int64_t>{};
+    ASSIGN_OR_RETURN(auto delta, projection.affine_delta(source_begin, uint64_t{source_high} + 1));
+    if (!delta.has_value() || !legacy_sstable_occurrence_agrees(projection, source_live_rssids, target_live_rssids,
+                                                                source_begin, source_high, *delta, target_end)) {
+        return std::optional<int64_t>{};
+    }
+    return delta;
+}
+
 enum class MergeSstableMetaMode { kPrivate, kIdentical, kLazyRebuild };
 
 enum class MergeSstableFallbackReason {
@@ -2665,10 +2705,6 @@ StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std
             if (!range_within_source) {
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
             }
-            if (source_sstable.max_rss_rowid() > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-                return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
-            }
-
             PersistentIndexSstablePB projected(source_sstable);
             if (source_sstable.has_shared_rssid()) {
                 auto source_rssid = effective_shared_rssid(source_sstable);
@@ -2694,23 +2730,11 @@ StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std
                     source_sstable.rssid_offset() < 0) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
                 }
-                const uint32_t source_high = extract_rss_rowid_high(source_sstable.max_rss_rowid());
-                ASSIGN_OR_RETURN(auto conservative_delta, projection.conservative_context_delta());
-                if (!conservative_delta.has_value()) {
+                ASSIGN_OR_RETURN(auto domain_delta, prove_legacy_sstable_affine_domain(
+                                                            source_sstable, projection, source_live_rssids,
+                                                            target_live_rssids, allocation_plan.target_next_rowset_id));
+                if (!domain_delta.has_value()) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
-                }
-                ASSIGN_OR_RETURN(auto domain_delta,
-                                 projection.affine_delta(source_sstable.rssid_offset(), uint64_t{source_high} + 1));
-                if (!domain_delta.has_value() || *domain_delta != *conservative_delta) {
-                    return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
-                }
-                const int64_t projected_high = static_cast<int64_t>(source_high) + *domain_delta;
-                const int64_t projected_offset = static_cast<int64_t>(source_sstable.rssid_offset()) + *domain_delta;
-                if (!source_live_rssids.contains(source_high) || projected_high < 0 ||
-                    projected_high >= allocation_plan.target_next_rowset_id ||
-                    !target_live_rssids.contains(static_cast<uint32_t>(projected_high)) || projected_offset < 0 ||
-                    projected_offset > std::numeric_limits<int32_t>::max()) {
-                    return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }
                 const auto projection_status =
                         project_non_shared_legacy_sstable(source_sstable, *domain_delta, &projected);
@@ -2736,11 +2760,12 @@ bool same_rowset_physical_layout(const RowsetMetadataPB& left, const RowsetMetad
         }
     }
 
-    // SPLIT stamps child-local rowset ranges and apportions logical statistics, while the physical
-    // segment and delete-file declarations remain inherited. Compare every other rowset field,
-    // using segment_metas as the canonical physical declaration and normalizing its effective index.
+    // SPLIT or an earlier merge can stamp context-local rowset IDs/ranges and apportion logical statistics, while the
+    // physical segment and delete-file declarations remain inherited. Compare every other rowset field, using
+    // segment_metas as the canonical physical declaration and normalizing its effective index.
     auto normalized = [](const RowsetMetadataPB& rowset) {
         RowsetMetadataPB result(rowset);
+        result.clear_id();
         result.clear_range();
         result.clear_num_rows();
         result.clear_data_size();
@@ -2820,9 +2845,6 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
     MergeSstableMetaResult result;
     result.mode = MergeSstableMetaMode::kIdentical;
     for (const auto& canonical_sstable : canonical_sstables) {
-        if (canonical_sstable.max_rss_rowid() > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-            return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
-        }
         PersistentIndexSstablePB projected(canonical_sstable);
         projected.set_shared(true);
         if (canonical_sstable.has_shared_rssid()) {
@@ -2856,7 +2878,34 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kEmbeddedDelvec);
             }
         } else {
-            return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
+            if ((canonical_sstable.has_shared_version() && canonical_sstable.shared_version() > 0) ||
+                (canonical_sstable.has_delvec() && canonical_sstable.delvec().size() > 0) ||
+                canonical_sstable.rssid_offset() < 0) {
+                return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
+            }
+            const uint64_t source_begin = static_cast<uint32_t>(canonical_sstable.rssid_offset());
+            const uint32_t source_high = extract_rss_rowid_high(canonical_sstable.max_rss_rowid());
+            const auto canonical_live = collect_live_rssids(canonical_metadata);
+            ASSIGN_OR_RETURN(auto common_delta,
+                             prove_legacy_sstable_affine_domain(canonical_sstable, allocation_plan.projections.front(),
+                                                                canonical_live, target_live_rssids,
+                                                                allocation_plan.target_next_rowset_id));
+            if (!common_delta.has_value()) {
+                return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
+            }
+            for (size_t context_index = 1; context_index < contexts.size(); ++context_index) {
+                const auto source_live = collect_live_rssids(*contexts[context_index].metadata());
+                if (!legacy_sstable_occurrence_agrees(allocation_plan.projections[context_index], source_live,
+                                                      target_live_rssids, source_begin, source_high, *common_delta,
+                                                      allocation_plan.target_next_rowset_id)) {
+                    return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
+                }
+            }
+            const auto projection_status =
+                    project_non_shared_legacy_sstable(canonical_sstable, *common_delta, &projected);
+            if (!projection_status.ok()) {
+                return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
+            }
         }
         result.metadata.add_sstables()->Swap(&projected);
     }
