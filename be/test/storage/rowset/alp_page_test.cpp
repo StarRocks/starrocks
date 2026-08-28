@@ -25,7 +25,7 @@
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"
@@ -324,6 +324,19 @@ TEST_F(AlpPageTest, CorruptedPageRejected) {
     {
         std::string bad = good;
         bad[ALP_PAGE_HEADER_SIZE] = (char)0xFE;
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // Corrupted vector meta in the body: scale indexes out of the supported
+    // range must be rejected before they reach the FALP constant tables.
+    {
+        std::string bad = good;
+        bad[ALP_PAGE_HEADER_SIZE + 2] = (char)0x7F; // exponent index
+        ASSERT_FALSE(decode(bad).ok());
+    }
+    {
+        std::string bad = good;
+        bad[ALP_PAGE_HEADER_SIZE + 1] = (char)0x7F; // factor index > exponent
         ASSERT_FALSE(decode(bad).ok());
     }
 }

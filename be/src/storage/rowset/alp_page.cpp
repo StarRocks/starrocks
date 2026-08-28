@@ -145,6 +145,14 @@ Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded,
         if (bw > sizeof(PT) * 8) {
             return Status::Corruption(strings::Substitute("invalid ALP bit width $0 at vector $1", (int)bw, vi));
         }
+        // The scale indexes come straight from page metadata and index the
+        // Constants<PT> factor/exponent tables inside FALP; validate them
+        // before use so a malformed page cannot cause out-of-bounds reads.
+        constexpr uint8_t MAX_SCALE_INDEX = alp::Constants<PT>::MAX_EXPONENT;
+        if (exp > MAX_SCALE_INDEX || fac > exp) {
+            return Status::Corruption(strings::Substitute("invalid ALP scale indexes fac=$0 exp=$1 at vector $2",
+                                                          (int)fac, (int)exp, vi));
+        }
         size_t packed_bytes = static_cast<size_t>(bw) * V / 8;
         size_t payload_bytes = align_up_8(packed_bytes + exc_c * (sizeof(PT) + sizeof(uint16_t)));
         if (off + payload_bytes > body_size) {
