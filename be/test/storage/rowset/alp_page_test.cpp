@@ -272,6 +272,62 @@ TEST_F(AlpPageTest, SeekAtOrAfterValue) {
     ASSERT_EQ(TStatusCode::NOT_FOUND, page_decoder.seek_at_or_after_value(&big, &exact_match).code());
 }
 
+// A corrupted or truncated ALP page header must be rejected by the page-load
+// pre-decoder with a clear error instead of being misread.
+// NOLINTNEXTLINE
+TEST_F(AlpPageTest, CorruptedPageRejected) {
+    auto data = gen_sensor_f64(3000);
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    AlpPageBuilder<TYPE_DOUBLE> page_builder(options);
+    ASSERT_EQ(data.size(), page_builder.add(reinterpret_cast<const uint8_t*>(data.data()), data.size()));
+    OwnedSlice s = page_builder.finish()->build();
+    std::string good(s.slice().data, s.slice().size);
+
+    auto decode = [](std::string page_bytes) {
+        Slice slice(page_bytes.data(), page_bytes.size());
+        std::unique_ptr<std::vector<uint8_t>> page;
+        PageFooterPB footer;
+        footer.set_type(DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        return StoragePageDecoder::decode_page(&footer, 0, ALP_ENCODING, &page, &slice);
+    };
+
+    // Sanity: the untouched page decodes fine.
+    ASSERT_TRUE(decode(good).ok());
+
+    // Page smaller than the 16-byte header.
+    ASSERT_FALSE(decode(good.substr(0, ALP_PAGE_HEADER_SIZE - 1)).ok());
+
+    // Invalid size_of_element (header bytes [12,16)).
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 12, 5);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // Padded element count that does not match num_elements (header bytes [8,12)).
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, 12345);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // Encoded size larger than the page (header bytes [4,8)).
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 4, good.size() + 100);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
+    // Corrupted vector meta in the body: an impossible bit width.
+    {
+        std::string bad = good;
+        bad[ALP_PAGE_HEADER_SIZE] = (char)0xFE;
+        ASSERT_FALSE(decode(bad).ok());
+    }
+}
+
 // ============================================================================
 // Performance comparison: ALP_ENCODING vs BIT_SHUFFLE on the same data,
 // through the production page path (PageBuilder -> StoragePageDecoder ->
