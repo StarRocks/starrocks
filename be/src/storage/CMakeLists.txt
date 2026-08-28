@@ -274,6 +274,7 @@ set(STORAGE_FILES
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
+    lake/parallel_task_runner.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
     lake/persistent_index_sstable.cpp

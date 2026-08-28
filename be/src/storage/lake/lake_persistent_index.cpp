@@ -36,6 +36,7 @@
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/lake_persistent_index_size_tiered_compaction_strategy.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/persistent_index_sstable_fileset.h"
@@ -78,18 +79,13 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
     const int num_sstables = sstable_meta.sstables_size();
     std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
 
-    std::mutex mutex;
-    Status shared_status;
-    auto open_one = [&](int idx) {
+    // Each task writes only its own sstables[] element, so there is no shared state to guard.
+    auto open_one = [&](int idx) -> Status {
         auto& pb = sstable_meta.sstables(idx);
-        auto res = PersistentIndexSstable::new_sstable(pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
-                                                       true /* need filter */, nullptr, metadata, tablet_mgr);
-        if (res.ok()) {
-            sstables[idx] = std::move(res.value());
-        } else {
-            std::lock_guard<std::mutex> lock(mutex);
-            shared_status.update(res.status());
-        }
+        ASSIGN_OR_RETURN(sstables[idx], PersistentIndexSstable::new_sstable(
+                                                pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
+                                                true /* need filter */, nullptr, metadata, tablet_mgr));
+        return Status::OK();
     };
 
     std::unique_ptr<ThreadPoolToken> token;
@@ -97,21 +93,11 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
+    ParallelTaskRunner runner(token.get());
     for (int i = 0; i < num_sstables; i++) {
-        if (token) {
-            auto st = token->submit_func([&open_one, i]() { open_one(i); });
-            if (!st.ok()) {
-                open_one(i);
-            }
-        } else {
-            open_one(i);
-        }
+        runner.run([&open_one, i]() { return open_one(i); });
     }
-    if (token) {
-        token->wait();
-    }
-
-    RETURN_IF_ERROR(shared_status);
+    RETURN_IF_ERROR(runner.join());
     return std::move(sstables);
 }
 
@@ -485,21 +471,13 @@ Status LakePersistentIndex::parallel_reverse_lookup(size_t n, const Slice* keys,
                                                     size_t num_tasks,
                                                     const std::function<KeyIndexSet(size_t)>& make_subset,
                                                     bool parallel_worthwhile) {
-    std::mutex mutex;
-    Status status;
     // Reverse-look up task i's positions from the immutable inactive memtables + sstables into old_values.
-    // Read-only and each subset touches disjoint positions of old_values, so only the shared status needs
-    // locking. get_from_* consume the key-index set (erasing resolved entries), so each task owns its copy.
-    auto run = [&](size_t i) {
+    // Read-only and each subset touches disjoint positions of old_values, so there is no shared state to
+    // guard. get_from_* consume the key-index set (erasing resolved entries), so each task owns its copy.
+    auto run = [&](size_t i) -> Status {
         KeyIndexSet key_indexes = make_subset(i);
-        auto st = get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1);
-        if (st.ok()) {
-            st = get_from_sstables(n, keys, old_values, &key_indexes, -1);
-        }
-        if (!st.ok()) {
-            std::lock_guard<std::mutex> l(mutex);
-            status.update(st);
-        }
+        RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, &key_indexes, -1));
+        return get_from_sstables(n, keys, old_values, &key_indexes, -1);
     };
 
     std::unique_ptr<ThreadPoolToken> token;
@@ -507,22 +485,11 @@ Status LakePersistentIndex::parallel_reverse_lookup(size_t n, const Slice* keys,
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
-    if (token == nullptr) {
-        for (size_t i = 0; i < num_tasks; ++i) {
-            run(i);
-            RETURN_IF_ERROR(status);
-        }
-        return Status::OK();
-    }
+    ParallelTaskRunner runner(token.get());
     for (size_t i = 0; i < num_tasks; ++i) {
-        // On submit failure, run this subset inline: it is read-only and touches disjoint positions, so
-        // it is safe to run alongside the tasks already submitted.
-        if (!token->submit_func([&run, i]() { run(i); }).ok()) {
-            run(i);
-        }
+        runner.run([&run, i]() { return run(i); });
     }
-    token->wait();
-    return status;
+    return runner.join();
 }
 
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid) {
@@ -1300,35 +1267,17 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // K untouched so B sees the same value the serial path would. Either way the final index equals
     // serial, so running every non-origin get() up-front against the same pre-erase snapshot is safe.
     std::vector<DecodedDel> decoded(num_del_files);
-    std::mutex shared_mutex;
-    Status shared_status;
-    auto record_err = [&](const Status& s) {
-        std::lock_guard<std::mutex> l(shared_mutex);
-        shared_status.update(s);
-    };
-    Trace* trace = Trace::CurrentTrace();
-    auto run_one = [&](int del_idx) {
-        ADOPT_TRACE(trace);
-        auto st = load_one(del_idx, &decoded[del_idx]);
-        if (!st.ok()) {
-            record_err(st);
-        }
-    };
 
     auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
             ThreadPool::ExecutionMode::CONCURRENT);
+    ParallelTaskRunner runner(token.get());
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
-        // Count attempted files here on the orchestrator thread; TRACE_COUNTER_INCREMENT reads
-        // a thread-local current trace that worker threads don't inherit, so incrementing from
-        // inside the submitted closure would silently drop the count.
+        // Counted on the orchestrator thread so it reads as "files attempted" in iteration order.
         TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
-        auto st = token->submit_func([&run_one, del_idx]() { run_one(del_idx); });
-        if (!st.ok()) {
-            run_one(del_idx);
-        }
+        // Each task writes only its own decoded[] element.
+        runner.run([&decoded, del_idx, &load_one]() { return load_one(del_idx, &decoded[del_idx]); });
     }
-    token->wait();
-    RETURN_IF_ERROR(shared_status);
+    RETURN_IF_ERROR(runner.join());
 
     // Phase 2 (sequential): order-dependent memtable erases.
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
@@ -1501,8 +1450,6 @@ struct RebuildScanContext {
     bool need_encode; // build a per-row pk-encoder column (multi-column PK or V2 encoding)
     size_t key_size;  // fixed encoded key size, used by the non-binary key path
     uint64_t rebuild_rss_rowid_point;
-    std::mutex* err_mutex;
-    Status* scan_status;
 };
 
 // Merge the IO fields the rebuild traces from one segment's stats into the aggregate (the only fields
@@ -1647,15 +1594,11 @@ StatusOr<RebuildScanPlan> build_rebuild_scan_units(TabletManager* tablet_mgr, co
 // `emit` is invoked once per decoded chunk-batch: the parallel path buffers it (inserted later in
 // version order), the serial path inserts it immediately so only one chunk is held at a time. An emit
 // error stops the scan and is recorded like any scan error.
-void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext& ctx,
-                           const std::function<Status(RebuildInsertBatch&)>& emit) {
+Status scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext& ctx,
+                             const std::function<Status(RebuildInsertBatch&)>& emit) {
     auto* itr = unit.itr;
     DeferOp close_iter([&] { itr->close(); });
     const uint32_t rssid = unit.rssid;
-    const auto record_err = [&](const Status& s) {
-        std::lock_guard<std::mutex> l(*ctx.err_mutex);
-        ctx.scan_status->update(s);
-    };
 
     // Worker-local scratch: the pk-encoder column is NOT thread-safe, so each task gets its own
     // chunk/rowids/pk-encoder column. IO accounting is task-local too: each unit's iterator was created
@@ -1680,8 +1623,7 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         if (st.is_end_of_file()) {
             break;
         } else if (!st.ok()) {
-            record_err(st);
-            break;
+            return st;
         }
         // On the encoded path, encode into a FRESH column per batch so the batch can own it; on the
         // non-encoded path the keys come straight from the chunk's single key column.
@@ -1719,11 +1661,7 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
             ColumnHelper::build_slices(pkc, batch.keys);
         } else {
             RawBytesVisitor visitor;
-            auto vst = pkc->accept(&visitor);
-            if (!vst.ok()) {
-                record_err(vst);
-                break;
-            }
+            RETURN_IF_ERROR(pkc->accept(&visitor));
             const auto* fkeys = visitor.result();
             for (size_t k = 0; k < pkc->size(); ++k) {
                 batch.keys.emplace_back(fkeys, ctx.key_size);
@@ -1735,11 +1673,9 @@ void scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanContext
         } else {
             batch.chunk = std::move(local_chunk_sp); // hand the chunk's key column to the batch
         }
-        if (auto es = emit(batch); !es.ok()) {
-            record_err(es);
-            break;
-        }
+        RETURN_IF_ERROR(emit(batch));
     }
+    return Status::OK();
 }
 
 } // namespace
@@ -1770,16 +1706,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     OlapReaderStatistics stats;
     const bool need_encode = pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2;
 
-    // Mutex-guarded status sink so parallel workers can report the first scan error without serializing.
-    std::mutex scan_err_mutex;
-    Status scan_status;
     const RebuildScanContext ctx{.pkey_schema = pkey_schema,
                                  .pk_encoding_type = pk_encoding_type,
                                  .need_encode = need_encode,
                                  .key_size = static_cast<size_t>(_key_size),
-                                 .rebuild_rss_rowid_point = rebuild_rss_rowid_point,
-                                 .err_mutex = &scan_err_mutex,
-                                 .scan_status = &scan_status};
+                                 .rebuild_rss_rowid_point = rebuild_rss_rowid_point};
 
     // Count the rebuild scan units (one per eligible (rowset, segment)) from metadata, so we can pick
     // the path WITHOUT building any iterators -- the serial fallback must not materialize them all.
@@ -1811,6 +1742,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         // is the only parallel layer; Phase A's get_each_segment_iterator stays serial (own pool).
         auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
+        ParallelTaskRunner runner(token.get());
         for (const auto& unit : scan_units) {
             const auto* unit_ptr = &unit;
             auto* result = &unit_results[unit.global_seq];
@@ -1819,16 +1751,10 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 result->batches.emplace_back(std::move(batch));
                 return Status::OK();
             };
-            auto st = token->submit_func(
-                    [unit_ptr, &ctx, buffer_emit]() { scan_one_rebuild_unit(*unit_ptr, ctx, buffer_emit); });
-            if (!st.ok()) {
-                // Fall back to inline scan for this unit on submit failure.
-                scan_one_rebuild_unit(unit, ctx, buffer_emit);
-            }
+            runner.run([unit_ptr, &ctx, buffer_emit]() { return scan_one_rebuild_unit(*unit_ptr, ctx, buffer_emit); });
         }
-        token->wait();
         // Propagate the first scan error before mutating the shared index.
-        RETURN_IF_ERROR(scan_status);
+        RETURN_IF_ERROR(runner.join());
         // Fold the per-segment IO stats back into the aggregate for tracing.
         for (const auto& seg_vec : plan.rowset_seg_stats) {
             for (const auto& s : seg_vec) {
@@ -1881,8 +1807,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     return insert(batch.keys.size(), reinterpret_cast<const Slice*>(batch.keys.data()),
                                   batch.values.data(), unit.rowset_version);
                 };
-                scan_one_rebuild_unit(unit, ctx, insert_emit);
-                RETURN_IF_ERROR(scan_status);
+                RETURN_IF_ERROR(scan_one_rebuild_unit(unit, ctx, insert_emit));
                 TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", unit_rows);
             }
             if (one->has_del_files) {
