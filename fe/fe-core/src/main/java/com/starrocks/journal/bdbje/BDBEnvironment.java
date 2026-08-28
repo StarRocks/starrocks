@@ -231,6 +231,10 @@ public class BDBEnvironment {
                 String.valueOf(Config.bdbje_cleaner_threads));
         environmentConfig.setConfigParam(EnvironmentConfig.RESERVED_DISK,
                 String.valueOf(Config.bdbje_reserved_disk_size));
+        // Keep bdb-je's own threshold aligned with the startup gate in MetaHelper#checkMetaDir, otherwise
+        // lowering the gate only yields an FE that starts and then has bdb-je reject every write.
+        environmentConfig.setConfigParam(EnvironmentConfig.FREE_DISK,
+                String.valueOf(Config.bdbje_free_disk_size));
 
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),
