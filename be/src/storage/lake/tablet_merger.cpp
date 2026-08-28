@@ -522,6 +522,7 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
         std::vector<SegmentMetadataPB*> references;
     };
     std::map<std::string, bool> bundled_by_filename;
+    std::map<std::string, std::map<int64_t, int64_t>> bundled_intervals_by_filename;
     std::map<std::pair<std::string, int64_t>, PhysicalSliceDeclaration> declarations_by_physical_slice;
     for (auto& canonical : *canonicals) {
         RETURN_IF_ERROR(validate_physical_rowset_shape(canonical.source_form_rowset));
@@ -532,6 +533,11 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
                 return Status::Corruption(
                         fmt::format("tablet merge physical segment file {} mixes bundled and standalone forms",
                                     segment.filename()));
+            }
+            if (segment.has_bundle_file_offset()) {
+                const int64_t bundle_end = static_cast<int64_t>(static_cast<uint64_t>(segment.bundle_file_offset()) +
+                                                                static_cast<uint64_t>(segment.size()));
+                bundled_intervals_by_filename[segment.filename()].try_emplace(segment.bundle_file_offset(), bundle_end);
             }
             const auto slice = std::pair{segment.filename(),
                                          segment.has_bundle_file_offset() ? segment.bundle_file_offset() : int64_t{0}};
@@ -546,6 +552,17 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
                                     slice.first, slice.second));
             }
             iter->second.references.emplace_back(&segment);
+        }
+    }
+    for (const auto& [filename, intervals] : bundled_intervals_by_filename) {
+        std::optional<std::pair<int64_t, int64_t>> previous;
+        for (const auto& [begin, end] : intervals) {
+            if (previous.has_value() && begin < previous->second) {
+                return Status::Corruption(fmt::format(
+                        "tablet merge physical segment file {} has overlapping bundled slices [{}, {}) and [{}, {})",
+                        filename, previous->first, previous->second, begin, end));
+            }
+            previous = std::pair{begin, end};
         }
     }
     for (auto& [slice, declaration] : declarations_by_physical_slice) {

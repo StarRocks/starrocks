@@ -10512,6 +10512,76 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_canonical_filena
     }
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_same_uid_overlapping_bundle_slices_before_io) {
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(fmt::format("{} source first", reverse_sources ? "later slice" : "earlier slice"));
+        const std::string filename = fmt::format("same_uid_overlapping_bundle_{}.dat", next_id());
+        auto earlier = make_preflight_sidecar_source(next_id(), filename);
+        auto later = make_preflight_sidecar_source(next_id(), filename);
+        auto* earlier_rowset = earlier->mutable_rowsets(0);
+        auto* later_rowset = later->mutable_rowsets(0);
+        earlier_rowset->mutable_segment_metas(0)->set_size(128);
+        earlier_rowset->mutable_segment_metas(0)->set_bundle_file_offset(0);
+        later_rowset->mutable_segment_metas(0)->set_size(128);
+        later_rowset->mutable_segment_metas(0)->set_bundle_file_offset(64);
+        later_rowset->mutable_segment_metas(0)->set_segment_idx(1);
+        later_rowset->mutable_uid()->CopyFrom(earlier_rowset->uid());
+        std::vector<TabletMetadataPtr> sources = {earlier, later};
+        if (reverse_sources) std::swap(sources[0], sources[1]);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains(filename)) << status;
+        EXPECT_TRUE(status.message().contains("overlapping bundled slices")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_canonical_overlapping_bundle_slices_before_io) {
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(fmt::format("{} source first", reverse_sources ? "later slice" : "earlier slice"));
+        const std::string filename = fmt::format("cross_canonical_overlapping_bundle_{}.dat", next_id());
+        auto earlier = make_preflight_sidecar_source(next_id(), filename);
+        auto later = make_preflight_sidecar_source(next_id(), filename);
+        earlier->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(128);
+        earlier->mutable_rowsets(0)->mutable_segment_metas(0)->set_bundle_file_offset(0);
+        later->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(128);
+        later->mutable_rowsets(0)->mutable_segment_metas(0)->set_bundle_file_offset(64);
+        std::vector<TabletMetadataPtr> sources = {earlier, later};
+        if (reverse_sources) std::swap(sources[0], sources[1]);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains(filename)) << status;
+        EXPECT_TRUE(status.message().contains("overlapping bundled slices")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_adjacent_and_disjoint_bundled_slices) {
+    for (int64_t later_offset : {int64_t{128}, int64_t{256}}) {
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("offset {}; {} source first", later_offset,
+                                     reverse_sources ? "later slice" : "earlier slice"));
+            const std::string filename = fmt::format("compatible_bundle_slices_{}.dat", next_id());
+            auto earlier = make_preflight_sidecar_source(next_id(), filename);
+            auto later = make_preflight_sidecar_source(next_id(), filename);
+            earlier->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(128);
+            earlier->mutable_rowsets(0)->mutable_segment_metas(0)->set_bundle_file_offset(0);
+            later->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(128);
+            later->mutable_rowsets(0)->mutable_segment_metas(0)->set_bundle_file_offset(later_offset);
+            std::vector<TabletMetadataPtr> sources = {earlier, later};
+            if (reverse_sources) std::swap(sources[0], sources[1]);
+
+            MergePhaseCounts counts;
+            ASSIGN_OR_ABORT(auto merged, merge_with_phase_counts(sources, next_id(), /*target_version=*/2, &counts));
+            ASSERT_EQ(2, merged->rowsets_size());
+            EXPECT_EQ(1, counts.materialize);
+            EXPECT_EQ(0, counts.dcg_writes);
+            EXPECT_EQ(0, counts.delvec_writes);
+            EXPECT_EQ(0, counts.source_flushes);
+        }
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_uniform_bundle_presence_after_segment_union) {
     for (bool bundled : {false, true}) {
         for (bool reverse_sources : {false, true}) {
