@@ -180,6 +180,11 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
             arrow_type = arrow::date32();
         } else if (slot_desc->type().type == TYPE_DATETIME) {
             arrow_type = arrow::timestamp(arrow::TimeUnit::MICRO);
+        } else if (slot_desc->type().type == TYPE_VARIANT) {
+            // paimon-cpp reads an unshredded variant as struct<value: binary, metadata: binary>,
+            // see VariantTypeUtils::UnshreddedStructType in paimon-cpp.
+            arrow_type = arrow::struct_({arrow::field("value", arrow::binary(), /*nullable=*/false),
+                                         arrow::field("metadata", arrow::binary(), /*nullable=*/false)});
         } else {
             RETURN_IF_ERROR(convert_to_arrow_type(slot_desc->type(), &arrow_type));
         }

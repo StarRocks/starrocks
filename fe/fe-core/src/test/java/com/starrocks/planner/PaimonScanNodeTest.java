@@ -236,13 +236,15 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(split.bucket(), deserializedSplit.bucket());
             Assertions.assertEquals(split.bucketPath(), deserializedSplit.bucketPath());
 
-            // AUTO also marks the SDK split for the native reader so BE can pick paimon-cpp when compiled in.
+            // Under AUTO, SDK splits keep the legacy JNI reader; only an explicit NATIVE routes
+            // them to paimon-cpp.
             PaimonScanNode autoScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
             autoScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.AUTO, split, null, 200L);
             THdfsScanRange autoRange = autoScanNode.getScanRangeLocations(10).get(0)
                     .getScan_range().getHdfs_scan_range();
-            Assertions.assertFalse(autoRange.isUse_paimon_jni_reader());
-            Assertions.assertTrue(autoRange.isUse_paimon_native_reader());
+            Assertions.assertTrue(autoRange.isUse_paimon_jni_reader());
+            Assertions.assertFalse(autoRange.isUse_paimon_native_reader());
+            Assertions.assertFalse(autoRange.isSetPaimon_split_info_binary());
 
             PaimonScanNode jniScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
             jniScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 200L);
@@ -296,11 +298,11 @@ public class PaimonScanNodeTest {
             THdfsScanRange unknownRange = scanNode.getScanRangeLocations(10).get(1)
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertEquals(THdfsFileFormat.UNKNOWN, unknownRange.getFile_format());
-            // Under AUTO, a split that cannot be read as raw files is marked for the native reader
-            // (with the serialized split attached) so BE can pick paimon-cpp when compiled in.
-            Assertions.assertFalse(unknownRange.isUse_paimon_jni_reader());
-            Assertions.assertTrue(unknownRange.isUse_paimon_native_reader());
-            Assertions.assertTrue(unknownRange.isSetPaimon_split_info_binary());
+            // Under AUTO, a split that cannot be read as raw files keeps the legacy JNI reader;
+            // paimon-cpp is only chosen by an explicit NATIVE mode.
+            Assertions.assertTrue(unknownRange.isUse_paimon_jni_reader());
+            Assertions.assertFalse(unknownRange.isUse_paimon_native_reader());
+            Assertions.assertFalse(unknownRange.isSetPaimon_split_info_binary());
         } finally {
             ConnectContext.remove();
         }
@@ -362,7 +364,7 @@ public class PaimonScanNodeTest {
 
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
                     () -> scanNode.addSDKSplitScanRangeLocations(
-                            PaimonReaderMode.AUTO, new FailingDataSplit(createDataSplit()), null, 200L));
+                            PaimonReaderMode.NATIVE, new FailingDataSplit(createDataSplit()), null, 200L));
             Assertions.assertTrue(exception.getMessage().contains("Failed to serialize Paimon data split"));
             Assertions.assertTrue(exception.getCause() instanceof IOException);
         } finally {

@@ -355,7 +355,10 @@ public class PaimonScanNode extends ScanNode {
             paimonReaderMode = PaimonReaderMode.JNI;
         }
 
-        if (paimonReaderMode == PaimonReaderMode.AUTO || paimonReaderMode == PaimonReaderMode.NATIVE) {
+        // TODO We will change later
+        // Only an explicit NATIVE choice routes SDK splits to paimon-cpp; under AUTO they keep
+        // the legacy JNI reader.
+        if (paimonReaderMode == PaimonReaderMode.NATIVE) {
             hdfsScanRange.setUse_paimon_jni_reader(false);
             hdfsScanRange.setUse_paimon_native_reader(true);
             try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
