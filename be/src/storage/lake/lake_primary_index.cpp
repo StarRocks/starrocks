@@ -22,6 +22,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
@@ -278,77 +279,46 @@ Status LakePrimaryIndex::upsert_owned(uint32_t rssid, const SegmentPKChunkRef& c
 
 Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
                                       DeletesMap* new_deletes) {
-    // Prepare parallel execution infrastructure if enabled
-    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
-    Status status = Status::OK();
+    ParallelTaskRunner runner(token);
+    // Drained into `new_deletes` under this mutex as each task finishes; the tasks themselves touch
+    // disjoint slots, so this is the only shared state.
+    std::mutex deletes_mutex;
+    // One slot per chunk, owned here so the encoded key bytes outlive the task that reads them.
+    std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
 
-    // Setup context shared across all parallel tasks
-    ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
-    auto* context_ptr = &context;
-
-    // Process each segment in the iterator
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
         auto current = segment_pk_iterator->current();
+        slots.push_back(std::make_unique<ParallelPublishSlot>());
+        auto* slot = slots.back().get();
 
-        // `extend_slots` is not thread-safe, must be called before submitting task
-        context.extend_slots(); // Allocate a slot for this task's working data
-        auto slot = context.slots.back().get();
-
-        // Define the task to execute (either async in thread pool or inline)
-        auto func = [this, context_ptr, current, slot, segment_pk_iterator]() {
-            // Error handling: Must not throw or early return, as we need to wait for all tasks
-            Status st = Status::OK();
-
-            // Encode primary keys for this segment
-            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.chunk.get());
-            DCHECK(context_ptr->slots.size() > 0);
-
-            if (pk_column_st.ok()) {
-                // Query index for existing rows with these primary keys
-                slot->pk_column = std::move(pk_column_st.value());
-                // Drop the siblings' keys first. Their old locations would otherwise reach
-                // old_values_to_deletes below and be marked deleted in THIS child's delvec, and the
-                // parent view ORs the children's delvecs -- so a sibling's lookup would erase a row
-                // its owner kept. Only the values matter downstream, never their positions, so
-                // filtering in place needs no index mapping.
-                if (!current.owned.empty()) {
-                    slot->pk_column->filter(current.owned);
-                }
-                slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
-                st = slot->pk_column->empty() ? Status::OK() : get(*slot->pk_column, &slot->old_values);
-            } else {
-                st = pk_column_st.status();
+        runner.run([this, current, slot, segment_pk_iterator, new_deletes, &deletes_mutex]() -> Status {
+            ASSIGN_OR_RETURN(slot->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
+            // Drop the siblings' keys first. Their old locations would otherwise reach
+            // old_values_to_deletes below and be marked deleted in THIS child's delvec, and the
+            // parent view ORs the children's delvecs -- so a sibling's lookup would erase a row
+            // its owner kept. Only the values matter downstream, never their positions, so
+            // filtering in place needs no index mapping.
+            if (!current.owned.empty()) {
+                slot->pk_column->filter(current.owned);
             }
-
-            // Update shared state under lock
-            std::lock_guard<std::mutex> l(*context_ptr->mutex);
-            context_ptr->status->update(st);
-
-            if (context_ptr->status->ok()) {
-                old_values_to_deletes(slot->old_values, context_ptr->deletes);
+            if (slot->pk_column->empty()) {
+                return Status::OK();
             }
-        };
-
-        if (token) {
-            // Parallel mode: Submit task to thread pool
-            auto st = token->submit_func(func);
+            slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
+            RETURN_IF_ERROR(get(*slot->pk_column, &slot->old_values));
+            std::lock_guard<std::mutex> l(deletes_mutex);
+            old_values_to_deletes(slot->old_values, new_deletes);
+            return Status::OK();
+        });
+        if (token != nullptr) {
             TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
-
-            // Record submit errors (actual execution errors will be recorded by the task)
-            std::lock_guard<std::mutex> l(*context.mutex);
-            context.status->update(st);
-        } else {
-            // Serial mode: Execute inline
-            func();
-            RETURN_IF_ERROR(*context.status);
         }
     }
-    if (token) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
-        token->wait(); // Wait for all submitted tasks to complete
-    }
 
-    RETURN_IF_ERROR(status); // Check for errors from parallel tasks
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
+        RETURN_IF_ERROR(runner.join());
+    }
     return segment_pk_iterator->status();
 }
 
@@ -374,8 +344,7 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
         Filter owned;
     };
 
-    std::mutex mutex;
-    Status status = Status::OK();
+    ParallelTaskRunner runner(token);
     std::vector<std::vector<std::unique_ptr<RssRowidSlot>>> per_segment_slots(num_segments);
 
     // Iterate all segments' chunks on the main thread and submit them all to the shared pool.
@@ -394,36 +363,22 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
             per_segment_slots[seg_idx].push_back(std::move(slot));
             auto* slot_ptr = per_segment_slots[seg_idx].back().get();
 
-            auto func = [this, slot_ptr, current = std::move(current), pk_iter, &mutex, &status]() {
-                auto pk_column_st = pk_iter->encoded_pk_column(current.chunk.get());
-                Status st;
-                if (pk_column_st.ok()) {
-                    slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
-                    st = get(*pk_column_st.value(), &slot_ptr->values);
-                } else {
-                    st = pk_column_st.status();
-                }
-                std::lock_guard<std::mutex> l(mutex);
-                status.update(st);
-            };
-
-            if (token) {
-                auto st = token->submit_func(func);
+            // Each task writes only its own slot, so there is no shared state to guard.
+            runner.run([this, slot_ptr, current = std::move(current), pk_iter]() -> Status {
+                ASSIGN_OR_RETURN(auto pk_column, pk_iter->encoded_pk_column(current.chunk.get()));
+                slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
+                return get(*pk_column, &slot_ptr->values);
+            });
+            if (token != nullptr) {
                 TRACE_COUNTER_INCREMENT("batch_parallel_get_rss_rowids_cnt", 1);
-                std::lock_guard<std::mutex> l(mutex);
-                status.update(st);
-            } else {
-                func();
-                RETURN_IF_ERROR(status);
             }
         }
     }
 
-    if (token) {
+    {
         TRACE_COUNTER_SCOPE_LATENCY_US("batch_parallel_get_rss_rowids_wait_us");
-        token->wait();
+        RETURN_IF_ERROR(runner.join());
     }
-    RETURN_IF_ERROR(status);
 
     for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
         RETURN_IF_ERROR(pk_iters[seg_idx]->status());
