@@ -34,10 +34,6 @@ public enum JournalType {
         return metricLabel;
     }
 
-    public boolean isGlobalStateJournal() {
-        return this == FE_META;
-    }
-
     public static JournalType fromPrefix(String prefix) {
         String normalizedPrefix = prefix == null ? "" : prefix;
         for (JournalType type : values()) {

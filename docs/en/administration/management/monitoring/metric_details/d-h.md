@@ -280,20 +280,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Average
 - Description: Read speed of FE edit log.
 
-## `fe_edit_log_retained`
-
-- Unit: Count
-- Type: Instantaneous
-- Labels: `journal` (`fe_meta` or `star_mgr`)
-- Description: Number of edit logs currently retained in the journal databases. Successful commits advance the cached maximum ID, and cleanup advances the cached oldest ID. Metrics collection does not read BDB JE. `fe_meta` and `star_mgr` are tracked independently because they have separate checkpoint controllers. An unreachable registered FE prevents cleanup and leaves the affected series climbing. Non-Leader FEs report zero.
-
-## `fe_edit_log_retained_bytes_estimate`
-
-- Unit: Bytes
-- Type: Instantaneous
-- Labels: `journal` (`fe_meta` or `star_mgr`)
-- Description: Estimated logical bytes for [`fe_edit_log_retained`](#fe_edit_log_retained). StarRocks multiplies the retained count by the average serialized entry size observed from successful commits since the current Leader's writer started. The value is `-1` until at least one entry has been observed after startup, then converges as more entries are written. Metrics collection does not read BDB JE. This is not physical disk usage and excludes BDB JE storage overhead.
-
 ## `fe_edit_log_size_bytes`
 
 - Unit: Bytes/s
@@ -329,20 +315,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Type: Average
 - Description: Number of completed insert jobs.
-
-## `fe_image_push`
-
-- Unit: Count
-- Type: Cumulative
-- Labels: `type` (`success` or `failed`), `journal` (`fe_meta` or `star_mgr`), and `node` (target FE node name)
-- Description: Number of attempts by the Leader FE to push a newly generated FE metadata or StarMgr image file to another FE node, counted once per target node per attempt. Old edit logs are deleted only after every node has the new image, so the `journal` and `node` labels identify the journal cleanup and target FE involved in a failed delivery.
-
-## `fe_image_write`
-
-- Unit: Count
-- Type: Cumulative
-- Labels: `type` (`success` or `failed`) and `journal` (`fe_meta` or `star_mgr`)
-- Description: Number of FE metadata or StarMgr image generation attempts, counted once per checkpoint round that actually needs a new image. Rounds where the image is already up to date are not counted.
 
 ## `fe_loading_broker_load_job`
 
@@ -465,3 +437,4 @@ For more information on how to build a monitoring service for your StarRocks clu
 ## `http_request_send_bytes (Deprecated)`
 
 ## `http_requests_total (Deprecated)`
+

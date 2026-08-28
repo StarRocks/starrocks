@@ -93,6 +93,7 @@ public class CheckpointController extends LeaderDaemon {
     private final Journal journal;
     // subDir comes after base imageDir, to distinguish different module's image dir
     private final String subDir;
+    private final boolean belongToGlobalStateMgr;
     private final JournalType journalType;
 
     // Package-private so same-package tests can assert on the cleared-on-demotion contract
@@ -118,23 +119,11 @@ public class CheckpointController extends LeaderDaemon {
     volatile HttpURLConnection inFlightConnection;
 
     public CheckpointController(String name, Journal journal, String subDir) {
-        this(name, journal, subDir, journal == null
-                ? (Strings.isNullOrEmpty(subDir) ? JournalType.FE_META : JournalType.STAR_MGR)
-                : JournalType.fromPrefix(journal.getPrefix()));
-    }
-
-    public CheckpointController(String name, Journal journal, String subDir, JournalType journalType) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
         this.subDir = subDir;
-        if (journalType == null) {
-            throw new IllegalArgumentException("journal type is required");
-        }
-        this.journalType = journalType;
-        if (journal != null && journal.getPrefix() != null &&
-                JournalType.fromPrefix(journal.getPrefix()) != journalType) {
-            throw new IllegalArgumentException("Journal prefix does not match journal type " + journalType);
-        }
+        this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
+        this.journalType = belongToGlobalStateMgr ? JournalType.FE_META : JournalType.STAR_MGR;
         nodesToPushImage = new HashSet<>();
         this.clusterSnapshotInfo = null;
     }
@@ -231,7 +220,7 @@ public class CheckpointController extends LeaderDaemon {
     public long getImageJournalId() {
         long imageJournalId = 0;
         try {
-            Storage storage = new Storage(MetaHelper.getImageFileDir(journalType.isGlobalStateJournal()));
+            Storage storage = new Storage(MetaHelper.getImageFileDir(belongToGlobalStateMgr));
             // get max image version
             imageJournalId = storage.getImageJournalId();
         } catch (IOException e) {
@@ -249,9 +238,6 @@ public class CheckpointController extends LeaderDaemon {
         if (imageJournalId < maxJournalId) {
             this.journalId = maxJournalId;
             createImageRet = createImage(needClusterSnapshotInfo);
-            if (!isStopRequested()) {
-                MetricRepo.recordImageWrite(journalType, createImageRet.first);
-            }
         }
         if (createImageRet.first) {
             // Push the image file to all other nodes
@@ -303,7 +289,7 @@ public class CheckpointController extends LeaderDaemon {
         result = new ArrayBlockingQueue<>(1);
         workerNodeName = selectWorker(needClusterSnapshotInfo);
         if (workerNodeName == null) {
-            LOG.warn("Save image failed: no available checkpoint worker, journalId={}", journalId);
+            LOG.warn("Failed to select worker to do checkpoint, journalId: {}", journalId);
             return Pair.create(false, workerNodeName);
         }
         workerSelectedTime = System.currentTimeMillis();
@@ -311,8 +297,7 @@ public class CheckpointController extends LeaderDaemon {
         // check the worker node is available
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(workerNodeName);
         if (frontend == null || !frontend.isAlive()) {
-            LOG.warn("Save image failed: worker is unavailable, journalId={}, workerNode={}",
-                    journalId, workerNodeName);
+            LOG.warn("worker node: {} is not available", workerNodeName);
             return Pair.create(false, workerNodeName);
         }
 
@@ -330,13 +315,11 @@ public class CheckpointController extends LeaderDaemon {
                 return Pair.create(false, workerNodeName);
             }
             if (ret == null) {
-                LOG.warn("Save image failed: checkpoint timed out, journalId={}, workerNode={}",
-                        journalId, workerNodeName);
+                LOG.warn("do checkpoint timeout on node: {}", workerNodeName);
                 return Pair.create(false, workerNodeName);
             }
             if (!ret.success) {
-                LOG.warn("Save image failed: journalId={}, workerNode={}, reason={}",
-                        journalId, workerNodeName, ret.reason);
+                LOG.warn("do checkpoint failed on node: {}, reason: {}", workerNodeName, ret.reason);
                 return Pair.create(false, workerNodeName);
             }
 
@@ -349,7 +332,7 @@ public class CheckpointController extends LeaderDaemon {
             downloadImage();
             return Pair.create(true, workerNodeName);
         } catch (Exception e) {
-            LOG.warn("Save image failed: journalId={}, workerNode={}", journalId, workerNodeName, e);
+            LOG.warn("create image failed", e);
             return Pair.create(false, workerNodeName);
         } finally {
             workerNodeName = null;
@@ -362,7 +345,7 @@ public class CheckpointController extends LeaderDaemon {
             return;
         }
 
-        if (journalType.isGlobalStateJournal()) {
+        if (belongToGlobalStateMgr) {
             downloadImage(ImageFormatVersion.v2, MetaHelper.getImageFileDir(true));
             GlobalStateMgr.getCurrentState().setImageJournalId(journalId);
         } else {
@@ -473,7 +456,7 @@ public class CheckpointController extends LeaderDaemon {
                 TStartCheckpointRequest request = new TStartCheckpointRequest();
                 request.setEpoch(epoch);
                 request.setJournal_id(journalId);
-                request.setIs_global_state_mgr(journalType.isGlobalStateJournal());
+                request.setIs_global_state_mgr(belongToGlobalStateMgr);
                 TStartCheckpointResponse response = ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.frontendPool,
                         new TNetworkAddress(frontend.getHost(), frontend.getRpcPort()),
@@ -499,58 +482,26 @@ public class CheckpointController extends LeaderDaemon {
     }
 
     private CheckpointWorker getCheckpointWorker() {
-        if (journalType.isGlobalStateJournal()) {
+        if (belongToGlobalStateMgr) {
             return GlobalStateMgr.getCurrentState().getCheckpointWorker();
         } else {
             return StarMgrServer.getCurrentState().getCheckpointWorker();
         }
     }
 
-    // Package-private so same-package tests can drive the reclaim / skipped / failed outcomes
-    // without standing up a checkpoint round.
-    void deleteOldJournals(long imageVersion) {
+    private void deleteOldJournals(long imageVersion) {
         // To ensure that all nodes will not lose data,
         // deleteVersion should be the minimum value of imageVersion and replayedJournalId.
         long minReplayedJournalId = getMinReplayedJournalId();
         long deleteVersion = Math.min(imageVersion, minReplayedJournalId);
-        List<Long> databaseNamesBefore = journal.getDatabaseNames();
-        try {
-            journal.deleteJournals(deleteVersion + 1);
-        } catch (RuntimeException e) {
-            LOG.error("Delete old edit log failed: deleteVersion={}, imageVersion={}, prefix={}",
-                    deleteVersion, imageVersion, journal.getPrefix(), e);
-            throw e;
-        }
-        List<Long> databaseNamesAfter = journal.getDatabaseNames();
-        if (journalDatabaseDeleted(databaseNamesBefore, databaseNamesAfter)) {
-            long oldestJournalId = databaseNamesAfter.isEmpty() ? -1L : databaseNamesAfter.get(0);
-            MetricRepo.updateEditLogRetainedOldestJournalId(journalType, oldestJournalId);
-            LOG.info("Delete old edit log succeeded: deleteVersion={}, imageVersion={}, "
-                            + "minReplayedJournalId={}, prefix={}, databasesBefore={}, databasesAfter={}",
-                    deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(),
-                    databaseNamesBefore, databaseNamesAfter);
-        } else {
-            LOG.warn("Delete old edit log skipped: reason=no_journal_database_deleted, deleteVersion={}, "
-                            + "imageVersion={}, minReplayedJournalId={}, prefix={}, databases={}",
-                    deleteVersion, imageVersion, minReplayedJournalId, journal.getPrefix(), databaseNamesAfter);
-        }
+        long minJournalId = journal.deleteJournalsAndGetMinJournalId(deleteVersion + 1);
+        MetricRepo.updateEditLogRetainedMinJournalId(journalType, minJournalId);
+        LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
+                deleteVersion, journal.getPrefix(), imageVersion, minReplayedJournalId);
+
     }
 
-    /**
-     * Whether deleteJournals() actually dropped a journal database. It is a no-op whenever the
-     * delete version has not yet crossed the next database boundary - including the case this PR
-     * is about, where an unreachable follower pins deleteVersion at 0 forever - so the caller can
-     * tell a real cleanup apart from a round that reclaimed nothing.
-     */
-    static boolean journalDatabaseDeleted(List<Long> before, List<Long> after) {
-        if (before == null || before.isEmpty() || after == null) {
-            return false;
-        }
-        return after.isEmpty() || after.get(0) > before.get(0);
-    }
-
-    // Package-private so same-package tests can exercise the per-node push failure path.
-    void pushImage(long imageVersion) {
+    private void pushImage(long imageVersion) {
         Iterator<String> iterator = nodesToPushImage.iterator();
         int needToPushCnt = nodesToPushImage.size();
         int successPushedCnt = 0;
@@ -567,13 +518,12 @@ public class CheckpointController extends LeaderDaemon {
             }
 
             boolean pushSuccess = true;
-            ImageFormatVersion formatVersion =
-                    journalType.isGlobalStateJournal() ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
+            ImageFormatVersion formatVersion = belongToGlobalStateMgr ? ImageFormatVersion.v2 : ImageFormatVersion.v1;
             String url = "http://" + NetUtils.getHostPortInAccessibleFormat(frontend.getHost(), Config.http_port)
                     + "/put?version=" + imageVersion
                     + "&port=" + Config.http_port
                     + "&subdir=" + subDir
-                    + "&for_global_state=" + journalType.isGlobalStateJournal()
+                    + "&for_global_state=" + belongToGlobalStateMgr
                     + "&image_format_version=" + formatVersion.toString();
             try {
                 MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> {
@@ -588,12 +538,12 @@ public class CheckpointController extends LeaderDaemon {
                 });
 
                 LOG.info("push image successfully, url = {}", url);
-                MetricRepo.recordImagePush(journalType, frontend.getNodeName(), true);
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
+                }
             } catch (IOException e) {
                 pushSuccess = false;
-                MetricRepo.recordImagePush(journalType, frontend.getNodeName(), false);
-                LOG.error("Push image failed: imageVersion={}, nodeName={}, host={}, subDir={}",
-                        imageVersion, frontend.getNodeName(), frontend.getHost(), subDir, e);
+                LOG.error("Exception when pushing image file. url = {}", url, e);
             } finally {
                 inFlightConnection = null;
             }
@@ -635,13 +585,9 @@ public class CheckpointController extends LeaderDaemon {
                 if (minReplayedJournalId > id) {
                     minReplayedJournalId = id;
                 }
-                // HttpURLConnection.getHeaderField() swallows the IOException and hands back null
-                // when the peer is unreachable, so an unreachable node surfaces as
-                // NumberFormatException from parseLong(null), not as IOException. Catching only the
-                // latter let it escape the whole checkpoint round and suppressed the log line below.
-            } catch (IOException | NumberFormatException e) {
-                LOG.error("Delete old edit log skipped: reason=replay_id_unreachable, nodeName={}, "
-                                + "host={}, port={}, prefix={}", fe.getNodeName(), host, port, journal.getPrefix(), e);
+            } catch (IOException e) {
+                LOG.error("Exception when getting current replayed journal id. host={}, port={}",
+                        host, port, e);
                 minReplayedJournalId = 0;
                 break;
             } finally {
@@ -688,12 +634,6 @@ public class CheckpointController extends LeaderDaemon {
 
     public Journal getJournal() {
         return journal;
-    }
-
-    // Package-private so same-package tests can wait until a checkpoint round has actually picked
-    // its worker before driving finishCheckpoint() / cancelCheckpoint().
-    String getWorkerNodeName() {
-        return workerNodeName;
     }
 
     public ClusterSnapshotInfo getClusterSnapshotInfo() {

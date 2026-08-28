@@ -41,33 +41,12 @@ import java.util.function.BooleanSupplier;
  */
 public class JournalWriterSealTest {
 
-    /**
-     * The constructor must not dereference the journal. Test doubles elsewhere subclass this writer
-     * via super(null, queue) - notably GlobalStateMgrTest.StubJournalWriter - so reading
-     * journal.getPrefix() eagerly here breaks them with an NPE.
-     */
-    @Test
-    public void testConstructorToleratesNullJournal() {
-        JournalWriter writer = new JournalWriter(null, new ArrayBlockingQueue<>(1));
-
-        Assertions.assertNotNull(writer);
-        Assertions.assertThrows(IllegalStateException.class, () -> writer.init(0L));
-    }
-
-    @Test
-    public void testUnknownJournalPrefixIsRejected() {
-        TestJournal journal = new TestJournal("unknown_");
-
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> new JournalWriter(journal, new ArrayBlockingQueue<>(1)));
-    }
-
     @Test
     public void testWriteBatchCommitsAndAdvancesWatermark() throws Exception {
         TestJournal journal = new TestJournal();
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
         JournalWriter writer = new JournalWriter(journal, queue);
-        writer.init(3L);
+        writer.init(1L, 3L);
 
         JournalTask task1 = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
         JournalTask task2 = new JournalTask(System.nanoTime(), makeBuffer(11), -1);
@@ -80,29 +59,9 @@ public class JournalWriterSealTest {
         Assertions.assertTrue(task2.get());
         Assertions.assertEquals(5L, writer.getLastCommittedJournalId());
         Assertions.assertEquals(List.of(4L, 5L), journal.getCommittedJournalIds());
-        Assertions.assertEquals(2L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
-        Assertions.assertEquals(task1.estimatedSizeByte() + task2.estimatedSizeByte(),
-                MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
-    }
-
-    @Test
-    public void testRetainedCountRecoversBeforeByteEstimateWarmsUp() throws Exception {
-        TestJournal journal = new TestJournal();
-        journal.setDatabaseNames(List.of(1L, 11L, 21L, 31L));
-        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
-        JournalWriter writer = new JournalWriter(journal, queue);
-        writer.init(35L);
-
-        Assertions.assertEquals(35L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
-        Assertions.assertEquals(-1L,
-                MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
-
-        JournalTask sample = new JournalTask(System.nanoTime(), makeBuffer(11), -1);
-        queue.put(sample);
-        writer.writeOneBatch();
-
-        Assertions.assertEquals(36L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
-        Assertions.assertEquals(36L * sample.estimatedSizeByte(),
+        Assertions.assertEquals(5L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        long batchBytes = task1.estimatedSizeByte() + task2.estimatedSizeByte();
+        Assertions.assertEquals(Math.round(5.0 * batchBytes / 2.0),
                 MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
     }
 
@@ -113,7 +72,7 @@ public class JournalWriterSealTest {
         journal.setCommitFailure(true);
         BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
         JournalWriter writer = new JournalWriter(journal, queue);
-        writer.init(3L);
+        writer.init(1L, 3L);
 
         JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
         queue.put(task);
@@ -126,35 +85,8 @@ public class JournalWriterSealTest {
         Assertions.assertEquals(JournalWriteException.Reason.WRITER_ABORTED,
                 ((JournalWriteException) abortException.getCause()).getReason());
         Assertions.assertEquals(3L, writer.getLastCommittedJournalId());
-        Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
-        Assertions.assertEquals(0L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
-    }
-
-    @Test
-    public void testStarMgrBatchUsesIndependentRetainedMetrics() throws Exception {
-        MetricRepo.resetEditLogRetained(JournalType.FE_META);
-        MetricRepo.resetEditLogRetained(JournalType.STAR_MGR);
-        MetricRepo.recordEditLogBatch(JournalType.FE_META, 7L, 7L, 70L);
-        try {
-            TestJournal journal = new TestJournal("starmgr_");
-            BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
-            JournalWriter writer = new JournalWriter(journal, queue);
-            writer.init(3L);
-
-            JournalTask task = new JournalTask(System.nanoTime(), makeBuffer(10), -1);
-            queue.put(task);
-            writer.writeOneBatch();
-
-            Assertions.assertTrue(task.get());
-            Assertions.assertEquals(7L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
-            Assertions.assertEquals(70L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
-            Assertions.assertEquals(1L, MetricRepo.getEditLogRetainedCount(JournalType.STAR_MGR));
-            Assertions.assertEquals(task.estimatedSizeByte(),
-                    MetricRepo.getEditLogRetainedBytesEstimate(JournalType.STAR_MGR));
-        } finally {
-            MetricRepo.resetEditLogRetained(JournalType.FE_META);
-            MetricRepo.resetEditLogRetained(JournalType.STAR_MGR);
-        }
+        Assertions.assertEquals(3L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(-1L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
     }
 
     @Test
@@ -314,21 +246,11 @@ public class JournalWriterSealTest {
     }
 
     private static class TestJournal implements Journal {
-        private final String prefix;
         private long maxJournalId = 0L;
         private boolean commitFailure;
         private final List<Long> stagingJournalIds = new ArrayList<>();
         private final List<Long> committedJournalIds = new ArrayList<>();
         private final List<Long> rollJournalIds = new ArrayList<>();
-        private List<Long> databaseNames = List.of();
-
-        private TestJournal() {
-            this("");
-        }
-
-        private TestJournal(String prefix) {
-            this.prefix = prefix;
-        }
 
         @Override
         public void open() {
@@ -364,16 +286,7 @@ public class JournalWriterSealTest {
 
         @Override
         public List<Long> getDatabaseNames() {
-            return databaseNames;
-        }
-
-        @Override
-        public long getMinJournalId() {
-            return databaseNames.isEmpty() ? -1L : databaseNames.get(0);
-        }
-
-        private void setDatabaseNames(List<Long> databaseNames) {
-            this.databaseNames = databaseNames;
+            return List.of();
         }
 
         @Override
@@ -403,7 +316,7 @@ public class JournalWriterSealTest {
 
         @Override
         public String getPrefix() {
-            return prefix;
+            return "";
         }
 
         public void setCommitFailure(boolean commitFailure) {

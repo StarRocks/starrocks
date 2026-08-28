@@ -99,8 +99,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
         try {
             doCheckpoint(np.epoch, np.journalId, np.needClusterSnapshotInfo && isBelongToGlobalStateMgr()); // only used for globalstate
         } catch (Exception e) {
-            LOG.warn("Save image failed: journalId={}, nodeName={}", np.journalId,
-                    servingGlobalState.getNodeMgr().getNodeName(), e);
+            LOG.warn("create image failed", e);
             finishCheckpoint(np.epoch, np.journalId, false, e.getMessage());
             return;
         }

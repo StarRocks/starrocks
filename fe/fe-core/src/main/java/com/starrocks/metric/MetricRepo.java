@@ -329,18 +329,11 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
-    private static final Map<JournalType, EditLogRetainedMetrics> EDIT_LOG_RETAINED_METRICS = Map.of(
-            JournalType.FE_META, new EditLogRetainedMetrics(),
-            JournalType.STAR_MGR, new EditLogRetainedMetrics());
-    private static final Map<JournalType, ImageWriteMetrics> IMAGE_WRITE_METRICS = Map.of(
-            JournalType.FE_META, new ImageWriteMetrics(JournalType.FE_META),
-            JournalType.STAR_MGR, new ImageWriteMetrics(JournalType.STAR_MGR));
-    private static final Map<JournalType, Map<String, LongCounterMetric>> IMAGE_PUSH_SUCCESS_METRICS = Map.of(
-            JournalType.FE_META, new ConcurrentHashMap<>(),
-            JournalType.STAR_MGR, new ConcurrentHashMap<>());
-    private static final Map<JournalType, Map<String, LongCounterMetric>> IMAGE_PUSH_FAILED_METRICS = Map.of(
-            JournalType.FE_META, new ConcurrentHashMap<>(),
-            JournalType.STAR_MGR, new ConcurrentHashMap<>());
+    private static final Map<JournalType, RetainedJournalState> RETAINED_JOURNAL_STATES = Map.of(
+            JournalType.FE_META, new RetainedJournalState(),
+            JournalType.STAR_MGR, new RetainedJournalState());
+    public static LongCounterMetric COUNTER_IMAGE_WRITE;
+    public static LongCounterMetric COUNTER_IMAGE_PUSH;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_REJECT;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_BEGIN;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_FAILED;
@@ -947,8 +940,12 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_SIZE_BYTES);
         for (JournalType journalType : JournalType.values()) {
             registerEditLogRetainedMetrics(journalType);
-            registerImageWriteMetrics(journalType);
         }
+        COUNTER_IMAGE_WRITE = new LongCounterMetric("image_write", MetricUnit.OPERATIONS, "counter of image generated");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE);
+        COUNTER_IMAGE_PUSH = new LongCounterMetric("image_push", MetricUnit.OPERATIONS,
+                "counter of image succeeded in pushing to other frontends");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH);
 
         COUNTER_SHORTCIRCUIT_QUERY = new LongCounterMetric("shortcircuit_query", MetricUnit.REQUESTS, "total shortcircuit query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
@@ -1369,184 +1366,95 @@ public final class MetricRepo {
     }
 
     private static void registerEditLogRetainedMetrics(JournalType journalType) {
-        EditLogRetainedMetrics metrics = getEditLogRetainedMetrics(journalType);
+        RetainedJournalState state = RETAINED_JOURNAL_STATES.get(journalType);
         Metric<Long> count = new LeaderAwareGaugeMetricLong(
-                "edit_log_retained", MetricUnit.OPERATIONS,
-                "number of edit logs currently retained in the journal databases") {
+                "edit_log_retained", MetricUnit.OPERATIONS, "number of retained edit logs") {
             @Override
             public Long getValueLeader() {
-                return metrics.getCount();
+                return state.getCount();
             }
         };
         count.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
         STARROCKS_METRIC_REGISTER.addMetric(count);
 
         Metric<Long> bytes = new LeaderAwareGaugeMetricLong(
-                "edit_log_retained_bytes_estimate", MetricUnit.BYTES,
-                "estimated retained edit log bytes based on the observed average entry size") {
+                "edit_log_retained_bytes_estimate", MetricUnit.BYTES, "estimated retained edit log bytes") {
             @Override
             public Long getValueLeader() {
-                return metrics.getEstimatedBytes();
+                return state.getEstimatedBytes();
             }
         };
         bytes.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
         STARROCKS_METRIC_REGISTER.addMetric(bytes);
     }
 
-    /** Initializes the cached retained range without adding a BDB JE read. */
     public static void initializeEditLogRetained(
-            JournalType journalType, long oldestJournalId, long maxJournalId) {
-        getEditLogRetainedMetrics(journalType).initialize(oldestJournalId, maxJournalId);
+            JournalType journalType, long minJournalId, long maxJournalId) {
+        RETAINED_JOURNAL_STATES.get(journalType).initialize(minJournalId, maxJournalId);
     }
 
     public static void recordEditLogBatch(
             JournalType journalType, long lastJournalId, long count, long bytes) {
-        getEditLogRetainedMetrics(journalType).record(lastJournalId, count, bytes);
+        RETAINED_JOURNAL_STATES.get(journalType).record(lastJournalId, count, bytes);
     }
 
-    /** Clears the cached retained state for one journal. */
-    public static void resetEditLogRetained(JournalType journalType) {
-        getEditLogRetainedMetrics(journalType).reset();
-    }
-
-    public static void updateEditLogRetainedOldestJournalId(JournalType journalType, long oldestJournalId) {
-        getEditLogRetainedMetrics(journalType).updateOldestJournalId(oldestJournalId);
+    public static void updateEditLogRetainedMinJournalId(JournalType journalType, long minJournalId) {
+        RETAINED_JOURNAL_STATES.get(journalType).updateMinJournalId(minJournalId);
     }
 
     public static long getEditLogRetainedCount(JournalType journalType) {
-        return getEditLogRetainedMetrics(journalType).getCount();
+        return RETAINED_JOURNAL_STATES.get(journalType).getCount();
     }
 
     public static long getEditLogRetainedBytesEstimate(JournalType journalType) {
-        return getEditLogRetainedMetrics(journalType).getEstimatedBytes();
+        return RETAINED_JOURNAL_STATES.get(journalType).getEstimatedBytes();
     }
 
-    private static EditLogRetainedMetrics getEditLogRetainedMetrics(JournalType journalType) {
-        return EDIT_LOG_RETAINED_METRICS.get(journalType);
-    }
-
-    private static final class EditLogRetainedMetrics {
-        private long oldestJournalId = -1L;
+    private static final class RetainedJournalState {
+        private long minJournalId = -1L;
         private long maxJournalId = -1L;
         private long observedCount;
         private long observedBytes;
 
-        private synchronized void initialize(long oldestJournalId, long maxJournalId) {
-            this.oldestJournalId = oldestJournalId;
+        private synchronized void initialize(long minJournalId, long maxJournalId) {
+            this.minJournalId = minJournalId;
             this.maxJournalId = maxJournalId;
             observedCount = 0L;
             observedBytes = 0L;
         }
 
-        private synchronized void record(long lastJournalId, long countDelta, long bytesDelta) {
-            if (countDelta <= 0L) {
+        private synchronized void record(long lastJournalId, long count, long bytes) {
+            if (count <= 0L) {
                 return;
             }
-            if (oldestJournalId < 0L) {
-                oldestJournalId = lastJournalId - countDelta + 1L;
+            if (minJournalId < 0L) {
+                minJournalId = lastJournalId - count + 1L;
             }
             maxJournalId = Math.max(maxJournalId, lastJournalId);
-            observedCount += countDelta;
-            observedBytes += bytesDelta;
+            observedCount += count;
+            observedBytes += bytes;
         }
 
-        private synchronized void updateOldestJournalId(long oldestJournalId) {
-            this.oldestJournalId = oldestJournalId;
-        }
-
-        private synchronized void reset() {
-            oldestJournalId = -1L;
-            maxJournalId = -1L;
-            observedCount = 0L;
-            observedBytes = 0L;
+        private synchronized void updateMinJournalId(long minJournalId) {
+            this.minJournalId = minJournalId;
         }
 
         private synchronized long getCount() {
-            return getCountInternal();
+            return minJournalId < 0L || maxJournalId < minJournalId
+                    ? 0L : maxJournalId - minJournalId + 1L;
         }
 
         private synchronized long getEstimatedBytes() {
-            long retainedCount = getCountInternal();
-            if (retainedCount == 0L) {
+            long count = getCount();
+            if (count == 0L) {
                 return 0L;
             }
             if (observedCount == 0L) {
                 return -1L;
             }
-            double estimate = (double) retainedCount * (double) observedBytes / (double) observedCount;
+            double estimate = (double) count * observedBytes / observedCount;
             return estimate >= Long.MAX_VALUE ? Long.MAX_VALUE : Math.round(estimate);
         }
-
-        private long getCountInternal() {
-            if (oldestJournalId < 0L || maxJournalId < oldestJournalId) {
-                return 0L;
-            }
-            return maxJournalId - oldestJournalId + 1L;
-        }
-    }
-
-    private static void registerImageWriteMetrics(JournalType journalType) {
-        ImageWriteMetrics metrics = IMAGE_WRITE_METRICS.get(journalType);
-        STARROCKS_METRIC_REGISTER.addMetric(metrics.success);
-        STARROCKS_METRIC_REGISTER.addMetric(metrics.failed);
-    }
-
-    public static void recordImageWrite(JournalType journalType, boolean success) {
-        if (!hasInit) {
-            return;
-        }
-        ImageWriteMetrics metrics = IMAGE_WRITE_METRICS.get(journalType);
-        (success ? metrics.success : metrics.failed).increase(1L);
-    }
-
-    public static long getImageWriteCount(JournalType journalType, boolean success) {
-        ImageWriteMetrics metrics = IMAGE_WRITE_METRICS.get(journalType);
-        return (success ? metrics.success : metrics.failed).getValue();
-    }
-
-    private static final class ImageWriteMetrics {
-        private final LongCounterMetric success;
-        private final LongCounterMetric failed;
-
-        private ImageWriteMetrics(JournalType journalType) {
-            success = newImageWriteMetric(journalType, "success");
-            failed = newImageWriteMetric(journalType, "failed");
-        }
-
-        private static LongCounterMetric newImageWriteMetric(JournalType journalType, String type) {
-            LongCounterMetric metric = new LongCounterMetric(
-                    "image_write", MetricUnit.OPERATIONS, "counter of image generation attempts by result and journal");
-            metric.addLabel(new MetricLabel("type", type));
-            metric.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
-            return metric;
-        }
-    }
-
-    public static void recordImagePush(JournalType journalType, String nodeName, boolean success) {
-        if (!hasInit) {
-            return;
-        }
-        String type = success ? "success" : "failed";
-        Map<JournalType, Map<String, LongCounterMetric>> metricsByJournal =
-                success ? IMAGE_PUSH_SUCCESS_METRICS : IMAGE_PUSH_FAILED_METRICS;
-        Map<String, LongCounterMetric> metrics = metricsByJournal.get(journalType);
-        metrics.computeIfAbsent(nodeName, ignored -> {
-            LongCounterMetric metric = new LongCounterMetric(
-                    "image_push", MetricUnit.OPERATIONS,
-                    "counter of image push attempts by result, journal, and target FE");
-            metric.addLabel(new MetricLabel("type", type));
-            metric.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
-            metric.addLabel(new MetricLabel("node", nodeName));
-            STARROCKS_METRIC_REGISTER.addMetric(metric);
-            return metric;
-        }).increase(1L);
-    }
-
-    public static long getImagePushCount(JournalType journalType, String nodeName, boolean success) {
-        Map<JournalType, Map<String, LongCounterMetric>> metricsByJournal =
-                success ? IMAGE_PUSH_SUCCESS_METRICS : IMAGE_PUSH_FAILED_METRICS;
-        LongCounterMetric metric = metricsByJournal.get(journalType).get(nodeName);
-        return metric == null ? 0L : metric.getValue();
     }
 
     // to generate the metrics related to tablets of each backend

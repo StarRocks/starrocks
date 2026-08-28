@@ -20,6 +20,7 @@ import com.staros.exception.ExceptionCode;
 import com.staros.exception.StarException;
 import com.staros.journal.JournalSystem;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.journal.Journal;
@@ -28,7 +29,6 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.journal.JournalType;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 // Implements com.staros.journal.JournalSystem on top of bdbje environment
 public class StarOSBDBJEJournalSystem implements JournalSystem {
-    private static final String JOURNAL_PREFIX = JournalType.STAR_MGR.getPrefix();
+    private static final String JOURNAL_PREFIX = "starmgr_"; // do not change this string!
     private static final int REPLAY_INTERVAL_MS = 1;
     private static final Logger LOG = LogManager.getLogger(StarOSBDBJEJournalSystem.class);
 
@@ -120,7 +120,8 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
             long replayEndTime = System.currentTimeMillis();
             LOG.info("finish star manager replay in " + (replayEndTime - replayStartTime) + " msec.");
 
-            journalWriter.init(bdbjeJournal.getMaxJournalId());
+            Pair<Long, Long> journalIdRange = bdbjeJournal.getJournalIdRange();
+            journalWriter.init(journalIdRange.first, journalIdRange.second);
 
             journalWriter.startDaemon();
         } catch (Exception e) {

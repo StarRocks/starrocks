@@ -280,20 +280,6 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 平均
 - 説明: FE編集ログの読み取り速度。
 
-## `fe_edit_log_retained`
-
-- 単位: カウント
-- タイプ: 瞬時値
-- ラベル: `journal`（`fe_meta` または `star_mgr`）
-- 説明: journal database に現在保持されている編集ログの件数です。正常なコミット後にキャッシュされた最大 ID を進め、クリーンアップ後にキャッシュされた最小 ID を進めます。メトリクス収集時に BDB JE を読み取りません。FE metadata と StarMgr は別々の checkpoint controller でクリーンアップされるため、`fe_meta` と `star_mgr` で個別に集計されます。到達不能な登録済み FE があるとクリーンアップが妨げられ、該当する系列が増え続けます。非 Leader FE は 0 を報告します。
-
-## `fe_edit_log_retained_bytes_estimate`
-
-- 単位: バイト
-- タイプ: 瞬時値
-- ラベル: `journal`（`fe_meta` または `star_mgr`）
-- 説明: [`fe_edit_log_retained`](#fe_edit_log_retained) に対応する論理バイト数の推定値です。StarRocks は retained count に、現在の Leader の writer が起動してから正常なコミットで観測したエントリの平均シリアライズサイズを乗算します。起動後に新しいエントリが 1 件も観測されていない間は `-1` で、書き込みサンプルが増えるにつれて推定値が収束します。メトリクス収集時に BDB JE を読み取りません。この値は物理ディスク使用量ではなく、BDB JE のストレージオーバーヘッドを含みません。
-
 ## `fe_edit_log_size_bytes`
 
 - 単位: バイト/秒
@@ -329,20 +315,6 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: カウント
 - タイプ: 平均
 - 説明: 完了した挿入ジョブの数。
-
-## `fe_image_push`
-
-- 単位: カウント
-- タイプ: 累積
-- ラベル: `type`（`success` または `failed`）、`journal`（`fe_meta` または `star_mgr`）、`node`（対象 FE のノード名）
-- 説明: Leader FE が新しく生成した FE metadata または StarMgr のイメージファイルを他の FE ノードにプッシュした回数。試行ごとに対象ノード単位で計上されます。すべてのノードが新しいイメージを受け取った後にのみ古い編集ログが削除されるため、`journal` と `node` ラベルから、プッシュ失敗に関係する journal のクリーンアップ処理と対象 FE を特定できます。
-
-## `fe_image_write`
-
-- 単位: カウント
-- タイプ: 累積
-- ラベル: `type`（`success` または `failed`）と `journal`（`fe_meta` または `star_mgr`）
-- 説明: FE metadata または StarMgr のイメージ生成の試行回数。新しいイメージの生成が実際に必要なチェックポイントのラウンドごとに 1 回計上されます。イメージが既に最新で生成が不要なラウンドは計上されません。
 
 ## `fe_loading_broker_load_job`
 

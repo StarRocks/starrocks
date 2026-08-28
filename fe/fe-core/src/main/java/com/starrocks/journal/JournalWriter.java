@@ -95,7 +95,6 @@ public class JournalWriter {
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
-        // Tolerates a null journal: test doubles subclass this writer via super(null, queue).
         this.journalType = journal == null ? null : JournalType.fromPrefix(journal.getPrefix());
     }
 
@@ -103,10 +102,13 @@ public class JournalWriter {
      * reset journal id & roll journal as a start
      */
     public void init(long maxJournalId) throws JournalException {
-        if (journal == null || journalType == null) {
-            throw new IllegalStateException("journal is required to initialize JournalWriter");
+        init(-1L, maxJournalId);
+    }
+
+    public void init(long minJournalId, long maxJournalId) throws JournalException {
+        if (journalType != null) {
+            MetricRepo.initializeEditLogRetained(journalType, minJournalId, maxJournalId);
         }
-        MetricRepo.initializeEditLogRetained(journalType, journal.getMinJournalId(), maxJournalId);
         this.nextVisibleJournalId = maxJournalId + 1;
         this.lastCommittedJournalId = maxJournalId;
         this.writerState.set(WriterState.RUNNING);
@@ -222,7 +224,6 @@ public class JournalWriter {
 
         long nextJournalId = nextVisibleJournalId;
         initBatch();
-        boolean batchCommitted = false;
 
         try {
             this.journal.batchWriteBegin();
@@ -254,8 +255,11 @@ public class JournalWriter {
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
                 lastCommittedJournalId = nextJournalId - 1;
+                if (journalType != null) {
+                    MetricRepo.recordEditLogBatch(
+                            journalType, lastCommittedJournalId, currentBatchTasks.size(), currentBatchBytes);
+                }
                 markCurrentBatchSucceed();
-                batchCommitted = true;
             } catch (JournalException | InterruptedException e) {
                 // Both failure kinds must resolve the batch: waiters block uninterruptibly on task
                 // completion (EditLog.waitForCommit), so a batch that never settles would pin them and
@@ -284,19 +288,19 @@ public class JournalWriter {
         }
 
         if (writerState.get() != WriterState.RUNNING) {
-            updateBatchMetrics(batchCommitted);
+            updateBatchMetrics();
             return;
         }
 
         rollJournalAfterBatch();
 
-        updateBatchMetrics(batchCommitted);
+        updateBatchMetrics();
     }
 
     private void initBatch() {
         startTimeNano = System.nanoTime();
         uncommittedEstimatedBytes = 0;
-        currentBatchBytes = 0;
+        currentBatchBytes = 0L;
         currentBatchTasks.clear();
     }
 
@@ -379,7 +383,7 @@ public class JournalWriter {
     /**
      * update all metrics after batch write
      */
-    private void updateBatchMetrics(boolean batchCommitted) {
+    private void updateBatchMetrics() {
         // Log slow edit log write if needed.
         long currentTimeNs = System.nanoTime();
         long durationMs = (currentTimeNs - startTimeNano) / 1000000;
@@ -391,17 +395,16 @@ public class JournalWriter {
                     currentBatchTasks.size(), durationMs, journalQueue.size());
             lastSlowEditLogTimeNs = currentTimeNs;
         }
-        if (batchCommitted && journalType != null) {
-            MetricRepo.recordEditLogBatch(
-                    journalType, lastCommittedJournalId, currentBatchTasks.size(), currentBatchBytes);
-        }
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_EDIT_LOG_WRITE.increase((long) currentBatchTasks.size());
             MetricRepo.HISTO_JOURNAL_WRITE_LATENCY.update(durationMs);
             MetricRepo.HISTO_JOURNAL_WRITE_BATCH.update(currentBatchTasks.size());
             MetricRepo.HISTO_JOURNAL_WRITE_BYTES.update(uncommittedEstimatedBytes);
             MetricRepo.GAUGE_STACKED_JOURNAL_NUM.setValue((long) journalQueue.size());
-            MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase(currentBatchBytes);
+
+            for (JournalTask e : currentBatchTasks) {
+                MetricRepo.COUNTER_EDIT_LOG_SIZE_BYTES.increase(e.estimatedSizeByte());
+            }
         }
         if (journalQueue.size() > Config.metadata_journal_max_batch_cnt) {
             LOG.warn("journal has piled up: {} in queue after consume", journalQueue.size());
@@ -433,7 +436,9 @@ public class JournalWriter {
 
     private void rollJournalAfterBatch() {
         rollJournalCounter += currentBatchTasks.size();
-        rollJournalBytes += currentBatchBytes;
+        for (JournalTask task : currentBatchTasks) {
+            rollJournalBytes += task.estimatedSizeByte();
+        }
         boolean rollByCount = rollJournalCounter >= Config.edit_log_roll_num;
         boolean rollByBytes = Config.edit_log_roll_bytes > 0 && rollJournalBytes >= Config.edit_log_roll_bytes;
         if (rollByCount || rollByBytes || needForceRollJournal()) {
