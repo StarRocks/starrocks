@@ -42,6 +42,57 @@ jdk_version() {
     echo "$result"
 }
 
+# Print a hard-to-miss banner for a deprecated JVM options config parameter.
+# The parameter is still honored, and still overrides JAVA_OPTS, so that upgrades
+# from older versions keep working, but it will be removed in a future release.
+# Output goes to stderr so it is not lost if the caller only redirects stdout.
+# Usage: warn_deprecated_java_opts <component> <var_name> <conf_file>
+warn_deprecated_java_opts() {
+    local component=$1
+    local var_name=$2
+    local conf_file=$3
+    cat >&2 << EOF
+
+################################################################################
+###                                                                          ###
+###         ACTION REQUIRED: DEPRECATED CONFIGURATION PARAMETER              ###
+###                                                                          ###
+################################################################################
+###
+### This DEPRECATED parameter is set and is in effect right now:
+###   $var_name
+###
+### JAVA_OPTS is the only supported place to set JVM parameters.
+###
+### $component still honors it for this start, so that upgrades from older
+### versions keep working, but support WILL BE REMOVED in an upcoming
+### StarRocks release. After that it is IGNORED WITHOUT ANY WARNING:
+### $component falls back to JAVA_OPTS, so every JVM parameter set only
+### here (heap size, GC, add-opens, kerberos, ...) SILENTLY STOPS TAKING
+### EFFECT and the process comes up with a different heap and GC setup.
+###
+EOF
+    if [ ! -z "${JAVA_OPTS}" ] ; then
+        cat >&2 << EOF
+### JAVA_OPTS is also set, and this parameter OVERRIDES IT COMPLETELY.
+### The two are NOT merged, your JAVA_OPTS value is being DISCARDED.
+###
+EOF
+    fi
+    cat >&2 << EOF
+### HOW TO FIX (before your next StarRocks upgrade):
+###   1. Edit $conf_file
+###   2. Move the JVM parameters into JAVA_OPTS, merging them by hand if
+###      JAVA_OPTS already has a value.
+###   3. Delete the line that sets
+###        $var_name
+###   4. Restart $component and confirm this banner is gone.
+###
+################################################################################
+
+EOF
+}
+
 jvm_arch() {
     march=`uname -m`
     case $march in
