@@ -14,6 +14,8 @@
 
 #include "storage/lake/segment_pk_iterator.h"
 
+#include <algorithm>
+
 #include "base/debug/trace.h"
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
@@ -85,9 +87,13 @@ Status SegmentPKIterator::_load() {
         // is current()'s: this chunk starts at logical offset _current_rows, which the physical base
         // shifts to the row's position in the segment file.
         const auto physical_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(_current_rows);
-        for (size_t i = 0; i < _owned.size(); i++) {
-            if (_owned[i] == 0) {
-                _unowned_rowids.push_back(physical_offset + static_cast<uint32_t>(i));
+        const size_t unowned = std::count(_owned.begin(), _owned.end(), 0);
+        if (unowned > 0) {
+            _unowned_rowids.reserve(_unowned_rowids.size() + unowned);
+            for (size_t i = 0; i < _owned.size(); i++) {
+                if (_owned[i] == 0) {
+                    _unowned_rowids.push_back(physical_offset + static_cast<uint32_t>(i));
+                }
             }
         }
     }
