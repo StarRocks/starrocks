@@ -284,13 +284,13 @@ TEST_F(AlpPageTest, CorruptedPageRejected) {
     OwnedSlice s = page_builder.finish()->build();
     std::string good(s.slice().data, s.slice().size);
 
-    auto decode = [](std::string page_bytes) {
+    auto decode = [](std::string page_bytes, uint32_t footer_size = 0) {
         Slice slice(page_bytes.data(), page_bytes.size());
         std::unique_ptr<std::vector<uint8_t>> page;
         PageFooterPB footer;
         footer.set_type(DATA_PAGE);
         footer.mutable_data_page_footer()->set_nullmap_size(0);
-        return StoragePageDecoder::decode_page(&footer, 0, ALP_ENCODING, &page, &slice);
+        return StoragePageDecoder::decode_page(&footer, footer_size, ALP_ENCODING, &page, &slice);
     };
 
     // Sanity: the untouched page decodes fine.
@@ -339,6 +339,10 @@ TEST_F(AlpPageTest, CorruptedPageRejected) {
         bad[ALP_PAGE_HEADER_SIZE + 1] = (char)0x7F; // factor index > exponent
         ASSERT_FALSE(decode(bad).ok());
     }
+
+    // A trailer (nullmap/footer) claimed to be larger than the bytes actually
+    // present after the encoded body must be rejected, not copied.
+    ASSERT_FALSE(decode(good, /*footer_size=*/8).ok());
 }
 
 // ============================================================================

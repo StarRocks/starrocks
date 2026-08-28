@@ -175,6 +175,14 @@ public:
         if (footer->type() == DATA_PAGE) {
             null_size = footer->data_page_footer().nullmap_size();
         }
+        // The trailer sizes come from the page footer; a malformed page could
+        // claim more trailer bytes than the input actually holds, which would
+        // read past page_slice and write past decoded_page below.
+        if (page_slice->size - encoded_size < (size_t)null_size + footer_size) {
+            return Status::Corruption(
+                    strings::Substitute("ALP page trailer truncated, page size:$0, encoded size:$1, trailer size:$2",
+                                        page_slice->size, encoded_size, (size_t)null_size + footer_size));
+        }
         memcpy(decoded_page->data() + header_size + data_size, page_slice->data + encoded_size,
                null_size + footer_size);
 
