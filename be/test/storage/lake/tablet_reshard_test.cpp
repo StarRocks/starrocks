@@ -3154,7 +3154,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
         _update_manager->unload_and_remove_primary_index(target_id);
         ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(target_id, after_second_upsert->version()));
         expect_lifecycle_oracle(reopened, expected_rows, {60});
-        expect_lifecycle_oracle(reopened, expected_rows, {60});
 
         ASSIGN_OR_ABORT(auto compacted, compact_tablet(target_id, reopened->version(), /*force_base=*/true));
         EXPECT_EQ(reopened->version() + 1, compacted->version());
