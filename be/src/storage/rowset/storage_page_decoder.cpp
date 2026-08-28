@@ -153,10 +153,19 @@ public:
         }
         // Every 1024-value vector costs at least its meta bytes in the encoded
         // body, which bounds the decoded size a valid page can claim; reject
-        // implausible counts before they drive the allocation below.
+        // implausible counts before they drive the allocation below. (The
+        // remaining ratio is legitimate: a constant column stores 1024 values
+        // in one 16-byte meta.)
         if (num_padded / ALP_PAGE_VECTOR_SIZE * ALP_PAGE_VECTOR_META_SIZE > encoded_size - ALP_PAGE_HEADER_SIZE) {
             return Status::Corruption(strings::Substitute("implausible ALP element count:$0 for encoded size:$1",
                                                           num_padded, encoded_size));
+        }
+        // The writer caps a page's raw bytes by data_page_size, an int32
+        // config, so no legitimate page can decode past INT32_MAX plus one
+        // vector of padding regardless of the writer's configuration.
+        if (num_padded * size_of_element > (size_t)INT32_MAX + ALP_PAGE_VECTOR_SIZE * size_of_element) {
+            return Status::Corruption(
+                    strings::Substitute("implausible ALP decoded size:$0", num_padded * size_of_element));
         }
 
         size_t header_size = ALP_PAGE_HEADER_SIZE;

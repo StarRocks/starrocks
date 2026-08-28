@@ -351,6 +351,20 @@ TEST_F(AlpPageTest, CorruptedPageRejected) {
         ASSERT_FALSE(decode(bad).ok());
     }
 
+    // Even with a body large enough to satisfy the per-vector metadata bound,
+    // a decoded size past the writer's int32 data_page_size limit must be
+    // rejected before the (multi-GiB) allocation.
+    {
+        const uint32_t huge_count = 536872960; // 4 GiB / 8, 1024-aligned
+        std::string bad;
+        bad.resize(ALP_PAGE_HEADER_SIZE + (size_t)huge_count / ALP_PAGE_VECTOR_SIZE * ALP_PAGE_VECTOR_META_SIZE, 0);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 0, huge_count);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 4, bad.size());
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, huge_count);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 12, 8);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
     // A trailer (nullmap/footer) claimed to be larger than the bytes actually
     // present after the encoded body must be rejected, not copied.
     ASSERT_FALSE(decode(good, /*footer_size=*/8).ok());
