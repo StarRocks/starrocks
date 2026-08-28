@@ -788,9 +788,26 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
             for (Map.Entry<Long, Long> partitionVersion : commitVersionMap.entrySet()) {
-                long partitionId = partitionVersion.getKey();
+                // commitVersionMap is keyed by PHYSICAL partition id (it is built from
+                // physicalPartitionIndexMap.rowKeySet()), so it has to be resolved through
+                // getPhysicalPartition() first. Passing it straight to getPartition(), which only looks up
+                // logical partitions in idToPartition, returned null for every entry and silently dropped
+                // the whole list -- leaving the MV version-map repair below unreachable.
+                long physicalPartitionId = partitionVersion.getKey();
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition == null) {
+                    continue;
+                }
+                long partitionId = physicalPartition.getParentId();
                 Partition partition = table.getPartition(partitionId);
                 if (partition == null || table.isTempPartition(partitionId)) {
+                    continue;
+                }
+                // MV staleness detection (OlapPartitionTraits#isBaseTableChanged) reads the version of
+                // partition.getLatestPhysicalPartition(). Only advance the MV watermark when the physical
+                // partition this job committed is exactly the one the MV will read back; otherwise the
+                // recorded version would not match and the MV would be refreshed anyway.
+                if (partition.getLatestPhysicalPartition().getId() != physicalPartitionId) {
                     continue;
                 }
                 // TODO(fixme): last version/version time is not kept in transaction state, use version - 1 for last commit

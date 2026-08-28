@@ -22,7 +22,9 @@ import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
@@ -35,10 +37,12 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -845,5 +849,61 @@ public class LakeTableAlterMetaJobTest {
         combined.add(row);
         combined.sort(new ListComparator<>(0, 1, 2, 3, 4, 5));
         Assertions.assertEquals(2, combined.size());
+    }
+
+    /**
+     * Regression: the MV version-map repair at the tail of this job family must actually run.
+     *
+     * Every LakeTableAlterMetaJobBase job advances the visible version and visible version time of every
+     * physical partition without rewriting a single row. MV staleness detection
+     * (OlapPartitionTraits#isBaseTableChanged) keys off exactly those two fields, so a dependent
+     * materialized view would re-materialize its entire history after a metadata-only ALTER. The
+     * compensation is handleMVRepair -> MVMetaVersionRepairer, which advances the MV watermark in place.
+     *
+     * commitVersionMap is keyed by PHYSICAL partition id, while MaterializedView.BasePartitionInfo is keyed
+     * on the LOGICAL partition (name + id). Feeding the physical id straight to OlapTable#getPartition(),
+     * which only resolves logical ids, returned null for every entry, so the repair list came out empty and
+     * the compensation silently never ran.
+     */
+    @Test
+    public void testMVVersionMapRepairUsesLogicalPartitionId() throws Exception {
+        // Without a dependent MV, handleMVRepair returns before building the repair list.
+        table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+
+        Partition partition = table.getPartitions().iterator().next();
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        // Premise: the logical partition and its physical partition carry DIFFERENT ids. If that ever stops
+        // holding, the assertions below would pass for the wrong reason.
+        Assertions.assertNotEquals(partition.getId(), physicalPartition.getId());
+        long versionBefore = physicalPartition.getVisibleVersion();
+
+        List<MVRepairHandler.PartitionRepairInfo> captured = new ArrayList<>();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void handleMVRepair(Database database, com.starrocks.catalog.Table changedTable,
+                                       List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+                captured.addAll(partitionRepairInfos);
+            }
+        };
+
+        job.runPendingJob();
+        job.runRunningJob();
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+
+        // The metadata-only job advanced the partition version ...
+        Assertions.assertEquals(versionBefore + 1, physicalPartition.getVisibleVersion());
+        // ... so the MV watermark repair must have been handed exactly one entry, carrying the LOGICAL
+        // partition id and name, and the version the MV will read back.
+        Assertions.assertEquals(1, captured.size());
+        MVRepairHandler.PartitionRepairInfo repairInfo = captured.get(0);
+        Assertions.assertEquals(partition.getId(), repairInfo.getPartitionId());
+        Assertions.assertEquals(partition.getName(), repairInfo.getPartitionName());
+        Assertions.assertEquals(versionBefore, repairInfo.getLastVersion());
+        Assertions.assertEquals(versionBefore + 1, repairInfo.getNewVersion());
+        Assertions.assertEquals(partition.getLatestPhysicalPartition().getVisibleVersion(),
+                repairInfo.getNewVersion());
     }
 }
