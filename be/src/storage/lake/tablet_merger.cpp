@@ -430,6 +430,9 @@ std::string normalized_physical_base_key(const SegmentMetadataPB& segment) {
 }
 
 Status validate_physical_segment_shape(const SegmentMetadataPB& segment) {
+    if (!segment.has_filename() || segment.filename().empty()) {
+        return Status::Corruption("tablet merge segment has a missing or empty filename");
+    }
     if (segment.has_bundle_file_offset() && segment.bundle_file_offset() < 0) {
         return Status::Corruption(fmt::format("tablet merge segment {} has negative bundle_file_offset {}",
                                               segment.filename(), segment.bundle_file_offset()));
@@ -441,6 +444,15 @@ Status validate_physical_segment_shape(const SegmentMetadataPB& segment) {
     if (segment.has_bundle_file_offset() && !segment.has_size()) {
         return Status::Corruption(fmt::format("tablet merge segment {} has bundle_file_offset {} but no size",
                                               segment.filename(), segment.bundle_file_offset()));
+    }
+    if (segment.has_bundle_file_offset()) {
+        const uint64_t bundle_end =
+                static_cast<uint64_t>(segment.bundle_file_offset()) + static_cast<uint64_t>(segment.size());
+        if (bundle_end > std::numeric_limits<int64_t>::max()) {
+            return Status::Corruption(
+                    fmt::format("tablet merge segment {} bundle_file_offset {} plus size {} exceeds int64 range",
+                                segment.filename(), segment.bundle_file_offset(), segment.size()));
+        }
     }
     return Status::OK();
 }
@@ -2256,32 +2268,84 @@ Status project_non_shared_legacy_sstable(const PersistentIndexSstablePB& sst, in
     return Status::OK();
 }
 
-bool legacy_sstable_occurrence_agrees(const RssidProjection& projection,
-                                      const std::unordered_set<uint32_t>& source_live_rssids,
+struct LegacySstableLiveRssidIndex {
+    struct Entry {
+        uint32_t source_rssid = 0;
+        std::optional<int64_t> target_delta;
+        size_t agreement_run = 0;
+    };
+
+    std::unordered_set<uint32_t> source_live_rssids;
+    std::vector<Entry> entries;
+};
+
+struct SstableLiveRssidIndex {
+    std::unordered_set<uint32_t> target_live_rssids;
+    std::vector<LegacySstableLiveRssidIndex> sources;
+};
+
+// Build the live occurrence mapping once after source PK flush has installed the current rowsets. A missing/dead target
+// is represented by no delta; adjacent sorted live RSSIDs with the same valid delta share one agreement run. The
+// existing affine proof plus one bounded run lookup then proves each legacy SST without rescanning all live RSSIDs.
+SstableLiveRssidIndex build_sstable_live_rssid_index(const std::vector<TabletMergeContext>& contexts,
+                                                     const TabletMergeAllocationPlan& allocation_plan,
+                                                     const TabletMetadataPB& target) {
+    SstableLiveRssidIndex result;
+    result.target_live_rssids = collect_live_rssids(target);
+    result.sources.reserve(contexts.size());
+    for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
+        TEST_SYNC_POINT_CALLBACK("legacy_sstable_liveness_index:precompute_context", nullptr);
+        LegacySstableLiveRssidIndex source_index;
+        source_index.source_live_rssids = collect_live_rssids(*contexts[context_index].metadata());
+        source_index.entries.reserve(source_index.source_live_rssids.size());
+        for (uint32_t source : source_index.source_live_rssids) {
+            TEST_SYNC_POINT_CALLBACK("legacy_sstable_liveness_index:visited_live_rssid", nullptr);
+            LegacySstableLiveRssidIndex::Entry entry{.source_rssid = source};
+            auto mapped = allocation_plan.projections[context_index].map_occurrence_rssid(source);
+            if (mapped.ok() && mapped.value() < allocation_plan.target_next_rowset_id &&
+                result.target_live_rssids.contains(mapped.value())) {
+                entry.target_delta = static_cast<int64_t>(mapped.value()) - source;
+            }
+            source_index.entries.emplace_back(std::move(entry));
+        }
+        std::sort(source_index.entries.begin(), source_index.entries.end(),
+                  [](const auto& left, const auto& right) { return left.source_rssid < right.source_rssid; });
+        for (size_t i = 1; i < source_index.entries.size(); ++i) {
+            source_index.entries[i].agreement_run = source_index.entries[i - 1].agreement_run;
+            if (source_index.entries[i].target_delta != source_index.entries[i - 1].target_delta) {
+                ++source_index.entries[i].agreement_run;
+            }
+        }
+        result.sources.emplace_back(std::move(source_index));
+    }
+    return result;
+}
+
+bool legacy_sstable_occurrence_agrees(const LegacySstableLiveRssidIndex& source_index,
                                       const std::unordered_set<uint32_t>& target_live_rssids, uint64_t source_begin,
                                       uint32_t source_high, int64_t delta, uint32_t target_end) {
-    if (!source_live_rssids.contains(source_high)) return false;
+    TEST_SYNC_POINT_CALLBACK("legacy_sstable_liveness_index:bounded_lookup", nullptr);
+    if (!source_index.source_live_rssids.contains(source_high)) return false;
     const int64_t projected_begin = static_cast<int64_t>(source_begin) + delta;
     const int64_t projected_high = static_cast<int64_t>(source_high) + delta;
     if (projected_begin < 0 || projected_begin > std::numeric_limits<int32_t>::max() || projected_high < 0 ||
         projected_high >= target_end || !target_live_rssids.contains(static_cast<uint32_t>(projected_high))) {
         return false;
     }
-    for (uint32_t source : source_live_rssids) {
-        if (source < source_begin || source > source_high) continue;
-        auto mapped = projection.map_occurrence_rssid(source);
-        const int64_t expected = static_cast<int64_t>(source) + delta;
-        if (!mapped.ok() || expected < 0 || expected >= target_end || mapped.value() != expected ||
-            !target_live_rssids.contains(mapped.value())) {
-            return false;
-        }
-    }
-    return true;
+    auto find_source = [&](uint64_t source) {
+        return std::lower_bound(source_index.entries.begin(), source_index.entries.end(), source,
+                                [](const auto& entry, uint64_t value) { return entry.source_rssid < value; });
+    };
+    auto first = find_source(source_begin);
+    auto high = find_source(source_high);
+    return first != source_index.entries.end() && high != source_index.entries.end() &&
+           high->source_rssid == source_high && first->agreement_run == high->agreement_run &&
+           first->target_delta == delta;
 }
 
 std::optional<int64_t> prove_legacy_sstable_affine_domain(const PersistentIndexSstablePB& sst,
                                                           const RssidProjection& projection,
-                                                          const std::unordered_set<uint32_t>& source_live_rssids,
+                                                          const LegacySstableLiveRssidIndex& source_index,
                                                           const std::unordered_set<uint32_t>& target_live_rssids,
                                                           uint32_t target_end) {
     if (sst.rssid_offset() < 0) return std::optional<int64_t>{};
@@ -2289,8 +2353,8 @@ std::optional<int64_t> prove_legacy_sstable_affine_domain(const PersistentIndexS
     const uint32_t source_high = extract_rss_rowid_high(sst.max_rss_rowid());
     if (source_high < source_begin) return std::optional<int64_t>{};
     auto delta = projection.affine_delta(source_begin, uint64_t{source_high} + 1);
-    if (!delta.has_value() || !legacy_sstable_occurrence_agrees(projection, source_live_rssids, target_live_rssids,
-                                                                source_begin, source_high, *delta, target_end)) {
+    if (!delta.has_value() || !legacy_sstable_occurrence_agrees(source_index, target_live_rssids, source_begin,
+                                                                source_high, *delta, target_end)) {
         return std::optional<int64_t>{};
     }
     return delta;
@@ -2762,25 +2826,25 @@ void order_and_assign_singleton_filesets(PersistentIndexSstableMetaPB* metadata)
 
 StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std::vector<TabletMergeContext>& contexts,
                                                                        const TabletMergeAllocationPlan& allocation_plan,
-                                                                       const TabletMetadataPB& target) {
+                                                                       const TabletMetadataPB& target,
+                                                                       const SstableLiveRssidIndex& live_rssids) {
     ASSIGN_OR_RETURN(auto range_proof, validate_metadata_reuse_source_ranges(contexts, target));
     if (range_proof != MergeSourceRangeProof::kReusable) {
         return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
     }
 
-    const auto target_live_rssids = collect_live_rssids(target);
     std::unordered_set<std::string> filenames;
     MergeSstableMetaResult result;
     result.mode = MergeSstableMetaMode::kPrivate;
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         const auto& context = contexts[context_index];
         const auto& projection = allocation_plan.projections[context_index];
+        const auto& source_live_rssids = live_rssids.sources[context_index];
         for (const auto& rowset : context.metadata()->rowsets()) {
             if (rowset.has_uid() && rowset.uid().hi() == 0 && rowset.uid().lo() == 0) {
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
             }
         }
-        const auto source_live_rssids = collect_live_rssids(*context.metadata());
         for (const auto& source_sstable : context.metadata()->sstable_meta().sstables()) {
             if (source_sstable.shared()) {
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kSharedOrMixed);
@@ -2803,11 +2867,11 @@ StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }
                 if (extract_rss_rowid_high(source_sstable.max_rss_rowid()) != *source_rssid ||
-                    !source_live_rssids.contains(*source_rssid)) {
+                    !source_live_rssids.source_live_rssids.contains(*source_rssid)) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }
                 auto mapped_rssid = projection.map_occurrence_rssid(*source_rssid);
-                if (!mapped_rssid.ok() || !target_live_rssids.contains(mapped_rssid.value())) {
+                if (!mapped_rssid.ok() || !live_rssids.target_live_rssids.contains(mapped_rssid.value())) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }
                 const auto projection_status =
@@ -2821,9 +2885,9 @@ StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std
                     source_sstable.rssid_offset() < 0) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
                 }
-                auto domain_delta =
-                        prove_legacy_sstable_affine_domain(source_sstable, projection, source_live_rssids,
-                                                           target_live_rssids, allocation_plan.target_next_rowset_id);
+                auto domain_delta = prove_legacy_sstable_affine_domain(source_sstable, projection, source_live_rssids,
+                                                                       live_rssids.target_live_rssids,
+                                                                       allocation_plan.target_next_rowset_id);
                 if (!domain_delta.has_value()) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
                 }
@@ -2896,7 +2960,8 @@ bool semantic_sstable_equal(const PersistentIndexSstablePB& left, const Persiste
 
 StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std::vector<TabletMergeContext>& contexts,
                                                                        const TabletMergeAllocationPlan& allocation_plan,
-                                                                       const TabletMetadataPB& target) {
+                                                                       const TabletMetadataPB& target,
+                                                                       const SstableLiveRssidIndex& live_rssids) {
     ASSIGN_OR_RETURN(auto range_proof, validate_metadata_reuse_source_ranges(contexts, target));
     if (range_proof != MergeSourceRangeProof::kReusable) {
         return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
@@ -2932,12 +2997,6 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
         }
     }
 
-    const auto target_live_rssids = collect_live_rssids(target);
-    std::vector<std::unordered_set<uint32_t>> source_live_rssids;
-    source_live_rssids.reserve(contexts.size());
-    for (const auto& context : contexts) {
-        source_live_rssids.emplace_back(collect_live_rssids(*context.metadata()));
-    }
     MergeSstableMetaResult result;
     result.mode = MergeSstableMetaMode::kIdentical;
     for (const auto& canonical_sstable : canonical_sstables) {
@@ -2953,7 +3012,7 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
             }
             std::optional<uint32_t> common_target;
             for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
-                if (!source_live_rssids[context_index].contains(*source_rssid)) {
+                if (!live_rssids.sources[context_index].source_live_rssids.contains(*source_rssid)) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
                 }
                 ASSIGN_OR_RETURN(auto mapped,
@@ -2967,7 +3026,7 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
             }
             const uint32_t mapped_rssid = *common_target;
-            if (!target_live_rssids.contains(mapped_rssid)) {
+            if (!live_rssids.target_live_rssids.contains(mapped_rssid)) {
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
             }
             const auto projection_status =
@@ -2984,16 +3043,15 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
             const uint64_t source_begin = static_cast<uint32_t>(canonical_sstable.rssid_offset());
             const uint32_t source_high = extract_rss_rowid_high(canonical_sstable.max_rss_rowid());
             auto common_delta = prove_legacy_sstable_affine_domain(
-                    canonical_sstable, allocation_plan.projections.front(), source_live_rssids.front(),
-                    target_live_rssids, allocation_plan.target_next_rowset_id);
+                    canonical_sstable, allocation_plan.projections.front(), live_rssids.sources.front(),
+                    live_rssids.target_live_rssids, allocation_plan.target_next_rowset_id);
             if (!common_delta.has_value()) {
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
             }
             for (size_t context_index = 1; context_index < contexts.size(); ++context_index) {
-                if (!legacy_sstable_occurrence_agrees(allocation_plan.projections[context_index],
-                                                      source_live_rssids[context_index], target_live_rssids,
-                                                      source_begin, source_high, *common_delta,
-                                                      allocation_plan.target_next_rowset_id)) {
+                if (!legacy_sstable_occurrence_agrees(live_rssids.sources[context_index],
+                                                      live_rssids.target_live_rssids, source_begin, source_high,
+                                                      *common_delta, allocation_plan.target_next_rowset_id)) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kNonuniformMapping);
                 }
             }
@@ -3119,20 +3177,21 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         new_metadata->clear_sstable_meta();
         return Status::OK();
     }
+    const auto live_rssids = build_sstable_live_rssid_index(merge_contexts, allocation_plan, *new_metadata);
 
     TEST_SYNC_POINT_CALLBACK("merge_sstables:metadata_classifier_entry", nullptr);
     DeferOp classifier_exit([] { TEST_SYNC_POINT_CALLBACK("merge_sstables:metadata_classifier_exit", nullptr); });
 
-    ASSIGN_OR_RETURN(auto private_result,
-                     try_project_complete_private_sstables(merge_contexts, allocation_plan, *new_metadata));
+    ASSIGN_OR_RETURN(auto private_result, try_project_complete_private_sstables(merge_contexts, allocation_plan,
+                                                                                *new_metadata, live_rssids));
     if (private_result.mode == MergeSstableMetaMode::kPrivate) {
         new_metadata->mutable_sstable_meta()->Swap(&private_result.metadata);
         record_merge_sstable_meta_result(private_result);
         return Status::OK();
     }
 
-    ASSIGN_OR_RETURN(auto identical_result,
-                     try_reuse_complete_identical_sstables(merge_contexts, allocation_plan, *new_metadata));
+    ASSIGN_OR_RETURN(auto identical_result, try_reuse_complete_identical_sstables(merge_contexts, allocation_plan,
+                                                                                  *new_metadata, live_rssids));
     if (identical_result.mode == MergeSstableMetaMode::kIdentical) {
         new_metadata->mutable_sstable_meta()->Swap(&identical_result.metadata);
         record_merge_sstable_meta_result(identical_result);
