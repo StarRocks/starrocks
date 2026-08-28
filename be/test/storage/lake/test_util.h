@@ -45,7 +45,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
-#include "storage/tablet_meta_manager.h"
 
 namespace starrocks::lake {
 
@@ -120,13 +119,6 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
-    }
-
-    void check_local_persistent_index_meta(int64_t tablet_id, int64_t expected_version) {
-        PersistentIndexMetaPB index_meta;
-        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
-        CHECK_OK(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
-        ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }
 
     StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id,
