@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <ctime>
 #include <functional>
 #include <limits>
@@ -870,6 +871,31 @@ protected:
         return result;
     }
 
+    RawPkSstableFile write_sidecar_payload(const std::string& path, const std::string& payload, bool encrypted) {
+        RawPkSstableFile result;
+        WritableFileOptions options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        if (encrypted) {
+            ensure_kek_in_key_cache();
+            auto encryption_pair = KeyCache::instance().create_encryption_meta_pair_using_current_kek().value();
+            options.encryption_info = encryption_pair.info;
+            result.encryption_meta = std::move(encryption_pair.encryption_meta);
+        }
+        ASSIGN_OR_ABORT(auto writer, fs::new_writable_file(options, path));
+        CHECK_OK(writer->append(payload));
+        CHECK_OK(writer->close());
+        result.filesize = payload.size();
+        return result;
+    }
+
+    StatusOr<std::string> read_sidecar_payload(const std::string& path, const std::string& encryption_meta) {
+        RandomAccessFileOptions options;
+        if (!encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(options.encryption_info, KeyCache::instance().unwrap_encryption_meta(encryption_meta));
+        }
+        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(options, path));
+        return reader->read_all();
+    }
+
     struct BelowFloorLegacyFixture {
         static constexpr int64_t kBaseVersion = 1;
         static constexpr int64_t kMergedVersion = 2;
@@ -1141,7 +1167,8 @@ protected:
     // Write a real .cols file for column c1 only, with `num_rows` entries.
     // cell_value(row) supplies the c1 value at segment row |row|.
     uint64_t write_c1_only_cols_file(int64_t tablet_id, const std::string& cols_filename, int num_rows,
-                                     const std::function<int(int)>& cell_value) {
+                                     const std::function<int(int)>& cell_value, bool encrypted = false,
+                                     std::string* encryption_meta = nullptr) {
         TabletSchemaPB full_pb;
         full_pb.set_keys_type(PRIMARY_KEYS);
         full_pb.set_id(3001);
@@ -1166,6 +1193,14 @@ protected:
 
         auto cols_path = _tablet_manager->segment_location(tablet_id, cols_filename);
         WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        if (encrypted) {
+            ensure_kek_in_key_cache();
+            auto encryption_pair = KeyCache::instance().create_encryption_meta_pair_using_current_kek().value();
+            fopts.encryption_info = encryption_pair.info;
+            if (encryption_meta != nullptr) *encryption_meta = std::move(encryption_pair.encryption_meta);
+        } else if (encryption_meta != nullptr) {
+            encryption_meta->clear();
+        }
         auto wfile_or = fs::new_writable_file(fopts, cols_path);
         CHECK_OK(wfile_or.status());
 
@@ -1622,6 +1657,405 @@ protected:
         return rows;
     }
 
+    static std::vector<std::pair<int32_t, int32_t>> repeated_expected_rows(const std::map<int32_t, int32_t>& expected) {
+        return {expected.begin(), expected.end()};
+    }
+
+    StatusOr<uint32_t> repeated_merge_cursor_oracle(const std::vector<TabletMetadataPtr>& sources) {
+        struct Family {
+            size_t selected_context = 0;
+            const RowsetMetadataPB* selected = nullptr;
+            uint32_t final_max_segment_idx = 0;
+        };
+        std::map<std::pair<int64_t, int64_t>, Family> families;
+        for (size_t context_index = 0; context_index < sources.size(); ++context_index) {
+            for (const auto& rowset : sources[context_index]->rowsets()) {
+                if (!rowset.has_uid()) return Status::Corruption("repeated lifecycle rowset is missing uid");
+                auto [it, inserted] = families.emplace(std::pair{rowset.uid().hi(), rowset.uid().lo()},
+                                                       Family{.selected_context = context_index, .selected = &rowset});
+                auto& family = it->second;
+                for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
+                    const auto& segment = rowset.segment_metas(segment_index);
+                    family.final_max_segment_idx = std::max(
+                            family.final_max_segment_idx,
+                            segment.has_segment_idx() ? segment.segment_idx() : static_cast<uint32_t>(segment_index));
+                }
+                if (!inserted && family.selected == nullptr) {
+                    return Status::Corruption("repeated lifecycle family has no selected rowset");
+                }
+            }
+        }
+
+        using Atom = std::pair<uint64_t, uint64_t>;
+        std::vector<std::vector<Atom>> atoms(sources.size());
+        auto add_atom = [&](size_t context_index, uint64_t begin, uint64_t end) -> Status {
+            if (begin >= end || end > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1) {
+                return Status::InvalidArgument("repeated lifecycle atom is outside the source RSSID domain");
+            }
+            atoms[context_index].emplace_back(begin, end);
+            return Status::OK();
+        };
+        for (const auto& [uid, family] : families) {
+            (void)uid;
+            const auto& rowset = *family.selected;
+            const uint64_t extent = rowset.segment_metas_size() == 0 ? 1 : family.final_max_segment_idx + uint64_t{1};
+            RETURN_IF_ERROR(add_atom(family.selected_context, rowset.id(), uint64_t{rowset.id()} + extent));
+            if (rowset.has_max_compact_input_rowset_id()) {
+                const uint64_t recovery = rowset.max_compact_input_rowset_id();
+                RETURN_IF_ERROR(add_atom(family.selected_context, recovery, recovery + 1));
+            }
+            for (const auto& del : rowset.del_files()) {
+                const uint64_t offset = del.has_op_offset() ? del.op_offset() : family.final_max_segment_idx;
+                RETURN_IF_ERROR(add_atom(family.selected_context, del.origin_rowset_id(),
+                                         uint64_t{del.origin_rowset_id()} + offset + 1));
+            }
+        }
+
+        uint64_t cursor = 1;
+        for (auto& context_atoms : atoms) {
+            std::sort(context_atoms.begin(), context_atoms.end());
+            uint64_t union_begin = 0;
+            uint64_t union_end = 0;
+            for (const auto& [begin, end] : context_atoms) {
+                if (union_begin == union_end) {
+                    union_begin = begin;
+                    union_end = end;
+                } else if (begin <= union_end) {
+                    union_end = std::max(union_end, end);
+                } else {
+                    cursor += union_end - union_begin;
+                    union_begin = begin;
+                    union_end = end;
+                }
+            }
+            cursor += union_end - union_begin;
+        }
+        if (cursor > std::numeric_limits<int32_t>::max()) {
+            return Status::InvalidArgument("repeated lifecycle oracle exhausts the target RSSID domain");
+        }
+        return static_cast<uint32_t>(cursor);
+    }
+
+    StatusOr<int> repeated_merge_delfile_count_oracle(const std::vector<TabletMetadataPtr>& sources) {
+        std::set<std::pair<int64_t, int64_t>> selected_families;
+        int count = 0;
+        for (const auto& source : sources) {
+            for (const auto& rowset : source->rowsets()) {
+                if (!rowset.has_uid()) return Status::Corruption("repeated lifecycle rowset is missing uid");
+                if (selected_families.emplace(rowset.uid().hi(), rowset.uid().lo()).second) {
+                    count += rowset.del_files_size();
+                }
+            }
+        }
+        return count;
+    }
+
+    void add_repeated_sparse_sidecars(TabletMetadataPB* metadata, int cycle, int child_index, int32_t value,
+                                      bool enable_tde) {
+        ASSERT_GT(metadata->rowsets_size(), 0);
+        auto* rowset = metadata->mutable_rowsets(metadata->rowsets_size() - 1);
+        ASSERT_EQ(1, rowset->segment_metas_size());
+        auto* segment = rowset->mutable_segment_metas(0);
+        const uint32_t sparse_index = 600 + child_index * 300;
+        segment->set_segment_idx(sparse_index);
+        EXPECT_EQ(enable_tde, !segment->encryption_meta().empty());
+        const uint32_t sparse_rssid = rowset->id() + sparse_index;
+        metadata->set_next_rowset_id(std::max(metadata->next_rowset_id(), sparse_rssid + 1));
+
+        const std::string stem = fmt::format("repeated_{}_{}_{}", cycle, child_index, metadata->id());
+        auto* del = rowset->add_del_files();
+        del->set_name(stem + ".del");
+        del->set_origin_rowset_id(rowset->id());
+        del->set_op_offset(sparse_index);
+        del->set_version(metadata->version());
+        del->set_num_rows(0);
+        if (enable_tde) {
+            del->set_encryption_meta(write_encrypted_binary_del_file(metadata->id(), del->name(), {}));
+        } else {
+            write_binary_del_file(metadata->id(), del->name(), {});
+        }
+
+        ASSERT_FALSE(metadata->delvec_meta().version_to_file().contains(metadata->version()));
+        DelVector empty_delvec;
+        empty_delvec.init(metadata->version(), nullptr, 0);
+        add_delvec(metadata, metadata->id(), metadata->version(), sparse_rssid, stem + ".delvec", empty_delvec.save());
+
+        std::string dcg_encryption_meta;
+        const std::string dcg_file = stem + ".cols";
+        const uint64_t dcg_size = write_c1_only_cols_file(
+                metadata->id(), dcg_file, /*num_rows=*/1, [=](int) { return value; }, enable_tde, &dcg_encryption_meta);
+        auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[sparse_rssid];
+        dcg.add_column_files(dcg_file);
+        dcg.add_unique_column_ids()->add_column_ids(1002);
+        dcg.add_versions(metadata->version());
+        dcg.add_encryption_metas(dcg_encryption_meta);
+        dcg.add_shared_files(false);
+        dcg.add_column_file_sizes(dcg_size);
+
+        const std::string idg_file = stem + ".idx";
+        const std::string idg_payload = "repeated-idg:" + idg_file;
+        const auto idg_physical = write_sidecar_payload(_tablet_manager->segment_location(metadata->id(), idg_file),
+                                                        idg_payload, enable_tde);
+        add_idg_with_key(metadata, sparse_rssid, idg_file, /*col_uid=*/1002, BITMAP, metadata->version(),
+                         /*shared_file=*/false);
+        auto* idg = metadata->mutable_idg_meta()->mutable_idgs()->at(sparse_rssid).mutable_entries(0);
+        idg->set_file_size(idg_physical.filesize);
+        idg->set_encryption_meta(idg_physical.encryption_meta);
+    }
+
+    StatusOr<std::vector<TabletMetadataPtr>> repeated_split_three_way(const TabletMetadataPtr& parent) {
+        std::vector<int64_t> child_ids = {next_id(), next_id(), next_id()};
+        ReshardingTabletInfoPB resharding;
+        auto* splitting = resharding.mutable_splitting_tablet_info();
+        splitting->set_old_tablet_id(parent->id());
+        for (int child_index = 0; child_index < 3; ++child_index) {
+            const int64_t child_id = child_ids[child_index];
+            prepare_tablet_dirs(child_id);
+            splitting->add_new_tablet_ids(child_id);
+            auto* range = splitting->add_new_tablet_ranges();
+            range->mutable_lower_bound()->CopyFrom(generate_sort_key(child_index * 100));
+            range->set_lower_bound_included(true);
+            range->mutable_upper_bound()->CopyFrom(generate_sort_key((child_index + 1) * 100));
+            range->set_upper_bound_included(false);
+        }
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(next_id());
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        std::unordered_map<int64_t, TabletRangePB> ranges;
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, parent->version(),
+                                                        parent->version() + 1, txn_info, false, published, ranges));
+        std::vector<TabletMetadataPtr> children;
+        for (int64_t child_id : child_ids) {
+            auto it = published.find(child_id);
+            if (it == published.end()) return Status::InternalError("repeated lifecycle split child is missing");
+            children.emplace_back(it->second);
+        }
+        return children;
+    }
+
+    void expect_repeated_merge_pb(const TabletMetadataPtr& metadata, uint32_t expected_cursor,
+                                  int expected_sidecar_count, int expected_del_file_count,
+                                  const std::set<std::string>& expected_sst_orphans, bool enable_tde) {
+        EXPECT_EQ(expected_cursor, metadata->next_rowset_id()) << "independent atom-union cursor";
+        std::set<uint32_t> live_rssids;
+        int del_file_count = 0;
+        for (const auto& rowset : metadata->rowsets()) {
+            EXPECT_LT(rowset.id(), metadata->next_rowset_id());
+            for (int segment_index = 0; segment_index < rowset.segment_metas_size(); ++segment_index) {
+                const auto& segment = rowset.segment_metas(segment_index);
+                const uint32_t effective_index = segment.has_segment_idx() ? segment.segment_idx() : segment_index;
+                const uint32_t rssid = rowset.id() + effective_index;
+                EXPECT_LT(rssid, metadata->next_rowset_id());
+                EXPECT_TRUE(live_rssids.insert(rssid).second) << "duplicate target RSSID " << rssid;
+                EXPECT_EQ(enable_tde, !segment.encryption_meta().empty());
+            }
+            for (const auto& del : rowset.del_files()) {
+                ++del_file_count;
+                EXPECT_LT(uint64_t{del.origin_rowset_id()} + del.op_offset(), metadata->next_rowset_id());
+                EXPECT_EQ(enable_tde, !del.encryption_meta().empty());
+            }
+        }
+        EXPECT_EQ(expected_del_file_count, del_file_count);
+        EXPECT_EQ(expected_sidecar_count, metadata->delvec_meta().delvecs_size());
+        EXPECT_EQ(expected_sidecar_count, metadata->dcg_meta().dcgs_size());
+        EXPECT_EQ(expected_sidecar_count, metadata->idg_meta().idgs_size());
+
+        for (const auto& [version, file] : metadata->delvec_meta().version_to_file()) {
+            (void)version;
+            EXPECT_TRUE(file.encryption_meta().empty());
+        }
+        LakeIOOptions io_options;
+        for (const auto& [rssid, page] : metadata->delvec_meta().delvecs()) {
+            (void)page;
+            EXPECT_TRUE(live_rssids.contains(rssid));
+            DelVector loaded;
+            ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *metadata, rssid, false, io_options, &loaded));
+            EXPECT_EQ(0, loaded.cardinality());
+        }
+        for (const auto& [rssid, dcg] : metadata->dcg_meta().dcgs()) {
+            EXPECT_TRUE(live_rssids.contains(rssid));
+            ASSERT_EQ(1, dcg.column_files_size());
+            ASSERT_EQ(1, dcg.encryption_metas_size());
+            EXPECT_EQ(enable_tde, !dcg.encryption_metas(0).empty());
+        }
+        for (const auto& [rssid, idg] : metadata->idg_meta().idgs()) {
+            EXPECT_TRUE(live_rssids.contains(rssid));
+            ASSERT_EQ(1, idg.entries_size());
+            const auto& entry = idg.entries(0);
+            EXPECT_EQ(enable_tde, !entry.encryption_meta().empty());
+            ASSIGN_OR_ABORT(auto payload,
+                            read_sidecar_payload(_tablet_manager->segment_location(metadata->id(), entry.index_file()),
+                                                 entry.encryption_meta()));
+            EXPECT_EQ("repeated-idg:" + entry.index_file(), payload);
+        }
+
+        EXPECT_EQ(0, metadata->sstable_meta().sstables_size());
+        std::set<std::string> actual_orphans;
+        for (const auto& orphan : metadata->orphan_files()) {
+            actual_orphans.insert(orphan.name());
+            EXPECT_TRUE(orphan.shared());
+            EXPECT_EQ(enable_tde, !orphan.encryption_meta().empty());
+        }
+        EXPECT_EQ(expected_sst_orphans, actual_orphans);
+    }
+
+    struct RepeatedLifecycleResult {
+        TabletMetadataPtr metadata;
+        std::vector<TabletMetadataPtr> final_sources;
+        std::map<int32_t, int32_t> expected;
+        std::vector<int32_t> deleted_keys;
+        std::set<std::string> final_sst_orphans;
+    };
+
+    StatusOr<RepeatedLifecycleResult> run_repeated_four_cycle_lifecycle(bool enable_tde) {
+        const bool old_tde = config::enable_transparent_data_encryption;
+        const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
+        const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
+        config::enable_transparent_data_encryption = enable_tde;
+        config::enable_pk_index_parallel_compaction = false;
+        config::lake_pk_compaction_min_input_segments = 1;
+        DeferOp restore_config([&] {
+            config::enable_transparent_data_encryption = old_tde;
+            config::enable_pk_index_parallel_compaction = old_parallel_compaction;
+            config::lake_pk_compaction_min_input_segments = old_min_segments;
+        });
+        if (enable_tde) ensure_kek_in_key_cache();
+        DeferOp wait_flush_pool(
+                [] { ExecEnv::GetInstance()->lake_services().pk_index_memtable_flush_thread_pool->wait(); });
+        set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+        set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
+        DeferOp restore_failpoints([&] {
+            set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::DISABLE);
+            set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE);
+        });
+
+        const char* force_projection_env = std::getenv("STARROCKS_TEST_FORCE_CONTEXT_SPAN_PROJECTION");
+        const bool force_context_span =
+                force_projection_env != nullptr && std::string_view(force_projection_env) == "1";
+        int context_span_hook_count = 0;
+        auto* sync = SyncPoint::GetInstance();
+        if (force_context_span) {
+            sync->SetCallBack("tablet_merge_test:force_context_span_projection", [&](void* arg) {
+                ++context_span_hook_count;
+                *static_cast<bool*>(arg) = true;
+            });
+            sync->EnableProcessing();
+        }
+        DeferOp cleanup_sync_point([&] {
+            if (force_context_span) {
+                sync->ClearCallBack("tablet_merge_test:force_context_span_projection");
+                sync->DisableProcessing();
+            }
+        });
+
+        std::map<int32_t, int32_t> expected = {{10, 100}, {110, 1100}, {210, 2100}};
+        std::set<int32_t> deleted;
+        std::vector<TabletMetadataPtr> initial_sources;
+        for (int child_index = 0; child_index < 3; ++child_index) {
+            const int32_t key = 10 + child_index * 100;
+            ASSIGN_OR_RETURN(auto source, create_lifecycle_source(next_id(), child_index * 100, (child_index + 1) * 100,
+                                                                  key, expected.at(key), /*include_delete=*/false));
+            initial_sources.emplace_back(std::move(source));
+        }
+        const int64_t initial_target = next_id();
+        prepare_tablet_dirs(initial_target);
+        ASSIGN_OR_RETURN(const uint32_t initial_cursor, repeated_merge_cursor_oracle(initial_sources));
+        std::unordered_map<int64_t, TabletMetadataPtr> initial_published;
+        int merge_count = 1;
+        RETURN_IF_ERROR(publish_resharding_merge(initial_sources, initial_target, initial_sources.front()->version(),
+                                                 initial_sources.front()->version() + 1, next_id(), initial_published));
+        auto current = initial_published.at(initial_target);
+        ASSIGN_OR_RETURN(const int initial_del_files, repeated_merge_delfile_count_oracle(initial_sources));
+        expect_repeated_merge_pb(current, initial_cursor, /*expected_sidecar_count=*/0, initial_del_files,
+                                 /*expected_sst_orphans=*/{}, enable_tde);
+        expect_lifecycle_oracle(current, repeated_expected_rows(expected), /*deleted_keys=*/{});
+
+        std::vector<TabletMetadataPtr> final_sources;
+        std::set<std::string> final_sst_orphans;
+        for (int cycle = 0; cycle < 4; ++cycle) {
+            SCOPED_TRACE(fmt::format("repeated lifecycle cycle {}", cycle));
+            const uint32_t prior_cursor = current->next_rowset_id();
+            const int32_t upsert_key = 40 + cycle;
+            const int32_t upsert_value = 4000 + cycle;
+            const int32_t delete_key = cycle < 3 ? 10 + cycle * 100 : 40;
+            _update_manager->unload_and_remove_primary_index(current->id());
+            ASSIGN_OR_RETURN(current, publish_followup_upsert_delete(current->id(), current->version(), upsert_key,
+                                                                     upsert_value, delete_key));
+            expected[upsert_key] = upsert_value;
+            expected.erase(delete_key);
+            deleted.insert(delete_key);
+            ASSIGN_OR_RETURN(current, compact_tablet(current->id(), current->version(), /*force_base=*/true));
+
+            ASSIGN_OR_RETURN(auto children, repeated_split_three_way(current));
+            std::vector<TabletMetadataPtr> merge_sources;
+            std::set<std::string> expected_sst_orphans;
+            for (int child_index = 0; child_index < 3; ++child_index) {
+                auto child = children[child_index];
+                const int32_t key = child_index * 100 + 20 + cycle;
+                const int32_t value = (cycle + 1) * 10000 + key;
+                _update_manager->unload_and_remove_primary_index(child->id());
+                ASSIGN_OR_RETURN(child, publish_followup_upsert_delete(child->id(), child->version(), key, value,
+                                                                       /*delete_key=*/0, /*include_delete=*/false));
+                expected[key] = value;
+                deleted.erase(key);
+                if (enable_tde) {
+                    ASSIGN_OR_RETURN(child, _update_manager->flush_pk_memtable(child, child->version()));
+                    RETURN_IF_ERROR(put_tablet_metadata(child));
+                    if (child->sstable_meta().sstables_size() == 0) {
+                        return Status::InternalError("TDE repeated lifecycle source flush emitted no SST");
+                    }
+                    assert_published_sstables_reopen(child);
+                }
+                auto mutable_child = std::make_shared<TabletMetadataPB>(*child);
+                for (auto& sstable : *mutable_child->mutable_sstable_meta()->mutable_sstables()) {
+                    if (enable_tde) {
+                        if (sstable.encryption_meta().empty()) {
+                            return Status::InternalError("TDE repeated lifecycle SST is plaintext");
+                        }
+                    }
+                    expected_sst_orphans.insert(sstable.filename());
+                    sstable.set_shared(true);
+                    sstable.clear_shared_rssid();
+                    sstable.clear_shared_version();
+                }
+                add_repeated_sparse_sidecars(mutable_child.get(), cycle, child_index, value, enable_tde);
+                _update_manager->unload_and_remove_primary_index(child->id());
+                merge_sources.emplace_back(std::move(mutable_child));
+            }
+
+            ASSIGN_OR_RETURN(const uint32_t expected_cursor, repeated_merge_cursor_oracle(merge_sources));
+            ASSIGN_OR_RETURN(const int expected_del_files, repeated_merge_delfile_count_oracle(merge_sources));
+            const int64_t target_id = next_id();
+            prepare_tablet_dirs(target_id);
+            std::unordered_map<int64_t, TabletMetadataPtr> published;
+            ++merge_count;
+            RETURN_IF_ERROR(publish_resharding_merge(merge_sources, target_id, merge_sources.front()->version(),
+                                                     merge_sources.front()->version() + 1, next_id(), published));
+            current = published.at(target_id);
+            EXPECT_LT(current->next_rowset_id(), uint64_t{prior_cursor} + 4096) << "bounded RSSID growth";
+            expect_repeated_merge_pb(current, expected_cursor, /*expected_sidecar_count=*/3, expected_del_files,
+                                     expected_sst_orphans, enable_tde);
+            std::vector<int32_t> deleted_keys(deleted.begin(), deleted.end());
+            expect_lifecycle_oracle(current, repeated_expected_rows(expected), deleted_keys);
+            if (cycle == 3) {
+                final_sst_orphans = std::move(expected_sst_orphans);
+                for (const auto& source : merge_sources) final_sources.emplace_back(published.at(source->id()));
+            }
+        }
+        EXPECT_EQ(force_context_span ? merge_count : 0, context_span_hook_count)
+                << "context-span hook must fire exactly once per MERGE";
+
+        RepeatedLifecycleResult result;
+        result.metadata = std::move(current);
+        result.final_sources = std::move(final_sources);
+        result.expected = std::move(expected);
+        result.deleted_keys.assign(deleted.begin(), deleted.end());
+        result.final_sst_orphans = std::move(final_sst_orphans);
+        return result;
+    }
+
     struct Issue11935MergeFixture {
         ReshardingTabletInfoPB resharding;
         TxnInfoPB txn_info;
@@ -1931,6 +2365,146 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_repeated_four_cycle_lifecycle) {
+    ASSIGN_OR_ABORT(auto result, run_repeated_four_cycle_lifecycle(/*enable_tde=*/false));
+    EXPECT_EQ(result.final_sst_orphans.size(), static_cast<size_t>(result.metadata->orphan_files_size()));
+    for (const auto& orphan : result.metadata->orphan_files()) EXPECT_TRUE(orphan.encryption_meta().empty());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_repeated_tde_sidecar_vacuum_lifecycle) {
+    ASSIGN_OR_ABORT(auto result, run_repeated_four_cycle_lifecycle(/*enable_tde=*/true));
+    ASSERT_GE(result.final_sst_orphans.size(), 3);
+
+    const bool old_tde = config::enable_transparent_data_encryption;
+    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
+    config::enable_transparent_data_encryption = true;
+    config::enable_pk_index_parallel_compaction = false;
+    DeferOp restore_config([&] {
+        config::enable_transparent_data_encryption = old_tde;
+        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
+    });
+    ensure_kek_in_key_cache();
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+
+    _update_manager->unload_and_remove_primary_index(result.metadata->id());
+    ASSIGN_OR_ABORT(auto reopened,
+                    _tablet_manager->get_tablet_metadata(result.metadata->id(), result.metadata->version()));
+    expect_lifecycle_oracle(reopened, repeated_expected_rows(result.expected), result.deleted_keys);
+
+    constexpr int32_t kTailUpsertKey = 77;
+    constexpr int32_t kTailDeleteKey = 120;
+    ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(reopened->id(), reopened->version(), kTailUpsertKey,
+                                                                   /*upsert_value=*/7700, kTailDeleteKey));
+    result.expected[kTailUpsertKey] = 7700;
+    result.expected.erase(kTailDeleteKey);
+    result.deleted_keys.push_back(kTailDeleteKey);
+    expect_lifecycle_oracle(after_dml, repeated_expected_rows(result.expected), result.deleted_keys);
+
+    _update_manager->unload_and_remove_primary_index(after_dml->id());
+    ASSIGN_OR_ABORT(auto reopened_after_dml,
+                    _tablet_manager->get_tablet_metadata(after_dml->id(), after_dml->version()));
+    expect_lifecycle_oracle(reopened_after_dml, repeated_expected_rows(result.expected), result.deleted_keys);
+    ASSIGN_OR_ABORT(auto compacted,
+                    compact_tablet(reopened_after_dml->id(), reopened_after_dml->version(), /*force_base=*/true));
+    EXPECT_EQ(reopened_after_dml->version() + 1, compacted->version());
+    for (const auto& rowset : compacted->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) EXPECT_FALSE(segment.encryption_meta().empty());
+    }
+    expect_lifecycle_oracle(compacted, repeated_expected_rows(result.expected), result.deleted_keys);
+
+    _update_manager->unload_and_remove_primary_index(compacted->id());
+    ASSIGN_OR_ABORT(auto reopened_compacted,
+                    _tablet_manager->get_tablet_metadata(compacted->id(), compacted->version()));
+    expect_lifecycle_oracle(reopened_compacted, repeated_expected_rows(result.expected), result.deleted_keys);
+
+    std::map<std::string, FileMetaPB> orphan_declarations;
+    int64_t orphan_bytes = 0;
+    for (const auto& orphan : result.metadata->orphan_files()) {
+        if (!result.final_sst_orphans.contains(orphan.name())) continue;
+        orphan_declarations.emplace(orphan.name(), orphan);
+        orphan_bytes += orphan.size();
+        EXPECT_FALSE(orphan.encryption_meta().empty());
+        ASSERT_OK(FileSystem::Default()->path_exists(
+                _tablet_manager->sst_location(result.metadata->id(), orphan.name())));
+    }
+    ASSERT_EQ(result.final_sst_orphans.size(), orphan_declarations.size());
+
+    auto run_vacuum = [&](const std::vector<std::pair<int64_t, int64_t>>& tablet_versions, int64_t min_retain_version) {
+        VacuumRequest request;
+        VacuumResponse response;
+        for (const auto& [tablet_id, min_version] : tablet_versions) {
+            auto* info = request.add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(min_version);
+        }
+        request.set_min_retain_version(min_retain_version);
+        request.set_grace_timestamp(::time(nullptr) + 3600);
+        request.set_min_active_txn_id(std::numeric_limits<int64_t>::max());
+        request.set_enable_file_bundling(false);
+        request.set_enable_shared_file_cleanup(true);
+        request.set_delete_txn_log(false);
+        lake::vacuum(_tablet_manager.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code())
+                << (response.status().error_msgs_size() > 0 ? response.status().error_msgs(0) : "");
+        return response;
+    };
+
+    std::vector<TabletMetadataPB> live_sources;
+    std::vector<std::pair<int64_t, int64_t>> live_versions = {{compacted->id(), compacted->version()}};
+    for (const auto& source : result.final_sources) {
+        TabletMetadataPB live(*source);
+        live.set_version(compacted->version());
+        live.set_prev_garbage_version(source->version());
+        live.clear_orphan_files();
+        ASSERT_GT(live.sstable_meta().sstables_size(), 0);
+        ASSERT_OK(put_tablet_metadata(live));
+        live_versions.emplace_back(source->id(), compacted->version());
+        live_sources.emplace_back(std::move(live));
+    }
+    _tablet_manager->prune_metacache();
+    auto noncovering = run_vacuum(live_versions, compacted->version());
+    EXPECT_TRUE(noncovering.has_status());
+    for (const auto& filename : result.final_sst_orphans) {
+        const auto status =
+                FileSystem::Default()->path_exists(_tablet_manager->sst_location(compacted->id(), filename));
+        EXPECT_OK(status);
+    }
+
+    const int64_t retirement_version = compacted->version() + 1;
+    TabletMetadataPB retired_target(*compacted);
+    retired_target.set_version(retirement_version);
+    retired_target.set_prev_garbage_version(compacted->version());
+    retired_target.clear_orphan_files();
+    ASSERT_OK(put_tablet_metadata(retired_target));
+    for (const auto& live : live_sources) {
+        TabletMetadataPB retired(live);
+        retired.set_version(retirement_version);
+        retired.set_prev_garbage_version(compacted->version());
+        retired.clear_sstable_meta();
+        retired.clear_orphan_files();
+        for (const auto& sstable : live.sstable_meta().sstables()) {
+            auto declaration = orphan_declarations.find(sstable.filename());
+            ASSERT_NE(orphan_declarations.end(), declaration);
+            retired.add_orphan_files()->CopyFrom(declaration->second);
+        }
+        ASSERT_OK(put_tablet_metadata(retired));
+    }
+    _tablet_manager->prune_metacache();
+
+    std::vector<std::pair<int64_t, int64_t>> retired_versions = {{compacted->id(), retirement_version}};
+    for (const auto& source : live_sources) retired_versions.emplace_back(source.id(), retirement_version);
+    auto covering = run_vacuum(retired_versions, retirement_version);
+    EXPECT_GE(covering.vacuumed_file_size(), orphan_bytes);
+    for (const auto& filename : result.final_sst_orphans) {
+        EXPECT_TRUE(FileSystem::Default()
+                            ->path_exists(_tablet_manager->sst_location(compacted->id(), filename))
+                            .is_not_found())
+                << "covering vacuum must reclaim a retired shared SST";
+    }
+}
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_private_complete_reuse) {
     int sstable_open_count = 0;
