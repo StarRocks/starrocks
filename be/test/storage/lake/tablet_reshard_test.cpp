@@ -58,6 +58,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
@@ -2951,7 +2952,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_identical_diverg
                  sources[1]->set_next_rowset_id(8);
              }},
             {"segment index mismatch",
-             [](auto& sources) { sources[1]->mutable_rowsets(0)->mutable_segment_metas(0)->set_segment_idx(7); }},
+             [&](auto& sources) {
+                 const std::string segment_name = "metadata_only_identical_index_mismatch.dat";
+                 const uint64_t segment_size = write_two_column_segment(
+                         sources[1]->id(), segment_name, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+                 auto* segment = sources[1]->mutable_rowsets(0)->mutable_segment_metas(0);
+                 segment->set_filename(segment_name);
+                 segment->set_size(segment_size);
+                 segment->set_segment_idx(7);
+             }},
             {"segment layout count mismatch",
              [&](auto& sources) {
                  const std::string segment_name = "metadata_only_identical_second_segment.dat";
@@ -10148,6 +10157,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     const std::string base_name = "cross_target_shared_base.dat";
     const std::string cols_name = "cross_target.cols";
     const std::string idx_name = "cross_target.idx";
+    const std::string dead_idx_name = "cross_target_dead.idx";
     const auto bundled_segments =
             write_two_column_bundled_segments(source_a_id, base_name, 2, [](int key) { return key * 10; });
     ASSERT_EQ(2, bundled_segments.size());
@@ -10159,6 +10169,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
             write_c1_only_cols_file(source_a_id, cols_name, 2, [](int row) { return (row + 1) * 1000; });
     const auto idx_file = write_sidecar_payload(_tablet_manager->segment_location(source_a_id, idx_name),
                                                 "cross-target-index", /*encrypted=*/false);
+    const auto dead_idx_file = write_sidecar_payload(_tablet_manager->segment_location(source_a_id, dead_idx_name),
+                                                     "cross-target-dead-index", /*encrypted=*/false);
 
     auto source_a = make_preflight_sidecar_source(source_a_id, base_name, /*shared_segment=*/false);
     auto source_b = make_preflight_sidecar_source(source_b_id, base_name, /*shared_segment=*/true);
@@ -10191,8 +10203,20 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
         dcg->set_shared_files(0, false);
         add_idg_with_key(source, /*segment_id=*/1, idx_name, /*col_uid=*/1002, BITMAP, /*version=*/1,
                          /*shared_file=*/false);
-        auto* idg = (*source->mutable_idg_meta()->mutable_idgs())[1].mutable_entries(0);
-        idg->set_file_size(idx_file.filesize);
+        add_idg_key(source, /*segment_id=*/1, /*col_uid=*/1003, BITMAP);
+        add_idg_with_key(source, /*segment_id=*/1, dead_idx_name, /*col_uid=*/1004, BITMAP, /*version=*/1,
+                         /*shared_file=*/false);
+        auto* idg = &(*source->mutable_idg_meta()->mutable_idgs())[1];
+        idg->mutable_entries(0)->set_file_size(idx_file.filesize);
+        idg->mutable_entries(1)->set_file_size(dead_idx_file.filesize);
+        if (i == 1) {
+            auto* partial_drop = idg->mutable_entries(0)->add_dropped_keys();
+            partial_drop->set_col_unique_id(1002);
+            partial_drop->set_index_type(BITMAP);
+            auto* full_drop = idg->mutable_entries(1)->add_dropped_keys();
+            full_drop->set_col_unique_id(1004);
+            full_drop->set_index_type(BITMAP);
+        }
     }
 
     MergePhaseCounts counts;
@@ -10219,13 +10243,21 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
         EXPECT_TRUE(dcg.shared_files(0));
     }
     for (const auto& [rssid, idg] : merged->idg_meta().idgs()) {
-        (void)rssid;
         ASSERT_EQ(1, idg.entries_size());
         EXPECT_EQ(idx_name, idg.entries(0).index_file());
         EXPECT_TRUE(idg.entries(0).shared_file());
+        lake::LakeIndexDeltaGroupLoader loader(merged);
+        lake::IndexDeltaGroupList loaded;
+        ASSERT_OK(loader.load(TabletSegmentId(target_id, rssid), merged->version(), &loaded));
+        ASSERT_EQ(1, loaded.size());
+        ASSERT_EQ(1, loaded[0].keys.size());
+        EXPECT_EQ(1003, loaded[0].keys[0].col_unique_id);
+        EXPECT_EQ(BITMAP, loaded[0].keys[0].index_type);
     }
     EXPECT_TRUE(std::none_of(merged->orphan_files().begin(), merged->orphan_files().end(),
                              [&](const FileMetaPB& file) { return file.name() == idx_name; }));
+    ASSERT_EQ(1, std::count_if(merged->orphan_files().begin(), merged->orphan_files().end(),
+                               [&](const FileMetaPB& file) { return file.name() == dead_idx_name; }));
 
     ASSERT_OK(put_tablet_metadata(merged));
     _tablet_manager->prune_metacache();
@@ -10273,13 +10305,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     };
     add_orphan(cols_name, cols_size, /*shared=*/true, /*version=*/1);
     add_orphan(idx_name, idx_file.filesize, /*shared=*/true, /*version=*/1);
+    add_orphan(dead_idx_name, dead_idx_file.filesize, /*shared=*/true, /*version=*/1);
     const std::string private_control_name = "cross_target_private_control.idx";
     const auto private_control = write_sidecar_payload(
             _tablet_manager->segment_location(target_id, private_control_name), "private-vacuum-control",
             /*encrypted=*/false);
     add_orphan(private_control_name, private_control.filesize, /*shared=*/false, compacted.version());
     ASSERT_EQ(1, compacted.compaction_inputs_size());
-    ASSERT_EQ(3, compacted.orphan_files_size());
+    ASSERT_EQ(4, compacted.orphan_files_size());
     ASSERT_OK(put_tablet_metadata(compacted));
 
     _tablet_manager->prune_metacache();
@@ -10306,6 +10339,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     EXPECT_OK(FileSystem::Default()->path_exists(_tablet_manager->segment_location(target_id, base_name)));
     EXPECT_OK(FileSystem::Default()->path_exists(_tablet_manager->segment_location(target_id, cols_name)));
     EXPECT_OK(FileSystem::Default()->path_exists(_tablet_manager->segment_location(target_id, idx_name)));
+    EXPECT_TRUE(FileSystem::Default()
+                        ->path_exists(_tablet_manager->segment_location(target_id, dead_idx_name))
+                        .is_not_found());
     EXPECT_TRUE(FileSystem::Default()
                         ->path_exists(_tablet_manager->segment_location(target_id, private_control_name))
                         .is_not_found());
@@ -10553,6 +10589,58 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_cross_canonical_overla
         auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
         EXPECT_TRUE(status.message().contains(filename)) << status;
         EXPECT_TRUE(status.message().contains("overlapping bundled slices")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_duplicate_segment_index_within_occurrence_before_io) {
+    for (bool reverse_segments : {false, true}) {
+        SCOPED_TRACE(fmt::format("{} segment first", reverse_segments ? "shared" : "private"));
+        auto source = make_preflight_sidecar_source(next_id(), fmt::format("duplicate_index_{}.dat", next_id()));
+        auto* rowset = source->mutable_rowsets(0);
+        auto* duplicate = rowset->add_segment_metas();
+        duplicate->CopyFrom(rowset->segment_metas(0));
+        duplicate->set_shared(true);
+        if (reverse_segments) rowset->mutable_segment_metas()->SwapElements(0, 1);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection({source}, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains("duplicate effective segment index")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_duplicate_physical_slice_in_one_rowset_before_io) {
+    for (bool reverse_segments : {false, true}) {
+        SCOPED_TRACE(fmt::format("segment index {} first", reverse_segments ? 1 : 0));
+        const std::string filename = fmt::format("duplicate_rowset_slice_{}.dat", next_id());
+        auto source = make_preflight_sidecar_source(next_id(), filename);
+        auto* rowset = source->mutable_rowsets(0);
+        auto* duplicate = rowset->add_segment_metas();
+        duplicate->CopyFrom(rowset->segment_metas(0));
+        duplicate->set_segment_idx(1);
+        if (reverse_segments) rowset->mutable_segment_metas()->SwapElements(0, 1);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection({source}, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains(filename)) << status;
+        EXPECT_TRUE(status.message().contains("multiple segment indices")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_sibling_union_duplicate_physical_slice_before_io) {
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(fmt::format("segment index {} source first", reverse_sources ? 1 : 0));
+        const std::string filename = fmt::format("duplicate_union_slice_{}.dat", next_id());
+        auto first = make_preflight_sidecar_source(next_id(), filename);
+        auto second = make_preflight_sidecar_source(next_id(), filename);
+        second->mutable_rowsets(0)->mutable_segment_metas(0)->set_segment_idx(1);
+        second->mutable_rowsets(0)->mutable_uid()->CopyFrom(first->rowsets(0).uid());
+        std::vector<TabletMetadataPtr> sources = {first, second};
+        if (reverse_sources) std::swap(sources[0], sources[1]);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains(filename)) << status;
+        EXPECT_TRUE(status.message().contains("multiple segment indices")) << status;
     }
 }
 
@@ -15555,12 +15643,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_drops_fully_tombstoned) {
     EXPECT_TRUE(orphaned) << "fully-tombstoned .idx must be added to orphan_files";
 }
 
-// MERGE: a .idx that is fully-tombstoned under one target but still ACTIVE under another
-// target must NOT be orphaned (vacuum deletes orphan_files without checking live idg_meta).
-// The same physical .idx may be referenced under two target RSSIDs only when both resolve to
-// the same physical base segment. child_a keeps "same.idx" active at its rssid; child_b
-// (distinct uid => remapped rssid) has the same base and a fully tombstoned declaration.
-TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_orphan_skips_still_referenced_file) {
+// MERGE: DROP INDEX tombstones are table-wide monotonic for one .idx + physical base.
+// A tombstone under either co-referenced target therefore makes the single-key entry dead
+// under both targets; with no active reference, the physical .idx is orphaned exactly once.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_global_tombstone_orphans_without_active_reference) {
     const int64_t base_version = 1, new_version = 2;
     const int64_t child_a = next_id(), child_b = next_id(), merged_tablet = next_id();
     prepare_tablet_dirs(child_a);
@@ -15604,17 +15690,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_orphan_skips_still_referen
                                               txn_info, false, tablet_metadatas, tablet_ranges));
 
     auto merged = tablet_metadatas.at(merged_tablet);
-    // same.idx is still active under child_a's target, so it must NOT be orphaned.
-    for (const auto& f : merged->orphan_files()) {
-        EXPECT_NE("same.idx", f.name()) << "a still-referenced .idx must not be orphaned";
-    }
-    bool active = false;
+    int active = 0;
     for (const auto& [rssid, ver] : merged->idg_meta().idgs()) {
+        (void)rssid;
         for (const auto& e : ver.entries()) {
-            if (e.index_file() == "same.idx") active = true;
+            if (e.index_file() == "same.idx") ++active;
         }
     }
-    EXPECT_TRUE(active) << "same.idx must remain an active entry";
+    EXPECT_EQ(0, active) << "the table-wide tombstone must remove every co-reference";
+    EXPECT_EQ(1, std::count_if(merged->orphan_files().begin(), merged->orphan_files().end(),
+                               [](const auto& file) { return file.name() == "same.idx"; }));
 }
 
 // MERGE: a source split before this fix can have segment.shared=true but a stale

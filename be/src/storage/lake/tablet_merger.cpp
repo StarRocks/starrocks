@@ -306,10 +306,10 @@ struct CanonicalAllocationPlan {
 };
 
 struct TabletMergeAllocationPlan {
-    RowsetEmissionPlan emission;
     std::vector<CanonicalAllocationPlan> canonicals;
     std::vector<RssidProjection> projections;
     uint32_t target_next_rowset_id = 1;
+    int64_t non_pk_skip_dedup_count = 0;
 };
 
 DEFINE_FAIL_POINT(tablet_merge_before_delete_predicate_range);
@@ -464,13 +464,25 @@ Status validate_physical_segment_shape(const SegmentMetadataPB& segment) {
 
 Status validate_physical_rowset_shape(const RowsetMetadataPB& rowset) {
     std::optional<bool> bundled;
-    for (const auto& segment : rowset.segment_metas()) {
+    std::map<std::pair<std::string, int64_t>, uint32_t> segment_index_by_physical_slice;
+    for (int position = 0; position < rowset.segment_metas_size(); ++position) {
+        const auto& segment = rowset.segment_metas(position);
         RETURN_IF_ERROR(validate_physical_segment_shape(segment));
         if (!bundled.has_value()) {
             bundled = segment.has_bundle_file_offset();
         } else if (*bundled != segment.has_bundle_file_offset()) {
             return Status::Corruption(
                     fmt::format("tablet merge rowset {} mixes bundled and standalone segments", rowset.id()));
+        }
+        const auto slice = std::pair{segment.filename(),
+                                     segment.has_bundle_file_offset() ? segment.bundle_file_offset() : int64_t{0}};
+        const uint32_t segment_index = get_segment_idx(rowset, position);
+        auto [iter, inserted] = segment_index_by_physical_slice.try_emplace(slice, segment_index);
+        if (!inserted && iter->second != segment_index) {
+            return Status::Corruption(fmt::format(
+                    "tablet merge rowset {} references physical segment slice {} at bundle offset {} from multiple "
+                    "segment indices",
+                    rowset.id(), slice.first, slice.second));
         }
     }
     return Status::OK();
@@ -480,8 +492,13 @@ Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* o
     const bool overlapped = canonical->overlapped() || (occurrence != nullptr && occurrence->overlapped());
     std::map<uint32_t, SegmentMetadataPB> by_index;
     auto ingest = [&](const RowsetMetadataPB& source) -> Status {
+        std::unordered_set<uint32_t> source_indices;
         for (int position = 0; position < source.segment_metas_size(); ++position) {
             const uint32_t index = get_segment_idx(source, position);
+            if (!source_indices.insert(index).second) {
+                return Status::Corruption(
+                        fmt::format("tablet merge source rowset has duplicate effective segment index {}", index));
+            }
             SegmentMetadataPB candidate(source.segment_metas(position));
             candidate.set_segment_idx(index);
             const bool candidate_shared = candidate.shared();
@@ -521,15 +538,18 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
         std::string declaration_key;
         std::vector<SegmentMetadataPB*> references;
     };
-    std::map<std::string, bool> bundled_by_filename;
-    std::map<std::string, std::map<int64_t, int64_t>> bundled_intervals_by_filename;
+    struct PhysicalFilenameDeclaration {
+        bool bundled = false;
+        std::map<int64_t, int64_t> bundled_intervals;
+    };
+    std::map<std::string, PhysicalFilenameDeclaration> declarations_by_filename;
     std::map<std::pair<std::string, int64_t>, PhysicalSliceDeclaration> declarations_by_physical_slice;
     for (auto& canonical : *canonicals) {
         RETURN_IF_ERROR(validate_physical_rowset_shape(canonical.source_form_rowset));
         for (auto& segment : *canonical.source_form_rowset.mutable_segment_metas()) {
-            auto [form, form_inserted] =
-                    bundled_by_filename.try_emplace(segment.filename(), segment.has_bundle_file_offset());
-            if (!form_inserted && form->second != segment.has_bundle_file_offset()) {
+            auto [file, file_inserted] = declarations_by_filename.try_emplace(
+                    segment.filename(), PhysicalFilenameDeclaration{.bundled = segment.has_bundle_file_offset()});
+            if (!file_inserted && file->second.bundled != segment.has_bundle_file_offset()) {
                 return Status::Corruption(
                         fmt::format("tablet merge physical segment file {} mixes bundled and standalone forms",
                                     segment.filename()));
@@ -537,7 +557,7 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
             if (segment.has_bundle_file_offset()) {
                 const int64_t bundle_end = static_cast<int64_t>(static_cast<uint64_t>(segment.bundle_file_offset()) +
                                                                 static_cast<uint64_t>(segment.size()));
-                bundled_intervals_by_filename[segment.filename()].try_emplace(segment.bundle_file_offset(), bundle_end);
+                file->second.bundled_intervals.try_emplace(segment.bundle_file_offset(), bundle_end);
             }
             const auto slice = std::pair{segment.filename(),
                                          segment.has_bundle_file_offset() ? segment.bundle_file_offset() : int64_t{0}};
@@ -554,9 +574,9 @@ Status normalize_cross_target_physical_ownership(std::vector<CanonicalAllocation
             iter->second.references.emplace_back(&segment);
         }
     }
-    for (const auto& [filename, intervals] : bundled_intervals_by_filename) {
+    for (const auto& [filename, declaration] : declarations_by_filename) {
         std::optional<std::pair<int64_t, int64_t>> previous;
-        for (const auto& [begin, end] : intervals) {
+        for (const auto& [begin, end] : declaration.bundled_intervals) {
             if (previous.has_value() && begin < previous->second) {
                 return Status::Corruption(fmt::format(
                         "tablet merge physical segment file {} has overlapping bundled slices [{}, {}) and [{}, {})",
@@ -639,18 +659,20 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
     TEST_SYNC_POINT_CALLBACK("tablet_merge_test:drop_primary_atom", &drop_primary_atom);
 
     TabletMergeAllocationPlan result;
-    ASSIGN_OR_RETURN(result.emission, build_rowset_emission_plan(contexts, discard_empty_rowsets));
+    ASSIGN_OR_RETURN(auto emission, build_rowset_emission_plan(contexts, discard_empty_rowsets));
     int canonical_count = 0;
-    for (const auto& decisions : result.emission) {
-        for (const auto& decision : decisions)
+    for (const auto& decisions : emission) {
+        for (const auto& decision : decisions) {
             canonical_count = std::max(canonical_count, decision.canonical_index + 1);
+            result.non_pk_skip_dedup_count += decision.emit && decision.non_pk_skip_dedup_fired;
+        }
     }
     result.canonicals.resize(canonical_count);
 
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         const auto& metadata = *contexts[context_index].metadata();
         for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
-            const auto& decision = result.emission[context_index][rowset_index];
+            const auto& decision = emission[context_index][rowset_index];
             if (!decision.emit) continue;
             const auto& rowset = metadata.rowsets(rowset_index);
             DCHECK(tablet_reshard_helper::has_valid_uid(rowset))
@@ -676,7 +698,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         const auto& metadata = *contexts[context_index].metadata();
         for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
-            const auto& decision = result.emission[context_index][rowset_index];
+            const auto& decision = emission[context_index][rowset_index];
             if (decision.discard || decision.emit) continue;
             const auto& occurrence = metadata.rowsets(rowset_index);
             DCHECK(tablet_reshard_helper::has_valid_uid(occurrence))
@@ -759,7 +781,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         const auto& metadata = *contexts[context_index].metadata();
         for (int rowset_index = 0; rowset_index < metadata.rowsets_size(); ++rowset_index) {
-            const auto& decision = result.emission[context_index][rowset_index];
+            const auto& decision = emission[context_index][rowset_index];
             const auto& occurrence = metadata.rowsets(rowset_index);
             if (decision.discard || decision.emit || occurrence.has_delete_predicate()) continue;
             const auto& canonical = result.canonicals[decision.canonical_index];
@@ -844,11 +866,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
 Status materialize_planned_rowsets(const TabletMergeAllocationPlan& plan, TabletMetadataPB* target,
                                    CanonicalContribMap* canonical_contribs) {
     TEST_SYNC_POINT_CALLBACK("materialize_planned_rowsets:entry", nullptr);
-    for (const auto& decisions : plan.emission) {
-        for (const auto& decision : decisions) {
-            if (decision.emit && decision.non_pk_skip_dedup_fired) g_tablet_merge_non_pk_skip_dedup_total << 1;
-        }
-    }
+    g_tablet_merge_non_pk_skip_dedup_total << plan.non_pk_skip_dedup_count;
     for (size_t canonical_index = 0; canonical_index < plan.canonicals.size(); ++canonical_index) {
         const auto& canonical = plan.canonicals[canonical_index];
         if (canonical_index != static_cast<size_t>(target->rowsets_size())) {
@@ -1032,6 +1050,16 @@ std::unordered_map<uint32_t, bool> collect_target_rssid_ownership(const TabletMe
     for (const auto& rowset : metadata.rowsets()) {
         for (int position = 0; position < rowset.segment_metas_size(); ++position) {
             result[get_rssid(rowset, position)] = rowset.segment_metas(position).shared();
+        }
+    }
+    return result;
+}
+
+std::unordered_map<uint32_t, std::string> collect_target_rssid_physical_bases(const TabletMetadataPB& metadata) {
+    std::unordered_map<uint32_t, std::string> result;
+    for (const auto& rowset : metadata.rowsets()) {
+        for (int position = 0; position < rowset.segment_metas_size(); ++position) {
+            result[get_rssid(rowset, position)] = normalized_physical_base_key(rowset.segment_metas(position));
         }
     }
     return result;
@@ -1740,6 +1768,7 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
     // this fix has segment.shared=true but idg.shared_file=false, because the old split marked
     // segments shared but not idg) and later mis-route the .idx at vacuum time.
     const auto target_rssid_shared = collect_target_rssid_ownership(*new_metadata);
+    const auto target_rssid_physical_bases = collect_target_rssid_physical_bases(*new_metadata);
 
     std::map<uint32_t, std::vector<IndexDeltaGroupEntryPB>> work_by_target;
     // target rssid -> (.idx filename -> index into work_by_target[target]).
@@ -1782,6 +1811,26 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
     }
 
     if (work_by_target.empty()) return Status::OK();
+
+    // DROP INDEX is table-wide monotonic. Co-referenced target RSSIDs that resolve to the same normalized physical base
+    // and .idx file must therefore see the union of every tombstone before active/dead and orphan decisions.
+    std::map<std::pair<std::string, std::string>, IndexDeltaGroupEntryPB> global_tombstones;
+    for (const auto& [target_rssid, entries] : work_by_target) {
+        auto base = target_rssid_physical_bases.find(target_rssid);
+        if (base == target_rssid_physical_bases.end()) {
+            return Status::Corruption(
+                    fmt::format("tablet merge IDG target RSSID {} has no physical base", target_rssid));
+        }
+        for (const auto& entry : entries) {
+            union_idg_dropped_keys(&global_tombstones[{base->second, entry.index_file()}], entry);
+        }
+    }
+    for (auto& [target_rssid, entries] : work_by_target) {
+        const auto& base = target_rssid_physical_bases.at(target_rssid);
+        for (auto& entry : entries) {
+            union_idg_dropped_keys(&entry, global_tombstones.at({base, entry.index_file()}));
+        }
+    }
 
     auto* merged_idgs = new_metadata->mutable_idg_meta()->mutable_idgs();
     // Fully-tombstoned entries' .idx files are orphan candidates. Collect them first and only
@@ -2871,9 +2920,9 @@ void order_and_assign_singleton_filesets(PersistentIndexSstableMetaPB* metadata)
 StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std::vector<TabletMergeContext>& contexts,
                                                                        const TabletMergeAllocationPlan& allocation_plan,
                                                                        const TabletMetadataPB& target,
+                                                                       MergeSourceRangeProof source_range_proof,
                                                                        const SstableLiveRssidIndex& live_rssids) {
-    ASSIGN_OR_RETURN(auto range_proof, validate_metadata_reuse_source_ranges(contexts, target));
-    if (range_proof != MergeSourceRangeProof::kReusable) {
+    if (source_range_proof != MergeSourceRangeProof::kReusable) {
         return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
     }
 
@@ -3005,9 +3054,9 @@ bool semantic_sstable_equal(const PersistentIndexSstablePB& left, const Persiste
 StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std::vector<TabletMergeContext>& contexts,
                                                                        const TabletMergeAllocationPlan& allocation_plan,
                                                                        const TabletMetadataPB& target,
+                                                                       MergeSourceRangeProof source_range_proof,
                                                                        const SstableLiveRssidIndex& live_rssids) {
-    ASSIGN_OR_RETURN(auto range_proof, validate_metadata_reuse_source_ranges(contexts, target));
-    if (range_proof != MergeSourceRangeProof::kReusable) {
+    if (source_range_proof != MergeSourceRangeProof::kReusable) {
         return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
     }
 
@@ -3225,17 +3274,21 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
 
     TEST_SYNC_POINT_CALLBACK("merge_sstables:metadata_classifier_entry", nullptr);
     DeferOp classifier_exit([] { TEST_SYNC_POINT_CALLBACK("merge_sstables:metadata_classifier_exit", nullptr); });
+    ASSIGN_OR_RETURN(const auto source_range_proof,
+                     validate_metadata_reuse_source_ranges(merge_contexts, *new_metadata));
 
-    ASSIGN_OR_RETURN(auto private_result, try_project_complete_private_sstables(merge_contexts, allocation_plan,
-                                                                                *new_metadata, live_rssids));
+    ASSIGN_OR_RETURN(auto private_result,
+                     try_project_complete_private_sstables(merge_contexts, allocation_plan, *new_metadata,
+                                                           source_range_proof, live_rssids));
     if (private_result.mode == MergeSstableMetaMode::kPrivate) {
         new_metadata->mutable_sstable_meta()->Swap(&private_result.metadata);
         record_merge_sstable_meta_result(private_result);
         return Status::OK();
     }
 
-    ASSIGN_OR_RETURN(auto identical_result, try_reuse_complete_identical_sstables(merge_contexts, allocation_plan,
-                                                                                  *new_metadata, live_rssids));
+    ASSIGN_OR_RETURN(auto identical_result,
+                     try_reuse_complete_identical_sstables(merge_contexts, allocation_plan, *new_metadata,
+                                                           source_range_proof, live_rssids));
     if (identical_result.mode == MergeSstableMetaMode::kIdentical) {
         new_metadata->mutable_sstable_meta()->Swap(&identical_result.metadata);
         record_merge_sstable_meta_result(identical_result);
