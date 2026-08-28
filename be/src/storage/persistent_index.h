@@ -62,10 +62,6 @@ protected:
     size_t _rowset_num = 0;
 };
 
-namespace lake {
-class LakeLocalPersistentIndex;
-}
-
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
 enum PersistentIndexFileVersion {
@@ -419,7 +415,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
 
     template <int N>
     void _init_loop_helper();
@@ -526,7 +521,6 @@ public:
 
 private:
     friend class PersistentIndex;
-    friend class starrocks::lake::LakeLocalPersistentIndex;
     friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
