@@ -299,21 +299,12 @@ private:
     uint32_t _target_end = 1;
 };
 
-struct ValidationOnlyDelOccurrence {
-    size_t context_index;
-    int rowset_index;
-    int del_index;
-    uint32_t current_max_segment_idx;
-};
-
 struct CanonicalAllocationPlan {
     size_t selected_context_index = 0;
-    int selected_rowset_index = -1;
     int output_index = -1;
     RowsetMetadataPB source_form_rowset;
     std::optional<int64_t> schema_id;
     std::vector<TabletRangePB> contributor_ranges;
-    std::vector<ValidationOnlyDelOccurrence> validation_only_dels;
 };
 
 struct TabletMergeAllocationPlan {
@@ -479,8 +470,7 @@ Status validate_del_replay_span(uint32_t origin, uint32_t offset) {
     return Status::OK();
 }
 
-Status reconcile_duplicate_dels(CanonicalAllocationPlan* canonical, size_t context_index, int rowset_index,
-                                const RowsetMetadataPB& occurrence) {
+Status reconcile_duplicate_dels(CanonicalAllocationPlan* canonical, const RowsetMetadataPB& occurrence) {
     auto* selected = &canonical->source_form_rowset;
     if (selected->del_files_size() != occurrence.del_files_size()) {
         return Status::Corruption("tablet merge duplicate rowset del-file count differs");
@@ -506,8 +496,6 @@ Status reconcile_duplicate_dels(CanonicalAllocationPlan* canonical, size_t conte
         selected_del->set_shared(selected_del->shared() || occurrence_del.shared());
         const uint32_t local_offset = occurrence_del.has_op_offset() ? occurrence_del.op_offset() : current_max;
         RETURN_IF_ERROR(validate_del_replay_span(occurrence_del.origin_rowset_id(), local_offset));
-        canonical->validation_only_dels.emplace_back(
-                ValidationOnlyDelOccurrence{context_index, rowset_index, del_index, current_max});
     }
     return Status::OK();
 }
@@ -562,7 +550,6 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
             }
             auto& canonical = result.canonicals[decision.canonical_index];
             canonical.selected_context_index = context_index;
-            canonical.selected_rowset_index = rowset_index;
             canonical.output_index = decision.canonical_index;
             canonical.source_form_rowset.CopyFrom(rowset);
             RETURN_IF_ERROR(
@@ -611,7 +598,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
                                                        occurrence.data_size());
             canonical.source_form_rowset.set_num_dels(canonical.source_form_rowset.num_dels() + occurrence.num_dels());
             RETURN_IF_ERROR(reconcile_segments(&canonical.source_form_rowset, &occurrence));
-            RETURN_IF_ERROR(reconcile_duplicate_dels(&canonical, context_index, rowset_index, occurrence));
+            RETURN_IF_ERROR(reconcile_duplicate_dels(&canonical, occurrence));
         }
     }
 
@@ -742,8 +729,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
     return result;
 }
 
-Status materialize_planned_rowsets(const std::vector<TabletMergeContext>& contexts,
-                                   const TabletMergeAllocationPlan& plan, TabletMetadataPB* target,
+Status materialize_planned_rowsets(const TabletMergeAllocationPlan& plan, TabletMetadataPB* target,
                                    CanonicalContribMap* canonical_contribs) {
     TEST_SYNC_POINT_CALLBACK("materialize_planned_rowsets:entry", nullptr);
     for (const auto& decisions : plan.emission) {
@@ -776,7 +762,6 @@ Status materialize_planned_rowsets(const std::vector<TabletMergeContext>& contex
             (*canonical_contribs)[canonical.output_index] = canonical.contributor_ranges;
         }
     }
-    (void)contexts;
     return Status::OK();
 }
 
@@ -3254,8 +3239,7 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // old tablets' old-tablet-local ranges; consumed by the PK fail-fast coverage
     // check below and by gap-delvec synthesis.
     CanonicalContribMap canonical_contribs;
-    RETURN_IF_ERROR(materialize_planned_rowsets(merge_contexts, allocation_plan, new_tablet_metadata.get(),
-                                                &canonical_contribs));
+    RETURN_IF_ERROR(materialize_planned_rowsets(allocation_plan, new_tablet_metadata.get(), &canonical_contribs));
 
     // Phase 2.5: Merge schemas (must run before gap synthesis + merge_dcg_meta,
     // which need historical_schemas to locate rebuild schemas for shared-segment
