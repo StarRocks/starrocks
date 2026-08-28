@@ -145,7 +145,8 @@ bool TimestampValue::from_date_format_str(const char* value, int value_len, cons
     uint8_t month = month1 * 10 + month2;
     uint8_t day = day1 * 10 + day2;
 
-    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year)))) {
+    if (month == 0 || day == 0 || month > 12 ||
+        (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year)))) {
         return false;
     }
 
@@ -193,7 +194,8 @@ bool TimestampValue::from_datetime_format_str(const char* value, int value_len, 
     uint8_t minute = minute1 * 10 + minute2;
     uint8_t second = second1 * 10 + second2;
 
-    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year))) ||
+    if (month == 0 || day == 0 || month > 12 ||
+        (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year))) ||
         hour > 23 || minute > 59 || second > 59) {
         return false;
     }
