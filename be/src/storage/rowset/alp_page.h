@@ -14,32 +14,23 @@
 
 #pragma once
 
-#include <glog/logging.h>
-
-#include <algorithm>
 #include <cstdint>
 #include <cstring>
 
-#include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
-#include "column/container_resource.h"
-#include "column/fixed_length_column.h"
-#include "common/logging.h"
-#include "gutil/port.h"
-#include "gutil/strings/substitute.h"
+#include "common/status.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/types.h"
 #include "types/storage_type_traits.h"
 
 namespace starrocks {
 
-// ALP (Adaptive Lossless floating-Point, cwida/ALP, vendored under
-// be/src/thirdparty/alp) column encoding for FLOAT/DOUBLE data pages.
+// ALP (Adaptive Lossless floating-Point, cwida/ALP, built as the thirdparty
+// library libalp.a) column encoding for FLOAT/DOUBLE data pages.
 //
 // The page format is as follows:
 //
@@ -91,7 +82,7 @@ inline constexpr size_t padded_element_count(size_t n) {
 }
 
 // Encode |num_padded| (a multiple of ALP_PAGE_VECTOR_SIZE) values into |out|
-// (appended). Implemented in alp_page.cpp so that the vendored ALP headers
+// (appended). Implemented in alp_page.cpp so that the ALP library headers
 // stay out of this widely-included header.
 template <typename PT>
 void alp_encode_body(const PT* vals, size_t num_padded, faststring* out);
@@ -102,100 +93,39 @@ Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded,
 
 } // namespace alppage
 
+// Method bodies live in alp_page.cpp (with explicit instantiations for
+// TYPE_FLOAT and TYPE_DOUBLE) so that line coverage is attributed to a
+// translation unit.
 template <LogicalType Type>
 class AlpPageBuilder final : public PageBuilder {
     using CppType = StorageCppType<Type>;
     static_assert(Type == TYPE_FLOAT || Type == TYPE_DOUBLE, "ALP encoding only supports FLOAT/DOUBLE");
 
 public:
-    explicit AlpPageBuilder(const PageBuilderOptions& options) : _max_count(options.data_page_size / SIZE_OF_TYPE) {
-        _data.reserve(alppage::padded_element_count(_max_count) * SIZE_OF_TYPE);
-    }
+    explicit AlpPageBuilder(const PageBuilderOptions& options);
 
-    void reserve_head(uint8_t head_size) override {
-        CHECK(_reserved_head_size == 0);
-        _reserved_head_size = head_size;
-    }
+    void reserve_head(uint8_t head_size) override;
 
     bool is_page_full() override { return _count >= _max_count; }
 
-    uint32_t add(const uint8_t* vals, uint32_t count) override {
-        DCHECK(!_finished);
-        uint32_t to_add = std::min<uint32_t>(_max_count - _count, count);
-        size_t old_sz = _data.size();
-        _data.resize(old_sz + to_add * SIZE_OF_TYPE);
-        memcpy(&_data[old_sz], vals, to_add * SIZE_OF_TYPE);
-        _count += to_add;
-        return to_add;
-    }
+    uint32_t add(const uint8_t* vals, uint32_t count) override;
 
-    faststring* finish() override {
-        if (_count > 0) {
-            _first_value = cell(0);
-            _last_value = cell(_count - 1);
-        }
-        return _finish();
-    }
+    faststring* finish() override;
 
-    void reset() override {
-        _count = 0;
-        _data.clear();
-        _finished = false;
-    }
+    void reset() override;
 
     uint32_t count() const override { return _count; }
 
     uint64_t size() const override { return _data.size(); }
 
-    Status get_first_value(void* value) const override {
-        DCHECK(_finished);
-        if (_count == 0) {
-            return Status::NotFound("page is empty");
-        }
-        memcpy(value, &_first_value, SIZE_OF_TYPE);
-        return Status::OK();
-    }
+    Status get_first_value(void* value) const override;
 
-    Status get_last_value(void* value) const override {
-        DCHECK(_finished);
-        if (_count == 0) {
-            return Status::NotFound("page is empty");
-        }
-        memcpy(value, &_last_value, SIZE_OF_TYPE);
-        return Status::OK();
-    }
+    Status get_last_value(void* value) const override;
 
-    CppType cell(int idx) const {
-        DCHECK_GE(idx, 0);
-        CppType ret;
-        memcpy(&ret, &_data[idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
-        return ret;
-    }
+    CppType cell(int idx) const;
 
 private:
-    faststring* _finish() {
-        // Pad up to a whole number of ALP vectors with +0.0, which every
-        // (factor, exponent) combination encodes exactly.
-        size_t num_padded = alppage::padded_element_count(_count);
-        size_t padding_bytes = (num_padded - _count) * SIZE_OF_TYPE;
-        size_t old_sz = _data.size();
-        _data.resize(old_sz + padding_bytes);
-        memset(&_data[old_sz], 0, padding_bytes);
-
-        _encoded.clear();
-        _encoded.resize(_reserved_head_size + ALP_PAGE_HEADER_SIZE);
-        if (num_padded > 0) {
-            alppage::alp_encode_body(reinterpret_cast<const CppType*>(_data.data()), num_padded, &_encoded);
-        }
-
-        uint8_t* header = _encoded.data() + _reserved_head_size;
-        encode_fixed32_le(&header[0], _count);
-        encode_fixed32_le(&header[4], _encoded.size() - _reserved_head_size);
-        encode_fixed32_le(&header[8], num_padded);
-        encode_fixed32_le(&header[12], SIZE_OF_TYPE);
-        _finished = true;
-        return &_encoded;
-    }
+    faststring* _finish();
 
     enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     uint8_t _reserved_head_size{0};
@@ -219,67 +149,11 @@ class AlpPageDecoder final : public PageDecoder {
 public:
     explicit AlpPageDecoder(Slice data) : _data(data) {}
 
-    Status init() override {
-        CHECK(!_parsed);
-        if (_data.size < ALP_PAGE_HEADER_SIZE) {
-            return Status::InternalError(strings::Substitute("file corruption: invalid data size:$0, header size:$1",
-                                                             _data.size, ALP_PAGE_HEADER_SIZE));
-        }
-        _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
-        _num_element_after_padding = decode_fixed32_le((const uint8_t*)&_data[8]);
-        if (_num_element_after_padding != alppage::padded_element_count(_num_elements)) {
-            return Status::InternalError(
-                    strings::Substitute("num of element information corrupted, padded:$0, num_elements:$1",
-                                        _num_element_after_padding, _num_elements));
-        }
-        size_t size_of_element = decode_fixed32_le((const uint8_t*)&_data[12]);
-        if (size_of_element != SIZE_OF_TYPE) {
-            return Status::InternalError(
-                    strings::Substitute("invalid size_of_elem:$0, expected:$1", size_of_element, (size_t)SIZE_OF_TYPE));
-        }
-        if (_data.size != _num_element_after_padding * SIZE_OF_TYPE + ALP_PAGE_HEADER_SIZE) {
-            return Status::InternalError(
-                    strings::Substitute("size information unmatched, data size:$0, expected:$1", _data.size,
-                                        _num_element_after_padding * SIZE_OF_TYPE + ALP_PAGE_HEADER_SIZE));
-        }
-        _parsed = true;
-        return Status::OK();
-    }
+    Status init() override;
 
-    Status seek_to_position_in_page(uint32_t pos) override {
-        DCHECK(_parsed) << "Must call init()";
-        DCHECK_LE(pos, _num_elements);
-        if (pos > _num_elements) {
-            return Status::InternalError(strings::Substitute("invalid pos:$0, num_elements:$1", pos, _num_elements));
-        }
-        _cur_index = pos;
-        return Status::OK();
-    }
+    Status seek_to_position_in_page(uint32_t pos) override;
 
-    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
-        DCHECK(_parsed) << "Must call init() firstly";
-        if (_num_elements == 0) {
-            return Status::NotFound("page is empty");
-        }
-        size_t left = 0;
-        size_t right = _num_elements;
-        while (left < right) {
-            size_t mid = left + (right - left) / 2;
-            const void* mid_value = get_data(mid * SIZE_OF_TYPE);
-            if (TypeComparator<Type>::cmp(mid_value, value) < 0) {
-                left = mid + 1;
-            } else {
-                right = mid;
-            }
-        }
-        if (left >= _num_elements) {
-            return Status::NotFound("all value small than the value");
-        }
-        const void* find_value = get_data(left * SIZE_OF_TYPE);
-        *exact_match = TypeComparator<Type>::cmp(find_value, value) == 0;
-        _cur_index = left;
-        return Status::OK();
-    }
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override;
 
     void at_index(uint32_t idx, CppType* out) const {
         memcpy(out, &_data[ALP_PAGE_HEADER_SIZE + idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
@@ -287,62 +161,12 @@ public:
 
     const void* get_data(size_t pos) { return static_cast<const void*>(&_data[pos + ALP_PAGE_HEADER_SIZE]); }
 
-    Status next_batch(size_t* count, Column* dst) override {
-        SparseRange<> read_range;
-        uint32_t begin = current_index();
-        read_range.add(Range<>(begin, begin + *count));
-        RETURN_IF_ERROR(next_batch(read_range, dst));
-        *count = current_index() - begin;
-        return Status::OK();
-    }
+    Status next_batch(size_t* count, Column* dst) override;
 
-    Status next_batch(const SparseRange<>& range, Column* dst) override {
-        DCHECK(_parsed);
-        if (PREDICT_FALSE(_cur_index >= _num_elements)) {
-            return Status::OK();
-        }
-        size_t to_read =
-                std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_elements - _cur_index));
-        SparseRangeIterator<> iter = range.new_iterator();
-        while (to_read > 0) {
-            _cur_index = iter.begin();
-            Range<> r = iter.next(to_read);
-            ContainerResource container(_page_handle, get_data(_cur_index * SIZE_OF_TYPE),
-                                        r.span_size() * SIZE_OF_TYPE);
-            int n = dst->append_numbers(container);
-            DCHECK_EQ(r.span_size(), n);
-            _cur_index += r.span_size();
-            to_read -= r.span_size();
-        }
-        return Status::OK();
-    }
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
 
     Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
-                          Column* column) override {
-        DCHECK(_parsed);
-        if (PREDICT_FALSE(*count == 0)) {
-            return Status::OK();
-        }
-        size_t total = *count;
-        size_t read_count = 0;
-        auto data = std::make_unique_for_overwrite<CppType[]>(total);
-        for (size_t i = 0; i < total; i++) {
-            ordinal_t ord = rowids[i] - first_ordinal_in_page;
-            if (UNLIKELY(ord >= _num_elements)) {
-                break;
-            }
-            data[read_count++] = *reinterpret_cast<const CppType*>(get_data(ord * SIZE_OF_TYPE));
-        }
-        if (read_count > 0) {
-            size_t nappend = column->append_numbers(data.get(), SIZE_OF_TYPE * read_count);
-            if (UNLIKELY(nappend != read_count)) {
-                return Status::InternalError(strings::Substitute(
-                        "append_numbers failed, expected rows[$0], actual rows[$1]", read_count, nappend));
-            }
-        }
-        *count = read_count;
-        return Status::OK();
-    }
+                          Column* column) override;
 
     uint32_t count() const override { return _num_elements; }
 

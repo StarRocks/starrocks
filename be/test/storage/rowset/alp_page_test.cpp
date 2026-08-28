@@ -375,6 +375,62 @@ TEST_F(AlpPageTest, CorruptedPageRejected) {
     ASSERT_FALSE(decode(good + std::string(3, 'x')).ok());
 }
 
+// Corrupted encoded bodies (as opposed to corrupted headers) must also be
+// rejected vector by vector during the page-load decode.
+// NOLINTNEXTLINE
+TEST_F(AlpPageTest, CorruptedBodyRejected) {
+    auto decode = [](std::string page_bytes) {
+        Slice slice(page_bytes.data(), page_bytes.size());
+        std::unique_ptr<std::vector<uint8_t>> page;
+        PageFooterPB footer;
+        footer.set_type(DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        return StoragePageDecoder::decode_page(&footer, 0, ALP_ENCODING, &page, &slice);
+    };
+    auto make_page = [](uint32_t num, const std::string& body) {
+        std::string page(ALP_PAGE_HEADER_SIZE, '\0');
+        page += body;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 0, num);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 4, page.size());
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 8,
+                          (uint32_t)alppage::padded_element_count(num));
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 12, 8);
+        return page;
+    };
+    constexpr size_t kRawBytes = ALP_PAGE_VECTOR_SIZE * 8;
+    const std::string raw_vector_meta = [] {
+        std::string meta(ALP_PAGE_VECTOR_META_SIZE, '\0');
+        meta[0] = (char)ALP_PAGE_RAW_VECTOR_MARKER;
+        return meta;
+    }();
+
+    // A raw vector cut short in the middle of its verbatim values.
+    ASSERT_FALSE(decode(make_page(1024, raw_vector_meta + std::string(4000, '\0'))).ok());
+
+    // The second vector's meta does not fit in the body.
+    ASSERT_FALSE(decode(make_page(2048, raw_vector_meta + std::string(kRawBytes, '\0') + std::string(8, '\0'))).ok());
+
+    // An encoded vector whose payload does not fit in the body: bw=32 needs
+    // 4KB packed data but only 8 bytes follow the meta.
+    {
+        std::string meta(ALP_PAGE_VECTOR_META_SIZE, '\0');
+        meta[0] = 32;
+        ASSERT_FALSE(decode(make_page(1024, meta + std::string(8, '\0'))).ok());
+    }
+
+    // An exception position beyond the vector must be rejected while patching.
+    {
+        std::string meta(ALP_PAGE_VECTOR_META_SIZE, '\0');
+        meta[4] = 1; // one exception, bw = 0
+        std::string payload(16, '\0');
+        encode_fixed16_le(reinterpret_cast<uint8_t*>(payload.data()) + 8, 2000);
+        ASSERT_FALSE(decode(make_page(1024, meta + payload)).ok());
+    }
+
+    // Surplus bytes after the last vector: the body must be consumed exactly.
+    ASSERT_FALSE(decode(make_page(1024, raw_vector_meta + std::string(kRawBytes, '\0') + std::string(4, '\0'))).ok());
+}
+
 // ============================================================================
 // Performance comparison: ALP_ENCODING vs BIT_SHUFFLE on the same data,
 // through the production page path (PageBuilder -> StoragePageDecoder ->
