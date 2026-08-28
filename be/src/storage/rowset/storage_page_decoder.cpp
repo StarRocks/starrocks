@@ -151,6 +151,13 @@ public:
             return Status::Corruption(
                     strings::Substitute("invalid ALP encoded size:$0, page size:$1", encoded_size, page_slice->size));
         }
+        // Every 1024-value vector costs at least its meta bytes in the encoded
+        // body, which bounds the decoded size a valid page can claim; reject
+        // implausible counts before they drive the allocation below.
+        if (num_padded / ALP_PAGE_VECTOR_SIZE * ALP_PAGE_VECTOR_META_SIZE > encoded_size - ALP_PAGE_HEADER_SIZE) {
+            return Status::Corruption(strings::Substitute("implausible ALP element count:$0 for encoded size:$1",
+                                                          num_padded, encoded_size));
+        }
 
         size_t header_size = ALP_PAGE_HEADER_SIZE;
         size_t data_size = num_padded * size_of_element;
@@ -176,11 +183,13 @@ public:
             null_size = footer->data_page_footer().nullmap_size();
         }
         // The trailer sizes come from the page footer; a malformed page could
-        // claim more trailer bytes than the input actually holds, which would
-        // read past page_slice and write past decoded_page below.
-        if (page_slice->size - encoded_size < (size_t)null_size + footer_size) {
+        // claim more trailer bytes than the input actually holds (reading past
+        // page_slice and writing past decoded_page below), or fewer, leaving
+        // surplus bytes inside the cached page whose footer is parsed from its
+        // very end. The input must be consumed exactly.
+        if (page_slice->size - encoded_size != (size_t)null_size + footer_size) {
             return Status::Corruption(
-                    strings::Substitute("ALP page trailer truncated, page size:$0, encoded size:$1, trailer size:$2",
+                    strings::Substitute("ALP page trailer mismatch, page size:$0, encoded size:$1, trailer size:$2",
                                         page_slice->size, encoded_size, (size_t)null_size + footer_size));
         }
         memcpy(decoded_page->data() + header_size + data_size, page_slice->data + encoded_size,

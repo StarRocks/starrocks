@@ -340,9 +340,25 @@ TEST_F(AlpPageTest, CorruptedPageRejected) {
         ASSERT_FALSE(decode(bad).ok());
     }
 
+    // Consistent but implausibly large element counts (more vectors than the
+    // encoded body could possibly hold metadata for) must be rejected before
+    // they drive the allocation.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 0, 100000000);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8,
+                          (uint32_t)alppage::padded_element_count(100000000));
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
     // A trailer (nullmap/footer) claimed to be larger than the bytes actually
     // present after the encoded body must be rejected, not copied.
     ASSERT_FALSE(decode(good, /*footer_size=*/8).ok());
+
+    // Surplus bytes between the encoded body and the trailer must be rejected
+    // too: the input has to be consumed exactly, otherwise the cached page
+    // (whose footer is parsed from its end) is polluted.
+    ASSERT_FALSE(decode(good + std::string(3, 'x')).ok());
 }
 
 // ============================================================================
