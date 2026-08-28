@@ -20,6 +20,7 @@
 #include <limits>
 
 #include "butil/time.h"
+#include "column/array_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -2754,4 +2755,198 @@ TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
     EXPECT_EQ("-7", json1.value());
 }
 
+<<<<<<< HEAD
+=======
+// Verifies CAST(ARRAY<VARIANT> AS VARIANT) uses column-aware recursive encoding instead of
+// materializing VariantColumn through the legacy Datum/ObjectColumn storage.
+TEST_F(VectorizedCastExprTest, array_with_variant_children_cast_to_variant) {
+    auto variant_data = VariantColumn::create();
+    auto variant_nulls = NullColumn::create();
+    for (const auto& json_text : {R"({"a":1})", R"({"b":2})"}) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json_text);
+        ASSERT_TRUE(encoded.ok());
+        variant_data->append(encoded.value());
+        variant_nulls->append(DATUM_NOT_NULL);
+    }
+    variant_data->append_default();
+    variant_nulls->append(DATUM_NULL);
+    auto elements = NullableColumn::create(std::move(variant_data), std::move(variant_nulls));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(3);
+    auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+
+    auto result = cast_to_variant(array_type, array);
+    auto json = variant_json_at(result, 0);
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"([{"a":1},{"b":2},null])", json.value());
+}
+
+TEST_F(VectorizedCastExprTest, nullable_array_with_variant_children_cast_to_variant) {
+    auto variant_data = VariantColumn::create();
+    auto encoded = VariantEncoder::encode_json_text_to_variant(R"({"a":1})");
+    ASSERT_TRUE(encoded.ok());
+    variant_data->append(encoded.value());
+    auto variant_nulls = NullColumn::create(1, DATUM_NOT_NULL);
+    auto elements = NullableColumn::create(std::move(variant_data), std::move(variant_nulls));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    offsets->append(1);
+    auto arrays = ArrayColumn::create(std::move(elements), std::move(offsets));
+    auto array_nulls = NullColumn::create();
+    array_nulls->append(DATUM_NOT_NULL);
+    array_nulls->append(DATUM_NULL);
+    ColumnPtr input = NullableColumn::create(std::move(arrays), std::move(array_nulls));
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+
+    auto result = cast_to_variant(array_type, input);
+    ASSERT_FALSE(result->is_null(0));
+    ASSERT_TRUE(result->is_null(1));
+    auto json = variant_json_at(result, 0);
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"([{"a":1}])", json.value());
+}
+
+TEST_F(VectorizedCastExprTest, const_array_with_variant_children_cast_to_variant) {
+    auto variant_data = VariantColumn::create();
+    auto encoded = VariantEncoder::encode_json_text_to_variant(R"({"a":1})");
+    ASSERT_TRUE(encoded.ok());
+    variant_data->append(encoded.value());
+    auto variant_nulls = NullColumn::create(1, DATUM_NOT_NULL);
+    auto elements = NullableColumn::create(std::move(variant_data), std::move(variant_nulls));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(1);
+    auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
+    ColumnPtr input = ConstColumn::create(std::move(array), 3);
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+
+    auto result = cast_to_variant(array_type, input);
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_EQ(3, result->size());
+    auto json = variant_json_at(result, 0);
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(R"([{"a":1}])", json.value());
+}
+
+// Verifies const variant input can cast to complex types with stable semantics.
+TEST_F(VectorizedCastExprTest, const_variant_cast_to_complex_types) {
+    constexpr size_t kInputSize = 3;
+    {
+        auto const_variant = make_const_variant_column_from_json(R"([1,2])", kInputSize);
+        auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "[1,2]");
+    }
+
+    {
+        auto const_variant = make_const_variant_column_from_json(R"({"k1":1,"k2":2})", kInputSize);
+        auto result = cast_from_variant(gen_map_type_desc(TPrimitiveType::VARCHAR, TPrimitiveType::INT), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{'k1':1,'k2':2}");
+    }
+
+    {
+        auto const_variant = make_const_variant_column_from_json(R"({"x":7,"y":"s"})", kInputSize);
+        auto result = cast_from_variant(
+                gen_struct_type_desc({TPrimitiveType::INT, TPrimitiveType::VARCHAR}, {"x", "y"}), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{x:7,y:'s'}");
+    }
+}
+
+// Verifies root typed-only scalar variant uses fast path for same-type cast and preserves null behavior.
+TEST_F(VectorizedCastExprTest, root_typed_only_scalar_cast_from_variant) {
+    auto variant_col = make_root_typed_only_variant_bigint_column({7, 0, -3}, {0, 1, 0});
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_EQ(7, result->get(0).get_int64());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_EQ(-3, result->get(2).get_int64());
+    }
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_DOUBLE_EQ(7.0, result->get(0).get_double());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_DOUBLE_EQ(-3.0, result->get(2).get_double());
+    }
+}
+
+// Verifies const root typed-only scalar column keeps const/expanded cast semantics stable.
+TEST_F(VectorizedCastExprTest, const_root_typed_only_scalar_cast_from_variant) {
+    auto one_row_variant = make_root_typed_only_variant_bigint_column({11}, {0});
+    auto const_variant = ConstColumn::create(std::move(one_row_variant), 3);
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), const_variant);
+    assert_const_or_expanded_result(result, 3, "11");
+}
+
+// Verifies root typed-only ARRAY variant can cast to ARRAY<INT> through get_row_value materialization.
+TEST_F(VectorizedCastExprTest, root_typed_only_array_cast_from_variant) {
+    auto variant_col = make_root_typed_only_variant_array_column(
+            {DatumArray{Datum((int32_t)1), Datum((int32_t)2)}, DatumArray{}}, {0, 1});
+    auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), variant_col);
+    ASSERT_EQ(2, result->size());
+    ASSERT_EQ("[1,2]", result->debug_item(0));
+    ASSERT_TRUE(result->is_null(1));
+}
+
+// Verifies base_shredded root scalar keeps cast semantics equivalent to typed-only on same/different target types.
+TEST_F(VectorizedCastExprTest, base_shredded_root_scalar_cast_from_variant) {
+    auto variant_col = make_base_shredded_root_bigint_variant_column({7, 0, -3}, {0, 1, 0});
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_EQ(7, result->get(0).get_int64());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_EQ(-3, result->get(2).get_int64());
+    }
+    {
+        auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
+        ASSERT_EQ(3, result->size());
+        ASSERT_DOUBLE_EQ(7.0, result->get(0).get_double());
+        ASSERT_TRUE(result->is_null(1));
+        ASSERT_DOUBLE_EQ(-3.0, result->get(2).get_double());
+    }
+}
+
+// Verifies const base_shredded root scalar keeps stable cast behavior.
+TEST_F(VectorizedCastExprTest, const_base_shredded_root_scalar_cast_from_variant) {
+    auto one_row_variant = make_base_shredded_root_bigint_variant_column({11}, {0});
+    auto const_variant = ConstColumn::create(std::move(one_row_variant), 3);
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), const_variant);
+    assert_const_or_expanded_result(result, 3, "11");
+}
+
+// Verifies root typed-only MAP casts to MAP target and preserves nullable row behavior.
+TEST_F(VectorizedCastExprTest, root_typed_only_map_cast_from_variant) {
+    DatumMap m;
+    m[(Slice) "k1"] = (int32_t)1;
+    m[(Slice) "k2"] = (int32_t)2;
+    auto variant_col = make_root_typed_only_variant_map_column({m}, {0});
+    auto result = cast_from_variant(gen_map_type_desc(TPrimitiveType::VARCHAR, TPrimitiveType::INT), variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_EQ("{'k1':1,'k2':2}", result->debug_item(0));
+}
+
+// Verifies root typed-only STRUCT casts to STRUCT target and preserves nullable row behavior.
+TEST_F(VectorizedCastExprTest, root_typed_only_struct_cast_from_variant) {
+    DatumStruct s{Datum(int32_t(7)), Datum("x")};
+    auto variant_col = make_root_typed_only_variant_struct_column({s}, {0});
+    auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT, TPrimitiveType::VARCHAR}, {"x", "y"}),
+                                    variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_EQ("{x:7,y:'x'}", result->debug_item(0));
+}
+
+// Verifies TYPE_VARIANT typed overlay cast mismatch returns NULL (no hard error).
+TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch_returns_null) {
+    VariantRowValue typed_obj = make_variant_row_from_json(R"({"x":1})");
+    auto variant_col = make_base_shredded_root_typed_variant_column(typed_obj, 1);
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_TRUE(result->is_null(0));
+}
+
+>>>>>>> 45fdd3c ([BugFix] Fix shredded Variant compatibility in generic operations (#78296))
 } // namespace starrocks

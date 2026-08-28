@@ -27,6 +27,256 @@ static inline uint8_t primitive_header(VariantType primitive) {
     return static_cast<uint8_t>(primitive) << 2;
 }
 
+<<<<<<< HEAD
+=======
+static MutableColumnPtr build_nullable_int64_column(const std::vector<int64_t>& values,
+                                                    const std::vector<uint8_t>& is_null) {
+    auto data = Int64Column::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_int16_column(const std::vector<int16_t>& values,
+                                                    const std::vector<uint8_t>& is_null) {
+    auto data = Int16Column::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::string>& values,
+                                                      const std::vector<uint8_t>& is_null) {
+    auto data = BinaryColumn::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
+                                                        const std::vector<uint8_t>& is_null) {
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT));
+    auto col = ColumnHelper::create_column(array_type, true);
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i] != 0) {
+            col->append_nulls(1);
+        } else {
+            col->append_datum(Datum(values[i]));
+        }
+    }
+    return col;
+}
+
+static MutableColumnPtr build_nullable_variant_column(const std::vector<std::string>& json_values,
+                                                      const std::vector<uint8_t>& is_null) {
+    auto data = VariantColumn::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(json_values.size(), is_null.size());
+    for (size_t i = 0; i < json_values.size(); ++i) {
+        if (is_null[i] != 0) {
+            VariantRowValue row = VariantRowValue::from_null();
+            data->append(&row);
+            null->append(1);
+            continue;
+        }
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json_values[i]);
+        DCHECK(encoded.ok()) << encoded.status().to_string();
+        data->append(&encoded.value());
+        null->append(0);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static void append_primitive_int8_row(BinaryColumn* metadata, BinaryColumn* remain, int8_t value) {
+    const std::string metadata_bytes(VariantMetadata::kEmptyMetadata);
+    const char payload[2] = {static_cast<char>(primitive_header(VariantType::INT8)), static_cast<char>(value)};
+    metadata->append(Slice(metadata_bytes.data(), metadata_bytes.size()));
+    remain->append(Slice(payload, sizeof(payload)));
+}
+
+static auto build_shredded_variant_column_for_ut() {
+    auto col = VariantColumn::create();
+
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    append_primitive_int8_row(metadata.get(), remain.get(), 1);
+    append_primitive_int8_row(metadata.get(), remain.get(), 2);
+    append_primitive_int8_row(metadata.get(), remain.get(), 3);
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({10, 20, 30}, {0, 1, 0}));
+
+    col->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
+                              std::move(remain));
+    return col;
+}
+
+static void append_json_variant_row(BinaryColumn* metadata, BinaryColumn* remain, std::string_view json_text) {
+    auto encoded = VariantEncoder::encode_json_text_to_variant(json_text);
+    ASSERT_TRUE(encoded.ok()) << encoded.status().to_string();
+    std::string_view metadata_raw = encoded->get_metadata().raw();
+    std::string_view value_raw = encoded->get_value().raw();
+    metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+    remain->append(Slice(value_raw.data(), value_raw.size()));
+}
+
+static VariantRowValue create_variant_row_from_json_text(std::string_view json_text) {
+    auto encoded = VariantEncoder::encode_json_text_to_variant(json_text);
+    DCHECK(encoded.ok()) << encoded.status().to_string();
+    return encoded.value();
+}
+
+static MutableColumnPtr build_single_path_bigint_shredded_variant(std::string path, int64_t typed_value) {
+    auto col = VariantColumn::create();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    append_primitive_int8_row(metadata.get(), remain.get(), 1);
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({typed_value}, {0}));
+    col->set_shredded_columns({std::move(path)}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
+                              std::move(remain));
+    return col;
+}
+
+static void assert_variant_row_json(const VariantColumn* col, size_t row, std::string_view expected_json) {
+    VariantRowValue buffer;
+    const VariantRowValue* value = col->get_row_value(row, &buffer);
+    ASSERT_NE(nullptr, value);
+    auto json = value->to_json();
+    ASSERT_TRUE(json.ok());
+    ASSERT_EQ(expected_json, json.value());
+}
+
+static void assert_null_base_payload(const VariantColumn* col, size_t row) {
+    ASSERT_TRUE(col->has_metadata_column());
+    ASSERT_TRUE(col->has_remain_value());
+    VariantRowValue null_base = VariantRowValue::from_null();
+    std::string_view null_metadata = null_base.get_metadata().raw();
+    std::string_view null_value = null_base.get_value().raw();
+    auto metadata_slice = col->metadata_column()->get(row).get_slice();
+    auto remain_slice = col->remain_value_column()->get(row).get_slice();
+    ASSERT_EQ(null_metadata.size(), metadata_slice.size);
+    ASSERT_EQ(null_value.size(), remain_slice.size);
+    ASSERT_EQ(0, memcmp(null_metadata.data(), metadata_slice.data, metadata_slice.size));
+    ASSERT_EQ(0, memcmp(null_value.data(), remain_slice.data, remain_slice.size));
+}
+
+enum class TypedOnlyIntoBaseShreddedAppendMode {
+    kAppend,
+    kAppendSelective,
+    kAppendValueMultipleTimes,
+};
+
+static void verify_typed_only_into_base_shredded_fast_path(TypedOnlyIntoBaseShreddedAppendMode mode) {
+    auto src = VariantColumn::create();
+    MutableColumns src_typed;
+    src_typed.emplace_back(build_nullable_int64_column({10, 11}, {0, 0}));
+    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), nullptr, nullptr);
+
+    auto dst = VariantColumn::create();
+    auto dst_metadata = BinaryColumn::create();
+    auto dst_remain = BinaryColumn::create();
+    append_json_variant_row(dst_metadata.get(), dst_remain.get(), R"({"a":7})");
+    MutableColumns dst_typed;
+    dst_typed.emplace_back(build_nullable_int64_column({7}, {0}));
+    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(dst_typed), std::move(dst_metadata),
+                              std::move(dst_remain));
+
+    switch (mode) {
+    case TypedOnlyIntoBaseShreddedAppendMode::kAppend:
+        dst->append(*src, 0, 2);
+        ASSERT_EQ(3, dst->size());
+        ASSERT_EQ(7, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(0).get_int64());
+        ASSERT_EQ(10, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(1).get_int64());
+        ASSERT_EQ(11, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(2).get_int64());
+        assert_null_base_payload(dst.get(), 1);
+        assert_null_base_payload(dst.get(), 2);
+        return;
+    case TypedOnlyIntoBaseShreddedAppendMode::kAppendSelective: {
+        uint32_t indexes[] = {1};
+        dst->append_selective(*src, indexes, 0, 1);
+        ASSERT_EQ(2, dst->size());
+        ASSERT_EQ(7, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(0).get_int64());
+        ASSERT_EQ(11, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(1).get_int64());
+        assert_null_base_payload(dst.get(), 1);
+        return;
+    }
+    case TypedOnlyIntoBaseShreddedAppendMode::kAppendValueMultipleTimes:
+        dst->append_value_multiple_times(*src, 1, 2);
+        ASSERT_EQ(3, dst->size());
+        ASSERT_EQ(7, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(0).get_int64());
+        ASSERT_EQ(11, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(1).get_int64());
+        ASSERT_EQ(11, down_cast<const NullableColumn*>(dst->typed_column_by_index(0))->get(2).get_int64());
+        assert_null_base_payload(dst.get(), 1);
+        assert_null_base_payload(dst.get(), 2);
+        return;
+    }
+}
+
+PARALLEL_TEST(VariantColumnTest, test_remove_first_n_values_from_nullable_variant) {
+    auto column = build_nullable_variant_column({"1", "2", "3"}, {0, 1, 0});
+
+    column->remove_first_n_values(1);
+
+    ASSERT_EQ(2, column->size());
+    const auto* nullable = down_cast<const NullableColumn*>(column.get());
+    ASSERT_TRUE(nullable->is_null(0));
+    ASSERT_FALSE(nullable->is_null(1));
+    const auto* data = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_EQ(2, data->size());
+    assert_variant_row_json(data, 0, "null");
+    assert_variant_row_json(data, 1, "3");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_remove_first_n_values_from_shredded_variant) {
+    auto column = build_shredded_variant_column_for_ut();
+
+    column->remove_first_n_values(1);
+
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ(2, column->metadata_column()->size());
+    ASSERT_EQ(2, column->remain_value_column()->size());
+    ASSERT_EQ(2, column->typed_column_by_index(0)->size());
+    const auto* typed = down_cast<const NullableColumn*>(column->typed_column_by_index(0));
+    ASSERT_TRUE(typed->is_null(0));
+    ASSERT_FALSE(typed->is_null(1));
+    const auto* typed_data = down_cast<const Int64Column*>(typed->data_column().get());
+    ASSERT_EQ(30, typed_data->immutable_data()[1]);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_remove_values_from_const_typed_variant) {
+    auto column = VariantColumn::create();
+    auto typed_data = Int64Column::create();
+    typed_data->append(42);
+    MutableColumns typed;
+    typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
+    column->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+
+    column->remove_first_n_values(1);
+
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ(2, column->typed_column_by_index(0)->size());
+
+    column->remove_first_n_values(column->size());
+
+    ASSERT_EQ(0, column->size());
+    ASSERT_EQ(0, column->typed_column_by_index(0)->size());
+}
+
+>>>>>>> 45fdd3c ([BugFix] Fix shredded Variant compatibility in generic operations (#78296))
 // NOLINTNEXTLINE
 PARALLEL_TEST(VariantColumnTest, test_build_column) {
     // create from type traits

@@ -70,7 +70,136 @@ std::string encode_null_value() {
     return std::string(VariantValue::kEmptyValue);
 }
 
+<<<<<<< HEAD:be/src/util/variant_encoder.cpp
 std::string encode_boolean(bool value) {
+=======
+void VariantEncoder::append_array_container(std::string* out, const std::vector<uint32_t>& end_offsets,
+                                            std::string_view payload) {
+    const uint32_t num_elements = static_cast<uint32_t>(end_offsets.size());
+    const uint8_t is_large = num_elements > 255 ? 1 : 0;
+    const uint8_t num_elements_size = is_large ? 4 : 1;
+    const uint8_t offset_size = VariantEncoder::minimal_uint_size(static_cast<uint32_t>(payload.size()));
+    const uint8_t vheader = static_cast<uint8_t>((offset_size - 1) | (is_large << 2));
+    const char header = static_cast<char>((vheader << VariantValue::kValueHeaderBitShift) |
+                                          static_cast<uint8_t>(VariantValue::BasicType::ARRAY));
+
+    out->reserve(out->size() + 1 + num_elements_size + (num_elements + 1) * offset_size + payload.size());
+    out->push_back(header);
+    VariantEncoder::append_uint_le(out, num_elements, num_elements_size);
+    VariantEncoder::append_uint_le(out, 0, offset_size);
+    for (uint32_t end_offset : end_offsets) {
+        VariantEncoder::append_uint_le(out, end_offset, offset_size);
+    }
+    out->append(payload.data(), payload.size());
+}
+
+void VariantEncoder::append_object_container(std::string* out, const std::vector<uint32_t>& field_ids,
+                                             const std::vector<uint32_t>& end_offsets, std::string_view payload) {
+    DCHECK_EQ(field_ids.size(), end_offsets.size());
+    const uint32_t num_elements = static_cast<uint32_t>(field_ids.size());
+    const uint8_t is_large = num_elements > 255 ? 1 : 0;
+    const uint8_t num_elements_size = is_large ? 4 : 1;
+
+    uint32_t max_field_id = 0;
+    for (uint32_t field_id : field_ids) {
+        max_field_id = std::max(max_field_id, field_id);
+    }
+    const uint8_t field_id_size = VariantEncoder::minimal_uint_size(max_field_id);
+    const uint8_t field_offset_size = VariantEncoder::minimal_uint_size(static_cast<uint32_t>(payload.size()));
+    const uint8_t vheader =
+            static_cast<uint8_t>((field_offset_size - 1) | ((field_id_size - 1) << 2) | (is_large << 4));
+    const char header = static_cast<char>((vheader << VariantValue::kValueHeaderBitShift) |
+                                          static_cast<uint8_t>(VariantValue::BasicType::OBJECT));
+
+    out->reserve(out->size() + 1 + num_elements_size + num_elements * field_id_size +
+                 (num_elements + 1) * field_offset_size + payload.size());
+    out->push_back(header);
+    VariantEncoder::append_uint_le(out, num_elements, num_elements_size);
+    for (uint32_t field_id : field_ids) {
+        VariantEncoder::append_uint_le(out, field_id, field_id_size);
+    }
+    VariantEncoder::append_uint_le(out, 0, field_offset_size);
+    for (uint32_t end_offset : end_offsets) {
+        VariantEncoder::append_uint_le(out, end_offset, field_offset_size);
+    }
+    out->append(payload.data(), payload.size());
+}
+
+std::string VariantEncoder::map_key_to_string(TypeInfo* type_info, const Datum& datum) {
+    if (datum.is_null()) {
+        return "null";
+    }
+
+    switch (type_info->type()) {
+    case TYPE_BOOLEAN: {
+        auto v = datum.get_int8();
+        return type_info->to_string(&v);
+    }
+    case TYPE_TINYINT: {
+        auto v = datum.get_int8();
+        return type_info->to_string(&v);
+    }
+    case TYPE_SMALLINT: {
+        auto v = datum.get_int16();
+        return type_info->to_string(&v);
+    }
+    case TYPE_INT: {
+        auto v = datum.get_int32();
+        return type_info->to_string(&v);
+    }
+    case TYPE_BIGINT: {
+        auto v = datum.get_int64();
+        return type_info->to_string(&v);
+    }
+    case TYPE_LARGEINT: {
+        auto v = datum.get_int128();
+        return type_info->to_string(&v);
+    }
+    case TYPE_FLOAT: {
+        auto v = datum.get_float();
+        return type_info->to_string(&v);
+    }
+    case TYPE_DOUBLE: {
+        auto v = datum.get_double();
+        return type_info->to_string(&v);
+    }
+    case TYPE_DATE: {
+        auto v = datum.get_date();
+        return type_info->to_string(&v);
+    }
+    case TYPE_DATETIME: {
+        auto v = datum.get_timestamp();
+        return type_info->to_string(&v);
+    }
+    case TYPE_DECIMALV2: {
+        auto v = datum.get_decimal();
+        return type_info->to_string(&v);
+    }
+    case TYPE_DECIMAL32: {
+        auto v = datum.get_int32();
+        return type_info->to_string(&v);
+    }
+    case TYPE_DECIMAL64: {
+        auto v = datum.get_int64();
+        return type_info->to_string(&v);
+    }
+    case TYPE_DECIMAL128: {
+        auto v = datum.get_int128();
+        return type_info->to_string(&v);
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_VARBINARY: {
+        auto v = datum.get_slice();
+        return type_info->to_string(&v);
+    }
+    default:
+        return "";
+    }
+}
+
+static std::string encode_boolean(bool value) {
+>>>>>>> 45fdd3c ([BugFix] Fix shredded Variant compatibility in generic operations (#78296)):be/src/column/variant_encoder.cpp
     const auto type = value ? VariantType::BOOLEAN_TRUE : VariantType::BOOLEAN_FALSE;
     char header = static_cast<char>((static_cast<uint8_t>(type) << VariantValue::kValueHeaderBitShift) |
                                     static_cast<uint8_t>(VariantValue::BasicType::PRIMITIVE));
@@ -652,7 +781,11 @@ Status collect_object_keys_from_datum(const Datum& datum, const TypeDescriptor& 
             if (key_datum.is_null()) {
                 return Status::NotSupported("Map key is null");
             }
+<<<<<<< HEAD:be/src/util/variant_encoder.cpp
             keys->insert(datum_to_string(key_type_info.get(), key_datum));
+=======
+            keys->insert(VariantEncoder::map_key_to_string(key_type_info.get(), key_datum));
+>>>>>>> 45fdd3c ([BugFix] Fix shredded Variant compatibility in generic operations (#78296)):be/src/column/variant_encoder.cpp
             RETURN_IF_ERROR(collect_object_keys_from_datum(value, value_type, keys));
         }
         return Status::OK();
@@ -809,7 +942,11 @@ StatusOr<std::string> encode_datum_to_variant_value(const Datum& datum, const Ty
             if (key_datum.is_null()) {
                 return Status::NotSupported("Map key is null");
             }
+<<<<<<< HEAD:be/src/util/variant_encoder.cpp
             std::string key_str = datum_to_string(key_type_info.get(), key_datum);
+=======
+            std::string key_str = VariantEncoder::map_key_to_string(key_type_info.get(), key_datum);
+>>>>>>> 45fdd3c ([BugFix] Fix shredded Variant compatibility in generic operations (#78296)):be/src/column/variant_encoder.cpp
             auto it = key_to_id.find(key_str);
             if (it == key_to_id.end()) {
                 return Status::VariantError("Variant metadata missing field: " + key_str);
