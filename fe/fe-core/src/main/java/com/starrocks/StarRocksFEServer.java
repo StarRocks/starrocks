@@ -80,6 +80,7 @@ import java.util.concurrent.TimeUnit;
 
 public class StarRocksFEServer {
     private static final Logger LOG = LogManager.getLogger(StarRocksFEServer.class);
+    private static QeService QE_SERVICE;
 
     public static volatile boolean stopped = false;
 
@@ -166,6 +167,7 @@ public class StarRocksFEServer {
             // 3. HttpServer for HTTP Server and optionally for HTTPS Server
             // 4. ArrowFlightSqlService for Arrow Flight SQL Server
             QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
+            QE_SERVICE = qeService;
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
             Optional<HttpServer> httpsServer = Optional.ofNullable(
@@ -215,15 +217,17 @@ public class StarRocksFEServer {
         // Since the normal exit is using SIGTERM(15),
         // so we have to choose another signal for the graceful exit, use SIGUSR1(10) here.
         Signal.handle(new Signal("USR1"), sig -> {
+            if (!GracefulExitFlag.markGracefulExit()) {
+                LOG.info("already handling graceful exit, ignore repeated SIGUSR1");
+                return;
+            }
             Thread t = new Thread(() -> {
                 if (canGracefulExit()) {
-                    long startTime = System.nanoTime();
                     LOG.info("start to handle graceful exit");
-                    GracefulExitFlag.markGracefulExit();
 
                     // Wait for queries to complete
                     try {
-                        waitForDraining(startTime);
+                        waitForDraining();
                     } catch (Exception e) {
                         LOG.warn("handle graceful exit failed", e);
                         System.exit(-1);
@@ -252,22 +256,51 @@ public class StarRocksFEServer {
             }
         });
     }
-
-    private static void waitForDraining(long startTimeNano) throws InterruptedException {
+    private static void waitForDraining() throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         final long waitInterval = 1000L;
+        boolean acceptStopped = false;
+        long stopAcceptTimeNano = 0L;
         while (true) {
             connectScheduler.closeAllIdleConnection();
             int totalConns = connectScheduler.getTotalConnCount();
-            if (totalConns > 0) {
-                LOG.info("waiting for {} connections to drain", totalConns);
-            } else if (System.nanoTime() - startTimeNano
+            // On a follower, transaction metadata reflects the whole cluster (replicated via BDB), so only the
+            // leader waits for running transactions to drain; a follower exits as soon as its connections are gone.
+            boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+            int runningTxnNums = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getRunningTxnNums();
+
+            // Keep the MySQL listen socket open during the accept-new window. Closing it after the
+            // window lets an L4 load balancer stop routing new connections while established sessions drain.
+            if (!GracefulExitFlag.shouldAcceptNewRequest() && !acceptStopped) {
+                acceptStopped = true;
+                stopAcceptTimeNano = System.nanoTime();
+                if (QE_SERVICE != null) {
+                    QE_SERVICE.stopAccept();
+                    LOG.info("Stopped accepting new JDBC connections (graceful exit accept-new window over).");
+                }
+            }
+
+            if (acceptStopped
+                    && totalConns == 0 && (!isLeader || runningTxnNums == 0)
+                    && System.nanoTime() - stopAcceptTimeNano
                     > TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second)) {
                 break;
+            }
+
+            if (totalConns > 0) {
+                LOG.info("waiting for {} connections to drain", totalConns);
+            } else if (isLeader && runningTxnNums > 0) {
+                LOG.info("waiting for {} running transactions to drain", runningTxnNums);
+            } else if (acceptStopped) {
+                long remainingMs = TimeUnit.SECONDS.toMillis(Config.min_graceful_exit_time_second) -
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - stopAcceptTimeNano);
+                LOG.info("drained, waiting for min_graceful_exit_time_second ({} ms remaining) before exit",
+                        Math.max(0, remainingMs));
             }
             Thread.sleep(waitInterval);
         }
     }
+
 
     private static boolean canGracefulExit() {
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);

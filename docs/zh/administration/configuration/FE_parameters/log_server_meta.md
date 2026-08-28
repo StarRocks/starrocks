@@ -895,6 +895,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点的 IP 地址。
 - 引入版本: -
 
+### `graceful_exit_accept_new_window_ms`
+
+- 默认值: 60000
+- 类型: Long
+- 单位: ms
+- 是否可变: Yes
+- 描述: 在优雅退出（由 `SIGUSR1` 触发）期间，FE 会在这段毫秒数内持续接受新请求，之后才开始排空，因此上游负载均衡器在其健康检查探测盲窗内转发过来的请求仍会被正常服务，而不会以 502 失败。FE 不会在该窗口结束前退出：stopAccept（关闭 MySQL 端口）是 L4/TCP 探测型负载均衡器开始排空的唯一触发点，因此提前退出会将新连接路由到一个已死的 FE。窗口结束后，当连接和进行中的事务全部清空、且 `min_graceful_exit_time_second`（从 stopAccept 开始计时）已满足时，FE 立即退出。建议设置为大于负载均衡器的摘除延迟加上预期的最大排空时间。优雅退出期间不会拒绝新的导入事务（loadTxnBegin）：排空会等待 runningTxnNums 降至 0（受 `max_graceful_exit_time_second` 约束），因此拒绝新的 BEGIN 只会造成一个所有导入在 FE 实际停止前都失败的窗口。
+- 引入版本: -
+
 ### `http_async_threads_num`
 
 - 默认值: 4096
@@ -989,6 +998,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 节点中 HTTPS 服务器监听的端口。
 - 引入版本: v4.0
 
+### `max_graceful_exit_time_second`
+
+- 默认值: 120
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 优雅退出超时时间。必须大于 `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`：优雅退出线程的硬超时 join(max) 从信号发出时开始计时，而 `min_graceful_exit_time_second` 仅从接受新连接窗口结束时开始计时。如果 max < window + min，线程会在最短排空完成前被强制终止。这些参数应一起设置。
+- 引入版本: -
+
 ### `max_mysql_service_task_threads_num`
 
 - 默认值: 4096
@@ -1024,6 +1042,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: FE `MemoryUsageTracker` 守护程序轮询和记录 FE 进程和已注册 `MemoryTrackable` 模块内存使用情况的间隔（秒）。当 `memory_tracker_enable` 设置为 `true` 时，跟踪器以此频率运行，更新 `MEMORY_USAGE`，并记录聚合的 JVM 和跟踪模块使用情况。
 - 引入版本: v3.2.4
+
+### `min_graceful_exit_time_second`
+
+- 默认值: 15
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: stopAccept（接受新连接窗口结束）与 FE 退出之间的最短等待时间，从 stopAccept 开始计时。该值必须大于负载均衡器的摘除延迟（通常为 7-11 秒），以确保负载均衡器在 FE 退出前已完成节点排空。必须小于 `max_graceful_exit_time_second`。
+- 引入版本: -
 
 ### `mysql_nio_backlog_num`
 

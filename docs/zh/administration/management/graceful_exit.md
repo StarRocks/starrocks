@@ -102,13 +102,33 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 
 - 描述：FE 被强制终止前的最大等待时间。
 - 默认值：60（秒）
-- 如何应用：在脚本命令中指定，例如 `--timeout 120`。
+- 如何应用：在脚本命令中指定。该值必须超过完整的优雅退出时长：接受新连接窗口（`graceful_exit_accept_new_window_ms`）加上窗口后的最短等待时间（`min_graceful_exit_time_second`）。例如默认设置（60000 毫秒 + 15 秒）下应使用 `--timeout 120`。如果设置过小，FE 会在排空完成前被强制终止。
 
 #### *最小 LB 检测时间*
 
 - 描述：LB 至少需要 15 秒来检测变更的健康状态。
 - 默认值：15（秒）
 - 如何应用：固定值
+
+#### `graceful_exit_accept_new_window_ms`
+
+- 描述：在优雅退出（由 `SIGUSR1` 触发）期间，FE 会在这段毫秒数内持续接受新请求，之后才开始排空。上游负载均衡器在其健康检查探测盲窗内转发过来的请求仍会被正常服务，而不会以 502 失败。FE 不会在该窗口结束前退出：stopAccept（关闭 MySQL 端口）是 L4/TCP 探测型负载均衡器开始排空的唯一触发点，因此提前退出会将新连接路由到一个已死的 FE。
+- 默认值：60000
+- 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
+
+#### `min_graceful_exit_time_second`
+
+- 描述：stopAccept（接受新连接窗口结束）与 FE 退出之间的最短等待时间，从 stopAccept 开始计时。该值必须大于负载均衡器的摘除延迟（通常为 7-11 秒），以确保负载均衡器在 FE 退出前已完成节点排空。
+- 默认值：15
+- 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
+- 时序关系：必须小于 `max_graceful_exit_time_second`。
+
+#### `max_graceful_exit_time_second`
+
+- 描述：优雅退出超时时间。
+- 默认值：120
+- 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
+- 时序关系：必须大于 `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`：优雅退出线程的硬超时 join(max) 从信号发出时开始计时，而 `min_graceful_exit_time_second` 仅从接受新连接窗口结束时开始计时。如果 max < window + min，线程会在最短排空完成前被强制终止。这些参数应一起设置。
 
 ### BE/CN 配置
 
@@ -187,12 +207,12 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 ### 执行 FE 优雅退出
 
 ```bash
-./bin/stop_fe.sh -g --timeout 60
+./bin/stop_fe.sh -g --timeout 120
 ```
 
 参数：
 
-- `--timeout`：在 FE 节点被强制终止前的最大等待时间。
+- `--timeout`：在 FE 节点被强制终止前的最大等待时间。该值必须超过完整的优雅退出时长（接受新连接窗口 `graceful_exit_accept_new_window_ms` 加上窗口后的最短等待时间 `min_graceful_exit_time_second`）；默认设置下至少使用 `--timeout 120`。如果设置过小，FE 会在排空完成前被强制终止。
 
 行为：
 

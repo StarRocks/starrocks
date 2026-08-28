@@ -102,13 +102,33 @@ From v3.4 onwards, FE no longer marks BE/CN as `DEAD` based on heartbeat failure
 
 - Description: Maximum waiting time before FE is force-killed.
 - Default: 60 (seconds)
-- How to apply: Specify it in the script command, for example, `--timeout 120`.
+- How to apply: Specify it in the script command. It must exceed the full graceful-exit duration: the accept-new window (`graceful_exit_accept_new_window_ms`) plus the post-window minimum (`min_graceful_exit_time_second`), e.g. `--timeout 120` for the default 60000 ms + 15 s. A smaller value force-kills the FE before the drain completes.
 
 #### *Minimum LB detection time*
 
 - Description: LB requires at least 15 seconds to detect degraded health.
 - Default: 15 (seconds)
 - How to apply: Fixed value
+
+#### `graceful_exit_accept_new_window_ms`
+
+- Description: During graceful exit (triggered by `SIGUSR1`), the FE keeps accepting new requests for this many milliseconds before it starts to drain. Requests forwarded by an upstream Load Balancer within its health-check probe-blind window are still served successfully instead of failing with 502. The FE does not exit before this window ends: stopAccept (which closes the MySQL port) is the only trigger for an L4/TCP-probing Load Balancer to drain, so exiting earlier would route new connections into a dead FE.
+- Default: 60000
+- How to apply: Modify it in the `fe.conf` configuration file or update it dynamically.
+
+#### `min_graceful_exit_time_second`
+
+- Description: The minimum wait time between stopAccept (the end of the accept-new window) and FE exit, measured from stopAccept. Must be greater than the Load Balancer detach latency (typically 7-11 seconds) so the Load Balancer has finished draining the node before the FE exits.
+- Default: 15
+- How to apply: Modify it in the `fe.conf` configuration file or update it dynamically.
+- Timing relationship: Must be smaller than `max_graceful_exit_time_second`.
+
+#### `max_graceful_exit_time_second`
+
+- Description: Timeout for graceful exit.
+- Default: 120
+- How to apply: Modify it in the `fe.conf` configuration file or update it dynamically.
+- Timing relationship: Must be greater than `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`: the graceful-exit thread's hard timeout is join(max) measured from the signal, while `min_graceful_exit_time_second` is measured only from the end of the accept-new window. If max < window + min the thread is force-killed before the minimum drain completes. Set these parameters together.
 
 ### BE/CN Configurations
 
@@ -187,12 +207,12 @@ Graceful Exit ensures:
 ### Perform FE Graceful Exit
 
 ```bash
-./bin/stop_fe.sh -g --timeout 60
+./bin/stop_fe.sh -g --timeout 120
 ```
 
 Parameters:
 
-- `--timeout`: The maximum time to wait before the FE node is force-killed.
+- `--timeout`: The maximum time to wait before the FE node is force-killed. It must exceed the full graceful-exit duration (the accept-new window `graceful_exit_accept_new_window_ms` plus the post-window minimum `min_graceful_exit_time_second`); use at least `--timeout 120` with the default settings. A smaller timeout force-kills the FE before the drain completes.
 
 Behavior:
 

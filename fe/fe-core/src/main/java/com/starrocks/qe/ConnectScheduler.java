@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.Frontend;
@@ -360,7 +361,14 @@ public class ConnectScheduler {
     public void closeAllIdleConnection() {
         try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
             connectionMap.values().forEach(context -> {
-                if (context.isIdleLastFor(1000)) {
+                // Skip connections with an active explicit transaction while the graceful-exit drain
+                // window is still open, so a transaction in flight gets a chance to commit/abort.
+                // Once the window elapses, close it too: disconnecting an idle explicit transaction
+                // rolls it back, which is required for totalConns to reach 0 and graceful shutdown
+                // to finish instead of hitting the hard timeout.
+                boolean explicitTxnExempt = context.inActiveExplicitTransaction()
+                        && !GracefulExitFlag.isDrainWindowElapsed();
+                if (!explicitTxnExempt && context.isIdleLastFor(1000)) {
                     context.cleanup();
                 }
             });

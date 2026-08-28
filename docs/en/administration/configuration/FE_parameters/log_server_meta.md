@@ -896,6 +896,15 @@ This topic introduces the following types of FE configurations:
 - Description: The IP address of the FE node.
 - Introduced in: -
 
+### `graceful_exit_accept_new_window_ms`
+
+- Default: 60000
+- Type: Long
+- Unit: ms
+- Is mutable: Yes
+- Description: During graceful exit (triggered by `SIGUSR1`), the FE keeps accepting new requests for this many milliseconds before it starts to drain, so requests forwarded by an upstream Load Balancer within its health-check probe-blind window are still served successfully instead of failing with 502. The FE does not exit before this window ends: stopAccept (which closes the MySQL port) is the only trigger for an L4/TCP-probing Load Balancer to drain, so exiting earlier would route new connections into a dead FE. After the window ends, the FE exits as soon as connections and in-flight transactions are gone and `min_graceful_exit_time_second` (measured from stopAccept) has elapsed. Set it above the Load Balancer detach latency plus the expected max drain time. New load transactions (loadTxnBegin) are NOT rejected during graceful exit: the drain waits for runningTxnNums to reach 0 (bounded by `max_graceful_exit_time_second`), so rejecting new BEGINs would only create a window where every load fails before the FE actually stops.
+- Introduced in: -
+
 ### `http_async_threads_num`
 
 - Default: 4096
@@ -990,6 +999,15 @@ This topic introduces the following types of FE configurations:
 - Description: The port on which the HTTPS server in the FE node listens.
 - Introduced in: v4.0
 
+### `max_graceful_exit_time_second`
+
+- Default: 120
+- Type: Long
+- Unit: s
+- Is mutable: Yes
+- Description: Timeout for graceful exit. MUST be greater than `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`: the graceful-exit thread's hard timeout is join(max) measured from the signal, while `min_graceful_exit_time_second` is measured only from the end of the accept-new window. If max < window + min the thread is force-killed before the minimum drain completes. Set these parameters together.
+- Introduced in: -
+
 ### `max_mysql_service_task_threads_num`
 
 - Default: 4096
@@ -1025,6 +1043,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Interval in seconds for the FE `MemoryUsageTracker` daemon to poll and record memory usage of the FE process and registered `MemoryTrackable` modules. When `memory_tracker_enable` is set to `true`, the tracker runs on this cadence, updates `MEMORY_USAGE`, and logs aggregated JVM and tracked-module usage.
 - Introduced in: v3.2.4
+
+### `min_graceful_exit_time_second`
+
+- Default: 15
+- Type: Long
+- Unit: s
+- Is mutable: Yes
+- Description: The minimum wait time between stopAccept (the end of the accept-new window) and FE exit, measured from stopAccept. Must be greater than the Load Balancer detach latency (typically 7-11 seconds) so the Load Balancer has finished draining the node before the FE exits. Must be smaller than `max_graceful_exit_time_second`.
+- Introduced in: -
 
 ### `mysql_nio_backlog_num`
 

@@ -13,16 +13,66 @@
 // limitations under the License.
 package com.starrocks.server;
 
+import com.starrocks.common.Config;
+
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class GracefulExitFlag {
     private static final AtomicBoolean GRACEFUL_EXIT = new AtomicBoolean(false);
+    // System.nanoTime() when graceful exit was marked (0 = not marked)
+    private static final AtomicLong BEGIN_NANO = new AtomicLong(0L);
 
-    public static void markGracefulExit() {
-        GRACEFUL_EXIT.set(true);
+    // Atomically claim the graceful-exit start. Returns true only for the caller that wins the
+    // CAS, so exactly one drain thread is spawned even under a burst of SIGUSR1. A repeated call
+    // returns false and does not reset BEGIN_NANO (which would reopen the accept-new window).
+    public static boolean markGracefulExit() {
+        if (GRACEFUL_EXIT.compareAndSet(false, true)) {
+            BEGIN_NANO.set(System.nanoTime());
+            return true;
+        }
+        return false;
     }
 
     public static boolean isGracefulExit() {
         return GRACEFUL_EXIT.get();
+    }
+
+    // During the accept-new window (graceful_exit_accept_new_window_ms after marking graceful exit),
+    // keep accepting new requests so that requests forwarded by an upstream load balancer within its
+    // health-check probe-blind window are still served successfully. After the window, new requests are
+    // rejected and the drain begins.
+    public static boolean shouldAcceptNewRequest() {
+        if (!GRACEFUL_EXIT.get()) {
+            return true;
+        }
+        long begin = BEGIN_NANO.get();
+        if (begin == 0L) {
+            return true;
+        }
+        return (System.nanoTime() - begin) < TimeUnit.NANOSECONDS.convert(
+                Config.graceful_exit_accept_new_window_ms, TimeUnit.MILLISECONDS);
+    }
+
+    // True once the accept-new window AND the post-window minimum drain time have both elapsed.
+    // After this point the drain is considered complete from the "waiting for activity" standpoint:
+    // an idle connection still holding an explicit transaction is force-closed (disconnecting rolls
+    // the txn back), so a hung BEGIN cannot block graceful shutdown forever.
+    public static boolean isDrainWindowElapsed() {
+        if (!GRACEFUL_EXIT.get()) {
+            return false;
+        }
+        long begin = BEGIN_NANO.get();
+        if (begin == 0L) {
+            return false;
+        }
+        long elapsed = System.nanoTime() - begin;
+        long acceptWindowNanos = TimeUnit.NANOSECONDS.convert(
+                Config.graceful_exit_accept_new_window_ms, TimeUnit.MILLISECONDS);
+        if (elapsed <= acceptWindowNanos) {
+            return false;
+        }
+        return (elapsed - acceptWindowNanos) > TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second);
     }
 }

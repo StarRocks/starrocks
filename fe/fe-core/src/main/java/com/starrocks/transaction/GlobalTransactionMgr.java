@@ -884,6 +884,14 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return minId;
     }
 
+    public int getRunningTxnNums() {
+        int total = 0;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            total += dbTransactionMgr.getRunningTxnNums();
+        }
+        return total;
+    }
+
     /**
      * Get the min txn id of running compaction transactions.
      *

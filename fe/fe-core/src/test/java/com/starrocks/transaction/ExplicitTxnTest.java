@@ -847,6 +847,78 @@ public class ExplicitTxnTest {
     }
 
     @Test
+    public void testCleanupRollsBackExplicitTxnWithDml() throws IOException, DdlException {
+        // A JDBC explicit transaction that already ran DML stays PREPARE in DatabaseTransactionMgr
+        // (runningTxnNums > 0) after the connection closes. cleanup() must roll it back so the
+        // graceful-exit drain sees runningTxnNums drop instead of blocking shutdown.
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() throws StarRocksException, RpcException, InterruptedException {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return Status.OK;
+            }
+
+            @Mock
+            public Map<String, String> getLoadCounters() {
+                Map<String, String> counters = new HashMap<>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "0");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "0");
+                counters.put(LoadJob.LOADED_BYTES, "0");
+                return counters;
+            }
+        };
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("db1", "tbl1");
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setQualifiedUser("u1");
+        context.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        TUniqueId queryId = new TUniqueId(300, 301);
+        context.setExecutionId(queryId);
+        UUID lastQueryId = new UUID(4L, 5L);
+        context.setLastQueryId(lastQueryId);
+
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+        long txnId = context.getTxnId();
+        Assertions.assertNotEquals(0, txnId);
+
+        String sql = "insert into db1.tbl1 values(1,2,3)";
+        DmlStmt stmt = (DmlStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(stmt, context);
+        TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), stmt, stmt.getOrigStmt(), context);
+        Assertions.assertFalse(context.getState().isError());
+
+        int runningBeforeCleanup = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getRunningTxnNums();
+        Assertions.assertTrue(runningBeforeCleanup > 0,
+                "a DML-carrying explicit transaction must be counted as running");
+
+        // Simulate connection disconnect: the txn must be aborted, not left PREPARE.
+        context.cleanup();
+
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertNull(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getExplicitTxnState(txnId));
+        Assertions.assertEquals(runningBeforeCleanup - 1, GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getRunningTxnNums(),
+                "cleanup() must roll back the explicit transaction so runningTxnNums decreases");
+    }
     public void testAbortTimeoutTxnsCleanupExplicitTxnState() {
         // Test that abortTimeoutTxns() cleans up timed-out explicit transaction states
         ConnectContext context = new ConnectContext();

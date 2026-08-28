@@ -887,6 +887,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの IP アドレス。
 - 導入時期：-
 
+### `graceful_exit_accept_new_window_ms`
+
+- デフォルト：60000
+- タイプ：Long
+- 単位：ms
+- 変更可能：Yes
+- 説明：グレースフルエグジット（`SIGUSR1` によってトリガー）中、FE はドレインを開始するまでこのミリ秒数の間新しいリクエストの受け入れを継続するため、アップストリームのロードバランサーがヘルスチェックのプローブブラインドウィンドウ内で転送したリクエストも正常に処理され、502 で失敗しません。FE はこのウィンドウが終了する前に終了しません。stopAccept（MySQL ポートを閉じる）が L4/TCP プローブ型ロードバランサーがドレインを開始する唯一のトリガーであるため、それより早く終了すると新規接続が停止済みの FE にルーティングされてしまいます。ウィンドウ終了後、接続と実行中のトランザクションがすべてなくなり、`min_graceful_exit_time_second`（stopAccept から計測）が経過すると、FE はすぐに終了します。ロードバランサーの切り離しレイテンシーに予想される最大ドレイン時間を加えた値より大きく設定してください。グレースフルエグジット中に新しいロードトランザクション（loadTxnBegin）は拒否されません。ドレインは runningTxnNums が 0 になるまで待機するため（`max_graceful_exit_time_second` で制限）、新しい BEGIN を拒否すると、FE が実際に停止する前にすべてのロードが失敗するウィンドウが生じるだけです。
+- 導入時期：-
+
 ### `http_async_threads_num`
 
 - デフォルト：4096
@@ -981,6 +990,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE ノードの HTTPS サーバーがリッスンするポート。
 - 導入時期：v4.0
 
+### `max_graceful_exit_time_second`
+
+- デフォルト：120
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：グレースフルエグジットのタイムアウト。`graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second` より大きい値にする必要があります。グレースフルエグジットスレッドのハードタイムアウト join(max) はシグナル送信時から計測されるのに対し、`min_graceful_exit_time_second` は新規受け入れウィンドウ終了後からのみ計測されます。max < window + min の場合、スレッドは最小ドレインが完了する前に強制終了されます。これらのパラメータはまとめて設定してください。
+- 導入時期：-
+
 ### `max_mysql_service_task_threads_num`
 
 - デフォルト：4096
@@ -1016,6 +1034,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：FE の `MemoryUsageTracker` デーモンが FE プロセスと登録された `MemoryTrackable` モジュールのメモリ使用量をポーリングして記録する間隔 (秒単位)。`memory_tracker_enable` が `true` に設定されている場合、トラッカーはこの周期で実行され、`MEMORY_USAGE` を更新し、集計された JVM および追跡対象モジュールの使用状況をログに記録します。
 - 導入時期：v3.2.4
+
+### `min_graceful_exit_time_second`
+
+- デフォルト：15
+- タイプ：Long
+- 単位：秒
+- 変更可能：Yes
+- 説明：stopAccept（新規接続受け入れウィンドウの終了）から FE 終了までの最小待機時間で、stopAccept から計測されます。ロードバランサーが FE の終了前にノードのドレインを完了できるよう、ロードバランサーの切り離しレイテンシー（通常 7〜11 秒）より大きい値に設定する必要があります。`max_graceful_exit_time_second` より小さくする必要があります。
+- 導入時期：-
 
 ### `mysql_nio_backlog_num`
 

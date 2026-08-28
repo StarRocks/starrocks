@@ -64,6 +64,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
@@ -216,10 +217,16 @@ public class LoadAction extends RestBaseAction {
     public void executeWithoutPasswordInternal(BaseRequest request, BaseResponse response) throws DdlException,
             AccessDeniedException {
 
-        // A 'Load' request must have "Expect: 100-continue" header for HTTP/1.1 and onward.
-        // Skip the "Expect" header check for HTTP/1.0 and earlier versions.
-        if (isExpectHeaderValid(request.getRequest()) && !HttpUtil.is100ContinueExpected(request.getRequest())) {
-            // TODO: should respond "HTTP 417 Expectation Failed"
+        // A 'Load' request may send "Expect: 100-continue" for HTTP/1.1 and onward. An L7 proxy
+        // (e.g. nginx) may strip this header, so a missing header is tolerated: the FE redirects
+        // to the BE without reading the body anyway. Only an explicitly present but wrong Expect
+        // value is rejected. HTTP/1.0 never requires the header (RFC 7231 5.1.1).
+        if (isExpectHeaderValid(request.getRequest())
+                && request.getRequest().headers().contains(HttpHeaderNames.EXPECT)
+                && !HttpUtil.is100ContinueExpected(request.getRequest())) {
+            // RFC 7231 5.1.1: a request with an unsupported Expect is rejected with 417; here we
+            // follow the existing behavior of failing the load with a DdlException and closing the
+            // connection (the body is not read since the FE redirects without consuming it).
             response.setForceCloseConnection(true);
             throw new DdlException("There is no 100-continue header");
         }

@@ -157,7 +157,7 @@ public class ExecuteSqlAction extends RestBaseAction {
             // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
             finalize(request, response, parsedStmt, context);
 
-            if (GracefulExitFlag.isGracefulExit()) {
+            if (!GracefulExitFlag.shouldAcceptNewRequest()) {
                 context.getNettyChannel().close();
             }
         } catch (StarRocksHttpException e) {

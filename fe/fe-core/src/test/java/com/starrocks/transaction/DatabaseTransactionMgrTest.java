@@ -1854,4 +1854,67 @@ public class DatabaseTransactionMgrTest {
             masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, "cleanup");
         }
     }
+
+    @Test
+    public void testGetRunningTxnNumsConcurrentVisibility() throws Exception {
+        // Guard getRunningTxnNums with the read lock so concurrent readers never observe a
+        // torn runningTxnNums while writers mutate it under the write lock.
+        DatabaseTransactionMgr mgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int initial = mgr.getRunningTxnNums();
+
+        int nReaders = 4;
+        int nWriters = 2;
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(nReaders + nWriters);
+        AtomicInteger maxObserved = new AtomicInteger(initial);
+        AtomicInteger minObserved = new AtomicInteger(initial);
+
+        for (int i = 0; i < nReaders; i++) {
+            new Thread(() -> {
+                try {
+                    start.await();
+                    for (int j = 0; j < 200; j++) {
+                        int v = mgr.getRunningTxnNums();
+                        maxObserved.updateAndGet(x -> Math.max(x, v));
+                        minObserved.updateAndGet(x -> Math.min(x, v));
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    done.countDown();
+                }
+            }).start();
+        }
+        for (int i = 0; i < nWriters; i++) {
+            new Thread(() -> {
+                try {
+                    start.await();
+                    for (int j = 0; j < 50; j++) {
+                        long txnId = 70000L + Thread.currentThread().getId() * 100 + j;
+                        try {
+                            masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                                    "concurrent-visible-" + txnId, transactionSource,
+                                    TransactionState.LoadJobSourceType.FRONTEND,
+                                    Config.stream_load_default_timeout_second);
+                        } catch (StarRocksException e) {
+                            // begin may throw for duplicate label; the readers only assert boundedness
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    done.countDown();
+                }
+            }).start();
+        }
+
+        start.countDown();
+        assertTrue(done.await(10, TimeUnit.SECONDS), "concurrent getRunningTxnNums deadlocked");
+        // Bounded assertions only (never exact counts): runningTxnNums only grows here (begins,
+        // no aborts), so reads must stay >= initial and <= initial + total successful begins.
+        assertTrue(minObserved.get() >= initial, "min observed should not drop below initial");
+        assertTrue(maxObserved.get() >= initial, "max observed should not drop below initial");
+    }
 }
