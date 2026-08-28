@@ -69,7 +69,9 @@ enum TDataSinkType {
     SPLIT_DATA_STREAM_SINK = 15,
     NOOP_SINK = 16,
     ICEBERG_DELETE_SINK = 17,
-    ICEBERG_ROW_DELTA_SINK = 18
+    ICEBERG_ROW_DELTA_SINK = 18,
+    // Value 19 is taken by a downstream distribution.
+    PLACEHOLDER_19 = 19
 }
 
 enum TResultSinkType {
@@ -80,7 +82,9 @@ enum TResultSinkType {
     HTTP_PROTOCAL,
     METADATA_ICEBERG,
     CUSTOMIZED,
-    ARROW_FLIGHT_PROTOCAL
+    ARROW_FLIGHT_PROTOCAL,
+    // Value 8 is taken by a downstream distribution.
+    PLACEHOLDER_8 = 8
 }
 
 enum TResultSinkFormatType {
@@ -302,6 +306,9 @@ struct TIcebergTableSink {
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
     12: optional TIcebergTableSinkExt ext
+    // Tags 50, 51 are occupied by downstream distributions; never allocate an upstream field here.
+    50: optional bool placeholder_50
+    51: optional bool placeholder_51
 }
 
 struct THiveTableSink {
@@ -353,4 +360,6 @@ struct TDataSink {
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
   18: optional TDataSinkExt ext
+  // Tag 30 is occupied by downstream distributions; never allocate an upstream field here.
+  30: optional bool placeholder_30
 }

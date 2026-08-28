@@ -411,5 +411,7 @@ message BuiltinInvertedIndexPB {
     optional int32 placeholder_2 = 2;
     optional bytes placeholder_3 = 3;
     optional bytes placeholder_4 = 4;
-    optional BuiltinInvertedIndexExtPB ext = 5;
+    // Tag 5 is occupied by downstream distributions; never allocate an upstream field here.
+    optional bytes placeholder_5 = 5;
+    optional BuiltinInvertedIndexExtPB ext = 6;
 }

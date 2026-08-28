@@ -149,11 +149,13 @@ struct TCreateTabletReq {
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
     27: optional Types.TTabletRange range;
+    // Tag 28 is occupied by downstream distributions; never allocate an upstream field here.
+    28: optional bool placeholder_28;
 
     // New fields should be added above this comment.
     // NOTE: If you add a new field here that ends up in tablet metadata,
     // also update TCloudTabletMeta in FrontendService.thrift to keep the two paths in sync.
-    28: optional TCreateTabletReqExt ext
+    29: optional TCreateTabletReqExt ext
 }
 
 struct TDropTabletReq {
@@ -562,7 +564,9 @@ enum TTabletMetaType {
     BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 12,
     FLAT_JSON_CONFIG = 13,
     ENABLE_FILE_BUNDLING = 14,
-    COMPACTION_STRATEGY = 15
+    COMPACTION_STRATEGY = 15,
+    // Value 16 is taken by a downstream distribution.
+    PLACEHOLDER_16 = 16
 }
 
 // Extension point for TTabletMetaInfo. DO NOT MODIFY: do not add fields here,
@@ -590,7 +594,9 @@ struct TTabletMetaInfo {
     13: optional bool bundle_tablet_metadata;
     14: optional TCompactionStrategy compaction_strategy;
     15: optional Types.TTabletRange tablet_range;
-    16: optional TTabletMetaInfoExt ext;
+    // Tag 16 is occupied by downstream distributions; never allocate an upstream field here.
+    16: optional bool placeholder_16;
+    17: optional TTabletMetaInfoExt ext;
 }
 
 struct TUpdateTabletMetaInfoReq {

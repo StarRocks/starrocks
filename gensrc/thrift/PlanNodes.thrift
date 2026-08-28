@@ -557,6 +557,9 @@ struct TScanRange {
 
   40: optional TBenchmarkScanRange benchmark_scan_range
   41: optional TScanRangeExt ext
+  // Tags 50, 51 are occupied by downstream distributions; never allocate an upstream field here.
+  50: optional bool placeholder_50
+  51: optional bool placeholder_51
 }
 
 struct TMySQLScanNode {
@@ -664,7 +667,10 @@ struct TSchemaScanNode {
   26: optional list<TFrontend> frontends;
 
   101: optional string catalog_name;
-  102: optional TSchemaScanNodeExt ext;
+  // Tags 102, 103 are occupied by downstream distributions; never allocate an upstream field here.
+  102: optional bool placeholder_102;
+  103: optional bool placeholder_103;
+  104: optional TSchemaScanNodeExt ext;
 }
 
 enum TAccessPathType {
@@ -761,6 +767,8 @@ struct TOlapScanNode {
 
   40: optional TVectorSearchOptions vector_search_options
   41: optional TTableSampleOptions sample_options;
+  // Tag 42 is occupied by downstream distributions; never allocate an upstream field here.
+  42: optional bool placeholder_42;
 
   //back pressure
   50: optional bool enable_topn_filter_back_pressure
@@ -842,6 +850,8 @@ struct TLakeScanNode {
   56: optional bool enable_global_late_materialization
 
   57: optional TVectorSearchOptions vector_search_options
+  // Tag 58 is occupied by downstream distributions; never allocate an upstream field here.
+  58: optional bool placeholder_58
 
   60: optional list<Exprs.TExpr> partition_conjuncts
 
@@ -1711,6 +1721,9 @@ struct TPlanNode {
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
   87: optional TPlanNodeExt ext
   88: optional TAIProjectNode ai_project_node
+  // Tags 150, 151 are occupied by downstream distributions; never allocate an upstream field here.
+  150: optional bool placeholder_150;
+  151: optional bool placeholder_151;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
