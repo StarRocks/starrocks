@@ -19,6 +19,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -114,7 +116,19 @@ public class PruneSubfieldRule extends TransformationRule {
             if (!normalizer.hasPath(ref)) {
                 continue;
             }
-            String columnName = scan.getColRefToColumnMetaMap().get(ref).getColumnId().getId();
+            Column column = scan.getColRefToColumnMetaMap().get(ref);
+            // An AGG_STATE_UNION column does not store the value the query sees: it stores a serialized
+            // aggregate state, and the storage layer rebuilds the value by running the aggregate function
+            // over that state. An access path asks the BE for only part of the column -- `array_length(v)`
+            // on an array_agg_distinct column asks for /v/OFFSET alone -- and the merge then runs against
+            // an array that kept its offsets and lost its elements. array_length comes back as 0 or 1
+            // instead of the real length, and on wider data the merge indexes past the element column and
+            // the BE dies in NullableColumn::null_count. A global dictionary is unusable on these columns
+            // for the same reason, see #77096.
+            if (column.getAggregationType() == AggregateType.AGG_STATE_UNION) {
+                continue;
+            }
+            String columnName = column.getColumnId().getId();
             ColumnAccessPath p = normalizer.normalizePath(ref, columnName);
 
             if (p.hasChildPath()) {
