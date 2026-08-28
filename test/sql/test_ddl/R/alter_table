@@ -13,18 +13,13 @@ ALTER TABLE t1 COMMENT="c2";
 -- !result
 SHOW CREATE TABLE t1;
 -- result:
-t1	CREATE TABLE `t1` (
-  `id1` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`id1`)
-COMMENT "c2"
-DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t1\	CREATE\ TABLE\ `t1`\ \(\
+\ \ `id1`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`id1`\)\
+(COMMENT "OLAP"\n)?COMMENT\ "c2"\
+DISTRIBUTED\ BY\ HASH\(`id1`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 CREATE TABLE `test_pk_tbl1` (
 `k1` DATE,

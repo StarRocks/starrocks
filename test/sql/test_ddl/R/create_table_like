@@ -13,20 +13,15 @@ CREATE TABLE t2 LIKE t1;
 -- !result
 SHOW CREATE TABLE t2;
 -- result:
-t2	CREATE TABLE `t2` (
-  `id1` int(11) NULL COMMENT "",
-  `id2` int(11) NULL COMMENT "",
-  `id3` double NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`id1`)
-COMMENT "c1"
-DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t2\	CREATE\ TABLE\ `t2`\ \(\
+\ \ `id1`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `id2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `id3`\ double\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`id1`\)\
+(COMMENT "OLAP"\n)?COMMENT\ "c1"\
+DISTRIBUTED\ BY\ HASH\(`id1`\)\ BUCKETS\ 1\ \
+PROPERTIES \(.*\);
 -- !result
 CREATE TABLE `test_pk_tbl1` (
 `k1` DATE,

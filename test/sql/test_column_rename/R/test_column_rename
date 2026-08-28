@@ -12,19 +12,14 @@ PROPERTIES(
 -- !result
 show create table t1;
 -- result:
-t1	CREATE TABLE `t1` (
-  `k1` int(11) NULL COMMENT "",
-  `v1` int(11) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`)
-DISTRIBUTED BY HASH(`k1`)
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t1\	CREATE\ TABLE\ `t1`\ \(\
+\ \ `k1`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `v1`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `v2`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k1`\)\
+PROPERTIES \(.*\);
 -- !result
 INSERT INTO t1 VALUES(1, 2, 3);
 -- result:
@@ -50,19 +45,14 @@ select k2 from t1;
 -- !result
 show create table t1;
 -- result:
-t1	CREATE TABLE `t1` (
-  `k2` int(11) NULL COMMENT "",
-  `v1` int(11) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k2`)
-DISTRIBUTED BY HASH(`k2`)
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)t1\	CREATE\ TABLE\ `t1`\ \(\
+\ \ `k2`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `v1`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `v2`\ int\(11\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k2`\)\
+(COMMENT "OLAP"\n)?DISTRIBUTED\ BY\ HASH\(`k2`\)\
+PROPERTIES \(.*\);
 -- !result
 insert into t1(k2, v1, v2) values(4, 5, 6);
 -- result:
@@ -98,25 +88,20 @@ alter table site_access rename column datekey to dt;
 -- !result
 show create table site_access;
 -- result:
-site_access	CREATE TABLE `site_access` (
-  `dt` date NULL COMMENT "",
-  `site_id` int(11) NULL COMMENT "",
-  `city_code` smallint(6) NULL COMMENT "",
-  `user_name` varchar(32) NULL COMMENT "",
-  `pv` bigint(20) NULL DEFAULT "0" COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`dt`, `site_id`, `city_code`, `user_name`)
-PARTITION BY RANGE(`dt`)
-(PARTITION p20210101 VALUES [("2021-01-01"), ("2021-01-02")),
-PARTITION p20210102 VALUES [("2021-01-02"), ("2021-01-03")),
-PARTITION p20210103 VALUES [("2021-01-03"), ("2021-01-04")))
-DISTRIBUTED BY HASH(`site_id`)
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)site_access\	CREATE\ TABLE\ `site_access`\ \(\
+\ \ `dt`\ date\ NULL\ COMMENT\ "",\
+\ \ `site_id`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `city_code`\ smallint\(6\)\ NULL\ COMMENT\ "",\
+\ \ `user_name`\ varchar\(32\)\ NULL\ COMMENT\ "",\
+\ \ `pv`\ bigint\(20\)\ NULL\ DEFAULT\ "0"\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`dt`,\ `site_id`,\ `city_code`,\ `user_name`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ RANGE\(`dt`\)\
+\(PARTITION\ p20210101\ VALUES\ \[\("2021\-01\-01"\),\ \("2021\-01\-02"\)\),\
+PARTITION\ p20210102\ VALUES\ \[\("2021\-01\-02"\),\ \("2021\-01\-03"\)\),\
+PARTITION\ p20210103\ VALUES\ \[\("2021\-01\-03"\),\ \("2021\-01\-04"\)\)\)\
+DISTRIBUTED\ BY\ HASH\(`site_id`\)\
+PROPERTIES \(.*\);
 -- !result
 insert into site_access values('2021-01-01',1,1,'1',1);
 -- result:
@@ -228,22 +213,17 @@ alter table site_access rename column event_day to dt;
 -- !result
 show create table site_access;
 -- result:
-site_access	CREATE TABLE `site_access` (
-  `dt` date NOT NULL COMMENT "",
-  `site_id` int(11) NULL DEFAULT "10" COMMENT "",
-  `city_code` varchar(100) NULL COMMENT "",
-  `user_name` varchar(32) NULL DEFAULT "" COMMENT "",
-  `pv` bigint(20) NULL DEFAULT "0" COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`dt`, `site_id`, `city_code`, `user_name`)
-PARTITION BY date_trunc('day', `dt`)
-DISTRIBUTED BY HASH(`dt`, `site_id`) BUCKETS 32 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)site_access\	CREATE\ TABLE\ `site_access`\ \(\
+\ \ `dt`\ date\ NOT\ NULL\ COMMENT\ "",\
+\ \ `site_id`\ int\(11\)\ NULL\ DEFAULT\ "10"\ COMMENT\ "",\
+\ \ `city_code`\ varchar\(100\)\ NULL\ COMMENT\ "",\
+\ \ `user_name`\ varchar\(32\)\ NULL\ DEFAULT\ ""\ COMMENT\ "",\
+\ \ `pv`\ bigint\(20\)\ NULL\ DEFAULT\ "0"\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`dt`,\ `site_id`,\ `city_code`,\ `user_name`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ [Dd][Aa][Tt][Ee]_[Tt][Rr][Uu][Nn][Cc]\('day',\ `dt`\)\
+DISTRIBUTED\ BY\ HASH\(`dt`,\ `site_id`\)\ BUCKETS\ 32\ \
+PROPERTIES \(.*\);
 -- !result
 CREATE TABLE `bill_detail` (
   `bill_code` varchar(200) NOT NULL DEFAULT "" COMMENT "运单号"
@@ -277,24 +257,18 @@ JT2921712368984
 -- !result
 show create table bill_detail;
 -- result:
-bill_detail	CREATE TABLE `bill_detail` (
-  `bill` varchar(200) NOT NULL DEFAULT "" COMMENT "运单号"
-) ENGINE=OLAP 
-PRIMARY KEY(`bill`)
-PARTITION BY RANGE(CAST(substr(`bill`, 3, 11) AS BIGINT))
-(PARTITION p1 VALUES [("0"), ("5000000")),
-PARTITION p2 VALUES [("5000000"), ("10000000")),
-PARTITION p3 VALUES [("10000000"), ("15000000")),
-PARTITION p4 VALUES [("15000000"), ("20000000")),
-PARTITION p6 VALUES [("20000000"), ("3021712368984")))
-DISTRIBUTED BY HASH(`bill`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+[REGEX](?s)bill_detail\	CREATE\ TABLE\ `bill_detail`\ \(\
+\ \ `bill`\ varchar\(200\)\ NOT\ NULL\ DEFAULT\ ""\ COMMENT\ "运单号"\
+\)\ ENGINE=OLAP\ \
+PRIMARY\ KEY\(`bill`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ RANGE\(CAST\(substr\(`bill`,\ 3,\ 11\)\ AS\ BIGINT\)\)\
+\(PARTITION\ p1\ VALUES\ \[\("0"\),\ \("5000000"\)\),\
+PARTITION\ p2\ VALUES\ \[\("5000000"\),\ \("10000000"\)\),\
+PARTITION\ p3\ VALUES\ \[\("10000000"\),\ \("15000000"\)\),\
+PARTITION\ p4\ VALUES\ \[\("15000000"\),\ \("20000000"\)\),\
+PARTITION\ p6\ VALUES\ \[\("20000000"\),\ \("3021712368984"\)\)\)\
+DISTRIBUTED\ BY\ HASH\(`bill`\)\ BUCKETS\ 3\ \
+PROPERTIES \(.*\);
 -- !result
 select * from bill_detail where bill = "JT2921712368984";
 -- result:

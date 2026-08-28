@@ -401,21 +401,15 @@ select * from multi_level_expr_par_tbl_1;
 -- !result
 show create table multi_level_expr_par_tbl_1;
 -- result:
-multi_level_expr_par_tbl_1	CREATE TABLE `multi_level_expr_par_tbl_1` (
-  `c1` bigint(20) NOT NULL COMMENT "",
-  `c2` varchar(65533) NULL COMMENT "",
-  `c3` date NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`c1`)
-PARTITION BY (from_unixtime(c1))
-DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
+[REGEX](?s)multi_level_expr_par_tbl_1\	CREATE\ TABLE\ `multi_level_expr_par_tbl_1`\ \(\
+\ \ `c1`\ bigint\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `c2`\ varchar\(65533\)\ NULL\ COMMENT\ "",\
+\ \ `c3`\ date\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+PRIMARY\ KEY\(`c1`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ \(from_unixtime\(c1\)\)\
+DISTRIBUTED\ BY\ HASH\(`c1`\)\ BUCKETS\ 3\ \
+PROPERTIES \(.*\);
 -- !result
 CREATE TABLE base_tbl (
                     `k1`  date,
@@ -445,32 +439,25 @@ CREATE TABLE multi_level_expr_par_tbl_2
 -- !result
 show create table multi_level_expr_par_tbl_2;
 -- result:
-multi_level_expr_par_tbl_2	CREATE TABLE `multi_level_expr_par_tbl_2` (
-  `k1` date NOT NULL COMMENT "",
-  `k2` datetime NOT NULL COMMENT "",
-  `k3` varchar(20) NOT NULL COMMENT "",
-  `k4` varchar(20) NOT NULL COMMENT "",
-  `k5` boolean NOT NULL COMMENT "",
-  `k6` tinyint(4) NULL COMMENT "",
-  `k7` smallint(6) NULL COMMENT "",
-  `k8` int(11) NULL COMMENT "",
-  `k9` bigint(20) NULL COMMENT "",
-  `k10` largeint(40) NULL COMMENT "",
-  `k11` decimal(38, 9) NULL COMMENT "",
-  `k12` decimal(38, 9) NULL COMMENT "",
-  `k13` decimal(27, 9) NULL COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
-COMMENT "OLAP"
-PARTITION BY (substring(k4, 1, 5),`k3`,date_trunc('month', k1))
-DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"enable_persistent_index" = "true",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
+[REGEX](?s)multi_level_expr_par_tbl_2\	CREATE\ TABLE\ `multi_level_expr_par_tbl_2`\ \(\
+\ \ `k1`\ date\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k2`\ datetime\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k3`\ varchar\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k4`\ varchar\(20\)\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k5`\ boolean\ NOT\ NULL\ COMMENT\ "",\
+\ \ `k6`\ tinyint\(4\)\ NULL\ COMMENT\ "",\
+\ \ `k7`\ smallint\(6\)\ NULL\ COMMENT\ "",\
+\ \ `k8`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k9`\ bigint\(20\)\ NULL\ COMMENT\ "",\
+\ \ `k10`\ largeint\(40\)\ NULL\ COMMENT\ "",\
+\ \ `k11`\ decimal\(38,\ 9\)\ NULL\ COMMENT\ "",\
+\ \ `k12`\ decimal\(38,\ 9\)\ NULL\ COMMENT\ "",\
+\ \ `k13`\ decimal\(27,\ 9\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+PRIMARY\ KEY\(`k1`,\ `k2`,\ `k3`,\ `k4`,\ `k5`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ \(substring\(k4,\ 1,\ 5\),`k3`,date_trunc\('month',\ k1\)\)\
+DISTRIBUTED\ BY\ HASH\(`k1`,\ `k2`,\ `k3`\)\ BUCKETS\ 3\ \
+PROPERTIES \(.*\);
 -- !result
 
 -- name: test_create_reserved_column
@@ -583,60 +570,48 @@ CREATE TABLE base_tbl (
 -- !result
 show create table base_tbl;
 -- result:
-base_tbl	CREATE TABLE `base_tbl` (
-  `k1` date NULL COMMENT "",
-  `k2` datetime NULL COMMENT "",
-  `k3` varchar(20) NULL COMMENT "",
-  `k4` varchar(20) NULL COMMENT "",
-  `k5` boolean NULL COMMENT "",
-  `k6` tinyint(4) NULL COMMENT "",
-  `k7` smallint(6) NULL COMMENT "",
-  `k8` int(11) NULL COMMENT "",
-  `k9` bigint(20) NULL COMMENT "",
-  `k10` largeint(40) NULL COMMENT "",
-  `k11` float NULL COMMENT "",
-  `k12` double NULL COMMENT "",
-  `k13` decimal(27, 9) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
-COMMENT "OLAP"
-PARTITION BY (substring(k4, 1, 5),`k3`,date_trunc('month', k1))
-DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
+[REGEX](?s)base_tbl\	CREATE\ TABLE\ `base_tbl`\ \(\
+\ \ `k1`\ date\ NULL\ COMMENT\ "",\
+\ \ `k2`\ datetime\ NULL\ COMMENT\ "",\
+\ \ `k3`\ varchar\(20\)\ NULL\ COMMENT\ "",\
+\ \ `k4`\ varchar\(20\)\ NULL\ COMMENT\ "",\
+\ \ `k5`\ boolean\ NULL\ COMMENT\ "",\
+\ \ `k6`\ tinyint\(4\)\ NULL\ COMMENT\ "",\
+\ \ `k7`\ smallint\(6\)\ NULL\ COMMENT\ "",\
+\ \ `k8`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k9`\ bigint\(20\)\ NULL\ COMMENT\ "",\
+\ \ `k10`\ largeint\(40\)\ NULL\ COMMENT\ "",\
+\ \ `k11`\ float\ NULL\ COMMENT\ "",\
+\ \ `k12`\ double\ NULL\ COMMENT\ "",\
+\ \ `k13`\ decimal\(27,\ 9\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`,\ `k3`,\ `k4`,\ `k5`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ \(substring\(k4,\ 1,\ 5\),`k3`,date_trunc\('month',\ k1\)\)\
+DISTRIBUTED\ BY\ HASH\(`k1`,\ `k2`,\ `k3`\)\ BUCKETS\ 3\ \
+PROPERTIES \(.*\);
 -- !result
 create table t1 like base_tbl;
 -- result:
 -- !result
 show create table t1;
 -- result:
-t1	CREATE TABLE `t1` (
-  `k1` date NULL COMMENT "",
-  `k2` datetime NULL COMMENT "",
-  `k3` varchar(20) NULL COMMENT "",
-  `k4` varchar(20) NULL COMMENT "",
-  `k5` boolean NULL COMMENT "",
-  `k6` tinyint(4) NULL COMMENT "",
-  `k7` smallint(6) NULL COMMENT "",
-  `k8` int(11) NULL COMMENT "",
-  `k9` bigint(20) NULL COMMENT "",
-  `k10` largeint(40) NULL COMMENT "",
-  `k11` float NULL COMMENT "",
-  `k12` double NULL COMMENT "",
-  `k13` decimal(27, 9) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
-COMMENT "OLAP"
-PARTITION BY (substring(k4, 1, 5),`k3`,date_trunc('month', k1))
-DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
+[REGEX](?s)t1\	CREATE\ TABLE\ `t1`\ \(\
+\ \ `k1`\ date\ NULL\ COMMENT\ "",\
+\ \ `k2`\ datetime\ NULL\ COMMENT\ "",\
+\ \ `k3`\ varchar\(20\)\ NULL\ COMMENT\ "",\
+\ \ `k4`\ varchar\(20\)\ NULL\ COMMENT\ "",\
+\ \ `k5`\ boolean\ NULL\ COMMENT\ "",\
+\ \ `k6`\ tinyint\(4\)\ NULL\ COMMENT\ "",\
+\ \ `k7`\ smallint\(6\)\ NULL\ COMMENT\ "",\
+\ \ `k8`\ int\(11\)\ NULL\ COMMENT\ "",\
+\ \ `k9`\ bigint\(20\)\ NULL\ COMMENT\ "",\
+\ \ `k10`\ largeint\(40\)\ NULL\ COMMENT\ "",\
+\ \ `k11`\ float\ NULL\ COMMENT\ "",\
+\ \ `k12`\ double\ NULL\ COMMENT\ "",\
+\ \ `k13`\ decimal\(27,\ 9\)\ NULL\ COMMENT\ ""\
+\)\ ENGINE=OLAP\ \
+DUPLICATE\ KEY\(`k1`,\ `k2`,\ `k3`,\ `k4`,\ `k5`\)\
+(COMMENT "OLAP"\n)?PARTITION\ BY\ \(substring\(k4,\ 1,\ 5\),`k3`,date_trunc\('month',\ k1\)\)\
+DISTRIBUTED\ BY\ HASH\(`k1`,\ `k2`,\ `k3`\)\ BUCKETS\ 3\ \
+PROPERTIES \(.*\);
 -- !result

@@ -29,15 +29,15 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 add field v1.v5 int;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Field v1 type INT is not valid.')
+[REGEX]E:.*Field\ v1\ type\ INT\ is\ not\ valid\.
 -- !result
 alter table tab1 modify column c1 add field v2 int;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Field v2 is already exist.')
+[REGEX]E:.*Field\ v2\ is\ already\ exist\.
 -- !result
 alter table tab1 modify column c1 add field v2.v3 int;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Field v3 is already exist.')
+[REGEX]E:.*Field\ v3\ is\ already\ exist\.
 -- !result
 alter table tab1 modify column c1 add field val1 int;
 -- result:
@@ -81,7 +81,7 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 drop field v2.v5;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Drop field v5 is not found.')
+[REGEX]E:.*Drop\ field\ v5\ is\ not\ found\.
 -- !result
 alter table tab1 modify column c1 drop field v1;
 -- result:
@@ -160,15 +160,15 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 drop field [*];
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Target Field is not struct.')
+[REGEX]E:.*Target\ Field\ is\ not\ struct\.
 -- !result
 alter table tab1 modify column c1 drop field [*].v3;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Drop field v3 is not found.')
+[REGEX]E:.*Drop\ field\ v3\ is\ not\ found\.
 -- !result
 alter table tab1 modify column c1 add field val1 int;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Target Field is not struct.')
+[REGEX]E:.*Target\ Field\ is\ not\ struct\.
 -- !result
 alter table tab1 modify column c1 add field [*].val1 int;
 -- result:

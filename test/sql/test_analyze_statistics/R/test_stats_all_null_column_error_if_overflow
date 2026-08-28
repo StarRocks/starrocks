@@ -43,7 +43,3 @@ set global sql_mode = '${ori_sql_mode}';
 drop database analyze_test_${uuid0};
 -- result:
 -- !result
-CLEANUP {
-    set global sql_mode = '${ori_sql_mode}';
-    drop database if exists analyze_test_${uuid0};
-} END CLEANUP
