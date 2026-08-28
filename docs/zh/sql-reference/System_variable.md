@@ -332,6 +332,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **类型**: Int
 * **引入版本**: v3.4.0, v3.5.0
 
+### cbo_push_down_count_aggregate
+
+* **描述**: 控制 `count(*)`/`count(col)` 聚合是否参与 `PushDownAggregateRule` 的下推优化，与已经支持下推的 `sum`/`max`/`min`/`hll_union`/`bitmap_union`/`percentile_union` 一样。启用（默认）时，优化器可以将 `count` 下推到 `INNER`/`CROSS` Join 一侧（仅限左侧/child-0，因为跨 Join 的 count 本质是笛卡尔积，无法通过对两侧的部分结果求和还原）上更窄的、仅按 Join key 分组的聚合，然后通过已有的 `COUNT -> SUM` rollup 逻辑重建顶层聚合；是否真正对某个查询应用下推，仍然由 `cbo_push_down_aggregate_mode` 的代价启发式规则决定，与其他可下推函数一致。当 `col` 来自 `CASE WHEN`/`IF()` 分支时，`count(col)` 不会被下推，因为对于 `count` 来说，一个从未命中的分支必须归零为 `0`（而不是像 `sum` 那样归为 `NULL`）。禁用该变量可回退到之前 `count` 始终留在 Join 之上的行为。
+* **范围**: Session
+* **默认值**: `true`
+* **数据类型**: boolean
+
 ### cbo_use_correlated_predicate_estimate
 
 * **描述**: 用于控制优化器在估算跨多列的合取相等谓词的选择性时，是否应用考虑相关性的启发式方法。当启用（默认）时，估算器会对主多列统计或最具选择性的谓词之外的附加列的选择性应用指数衰减权重，从而减少后续谓词的乘法影响（权重：对于最多三个附加列分别为 0.5、0.25、0.125）。当禁用时，不应用衰减（decay factor = 1），估算器会对这些列使用完整选择性相乘（更强的独立性假设）。StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity 会检查此标志，以在多列统计路径和回退路径中选择衰减因子，从而影响 CBO 使用的基数估算。
