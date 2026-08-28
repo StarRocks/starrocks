@@ -46,9 +46,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class GroupingSetsTest extends PlanTestBase {
@@ -67,6 +70,42 @@ public class GroupingSetsTest extends PlanTestBase {
     @BeforeEach
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testRepeatNodeWithUnionAllRewriteDuplicateGroupingKey() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
+        try {
+            // ROLLUP(v1, v2, v1) expands to the grouping sets (), (v1), (v1, v2), (v1, v2, v1). The rewrite
+            // turns each set into an aggregation's group-by keys; the last set must not carry v1 twice, or the
+            // FE emits one output slot fewer than group-by expressions and the BE crashes building the chunk.
+            String[] sqls = {
+                    "select v1, v2, sum(v3) from t0 group by rollup(v1, v2, v1)",
+                    "select v1, v2, sum(v3) from t0 group by cube(v1, v2, v1)",
+                    "select v1, v2, sum(v3) from t0 group by grouping sets((v1, v2), (v1, v2, v1), (v1, v1))",
+            };
+            for (String sql : sqls) {
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "1:UNION");
+                for (String line : plan.split("\n")) {
+                    int pos = line.indexOf("group by:");
+                    if (pos < 0) {
+                        continue;
+                    }
+                    List<String> keys = Arrays.stream(line.substring(pos + "group by:".length()).split(","))
+                            .map(String::trim).filter(k -> !k.isEmpty()).collect(Collectors.toList());
+                    Assertions.assertEquals(keys.size(), new HashSet<>(keys).size(),
+                            "duplicated group-by key in " + sql + ":\n" + plan);
+                }
+            }
+
+            // Every grouping set still becomes its own union branch: 4 sets for ROLLUP(v1, v2, v1).
+            String plan = getFragmentPlan(sqls[0]).replaceAll(" ", "");
+            Assertions.assertTrue(Pattern.compile("1:UNION\n\\|\n(\\|----\\d+:EXCHANGE\n\\|\n){3}\\d+:EXCHANGE\n")
+                    .matcher(plan).find(), plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
+        }
     }
 
     @Test
