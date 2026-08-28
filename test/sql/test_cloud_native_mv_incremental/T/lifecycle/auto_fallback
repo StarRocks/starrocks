@@ -81,11 +81,11 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 SELECT k, v FROM mv_ao ORDER BY k;
 SELECT k, v FROM ao_base ORDER BY k;
 
--- name: test_ivm_auto_does_not_absorb_row_delete @cloud
--- The fallback only covers a plan that cannot be built. A row-level DELETE on a DUPLICATE KEY
--- table plans fine and is refused by the backend while the plan runs, which is past the point
--- where AUTO can switch to PCT, so the view is inactivated exactly as an INCREMENTAL one is.
--- AGGREGATE KEY behaves the same; PRIMARY KEY does not, see the two cases below.
+-- name: test_ivm_auto_absorbs_row_delete_by_falling_back @cloud
+-- A row-level DELETE on a DUPLICATE KEY table plans fine and is refused by the backend while the
+-- plan runs, past the point the plan-time fallback covers. AUTO re-plans that run as PCT, so the
+-- view stays active and tracks the base. AGGREGATE KEY behaves the same; an INCREMENTAL view has
+-- no fallback and is inactivated instead, see test_ivm_incremental_row_delete_inactivates.
 CREATE TABLE de_base (k INT, v BIGINT) DUPLICATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 INSERT INTO de_base VALUES (1,10),(2,20),(3,30);
@@ -98,11 +98,22 @@ AS SELECT k, v FROM de_base;
 [UC]REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
 SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
 DELETE FROM de_base WHERE k = 1;
-[UC]REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
-SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
-SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CDC-ERROR-1 (CHANGE_NOT_TRACKABLE):%' AS backend_rejected
-FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+-- The run recovers rather than failing first, so the job leaves no FAILED task run behind.
+SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+-- The point of falling back: the whole partition is recomputed, so the deleted row is gone.
+SELECT k, v FROM mv_de ORDER BY k;
+SELECT k, v FROM de_base ORDER BY k;
+-- The fallback is for this run only: the pct pass advanced the base versions past the delete, so the
+-- next append-only change is incremental again. Without this the view would silently recompute whole
+-- partitions forever.
+INSERT INTO de_base VALUES (4,40);
+REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
+SELECT k, v FROM mv_de ORDER BY k;
 
 -- name: test_ivm_incremental_rejects_what_auto_absorbs @cloud
 -- The DROP PARTITION that test_ivm_auto_drop_partition_recovers refreshes through, against an
@@ -161,8 +172,8 @@ WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_dg' AND COLUMN_NAME LIKE '%RO
 REFRESH MATERIALIZED VIEW mv_dg WITH SYNC MODE;
 SELECT k, rn FROM mv_dg ORDER BY k;
 
--- name: test_ivm_auto_agg_row_delete_not_absorbed_either @cloud
--- Same as the DUPLICATE KEY case: the refusal comes from the backend, so AUTO cannot step in.
+-- name: test_ivm_auto_absorbs_agg_row_delete_by_falling_back @cloud
+-- Same as the DUPLICATE KEY case: the backend refuses the delete and AUTO re-plans the run as PCT.
 CREATE TABLE ag_base (k INT, v BIGINT SUM) AGGREGATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 INSERT INTO ag_base VALUES (1,10),(2,20),(3,30);
@@ -173,9 +184,36 @@ PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
 AS SELECT k, SUM(v) AS v FROM ag_base GROUP BY k;
 REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
 DELETE FROM ag_base WHERE k = 1;
-[UC]REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
-SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ag';
+SELECT k, v FROM mv_ag ORDER BY k;
+SELECT k, SUM(v) FROM ag_base GROUP BY k ORDER BY k;
+INSERT INTO ag_base VALUES (4,40);
+REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ag';
+
+-- name: test_ivm_incremental_row_delete_inactivates @cloud
+-- The other side of test_ivm_auto_absorbs_row_delete_by_falling_back: the same backend refusal
+-- against an INCREMENTAL view. It declined approximate semantics, so there is no fallback to take
+-- and the view is inactivated, still holding the row the base no longer has. Asserting only the
+-- AUTO side would not catch a change that quietly gave INCREMENTAL the fallback as well.
+CREATE TABLE ir_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO ir_base VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_ir
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT k, v FROM ir_base;
+REFRESH MATERIALIZED VIEW mv_ir WITH SYNC MODE;
+DELETE FROM ir_base WHERE k = 1;
+[UC]REFRESH MATERIALIZED VIEW mv_ir WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ir';
+-- Deliberately stale: the view still has the deleted row, which is what declining the fallback means.
+SELECT k, v FROM mv_ir ORDER BY k;
 
 -- name: test_ivm_auto_pk_row_delete_stays_incremental @cloud
 -- A PRIMARY KEY base table with change data capture emits the delete, so there is nothing for
@@ -197,6 +235,27 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_pk';
 SELECT k, v FROM mv_pk ORDER BY k;
 SELECT k, v FROM pk_base ORDER BY k;
+
+-- name: test_ivm_auto_pk_row_delete_without_cdc_falls_back @cloud
+-- A PRIMARY KEY base table without change data capture cannot emit the delete either, and the backend
+-- refuses the scan for that reason instead of the key type. AUTO treats it the same as the duplicate-key
+-- case -- the reason the view cannot be maintained incrementally does not change what to do about it.
+CREATE TABLE nc_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'false');
+INSERT INTO nc_base VALUES (1,10),(2,20),(3,30);
+CREATE MATERIALIZED VIEW mv_nc
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM nc_base;
+[UC]REFRESH MATERIALIZED VIEW mv_nc WITH SYNC MODE;
+DELETE FROM nc_base WHERE k = 1;
+[UC]REFRESH MATERIALIZED VIEW mv_nc WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_nc';
+SELECT k, v FROM mv_nc ORDER BY k;
+SELECT k, v FROM nc_base ORDER BY k;
 
 -- name: test_ivm_auto_pk_drop_partition_recovers @cloud
 -- The fallback is not tied to a key type: a PRIMARY KEY base falls back and recovers too.

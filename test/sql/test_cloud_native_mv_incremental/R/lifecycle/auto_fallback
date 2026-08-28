@@ -165,7 +165,7 @@ SELECT k, v FROM ao_base ORDER BY k;
 5	50
 9	99
 -- !result
--- name: test_ivm_auto_does_not_absorb_row_delete @cloud
+-- name: test_ivm_auto_absorbs_row_delete_by_falling_back @cloud
 CREATE TABLE de_base (k INT, v BIGINT) DUPLICATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 -- result:
@@ -189,16 +189,40 @@ PCT
 DELETE FROM de_base WHERE k = 1;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
-SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
 -- result:
-false	1
+true	PCT
 -- !result
-SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%CDC-ERROR-1 (CHANGE_NOT_TRACKABLE):%' AS backend_rejected
-FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
+SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
 -- result:
-FAILED	1
+0
+-- !result
+SELECT k, v FROM mv_de ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+SELECT k, v FROM de_base ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+INSERT INTO de_base VALUES (4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
+-- result:
+INCREMENTAL
+-- !result
+SELECT k, v FROM mv_de ORDER BY k;
+-- result:
+2	20
+3	30
+4	40
 -- !result
 -- name: test_ivm_incremental_rejects_what_auto_absorbs @cloud
 CREATE TABLE st_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
@@ -252,11 +276,11 @@ AUTO
 -- !result
 ALTER MATERIALIZED VIEW mv_al SET ('refresh_mode' = 'incremental');
 -- result:
-[REGEX].*Altering refresh_mode from AUTO to INCREMENTAL is not supported.*
+E: (1064, 'Getting analyzing error. Detail message: Altering refresh_mode from AUTO to INCREMENTAL is not supported. Please drop and re-create the materialized view if a mode change is required..')
 -- !result
 ALTER MATERIALIZED VIEW mv_al SET ('refresh_mode' = 'pct');
 -- result:
-[REGEX].*Altering refresh_mode from AUTO to PCT is not supported.*
+E: (1064, 'Getting analyzing error. Detail message: Altering refresh_mode from AUTO to PCT is not supported. Please drop and re-create the materialized view if a mode change is required..')
 -- !result
 ALTER MATERIALIZED VIEW mv_al SET ('refresh_mode' = 'auto');
 -- result:
@@ -295,7 +319,7 @@ SELECT k, rn FROM mv_dg ORDER BY k;
 1	1
 2	2
 -- !result
--- name: test_ivm_auto_agg_row_delete_not_absorbed_either @cloud
+-- name: test_ivm_auto_absorbs_agg_row_delete_by_falling_back @cloud
 CREATE TABLE ag_base (k INT, v BIGINT SUM) AGGREGATE KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 -- result:
@@ -314,11 +338,61 @@ REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
 DELETE FROM ag_base WHERE k = 1;
 -- result:
 -- !result
-[UC]REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
-SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ag';
 -- result:
+true	PCT
+-- !result
+SELECT k, v FROM mv_ag ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+SELECT k, SUM(v) FROM ag_base GROUP BY k ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+INSERT INTO ag_base VALUES (4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ag';
+-- result:
+INCREMENTAL
+-- !result
+-- name: test_ivm_incremental_row_delete_inactivates @cloud
+CREATE TABLE ir_base (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ir_base VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ir
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT k, v FROM ir_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_ir WITH SYNC MODE;
+DELETE FROM ir_base WHERE k = 1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ir WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%incremental refresh broken%' AS reason_match
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ir';
+-- result:
 false	1
+-- !result
+SELECT k, v FROM mv_ir ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
 -- !result
 -- name: test_ivm_auto_pk_row_delete_stays_incremental @cloud
 CREATE TABLE pk_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
@@ -356,6 +430,42 @@ SELECT k, v FROM mv_pk ORDER BY k;
 3	30
 -- !result
 SELECT k, v FROM pk_base ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+-- name: test_ivm_auto_pk_row_delete_without_cdc_falls_back @cloud
+CREATE TABLE nc_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'false');
+-- result:
+-- !result
+INSERT INTO nc_base VALUES (1,10),(2,20),(3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_nc
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM nc_base;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_nc WITH SYNC MODE;
+DELETE FROM nc_base WHERE k = 1;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_nc WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_nc';
+-- result:
+true	PCT
+-- !result
+SELECT k, v FROM mv_nc ORDER BY k;
+-- result:
+2	20
+3	30
+-- !result
+SELECT k, v FROM nc_base ORDER BY k;
 -- result:
 2	20
 3	30

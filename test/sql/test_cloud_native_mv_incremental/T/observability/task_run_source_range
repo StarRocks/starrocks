@@ -87,16 +87,20 @@ REFRESH MATERIALIZED VIEW mv_chain WITH SYNC MODE;
 INSERT INTO base_chain VALUES (3, 30);
 REFRESH MATERIALIZED VIEW mv_chain WITH SYNC MODE;
 SELECT COUNT(*) AS diff FROM (SELECT k, v FROM mv_chain EXCEPT SELECT k, v FROM base_chain) t;
+-- start == end is a legitimate "nothing changed" window, so a row must not pair with itself; and
+-- versions can render as MIN/MAX sentinels, which a digits-only pattern would collapse to ''.
 WITH r AS (
-  SELECT regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) AS s,
-         regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([0-9]+)"', 1) AS e
+  SELECT QUERY_ID AS q,
+         regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([^"]+)"', 1) AS s,
+         regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([^"]+)"', 1) AS e
   FROM information_schema.task_runs
   WHERE TASK_NAME = '${TASK_NAME}'
     AND get_json_string(EXTRA_MESSAGE, '$.refreshMode') = 'INCREMENTAL'
     AND get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange') != '{}'
 )
 SELECT (SELECT COUNT(*) FROM r) AS incremental_runs,
-       (SELECT COUNT(*) FROM r a JOIN r b ON a.e = b.s) AS adjacent_pairs,
+       (SELECT COUNT(*) FROM r a JOIN r b ON a.e = b.s AND a.q <> b.q) AS adjacent_pairs,
+       (SELECT COUNT(*) FROM r WHERE s = '' OR e = '') AS unparsed_versions,
        (SELECT COUNT(*) FROM r WHERE s = e) AS degenerate_windows;
 DROP MATERIALIZED VIEW mv_chain;
 

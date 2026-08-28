@@ -95,6 +95,20 @@ public class MaterializedViewExceptions {
         return false;
     }
 
+    /**
+     * Whether the backend rejected the CHANGES scan as non-trackable. Narrower than
+     * {@link #isIncrementalBreakingFailure}: it deliberately excludes the frontend-detected marker, because
+     * that one is already caught while the plan is built and never reaches execution.
+     */
+    public static boolean isChangeNotTrackableFailure(Throwable e) {
+        for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
+            if (CdcErrorUtils.isChangeNotTrackable(t.getMessage())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static String inactiveReasonForMetadataTableRestoreCorrupted(String tableName) {
         return INACTIVE_REASON_FOR_METADATA_TABLE_RESTORE_CORRUPTED + tableName;
     }

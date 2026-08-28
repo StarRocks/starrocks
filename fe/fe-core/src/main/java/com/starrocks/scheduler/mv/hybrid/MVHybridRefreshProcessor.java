@@ -20,6 +20,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
@@ -132,7 +133,42 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
     public Constants.TaskRunState execProcessExecPlan(TaskRunContext taskRunContext,
                                                       ProcessExecPlan processExecPlan,
                                                       MVRefreshExecutor executor) throws Exception {
-        return getCurrentProcessor().execProcessExecPlan(taskRunContext, processExecPlan, executor);
+        try {
+            return getCurrentProcessor().execProcessExecPlan(taskRunContext, processExecPlan, executor);
+        } catch (Exception e) {
+            if (!canFallBackOnExecutionFailure(runRefreshMode, mv.getCurrentRefreshMode(), e)) {
+                throw e;
+            }
+            logger.warn("Incremental refresh for mv {} was rejected by the backend as non-trackable, " +
+                    "falling back to pct for this run", mv.getName(), e);
+            try {
+                ProcessExecPlan pctPlan = switchToPCTRefresh(taskRunContext);
+                if (pctPlan.state() == Constants.TaskRunState.SKIPPED) {
+                    return Constants.TaskRunState.SKIPPED;
+                }
+                return pctProcessor.execProcessExecPlan(taskRunContext, pctPlan, executor);
+            } catch (Exception pctFailure) {
+                // Carry the rejection that sent this run to pct, or the reported failure looks like a plain
+                // pct error and the incremental attempt that preceded it is only visible in the log.
+                pctFailure.addSuppressed(e);
+                throw pctFailure;
+            }
+        }
+    }
+
+    /**
+     * A duplicate-key or aggregate base table rejects a row delete only once the backend reads the changes, past
+     * the plan-time fallback. Only an AUTO view may recover here: an INCREMENTAL one also reaches this processor
+     * when a base table needs its TVR baseline rebuilt, and switching that run to pct would silently give it the
+     * approximate semantics it declined.
+     */
+    @VisibleForTesting
+    static boolean canFallBackOnExecutionFailure(MaterializedView.RefreshMode runRefreshMode,
+                                                 MaterializedView.RefreshMode settledMode,
+                                                 Throwable e) {
+        return runRefreshMode.isIncremental()
+                && settledMode == MaterializedView.RefreshMode.AUTO
+                && MaterializedViewExceptions.isChangeNotTrackableFailure(e);
     }
 
     @Override
