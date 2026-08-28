@@ -160,7 +160,7 @@ fi
 final_java_opt=${JAVA_OPTS}
 # Compatible with scenarios upgraded from jdk11
 if [ ! -z "${JAVA_OPTS_FOR_JDK_11}" ] ; then
-    echo "Warning: Configuration parameter JAVA_OPTS_FOR_JDK_11 is not supported, JAVA_OPTS is the only place to set jvm parameters"
+    warn_deprecated_java_opts "StarRocks FE" "JAVA_OPTS_FOR_JDK_11" "$STARROCKS_HOME/conf/fe.conf"
     final_java_opt=${JAVA_OPTS_FOR_JDK_11}
 fi
 

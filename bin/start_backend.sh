@@ -132,7 +132,13 @@ fi
 final_java_opt=${JAVA_OPTS}
 # Compatible with scenarios upgraded from jdk9~jdk16
 if [ ! -z "${JAVA_OPTS_FOR_JDK_9_AND_LATER}" ] ; then
-    echo "Warning: Configuration parameter JAVA_OPTS_FOR_JDK_9_AND_LATER is not supported, JAVA_OPTS is the only place to set jvm parameters"
+    component_name="StarRocks BE"
+    component_conf_file="$STARROCKS_HOME/conf/be.conf"
+    if [ ${RUN_CN} -eq 1 ]; then
+        component_name="StarRocks CN"
+        component_conf_file="$STARROCKS_HOME/conf/cn.conf"
+    fi
+    warn_deprecated_java_opts "$component_name" "JAVA_OPTS_FOR_JDK_9_AND_LATER" "$component_conf_file"
     final_java_opt=${JAVA_OPTS_FOR_JDK_9_AND_LATER}
 fi
 
