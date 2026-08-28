@@ -193,6 +193,9 @@ struct RssidTranslationRun {
     uint32_t target_begin;
 };
 
+constexpr uint64_t kSourceRssidExclusiveLimit = uint64_t{std::numeric_limits<uint32_t>::max()} + 1;
+constexpr uint64_t kTargetRssidExclusiveLimit = static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
+
 class RssidProjection {
 public:
     Status build(std::vector<std::pair<uint64_t, uint64_t>> atoms, uint32_t target_begin) {
@@ -203,7 +206,7 @@ public:
         std::sort(atoms.begin(), atoms.end());
         std::vector<std::pair<uint64_t, uint64_t>> merged;
         for (const auto& [begin, end] : atoms) {
-            if (begin >= end || end > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            if (begin >= end || end > kSourceRssidExclusiveLimit) {
                 return Status::InvalidArgument("tablet merge source RSSID interval is outside the supported domain");
             }
             if (merged.empty() || begin > merged.back().second) {
@@ -215,7 +218,7 @@ public:
         uint64_t cursor = target_begin;
         for (const auto& [begin, end] : merged) {
             const uint64_t length = end - begin;
-            if (cursor + length > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            if (cursor + length > kTargetRssidExclusiveLimit) {
                 return Status::InvalidArgument("tablet merge exhausts the supported rssid allocation domain");
             }
             _runs.emplace_back(RssidTranslationRun{begin, end, static_cast<uint32_t>(cursor)});
@@ -473,7 +476,7 @@ Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* o
 
 Status validate_del_replay_span(uint32_t origin, uint32_t offset) {
     const uint64_t end = static_cast<uint64_t>(origin) + static_cast<uint64_t>(offset) + 1;
-    if (end > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+    if (end > kSourceRssidExclusiveLimit) {
         return Status::InvalidArgument("tablet merge delete replay span exceeds the supported RSSID domain");
     }
     return Status::OK();
@@ -621,7 +624,7 @@ StatusOr<TabletMergeAllocationPlan> build_tablet_merge_allocation_plan(const std
         const auto& rowset = canonical.source_form_rowset;
         const uint64_t segment_span = rowset.segment_metas_size() == 0 ? 1 : uint64_t{get_max_segment_idx(rowset)} + 1;
         const uint64_t extent_end = uint64_t{rowset.id()} + segment_span;
-        if (extent_end > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        if (extent_end > kSourceRssidExclusiveLimit) {
             return Status::InvalidArgument("tablet merge rowset extent exceeds the supported RSSID domain");
         }
         auto& context_atoms = atoms[canonical.selected_context_index];
@@ -2697,6 +2700,27 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     return Status::OK();
 }
 
+Status validate_source_rssid_domain(const TabletMetadataPB& metadata) {
+    for (const auto& rowset : metadata.rowsets()) {
+        const uint64_t max_segment_idx = get_max_segment_idx(rowset);
+        const uint64_t segment_span = rowset.segment_metas_size() == 0 ? 1 : max_segment_idx + 1;
+        if (uint64_t{rowset.id()} + segment_span > kSourceRssidExclusiveLimit) {
+            return Status::InvalidArgument("tablet merge source rowset extent exceeds the uint32 RSSID domain");
+        }
+        if (rowset.has_max_compact_input_rowset_id() &&
+            uint64_t{rowset.max_compact_input_rowset_id()} + 1 > kSourceRssidExclusiveLimit) {
+            return Status::InvalidArgument("tablet merge source recovery key exceeds the uint32 RSSID domain");
+        }
+        for (const auto& del : rowset.del_files()) {
+            const uint64_t replay_offset = del.has_op_offset() ? uint64_t{del.op_offset()} : max_segment_idx;
+            if (uint64_t{del.origin_rowset_id()} + replay_offset + 1 > kSourceRssidExclusiveLimit) {
+                return Status::InvalidArgument("tablet merge source delete span exceeds the uint32 RSSID domain");
+            }
+        }
+    }
+    return Status::OK();
+}
+
 StatusOr<uint32_t> compute_supported_next_rowset_id(const TabletMetadataPB& metadata) {
     uint64_t next = 1;
     for (const auto& rowset : metadata.rowsets()) {
@@ -2818,17 +2842,10 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
         if (old_tablet_metadata == nullptr) {
             return Status::InvalidArgument("old tablet metadata is null");
         }
-        // The read-only alias path retains the historical source-SST domain
-        // check. A real writable MERGE may deliberately omit an uncertain SST,
-        // so only its rowset/delete recovery domain is authoritative here; the
-        // installed fast-path SST cohort is checked again after classification.
-        if (skip_sstable_merge) {
-            RETURN_IF_ERROR(compute_supported_next_rowset_id(*old_tablet_metadata));
-        } else {
-            TabletMetadataPB recovery_visible_source(*old_tablet_metadata);
-            recovery_visible_source.clear_sstable_meta();
-            RETURN_IF_ERROR(compute_supported_next_rowset_id(recovery_visible_source));
-        }
+        // Source RSSIDs occupy the full uint32 domain. Only the packed target
+        // cursor is restricted to INT32_MAX; source SST reuse is proved later
+        // by the modern/legacy classifiers against the packed projection.
+        RETURN_IF_ERROR(validate_source_rssid_domain(*old_tablet_metadata));
         if (!skip_sstable_merge && is_primary_key(*old_tablet_metadata)) {
             for (const auto& rowset : old_tablet_metadata->rowsets()) {
                 const uint64_t source_rowset_id = static_cast<uint64_t>(rowset.id());
