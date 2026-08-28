@@ -36,6 +36,8 @@
 
 #include <string_view>
 
+#include "base/string/trim.h"
+
 namespace starrocks {
 
 const Slice UrlParser::_s_url_authority(const_cast<char*>("AUTHORITY"), 9);
@@ -59,6 +61,7 @@ const StringSearch UrlParser::_s_colon_search(&_s_colon);
 const StringSearch UrlParser::_s_question_search(&_s_question);
 const StringSearch UrlParser::_s_hash_search(&_s_hash);
 
+<<<<<<< HEAD:be/src/util/url_parser.cpp
 std::string_view trim(std::string_view str) {
     auto pos = str.find_first_not_of(' ');
     str.remove_prefix(std::min(pos, str.length()));
@@ -68,11 +71,14 @@ std::string_view trim(std::string_view str) {
 }
 
 bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
+=======
+UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
+>>>>>>> 7521d92 ([Refactor] Deduplicate the space-trim helper into base/string (#78342)):be/src/base/string/url_parser.cpp
     result->data = nullptr;
     result->size = 0;
     // Remove leading and trailing spaces.
     std::string_view url_view = url;
-    Slice trimmed_url = trim(url_view);
+    Slice trimmed_url = trim_spaces(url_view);
 
     std::string_view protocol_end;
 
