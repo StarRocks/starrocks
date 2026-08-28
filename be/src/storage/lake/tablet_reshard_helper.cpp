@@ -21,14 +21,10 @@
 #include <roaring/roaring.hh>
 #include <unordered_set>
 
-#include "base/decimal_types.h"
 #include "base/uid_util.h"
 #include "common/logging.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
-#include "storage_primitive/key_coder.h"
-#include "types/logical_type.h"
-#include "types/type_descriptor.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
 
@@ -627,188 +623,13 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
     return Status::OK();
 }
 
-RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const TabletRangePB& range_pb) {
-    if (rowset.segment_metas_size() == 0) {
-        return RangeOverlap::kUnknown;
-    }
-
-    struct ComparisonType {
-        LogicalType type;
-        int precision = -1;
-        int scale = -1;
-
-        bool operator==(const ComparisonType&) const = default;
-    };
-    struct ValidatedTuple {
-        VariantTuple values;
-        std::vector<ComparisonType> types;
-    };
-    auto decode_tuple = [](const TuplePB& tuple_pb, ValidatedTuple* tuple) {
-        if (tuple_pb.values_size() == 0) return false;
-        tuple->types.reserve(tuple_pb.values_size());
-        for (const auto& variant : tuple_pb.values()) {
-            if (!variant.has_type() || variant.type().types_size() != 1 || !variant.type().IsInitialized()) {
-                return false;
-            }
-            const auto& node = variant.type().types(0);
-            if (static_cast<TTypeNodeType::type>(node.type()) != TTypeNodeType::SCALAR || !node.has_scalar_type()) {
-                return false;
-            }
-            const auto& scalar_type = node.scalar_type();
-            const auto logical_type = thrift_to_type(static_cast<TPrimitiveType::type>(scalar_type.type()));
-            if (!is_scalar_logical_type(logical_type) || get_key_coder(logical_type) == nullptr) return false;
-            if ((logical_type == TYPE_CHAR || logical_type == TYPE_VARCHAR) &&
-                (!scalar_type.has_len() || scalar_type.len() <= 0 ||
-                 (logical_type == TYPE_CHAR && scalar_type.len() > TypeDescriptor::MAX_CHAR_LENGTH) ||
-                 (logical_type == TYPE_VARCHAR && scalar_type.len() > TypeDescriptor::MAX_VARCHAR_LENGTH))) {
-                return false;
-            }
-            if (logical_type == TYPE_DECIMAL || logical_type == TYPE_DECIMALV2 ||
-                is_decimalv3_field_type(logical_type)) {
-                int max_precision = TypeDescriptor::MAX_PRECISION;
-                if (logical_type == TYPE_DECIMAL32) {
-                    max_precision = TypeDescriptor::MAX_DECIMAL4_PRECISION;
-                } else if (logical_type == TYPE_DECIMAL64) {
-                    max_precision = TypeDescriptor::MAX_DECIMAL8_PRECISION;
-                } else if (logical_type == TYPE_DECIMAL128) {
-                    max_precision = decimal_precision_limit<int128_t>;
-                } else if (logical_type == TYPE_DECIMAL256) {
-                    max_precision = decimal_precision_limit<int256_t>;
-                }
-                if (!scalar_type.has_precision() || !scalar_type.has_scale() || scalar_type.precision() <= 0 ||
-                    scalar_type.precision() > max_precision || scalar_type.scale() < 0 ||
-                    scalar_type.scale() > scalar_type.precision()) {
-                    return false;
-                }
-            }
-            ComparisonType comparison_type{logical_type};
-            if (logical_type == TYPE_DECIMAL || logical_type == TYPE_DECIMALV2 ||
-                is_decimalv3_field_type(logical_type)) {
-                comparison_type.precision = scalar_type.precision();
-                comparison_type.scale = scalar_type.scale();
-            }
-            DatumVariant value;
-            if (!value.from_proto(variant).ok()) return false;
-            tuple->values.append(std::move(value));
-            tuple->types.emplace_back(comparison_type);
-        }
-        return true;
-    };
-    auto same_shape = [](const ValidatedTuple& lhs, const ValidatedTuple& rhs) { return lhs.types == rhs.types; };
-
-    ValidatedTuple range_lower;
-    ValidatedTuple range_upper;
-    if ((range_pb.has_lower_bound() && !decode_tuple(range_pb.lower_bound(), &range_lower)) ||
-        (range_pb.has_upper_bound() && !decode_tuple(range_pb.upper_bound(), &range_upper))) {
-        return RangeOverlap::kUnknown;
-    }
-    TabletRange range;
-    if (!range.from_proto(range_pb).ok()) {
-        return RangeOverlap::kUnknown;
-    }
-
-    ValidatedTuple envelope_min;
-    ValidatedTuple envelope_max;
-    for (const auto& segment_meta : rowset.segment_metas()) {
-        if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
-            return RangeOverlap::kUnknown;
-        }
-        ValidatedTuple segment_min;
-        ValidatedTuple segment_max;
-        if (!decode_tuple(segment_meta.sort_key_min(), &segment_min) ||
-            !decode_tuple(segment_meta.sort_key_max(), &segment_max)) {
-            return RangeOverlap::kUnknown;
-        }
-        if (!same_shape(segment_min, segment_max) || segment_min.values.compare(segment_max.values) > 0) {
-            return RangeOverlap::kUnknown;
-        }
-        if (!envelope_min.values.empty() && !same_shape(envelope_min, segment_min)) {
-            return RangeOverlap::kUnknown;
-        }
-        if (envelope_min.values.empty() || segment_min.values.compare(envelope_min.values) < 0) {
-            envelope_min = segment_min;
-        }
-        if (envelope_max.values.empty() || segment_max.values.compare(envelope_max.values) > 0) {
-            envelope_max = segment_max;
-        }
-    }
-
-    // Match the comparison representation: logical type plus decimal precision/scale. Declared
-    // CHAR/VARCHAR length is validated above but intentionally excluded because segment TypeInfo
-    // serializes it at the maximum while FE tablet bounds retain the schema's declared length.
-    if ((!range.is_minimum() && !same_shape(envelope_min, range_lower)) ||
-        (!range.is_maximum() && !same_shape(envelope_min, range_upper)) || range.is_empty()) {
-        return RangeOverlap::kUnknown;
-    }
-
-    if (range.is_all()) {
-        // (-inf, +inf) contains every valid envelope.
-        return RangeOverlap::kContainsBoth;
-    }
-
-    // [envelope_min, envelope_max] is a superset of the rowset's keys, so "the range sits entirely
-    // outside the envelope" proves the sibling owns none of them.
-    if (range.less_than(envelope_min.values) || range.greater_than(envelope_max.values)) {
-        return RangeOverlap::kNo;
-    }
-    const bool contains_lower = range.contains(envelope_min.values);
-    const bool contains_upper = range.contains(envelope_max.values);
-    if (contains_lower && contains_upper) return RangeOverlap::kContainsBoth;
-    if (contains_lower) return RangeOverlap::kContainsLower;
-    if (contains_upper) return RangeOverlap::kContainsUpper;
-    return RangeOverlap::kInterior;
-}
-
-void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index,
-                              RangeOverlap overlap) {
+void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index) {
     if (split_count <= 1) return;
-
-    if (overlap == RangeOverlap::kNo) {
-        // Proven to own none of the rowset's keys, so drop its segments outright rather than hand
-        // this sibling data it can never read. Presence is decided by what the op carries, so this
-        // has to be an explicit removal -- zeroing the counters no longer takes the rowset with it.
-        //
-        // Only the segments go. A del file must still be replayed against this sibling's own index
-        // (that is why the splitter keeps a del-file-carrying rowset whatever its range says), and
-        // dels_meta/del_ssts live on the op_write, not here.
-        rowset->clear_segment_metas();
-        // The legacy arrays are dual-written for rollback, so they have to go with segment_metas or
-        // a pre-feature reader would still see the segments (lake_proto_normalizer back-fills from
-        // them).
-        rowset->clear_deprecated_segments();
-        rowset->clear_deprecated_segment_size();
-        rowset->clear_deprecated_segment_encryption_metas();
-        rowset->clear_deprecated_shared_segments();
-        rowset->clear_deprecated_bundle_file_offsets();
-        rowset->set_overlapped(false);
-        if (rowset->has_num_rows()) rowset->set_num_rows(0);
-        if (rowset->has_data_size()) rowset->set_data_size(0);
-        if (rowset->has_num_dels()) rowset->set_num_dels(0);
-        return;
-    }
-
-    // Every sibling starts with its original virtual share. Boundary siblings also absorb the
-    // shares assigned to pruned outer siblings, so the overlapping interval conserves the source's
-    // persisted statistics without requiring family-wide context.
-    int32_t share_begin = split_index;
-    int32_t share_end = split_index + 1;
-    if (overlap == RangeOverlap::kContainsLower || overlap == RangeOverlap::kContainsBoth) {
-        share_begin = 0;
-    }
-    if (overlap == RangeOverlap::kContainsUpper || overlap == RangeOverlap::kContainsBoth) {
-        share_end = split_count;
-    }
-    auto prefix = [split_count](int64_t value, int32_t end) {
-        return (value / split_count) * end + std::min<int64_t>(end, value % split_count);
+    auto apportion = [split_count, split_index](int64_t value) {
+        return value / split_count + (split_index < value % split_count ? 1 : 0);
     };
-    auto apportion = [&](int64_t value) { return prefix(value, share_end) - prefix(value, share_begin); };
-
-    if (rowset->has_num_rows()) {
-        rowset->set_num_rows(apportion(rowset->num_rows()));
-    }
-    if (rowset->has_data_size()) {
-        rowset->set_data_size(apportion(rowset->data_size()));
-    }
+    if (rowset->has_num_rows()) rowset->set_num_rows(apportion(rowset->num_rows()));
+    if (rowset->has_data_size()) rowset->set_data_size(apportion(rowset->data_size()));
     if (rowset->has_num_dels()) {
         rowset->set_num_dels(std::min<int64_t>(apportion(rowset->num_dels()), rowset->num_rows()));
     }
@@ -925,39 +746,29 @@ std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log
     return output_paths;
 }
 
-void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index,
-                               const TabletRangePB* sibling_range) {
-    // Classify each rowset against the sibling's range; nullptr keeps the legacy apportionment.
-    auto overlap_of = [sibling_range](const RowsetMetadataPB& rowset) {
-        return sibling_range == nullptr ? RangeOverlap::kUnknown
-                                        : classify_rowset_range_overlap(rowset, *sibling_range);
-    };
+void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index) {
     if (txn_log->has_op_write() && txn_log->mutable_op_write()->has_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index,
-                                 overlap_of(txn_log->op_write().rowset()));
+        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index);
     }
     if (txn_log->has_op_compaction() && txn_log->mutable_op_compaction()->has_output_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index,
-                                 overlap_of(txn_log->op_compaction().output_rowset()));
+        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index);
     }
     if (txn_log->has_op_schema_change()) {
         for (auto& rowset : *txn_log->mutable_op_schema_change()->mutable_rowsets()) {
-            update_rowset_data_stats(&rowset, split_count, split_index, overlap_of(rowset));
+            update_rowset_data_stats(&rowset, split_count, split_index);
         }
     }
     if (txn_log->has_op_replication()) {
         for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
             if (op_write.has_rowset()) {
-                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index,
-                                         overlap_of(op_write.rowset()));
+                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index);
             }
         }
     }
     if (txn_log->has_op_parallel_compaction()) {
         for (auto& subtask : *txn_log->mutable_op_parallel_compaction()->mutable_subtask_compactions()) {
             if (subtask.has_output_rowset()) {
-                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index,
-                                         overlap_of(subtask.output_rowset()));
+                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index);
             }
         }
     }

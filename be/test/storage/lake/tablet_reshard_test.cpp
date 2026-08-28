@@ -6493,7 +6493,7 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_adjusts_data_stats_for_splitt
     EXPECT_TRUE(converted0->op_write().rowset().segment_metas(0).shared());
 }
 
-TEST_F(LakeTabletReshardTest, test_convert_txn_log_prunes_disjoint_sibling_and_conserves_stats) {
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_shares_disjoint_sibling_and_conserves_stats) {
     const int64_t old_tablet_id = next_id();
     auto txn_log = std::make_shared<TxnLogPB>();
     txn_log->set_tablet_id(old_tablet_id);
@@ -6531,12 +6531,14 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_prunes_disjoint_sibling_and_c
     ASSIGN_OR_ABORT(auto converted_left, lake::convert_txn_log(txn_log, left_metadata, left_info));
     ASSIGN_OR_ABORT(auto converted_right, lake::convert_txn_log(txn_log, right_metadata, right_info));
 
-    EXPECT_EQ(0, converted_left->op_write().rowset().segment_metas_size());
+    ASSERT_EQ(1, converted_left->op_write().rowset().segment_metas_size());
     ASSERT_EQ(1, converted_right->op_write().rowset().segment_metas_size());
+    EXPECT_TRUE(converted_left->op_write().rowset().segment_metas(0).shared());
     EXPECT_TRUE(converted_right->op_write().rowset().segment_metas(0).shared());
-    EXPECT_EQ(1000, converted_left->op_write().rowset().num_rows() + converted_right->op_write().rowset().num_rows());
-    EXPECT_EQ(10000,
-              converted_left->op_write().rowset().data_size() + converted_right->op_write().rowset().data_size());
+    EXPECT_EQ(500, converted_left->op_write().rowset().num_rows());
+    EXPECT_EQ(500, converted_right->op_write().rowset().num_rows());
+    EXPECT_EQ(5000, converted_left->op_write().rowset().data_size());
+    EXPECT_EQ(5000, converted_right->op_write().rowset().data_size());
 }
 
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_normal_publish_no_stats_change) {
