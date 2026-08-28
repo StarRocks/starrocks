@@ -1612,7 +1612,9 @@ select count(*) from t;
 -- result:
 300
 -- !result
-<<<<<<< HEAD
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_optimize_duplicate_partitions
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -1683,8 +1685,3 @@ alter table t drop all temporary partitions;
 show temporary partitions from t;
 -- result:
 -- !result
-=======
-CLEANUP {
-    admin set frontend config ('enable_online_optimize_table'='false');
-} END CLEANUP
->>>>>>> 85941d3 ([Enhancement] Disable online optimize table by default (#78206))

@@ -372,18 +372,14 @@ CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
 } END CLEANUP
 
-<<<<<<< HEAD
 -- name: test_cancel_optimize
 create table t(k int) distributed by hash(k) buckets 10;
 alter table t distributed by hash(k);
 cancel alter table optimize from t;
 function: wait_optimize_table_finish(expect_status="CANCELLED")
 
--- name: test_online_optimize_table_batch @seqential @native
-=======
 -- name: test_online_optimize_table_batch @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
->>>>>>> 85941d3 ([Enhancement] Disable online optimize table by default (#78206))
 create database db_${uuid0};
 use db_${uuid0};
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
@@ -400,7 +396,9 @@ function: wait_optimize_table_finish()
 show create table t;
 select * from t;
 select count(*) from t;
-<<<<<<< HEAD
+CLEANUP {
+    admin set frontend config ('enable_online_optimize_table'='false');
+} END CLEANUP
 
 -- name: test_optimize_duplicate_partitions
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -443,8 +441,3 @@ alter table t add temporary partition tp202009 VALUES LESS THAN ("2020-10-01");
 show temporary partitions from t;
 alter table t drop all temporary partitions;
 show temporary partitions from t;
-=======
-CLEANUP {
-    admin set frontend config ('enable_online_optimize_table'='false');
-} END CLEANUP
->>>>>>> 85941d3 ([Enhancement] Disable online optimize table by default (#78206))
