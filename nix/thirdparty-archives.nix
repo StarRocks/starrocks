@@ -164,11 +164,6 @@ let
       md5 = "c5ac53ca70cc667189ec824c6048914a";
       sha256 = "1d38yknmvvym19s8hia14pkrccqr7lq5iclm9j9hqvpyx0h0ww0l";
     };
-    "hyperscan-5.3.0.aarch64.tar.gz" = {
-      url = "https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz";
-      md5 = "ef337257bde6583242a739fab6fb161f";
-      sha256 = "1cawqr9yx7b02kk8ihvf41ps7wv4qzi7gi4jw53x13rnnfyva170";
-    };
     "hyperscan-5.4.0.tar.gz" = {
       url = "https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz";
       md5 = "65e08385038c24470a248f6ff2fa379b";
