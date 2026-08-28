@@ -94,15 +94,8 @@ static size_t get_metacache_usage(void*) {
     return (cache != nullptr) ? cache->memory_usage() : 0;
 }
 
-static size_t get_metacache_evict_count(void*) {
-    auto cache = get_metacache();
-    return (cache != nullptr) ? cache->evict_count() : 0;
-}
-
 static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
-static bvar::PassiveStatus<size_t> g_metacache_evict_count("lake", "metacache_evict_count", get_metacache_evict_count,
-                                                           nullptr);
 #endif
 
 Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capacity)) {}
@@ -336,10 +329,6 @@ size_t Metacache::memory_usage() const {
 
 size_t Metacache::capacity() const {
     return _cache->get_capacity();
-}
-
-size_t Metacache::evict_count() const {
-    return _cache->get_insert_evict_count() + _cache->get_release_evict_count();
 }
 
 } // namespace starrocks::lake

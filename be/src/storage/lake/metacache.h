@@ -91,9 +91,6 @@ public:
 
     size_t capacity() const;
 
-    // Total entries evicted so far, across both the insert and the release paths.
-    size_t evict_count() const;
-
 private:
     static void cache_value_deleter(const CacheKey& key, void* value);
 

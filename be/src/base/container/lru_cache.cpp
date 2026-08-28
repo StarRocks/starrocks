@@ -386,8 +386,6 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
 Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                           void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                                           CachePriority priority) {
-    // Allocated before the lock is taken because the common case is a real insert;
-    // on the losing path the handle is freed again below, the value is untouched.
     LRUHandle* e = _alloc_handle(key, hash, value, value_size, deleter, priority);
     LRUHandle* ret = nullptr;
     std::vector<LRUHandle*> last_ref_list;
