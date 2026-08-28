@@ -64,6 +64,7 @@ public class EliminateSortColumnWithEqualityPredicateRule extends Transformation
 
         if (reservedOrdering.isEmpty()) {
             // if topn has projection, we should merge topn's projection into scan's projection
+            // partial cherry-pick from https://github.com/StarRocks/starrocks/pull/58345
             if (topn.getProjection() != null) {
                 if (scan.getProjection() == null) {
                     scan.setProjection(topn.getProjection());
