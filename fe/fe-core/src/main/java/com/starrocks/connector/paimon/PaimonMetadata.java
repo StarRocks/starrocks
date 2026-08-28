@@ -70,6 +70,7 @@ import org.apache.paimon.CoreOptions;
 import org.apache.paimon.Snapshot;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.DelegateCatalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
@@ -396,9 +397,25 @@ public class PaimonMetadata implements ConnectorMetadata {
                 // System table does not have snapshotId, ignore it.
                 LOG.warn("Cannot get snapshot because {}", e.getMessage());
             }
+            // this read of the live pointer is the only fresh signal on the query path: hand it to the
+            // cache so the schema and partition list can catch up without waiting for the daemon
+            queueRefreshIfStale(paimonTable, snapshotId);
             return TvrTableSnapshot.of(Optional.of(snapshotId));
         } else {
             return TvrTableDelta.of(start, end);
+        }
+    }
+
+    private void queueRefreshIfStale(PaimonTable paimonTable, long snapshotId) {
+        // the caching layer sits under the privilege wrapper when paimon privileges are on.
+        // DelegateCatalog.rootCatalog would strip it too, since CachingCatalog is itself a delegate
+        Catalog catalog = paimonNativeCatalog;
+        while (catalog instanceof DelegateCatalog && !(catalog instanceof CachingPaimonCatalog)) {
+            catalog = ((DelegateCatalog) catalog).wrapped();
+        }
+        if (catalog instanceof CachingPaimonCatalog) {
+            ((CachingPaimonCatalog) catalog).maybeRefreshAsync(
+                    new Identifier(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName()), snapshotId);
         }
     }
 

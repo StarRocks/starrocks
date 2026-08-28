@@ -3148,6 +3148,20 @@ public class Config extends ConfigBase {
     public static long background_refresh_metadata_time_secs_since_last_access_secs = 3600L * 24L;
 
     /**
+     * Whether a query that observes a new Paimon snapshot may queue a refresh of that table's
+     * cached metadata. The refresh runs in the background, the query never waits for it.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_paimon_query_triggered_refresh = true;
+
+    /**
+     * Lower bound between two query-triggered refreshes of the same Paimon table. Caps how much
+     * work a fast committing table can queue; the background daemon still covers the rest.
+     */
+    @ConfField(mutable = true)
+    public static long paimon_query_triggered_refresh_min_interval_secs = 60L;
+
+    /**
      * Enable refresh hive partition statistics.
      * The `getPartitionColumnStats()` requests of hive metastore has a high latency, and some users env may return timeout.
      */

@@ -27,7 +27,10 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.Table;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Paimon's caching catalog plus the bookkeeping background refresh needs to prune its work:
@@ -38,16 +41,20 @@ public class CachingPaimonCatalog extends CachingCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingPaimonCatalog.class);
 
     private final String catalogName;
+    private final ExecutorService refreshExecutor;
     private final Map<Identifier, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<Identifier, TableRevision> lastRefreshedRevision = new ConcurrentHashMap<>();
+    private final Map<Identifier, Long> lastRefreshTime = new ConcurrentHashMap<>();
+    private final Set<Identifier> refreshInFlight = ConcurrentHashMap.newKeySet();
 
     /** What the lake looked like when a table was last refreshed. */
     private record TableRevision(long snapshotId, long schemaId) {
     }
 
-    public CachingPaimonCatalog(String catalogName, Catalog wrapped, Options options) {
+    public CachingPaimonCatalog(String catalogName, Catalog wrapped, Options options, ExecutorService refreshExecutor) {
         super(wrapped, options);
         this.catalogName = catalogName;
+        this.refreshExecutor = refreshExecutor;
     }
 
     @Override
@@ -65,9 +72,48 @@ public class CachingPaimonCatalog extends CachingCatalog {
         super.invalidateTable(id);
         // the revision described the evicted entry, not the next one
         lastRefreshedRevision.remove(id);
+        lastRefreshTime.remove(id);
     }
 
-    /** Refresh one table if the lake moved. Background daemon only. */
+    /**
+     * Queue a refresh when a query just read a snapshot newer than the one this catalog was last
+     * refreshed to. Runs on the background pool, the caller never waits for it.
+     */
+    public void maybeRefreshAsync(Identifier id, long observedSnapshotId) {
+        if (!Config.enable_paimon_query_triggered_refresh || observedSnapshotId < 0) {
+            return;
+        }
+        // same exclusions as the access time ledger: neither kind of table goes stale
+        if (id.isSystemTable() || id.getBranchName() != null) {
+            return;
+        }
+        TableRevision refreshed = lastRefreshedRevision.get(id);
+        if (refreshed != null && refreshed.snapshotId() == observedSnapshotId) {
+            return;
+        }
+        Long refreshedAt = lastRefreshTime.get(id);
+        if (refreshedAt != null && System.currentTimeMillis() - refreshedAt
+                < Config.paimon_query_triggered_refresh_min_interval_secs * 1000) {
+            return;
+        }
+        if (!refreshInFlight.add(id)) {
+            return;
+        }
+        try {
+            refreshExecutor.submit(() -> {
+                try {
+                    refreshTable(id);
+                } finally {
+                    refreshInFlight.remove(id);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            refreshInFlight.remove(id);
+            LOG.debug("Dropped queued refresh of paimon table {} of catalog {}", id.getFullName(), catalogName);
+        }
+    }
+
+    /** Refresh one table if the lake moved. Background daemon and query-triggered refresh only. */
     public void refreshTable(Identifier id) {
         try {
             // via super: probing must not count as an access
@@ -83,6 +129,7 @@ public class CachingPaimonCatalog extends CachingCatalog {
             // a schema-only ALTER TABLE bumps the schema id without creating a snapshot
             long latestSchemaId = dataTable.schemaManager().latest().map(TableSchema::id).orElse(-1L);
             TableRevision latest = new TableRevision(latestSnapshotId, latestSchemaId);
+            lastRefreshTime.put(id, System.currentTimeMillis());
             if (latest.equals(lastRefreshedRevision.get(id))) {
                 return;
             }
@@ -111,7 +158,9 @@ public class CachingPaimonCatalog extends CachingCatalog {
                 tableLatestAccessTime.remove(entry.getKey());
                 continue;
             }
-            refreshTable(entry.getKey());
+            if (!refreshInFlight.contains(entry.getKey())) {
+                refreshTable(entry.getKey());
+            }
         }
     }
 

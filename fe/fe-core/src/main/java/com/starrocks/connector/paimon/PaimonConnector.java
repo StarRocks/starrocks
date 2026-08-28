@@ -15,6 +15,7 @@
 package com.starrocks.connector.paimon;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -43,6 +44,7 @@ import org.apache.paimon.privilege.PrivilegedCatalog;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
@@ -58,10 +60,12 @@ public class PaimonConnector implements Connector {
     public static final String PAIMON_META_CACHE_TTL = "paimon_meta_cache_ttl_sec";
     private static final long DEFAULT_META_CACHE_TTL_SEC = 24L * 60 * 60;
     private static final long CACHE_PARTITION_MAX_NUM = 1000L;
+    private static final int REFRESH_THREAD_NUM = 4;
     private static final MemorySize CACHE_MANIFEST_FILE_THRESHOLD = MemorySize.ofMebiBytes(10);
     private static final MemorySize CACHE_MANIFEST_MEMORY = MemorySize.ofMebiBytes(1024);
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
+    private ExecutorService refreshExecutor;
     private final String catalogName;
     private final Options paimonOptions;
     private final ConnectorProperties connectorProperties;
@@ -174,8 +178,10 @@ public class PaimonConnector implements Connector {
                 this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(unwrapped, getPaimonOptions());
                 return paimonNativeCatalog;
             }
+            this.refreshExecutor = ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(
+                    REFRESH_THREAD_NUM, catalogName + "-paimon-refresh-pool", true);
             CachingPaimonCatalog cachingCatalog =
-                    new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions());
+                    new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions(), refreshExecutor);
             this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
             GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                     .registerPaimonCatalog(catalogName, cachingCatalog);
@@ -191,5 +197,8 @@ public class PaimonConnector implements Connector {
     @Override
     public void shutdown() {
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterPaimonCatalog(catalogName);
+        if (refreshExecutor != null) {
+            refreshExecutor.shutdown();
+        }
     }
 }

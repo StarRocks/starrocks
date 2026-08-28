@@ -1462,6 +1462,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用周期性 Hive 元数据缓存刷新。启用后，StarRocks 会轮询 Hive 集群的 metastore（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Hive Catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。
 - 引入版本: v2.5.5
 
+### `enable_paimon_query_triggered_refresh`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 查询读到新的 Paimon Snapshot 时，是否为该表排队一次元数据缓存刷新。Paimon 在每次扫描时都会解析当前 Snapshot，因此数据始终是最新的，而缓存的 Schema 和分区列表只有在刷新后才会更新。启用后，缓存元数据会在查询后不久追平，而不必等待下一轮后台刷新。刷新在后台线程池中执行，查询不会等待它完成。
+- 引入版本: v4.2.0
+
+### `paimon_query_triggered_refresh_min_interval_secs`
+
+- 默认值: 60
+- 类型: Long
+- 单位: Seconds
+- 是否可变: Yes
+- 描述: 同一张 Paimon 表两次由查询触发的刷新之间的最小间隔，用于限制高频提交的表所能排队的刷新工作量。因该间隔被跳过的刷新仍由周期性后台刷新覆盖。仅在 `enable_paimon_query_triggered_refresh` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
 ### `refresh_other_fe_dispatch_executor_thread_num`
 
 - 默认值: 4
