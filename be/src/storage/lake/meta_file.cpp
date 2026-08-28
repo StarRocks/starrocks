@@ -28,7 +28,6 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
-#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -1252,13 +1251,8 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
                    << ", version: " << delvec_page.version();
         return Status::InternalError("Can't find delvec file name");
     }
-    const auto& delvec_file = iter->second;
-    const auto& delvec_name = delvec_file.name();
+    const auto& delvec_name = iter->second.name();
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-    if (delvec_file.has_encryption_meta() && !delvec_file.encryption_meta().empty()) {
-        ASSIGN_OR_RETURN(opts.encryption_info,
-                         KeyCache::instance().unwrap_encryption_meta(delvec_file.encryption_meta()));
-    }
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
         std::unique_ptr<RandomAccessFile> rf;
@@ -1318,45 +1312,17 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
     return Status::OK();
 }
 
-static Status prepare_delvec_output_encryption(bool encrypt_output, WritableFileOptions* options,
-                                               std::string* encryption_meta) {
-    if (!encrypt_output) {
-        return Status::OK();
-    }
-    Status create_encryption_meta_status;
-    TEST_SYNC_POINT_CALLBACK("write_delvec_output:create_encryption_meta", &create_encryption_meta_status);
-    RETURN_IF_ERROR(create_encryption_meta_status);
-    ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-    options->encryption_info = pair.info;
-    *encryption_meta = std::move(pair.encryption_meta);
-    return Status::OK();
-}
-
 Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
                           int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
-                          std::vector<uint64_t>* offsets, const Slice& extra_data, uint64_t* extra_data_offset,
-                          bool force_encrypt_output) {
+                          std::vector<uint64_t>* offsets, const Slice& extra_data, uint64_t* extra_data_offset) {
     if (old_delvec_files.empty()) {
         DCHECK(extra_data.empty()) << "extra_data provided but no delvec files to merge";
         return Status::OK();
     }
 
-    bool need_encrypt = force_encrypt_output;
-    std::vector<FileEncryptionInfo> source_encryption_infos(old_delvec_files.size());
-    for (size_t i = 0; i < old_delvec_files.size(); ++i) {
-        const auto& file_info = old_delvec_files[i];
-        if (file_info.delvec_file.has_encryption_meta() && !file_info.delvec_file.encryption_meta().empty()) {
-            need_encrypt = true;
-            ASSIGN_OR_RETURN(source_encryption_infos[i],
-                             KeyCache::instance().unwrap_encryption_meta(file_info.delvec_file.encryption_meta()));
-        }
-    }
-
     const std::string new_file_name = gen_delvec_filename(txn_id);
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    std::string new_encryption_meta;
-    RETURN_IF_ERROR(prepare_delvec_output_encryption(need_encrypt, &wopts, &new_encryption_meta));
     ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
 
     std::vector<uint64_t> new_offsets;
@@ -1365,10 +1331,8 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
     for (size_t i = 0; i < old_delvec_files.size(); ++i) {
         const auto& file_info = old_delvec_files[i];
         new_offsets.push_back(total_size);
-        RandomAccessFileOptions ropts;
-        ropts.encryption_info = source_encryption_infos[i];
         const std::string src_path = tablet_mgr->delvec_location(file_info.tablet_id, file_info.delvec_file.name());
-        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(ropts, src_path));
+        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(src_path));
         ASSIGN_OR_RETURN(auto content, reader->read_all());
         Status append_status;
         TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
@@ -1398,17 +1362,13 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
     }
     new_delvec_file->set_name(new_file_name);
     new_delvec_file->set_size(total_size);
-    if (need_encrypt) {
-        new_delvec_file->set_encryption_meta(std::move(new_encryption_meta));
-    } else {
-        new_delvec_file->clear_encryption_meta();
-    }
+    new_delvec_file->clear_encryption_meta();
     new_delvec_file->set_shared(false);
     return Status::OK();
 }
 
 Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
-                                     const Slice& buffer, FileMetaPB* new_delvec_file, bool encrypt_output) {
+                                     const Slice& buffer, FileMetaPB* new_delvec_file) {
     DCHECK(new_delvec_file != nullptr);
     if (buffer.empty()) {
         return Status::InvalidArgument("write_delvec_file_from_buffer called with empty buffer");
@@ -1417,8 +1377,6 @@ Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tabl
     const std::string new_file_name = gen_delvec_filename(txn_id);
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    std::string new_encryption_meta;
-    RETURN_IF_ERROR(prepare_delvec_output_encryption(encrypt_output, &wopts, &new_encryption_meta));
     ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
     Status append_status;
     TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
@@ -1431,11 +1389,7 @@ Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tabl
 
     new_delvec_file->set_name(new_file_name);
     new_delvec_file->set_size(buffer.size);
-    if (encrypt_output) {
-        new_delvec_file->set_encryption_meta(std::move(new_encryption_meta));
-    } else {
-        new_delvec_file->clear_encryption_meta();
-    }
+    new_delvec_file->clear_encryption_meta();
     new_delvec_file->set_shared(false);
     return Status::OK();
 }

@@ -1749,8 +1749,7 @@ Status inject_synthesized_gaps_into_target_states(TabletManager* tablet_manager,
 }
 
 bool delvec_file_metadata_matches(const FileMetaPB& left, const FileMetaPB& right) {
-    return left.size() == right.size() && left.encryption_meta() == right.encryption_meta() &&
-           left.shared() == right.shared();
+    return left.size() == right.size() && left.shared() == right.shared();
 }
 
 DEFINE_FAIL_POINT(tablet_merge_after_write_delvec);
@@ -1764,7 +1763,6 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     // File name is resolved inline via each old tablet's version_to_file map.
     std::map<uint32_t, TargetDelvecState> target_states;
     std::unordered_map<std::string, DelvecFileInfo> actual_page_source_files;
-    bool output_requires_encryption = false;
     const auto target_live_rssids = collect_live_rssids(*new_metadata);
 
     for (const auto& ctx : merge_contexts) {
@@ -1799,8 +1797,6 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                                         file_name, canonical_file_it->second.tablet_id, ctx.metadata()->id()));
                 }
             }
-            output_requires_encryption |= !file_it->second.encryption_meta().empty();
-
             auto& state = target_states[target];
             auto source_key = std::make_pair(file_name, page.offset());
 
@@ -1861,8 +1857,6 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
             }
         }
     }
-    TEST_SYNC_POINT_CALLBACK("merge_delvecs:output_requires_encryption", &output_requires_encryption);
-
     // Phase 1.5: inject synthesized gap delvecs into target_states. Each spec's
     // bitmap masks rowids in the shared physical segment whose key was
     // contributed by no surviving old tablet (e.g., an old tablet that compacted away
@@ -1932,7 +1926,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         ++writer_invocations;
         TEST_SYNC_POINT_CALLBACK("merge_delvecs:writer_invocations", &writer_invocations);
         RETURN_IF_ERROR(write_delvec_file_from_buffer(tablet_manager, new_metadata->id(), txn_id, Slice(union_buffer),
-                                                      &new_delvec_file, output_requires_encryption));
+                                                      &new_delvec_file));
         union_base_offset = 0;
         if (actual_page_source_files.empty()) {
             g_tablet_merge_synthesized_only_delvec_total << 1;
@@ -1941,8 +1935,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
         ++writer_invocations;
         TEST_SYNC_POINT_CALLBACK("merge_delvecs:writer_invocations", &writer_invocations);
         RETURN_IF_ERROR(merge_delvec_files(tablet_manager, unique_delvec_files, new_metadata->id(), txn_id,
-                                           &new_delvec_file, &offsets, Slice(union_buffer), &union_base_offset,
-                                           output_requires_encryption));
+                                           &new_delvec_file, &offsets, Slice(union_buffer), &union_base_offset));
     }
 
     // The merged delvec file is written; new_metadata does not point at it until Phase 5 below.
