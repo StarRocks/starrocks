@@ -422,11 +422,11 @@ std::optional<int64_t> rowset_schema_id(const TabletMergeContext& context, uint3
     return iter->second;
 }
 
-SegmentMetadataPB normalized_physical_base(const SegmentMetadataPB& segment) {
+std::string normalized_physical_base_key(const SegmentMetadataPB& segment) {
     SegmentMetadataPB normalized(segment);
     normalized.clear_segment_idx();
     normalized.clear_shared();
-    return normalized;
+    return normalized.SerializeAsString();
 }
 
 Status reconcile_segments(RowsetMetadataPB* canonical, const RowsetMetadataPB* occurrence) {
@@ -473,7 +473,7 @@ void normalize_cross_target_physical_ownership(std::vector<CanonicalAllocationPl
     std::map<std::string, std::vector<SegmentMetadataPB*>> references_by_physical_base;
     for (auto& canonical : *canonicals) {
         for (auto& segment : *canonical.source_form_rowset.mutable_segment_metas()) {
-            references_by_physical_base[normalized_physical_base(segment).SerializeAsString()].emplace_back(&segment);
+            references_by_physical_base[normalized_physical_base_key(segment)].emplace_back(&segment);
         }
     }
     for (auto& [physical_base, references] : references_by_physical_base) {
@@ -2147,6 +2147,10 @@ Status validate_non_shared_legacy_sstable_form(const PersistentIndexSstablePB& s
     return Status::OK();
 }
 
+bool has_valid_modern_sstable_shared_version(const PersistentIndexSstablePB& sstable) {
+    return sstable.has_shared_version() && sstable.shared_version() > 0;
+}
+
 // Project a sstable that has shared_rssid set (modern shared or
 // `ingest_sst()` output). |out| was already CopyFrom'd from |sst|; this
 // function rewrites the projection-affected fields in place.
@@ -2390,12 +2394,8 @@ StatusOr<bool> sstable_range_within_tablet(const PersistentIndexSstablePB& sst, 
 }
 
 struct PreflightTargetSegment {
-    SegmentMetadataPB physical_base;
+    std::string physical_base_key;
     bool shared = false;
-};
-
-struct PreflightSourceSegment {
-    uint32_t target_rssid = 0;
 };
 
 StatusOr<std::map<uint32_t, PreflightTargetSegment>> collect_preflight_target_segments(
@@ -2411,7 +2411,7 @@ StatusOr<std::map<uint32_t, PreflightTargetSegment>> collect_preflight_target_se
                 target_rssid > std::numeric_limits<uint32_t>::max()) {
                 return Status::Corruption("tablet merge planned target segment exceeds its authoritative cursor");
             }
-            PreflightTargetSegment candidate{normalized_physical_base(rowset.segment_metas(position)),
+            PreflightTargetSegment candidate{normalized_physical_base_key(rowset.segment_metas(position)),
                                              rowset.segment_metas(position).shared()};
             auto [iter, inserted] = result.try_emplace(static_cast<uint32_t>(target_rssid), std::move(candidate));
             if (!inserted) {
@@ -2423,10 +2423,10 @@ StatusOr<std::map<uint32_t, PreflightTargetSegment>> collect_preflight_target_se
     return result;
 }
 
-StatusOr<std::vector<std::map<uint32_t, PreflightSourceSegment>>> collect_preflight_source_segments(
+StatusOr<std::vector<std::map<uint32_t, uint32_t>>> collect_preflight_source_segments(
         const std::vector<TabletMergeContext>& contexts, const TabletMergeAllocationPlan& allocation_plan,
         const std::map<uint32_t, PreflightTargetSegment>& target_segments) {
-    std::vector<std::map<uint32_t, PreflightSourceSegment>> result(contexts.size());
+    std::vector<std::map<uint32_t, uint32_t>> result(contexts.size());
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         for (const auto& rowset : contexts[context_index].metadata()->rowsets()) {
             for (int position = 0; position < rowset.segment_metas_size(); ++position) {
@@ -2438,15 +2438,13 @@ StatusOr<std::vector<std::map<uint32_t, PreflightSourceSegment>>> collect_prefli
                     return Status::Corruption(fmt::format("tablet merge source-live RSSID {} maps to missing target {}",
                                                           source_rssid, target_rssid));
                 }
-                auto physical_base = normalized_physical_base(rowset.segment_metas(position));
-                if (physical_base.SerializeAsString() != target->second.physical_base.SerializeAsString()) {
+                if (normalized_physical_base_key(rowset.segment_metas(position)) != target->second.physical_base_key) {
                     return Status::Corruption(
                             fmt::format("tablet merge source-live RSSID {} disagrees with target {} physical base",
                                         source_rssid, target_rssid));
                 }
-                auto [iter, inserted] =
-                        result[context_index].try_emplace(source_rssid, PreflightSourceSegment{target_rssid});
-                if (!inserted && iter->second.target_rssid != target_rssid) {
+                auto [iter, inserted] = result[context_index].try_emplace(source_rssid, target_rssid);
+                if (!inserted && iter->second != target_rssid) {
                     return Status::Corruption(
                             fmt::format("tablet merge source RSSID {} has conflicting physical bases", source_rssid));
                 }
@@ -2485,16 +2483,16 @@ Status validate_idg_entry_shape(const IndexDeltaGroupEntryPB& entry) {
 
 struct PreflightSidecarDeclaration {
     std::string declaration;
-    std::string physical_base;
+    std::string physical_base_key;
 };
 
 Status register_preflight_sidecar(std::string_view kind, const std::string& filename, const std::string& declaration,
-                                  const SegmentMetadataPB& physical_base,
+                                  const std::string& physical_base_key,
                                   std::map<std::string, PreflightSidecarDeclaration>* registry) {
-    const std::string base = physical_base.SerializeAsString();
-    auto [iter, inserted] = registry->try_emplace(filename, PreflightSidecarDeclaration{declaration, base});
+    auto [iter, inserted] =
+            registry->try_emplace(filename, PreflightSidecarDeclaration{declaration, physical_base_key});
     if (inserted) return Status::OK();
-    if (iter->second.physical_base != base) {
+    if (iter->second.physical_base_key != physical_base_key) {
         return Status::Corruption(
                 fmt::format("tablet merge {} file {} is attached to a different physical base", kind, filename));
     }
@@ -2515,6 +2513,14 @@ Status validate_preflight_sstable_declaration(const PersistentIndexSstablePB& ss
         return Status::Corruption(fmt::format("tablet merge source SST {} has a negative size", sstable.filename()));
     }
     if (sstable.has_shared_rssid()) {
+        if (!has_valid_modern_sstable_shared_version(sstable)) {
+            const std::string version =
+                    sstable.has_shared_version() ? std::to_string(sstable.shared_version()) : "missing";
+            return Status::Corruption(fmt::format(
+                    "tablet merge source SST {} has invalid shared_version {}; modern shared form requires a "
+                    "positive shared_version",
+                    sstable.filename(), version));
+        }
         auto effective = effective_shared_rssid(sstable);
         if (!effective.ok()) {
             return Status::Corruption(fmt::format("tablet merge source SST {} has an invalid shared form: {}",
@@ -2574,11 +2580,11 @@ Status preflight_merge_sources(const std::vector<TabletMergeContext>& contexts,
                 }
                 bool force_target_omission = false;
                 TEST_SYNC_POINT_CALLBACK("tablet_merge_test:force_dcg_target_omission", &force_target_omission);
-                if (force_target_omission || !target_segments.contains(source_segment->second.target_rssid)) {
+                auto target_segment = target_segments.find(source_segment->second);
+                if (force_target_omission || target_segment == target_segments.end()) {
                     return Status::Corruption(
                             fmt::format("tablet merge source-live DCG RSSID {} target was omitted", source_rssid));
                 }
-                const auto& target_segment = target_segments.at(source_segment->second.target_rssid);
                 DeltaColumnGroupVerPB normalized(source_dcg);
                 RETURN_IF_ERROR(validate_dcg_shape(normalized));
                 normalize_dcg_optional_fields(&normalized);
@@ -2590,11 +2596,11 @@ Status preflight_merge_sources(const std::vector<TabletMergeContext>& contexts,
                         return Status::Corruption(fmt::format("tablet merge DCG file {} has a negative size",
                                                               normalized.column_files(entry_index)));
                     }
-                    normalized.set_shared_files(entry_index, target_segment.shared);
+                    normalized.set_shared_files(entry_index, target_segment->second.shared);
                     const auto single = make_single_entry_dcg(normalized, entry_index);
                     RETURN_IF_ERROR(register_preflight_sidecar("DCG", normalized.column_files(entry_index),
-                                                               single.SerializeAsString(), target_segment.physical_base,
-                                                               &dcg_files));
+                                                               single.SerializeAsString(),
+                                                               target_segment->second.physical_base_key, &dcg_files));
                 }
             }
         }
@@ -2605,18 +2611,18 @@ Status preflight_merge_sources(const std::vector<TabletMergeContext>& contexts,
                 if (source_segment == source_segments[context_index].end()) continue;
                 bool force_target_omission = false;
                 TEST_SYNC_POINT_CALLBACK("tablet_merge_test:force_idg_target_omission", &force_target_omission);
-                if (force_target_omission || !target_segments.contains(source_segment->second.target_rssid)) {
+                auto target_segment = target_segments.find(source_segment->second);
+                if (force_target_omission || target_segment == target_segments.end()) {
                     return Status::Corruption(
                             fmt::format("tablet merge source-live IDG RSSID {} target was omitted", source_rssid));
                 }
-                const auto& target_segment = target_segments.at(source_segment->second.target_rssid);
                 for (const auto& entry : source_idg.entries()) {
                     RETURN_IF_ERROR(validate_idg_entry_shape(entry));
                     IndexDeltaGroupEntryPB stable(entry);
                     stable.clear_dropped_keys();
                     stable.clear_shared_file();
                     RETURN_IF_ERROR(register_preflight_sidecar("IDG", entry.index_file(), stable.SerializeAsString(),
-                                                               target_segment.physical_base, &idg_files));
+                                                               target_segment->second.physical_base_key, &idg_files));
                 }
             }
         }
@@ -2627,7 +2633,7 @@ Status preflight_merge_sources(const std::vector<TabletMergeContext>& contexts,
                 if (source_segment == source_segments[context_index].end()) continue;
                 bool force_target_omission = false;
                 TEST_SYNC_POINT_CALLBACK("tablet_merge_test:force_delvec_target_omission", &force_target_omission);
-                if (force_target_omission || !target_segments.contains(source_segment->second.target_rssid)) {
+                if (force_target_omission || !target_segments.contains(source_segment->second)) {
                     return Status::Corruption(
                             fmt::format("tablet merge source-live delvec RSSID {} target was omitted", source_rssid));
                 }
@@ -2755,6 +2761,9 @@ StatusOr<MergeSstableMetaResult> try_project_complete_private_sstables(const std
             }
             PersistentIndexSstablePB projected(source_sstable);
             if (source_sstable.has_shared_rssid()) {
+                if (!has_valid_modern_sstable_shared_version(source_sstable)) {
+                    return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
+                }
                 auto source_rssid = effective_shared_rssid(source_sstable);
                 if (!source_rssid.ok()) {
                     return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);
@@ -2901,6 +2910,9 @@ StatusOr<MergeSstableMetaResult> try_reuse_complete_identical_sstables(const std
         PersistentIndexSstablePB projected(canonical_sstable);
         projected.set_shared(true);
         if (canonical_sstable.has_shared_rssid()) {
+            if (!has_valid_modern_sstable_shared_version(canonical_sstable)) {
+                return lazy_sstable_meta_result(MergeSstableFallbackReason::kUnsupportedSstForm);
+            }
             auto source_rssid = effective_shared_rssid(canonical_sstable);
             if (!source_rssid.ok() || extract_rss_rowid_high(canonical_sstable.max_rss_rowid()) != *source_rssid) {
                 return lazy_sstable_meta_result(MergeSstableFallbackReason::kProjectedDomain);

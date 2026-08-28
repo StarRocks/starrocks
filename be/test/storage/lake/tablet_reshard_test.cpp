@@ -10194,14 +10194,18 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
 
     TabletMetadataPB compacted(*reopened);
     compacted.set_version(reopened->version() + 1);
-    compacted.set_prev_garbage_version(reopened->version());
+    RowsetMetadataPB retired;
     RowsetMetadataPB retained;
     for (const auto& rowset : compacted.rowsets()) {
+        if (rowset.id() == 1) retired.CopyFrom(rowset);
         if (rowset.id() == 2) retained.CopyFrom(rowset);
     }
+    ASSERT_TRUE(retired.has_id());
     ASSERT_TRUE(retained.has_id());
     compacted.clear_rowsets();
     compacted.add_rowsets()->CopyFrom(retained);
+    compacted.clear_compaction_inputs();
+    compacted.add_compaction_inputs()->CopyFrom(retired);
     const std::string compacted_name = "cross_target_compacted.dat";
     const uint64_t compacted_size = write_two_column_segment(target_id, compacted_name, 1, [](int) { return 1000; });
     auto* output = compacted.add_rowsets();
@@ -10224,12 +10228,29 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     compacted.mutable_idg_meta()->mutable_idgs()->erase(1);
     compacted.mutable_delvec_meta()->mutable_delvecs()->erase(1);
     compacted.clear_orphan_files();
+    auto add_orphan = [&](const std::string& name, int64_t size, bool shared, int64_t version) {
+        auto* orphan = compacted.add_orphan_files();
+        orphan->set_name(name);
+        orphan->set_size(size);
+        orphan->set_shared(shared);
+        orphan->set_version(version);
+    };
+    add_orphan(cols_name, cols_size, /*shared=*/true, /*version=*/1);
+    add_orphan(idx_name, idx_file.filesize, /*shared=*/true, /*version=*/1);
+    const std::string private_control_name = "cross_target_private_control.idx";
+    const auto private_control = write_sidecar_payload(
+            _tablet_manager->segment_location(target_id, private_control_name), "private-vacuum-control",
+            /*encrypted=*/false);
+    add_orphan(private_control_name, private_control.filesize, /*shared=*/false, compacted.version());
+    ASSERT_EQ(1, compacted.compaction_inputs_size());
+    ASSERT_EQ(3, compacted.orphan_files_size());
     ASSERT_OK(put_tablet_metadata(compacted));
 
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto cold_compacted, _tablet_manager->get_tablet_metadata(target_id, compacted.version()));
     ASSIGN_OR_ABORT(auto compacted_rows, read_two_column_rows(cold_compacted));
     EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{0, 1000}, {1, 2000}}), compacted_rows);
+    EXPECT_OK(FileSystem::Default()->path_exists(_tablet_manager->segment_location(target_id, private_control_name)));
 
     VacuumRequest request;
     VacuumResponse response;
@@ -10249,6 +10270,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     EXPECT_OK(FileSystem::Default()->path_exists(_tablet_manager->segment_location(target_id, base_name)));
     EXPECT_OK(FileSystem::Default()->path_exists(_tablet_manager->segment_location(target_id, cols_name)));
     EXPECT_OK(FileSystem::Default()->path_exists(_tablet_manager->segment_location(target_id, idx_name)));
+    EXPECT_TRUE(FileSystem::Default()
+                        ->path_exists(_tablet_manager->segment_location(target_id, private_control_name))
+                        .is_not_found());
 
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto reopened_after_vacuum, _tablet_manager->get_tablet_metadata(target_id, compacted.version()));
@@ -10382,6 +10406,29 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_sst_invalid_
         MergePhaseCounts counts;
         auto status = expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
         EXPECT_TRUE(status.message().contains("SST")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_modern_sst_invalid_shared_version_before_io) {
+    struct InvalidSharedVersion {
+        const char* name;
+        std::function<void(PersistentIndexSstablePB*)> apply;
+    };
+    const std::vector<InvalidSharedVersion> invalid_versions = {
+            {"missing", [](PersistentIndexSstablePB* sst) { sst->clear_shared_version(); }},
+            {"zero", [](PersistentIndexSstablePB* sst) { sst->set_shared_version(0); }},
+            {"negative", [](PersistentIndexSstablePB* sst) { sst->set_shared_version(-1); }},
+    };
+
+    for (const auto& invalid : invalid_versions) {
+        SCOPED_TRACE(invalid.name);
+        auto sources = make_preflight_sst_sources(fmt::format("sst_invalid_shared_version_{}", next_id()));
+        for (auto& source : sources) invalid.apply(source->mutable_sstable_meta()->mutable_sstables(0));
+        std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains("SST")) << status;
+        EXPECT_TRUE(status.message().contains("shared_version")) << status;
     }
 }
 
