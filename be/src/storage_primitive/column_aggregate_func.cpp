@@ -32,6 +32,7 @@
 #include "runtime/runtime_state.h"
 #include "storage_primitive/aggregate_type.h"
 #include "storage_primitive/column_aggregator.h"
+#include "types/decimalv2_value.h"
 #include "types/percentile_value.h"
 #include "types/type_descriptor.h"
 
@@ -501,8 +502,17 @@ StatusOr<ColumnAggregatorPtr> ColumnAggregatorFactory::create_value_column_aggre
         }
         // The storage aggregate functions above take the column type as both their argument and
         // return type.
-        auto type_desc = TypeDescriptor::from_logical_type(normalized_tpe, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                           field->type()->precision(), field->type()->scale());
+        // DECIMALV2 has a fixed precision/scale that its scalar TypeInfo does not carry, so it
+        // reports -1 for both. Fall back to the DecimalV2 constants instead of feeding an invalid
+        // precision into TypeDescriptor.
+        auto precision = field->type()->precision();
+        auto scale = field->type()->scale();
+        if (normalized_tpe == TYPE_DECIMALV2 && precision < 0) {
+            precision = DecimalV2Value::PRECISION;
+            scale = DecimalV2Value::SCALE;
+        }
+        auto type_desc =
+                TypeDescriptor::from_logical_type(normalized_tpe, TypeDescriptor::MAX_VARCHAR_LENGTH, precision, scale);
         return std::make_unique<AggFuncBasedValueAggregator>(agg_func, type_desc,
                                                              std::vector<TypeDescriptor>{type_desc});
     }
