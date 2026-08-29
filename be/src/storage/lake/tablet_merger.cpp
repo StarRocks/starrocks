@@ -1033,6 +1033,11 @@ struct DcgTargetWorkItem {
     std::vector<DcgSourceRowsetReference> source_refs;
 };
 
+struct TargetSegmentDeclaration {
+    std::string physical_base_key;
+    bool shared = false;
+};
+
 DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source, int entry_index) {
     DeltaColumnGroupVerPB out;
     out.add_column_files(source.column_files(entry_index));
@@ -1055,11 +1060,14 @@ std::unordered_map<uint32_t, bool> collect_target_rssid_ownership(const TabletMe
     return result;
 }
 
-std::unordered_map<uint32_t, std::string> collect_target_rssid_physical_bases(const TabletMetadataPB& metadata) {
-    std::unordered_map<uint32_t, std::string> result;
+std::unordered_map<uint32_t, TargetSegmentDeclaration> collect_target_segment_declarations(
+        const TabletMetadataPB& metadata) {
+    std::unordered_map<uint32_t, TargetSegmentDeclaration> result;
     for (const auto& rowset : metadata.rowsets()) {
         for (int position = 0; position < rowset.segment_metas_size(); ++position) {
-            result[get_rssid(rowset, position)] = normalized_physical_base_key(rowset.segment_metas(position));
+            const auto& segment = rowset.segment_metas(position);
+            result[get_rssid(rowset, position)] =
+                    TargetSegmentDeclaration{normalized_physical_base_key(segment), segment.shared()};
         }
     }
     return result;
@@ -1760,17 +1768,20 @@ std::unordered_set<uint32_t> collect_live_rssids(const TabletMetadataPB& metadat
 // partial-write cleanup to do.
 Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
                       const TabletMergeAllocationPlan& allocation_plan, TabletMetadataPB* new_metadata) {
-    // Every segment present after merge_rowsets, mapped to its shared flag. An IDG entry is
+    // Every segment present after merge_rowsets, mapped to its physical-base declaration. An IDG entry is
     // kept only if its remapped target is here (target-live), and its .idx shared_file is
     // DERIVED from the target segment's shared flag (see the emit loop) rather than preserved
     // from the source: an .idx is shared iff the segment it indexes is shared, so the two must
     // agree. Preserving a source flag would carry a stale value (e.g. a tablet split before
     // this fix has segment.shared=true but idg.shared_file=false, because the old split marked
     // segments shared but not idg) and later mis-route the .idx at vacuum time.
-    const auto target_rssid_shared = collect_target_rssid_ownership(*new_metadata);
-    const auto target_rssid_physical_bases = collect_target_rssid_physical_bases(*new_metadata);
+    const auto target_segments = collect_target_segment_declarations(*new_metadata);
 
-    std::map<uint32_t, std::vector<IndexDeltaGroupEntryPB>> work_by_target;
+    struct TargetWorkItem {
+        const TargetSegmentDeclaration* declaration = nullptr;
+        std::vector<IndexDeltaGroupEntryPB> entries;
+    };
+    std::map<uint32_t, TargetWorkItem> work_by_target;
     // target rssid -> (.idx filename -> index into work_by_target[target]).
     std::map<uint32_t, std::unordered_map<std::string, size_t>> seen_files_by_target;
 
@@ -1790,11 +1801,14 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
                 return Status::Corruption(
                         fmt::format("tablet merge source-live IDG RSSID {} target was omitted", segment_id));
             }
-            if (!target_rssid_shared.contains(target_rssid)) {
+            auto target_segment = target_segments.find(target_rssid);
+            if (target_segment == target_segments.end()) {
                 return Status::Corruption(fmt::format("tablet merge source-live IDG RSSID {} maps to missing target {}",
                                                       segment_id, target_rssid));
             }
-            auto& entries = work_by_target[target_rssid];
+            auto& target_work = work_by_target[target_rssid];
+            target_work.declaration = &target_segment->second;
+            auto& entries = target_work.entries;
             auto& seen = seen_files_by_target[target_rssid];
             for (const auto& entry : idg_ver.entries()) {
                 if (!entry.has_index_file() || entry.index_file().empty()) continue;
@@ -1815,20 +1829,20 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
     // DROP INDEX is table-wide monotonic. Co-referenced target RSSIDs that resolve to the same normalized physical base
     // and .idx file must therefore see the union of every tombstone before active/dead and orphan decisions.
     std::map<std::pair<std::string, std::string>, IndexDeltaGroupEntryPB> global_tombstones;
-    for (const auto& [target_rssid, entries] : work_by_target) {
-        auto base = target_rssid_physical_bases.find(target_rssid);
-        if (base == target_rssid_physical_bases.end()) {
-            return Status::Corruption(
-                    fmt::format("tablet merge IDG target RSSID {} has no physical base", target_rssid));
-        }
-        for (const auto& entry : entries) {
-            union_idg_dropped_keys(&global_tombstones[{base->second, entry.index_file()}], entry);
+    for (const auto& [target_rssid, target_work] : work_by_target) {
+        (void)target_rssid;
+        DCHECK(target_work.declaration != nullptr);
+        for (const auto& entry : target_work.entries) {
+            union_idg_dropped_keys(&global_tombstones[{target_work.declaration->physical_base_key, entry.index_file()}],
+                                   entry);
         }
     }
-    for (auto& [target_rssid, entries] : work_by_target) {
-        const auto& base = target_rssid_physical_bases.at(target_rssid);
-        for (auto& entry : entries) {
-            union_idg_dropped_keys(&entry, global_tombstones.at({base, entry.index_file()}));
+    for (auto& [target_rssid, target_work] : work_by_target) {
+        (void)target_rssid;
+        DCHECK(target_work.declaration != nullptr);
+        for (auto& entry : target_work.entries) {
+            union_idg_dropped_keys(
+                    &entry, global_tombstones.at({target_work.declaration->physical_base_key, entry.index_file()}));
         }
     }
 
@@ -1840,13 +1854,14 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
     // practice, but resolving against the full surviving set keeps the orphan set provably safe.)
     std::unordered_set<std::string> surviving_files;
     std::map<std::string, FileMetaPB> orphan_candidates;
-    for (auto& [target_rssid, entries] : work_by_target) {
+    for (auto& [target_rssid, target_work] : work_by_target) {
         // Derive the .idx shared flag from the merged segment's ownership: an .idx is shared
         // iff the segment it indexes is shared. This corrects a stale source flag (e.g. from a
         // tablet split before this fix) instead of preserving it, and matches how vacuum treats
         // the segment/.cols for the same rssid.
-        auto shared_it = target_rssid_shared.find(target_rssid);
-        const bool tgt_shared = shared_it != target_rssid_shared.end() && shared_it->second;
+        DCHECK(target_work.declaration != nullptr);
+        const bool tgt_shared = target_work.declaration->shared;
+        auto& entries = target_work.entries;
         std::sort(entries.begin(), entries.end(), [](const IndexDeltaGroupEntryPB& a, const IndexDeltaGroupEntryPB& b) {
             return a.version() > b.version();
         });
@@ -2584,14 +2599,9 @@ StatusOr<bool> sstable_range_within_tablet(const PersistentIndexSstablePB& sst, 
     return true;
 }
 
-struct PreflightTargetSegment {
-    std::string physical_base_key;
-    bool shared = false;
-};
-
-StatusOr<std::map<uint32_t, PreflightTargetSegment>> collect_preflight_target_segments(
+StatusOr<std::map<uint32_t, TargetSegmentDeclaration>> collect_preflight_target_segments(
         const TabletMergeAllocationPlan& allocation_plan) {
-    std::map<uint32_t, PreflightTargetSegment> result;
+    std::map<uint32_t, TargetSegmentDeclaration> result;
     for (const auto& canonical : allocation_plan.canonicals) {
         const auto& rowset = canonical.source_form_rowset;
         const auto& projection = allocation_plan.projections[canonical.selected_context_index];
@@ -2602,8 +2612,8 @@ StatusOr<std::map<uint32_t, PreflightTargetSegment>> collect_preflight_target_se
                 target_rssid > std::numeric_limits<uint32_t>::max()) {
                 return Status::Corruption("tablet merge planned target segment exceeds its authoritative cursor");
             }
-            PreflightTargetSegment candidate{normalized_physical_base_key(rowset.segment_metas(position)),
-                                             rowset.segment_metas(position).shared()};
+            TargetSegmentDeclaration candidate{normalized_physical_base_key(rowset.segment_metas(position)),
+                                               rowset.segment_metas(position).shared()};
             auto [iter, inserted] = result.try_emplace(static_cast<uint32_t>(target_rssid), std::move(candidate));
             if (!inserted) {
                 return Status::Corruption(
@@ -2616,7 +2626,7 @@ StatusOr<std::map<uint32_t, PreflightTargetSegment>> collect_preflight_target_se
 
 StatusOr<std::vector<std::map<uint32_t, uint32_t>>> collect_preflight_source_segments(
         const std::vector<TabletMergeContext>& contexts, const TabletMergeAllocationPlan& allocation_plan,
-        const std::map<uint32_t, PreflightTargetSegment>& target_segments) {
+        const std::map<uint32_t, TargetSegmentDeclaration>& target_segments) {
     std::vector<std::map<uint32_t, uint32_t>> result(contexts.size());
     for (size_t context_index = 0; context_index < contexts.size(); ++context_index) {
         for (const auto& rowset : contexts[context_index].metadata()->rowsets()) {
