@@ -118,16 +118,20 @@ void alp_encode_body(const PT* vals, size_t num_padded, faststring* out) {
 }
 
 template <typename PT>
-Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded, PT* out) {
+Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded, size_t num_valid, PT* out) {
     using ST = typename alp::inner_t<PT>::st;
     constexpr size_t V = ALP_PAGE_VECTOR_SIZE;
     DCHECK_EQ(num_padded % V, 0);
+    DCHECK_LE(num_valid, num_padded);
     const size_t num_vectors = num_padded / V;
     constexpr size_t RAW_VECTOR_BYTES = V * sizeof(PT);
 
     // Scratch buffer for the (rare) case that a packed section is not
     // naturally aligned for ST loads.
     std::vector<ST> aligned_scratch(V);
+    // A partial tail vector is decoded here first so that only the real
+    // values are copied into |out| and the padding never reaches the cache.
+    std::vector<PT> tail_scratch;
 
     size_t off = 0;
     for (size_t vi = 0; vi < num_vectors; vi++) {
@@ -142,7 +146,13 @@ Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded,
         uint16_t exc_c = decode_fixed16_le(&meta[4]);
         uint64_t base_u64 = decode_fixed64_le(&meta[8]);
         off += ALP_PAGE_VECTOR_META_SIZE;
-        PT* out_vec = out + vi * V;
+        const size_t vec_start = vi * V;
+        const size_t vec_valid = std::min(V, num_valid > vec_start ? num_valid - vec_start : 0);
+        PT* out_vec = out + vec_start;
+        if (vec_valid < V) {
+            tail_scratch.resize(V);
+            out_vec = tail_scratch.data();
+        }
 
         if (bw == ALP_PAGE_RAW_VECTOR_MARKER) {
             if (off + RAW_VECTOR_BYTES > body_size) {
@@ -150,6 +160,9 @@ Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded,
             }
             memcpy(out_vec, body + off, RAW_VECTOR_BYTES);
             off += RAW_VECTOR_BYTES;
+            if (vec_valid < V) {
+                memcpy(out + vec_start, out_vec, vec_valid * sizeof(PT));
+            }
             continue;
         }
 
@@ -192,6 +205,9 @@ Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded,
             out_vec[p] = v;
         }
         off += payload_bytes;
+        if (vec_valid < V) {
+            memcpy(out + vec_start, out_vec, vec_valid * sizeof(PT));
+        }
     }
     if (off != body_size) {
         return Status::Corruption(
@@ -202,8 +218,8 @@ Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded,
 
 template void alp_encode_body<float>(const float*, size_t, faststring*);
 template void alp_encode_body<double>(const double*, size_t, faststring*);
-template Status alp_decode_body<float>(const uint8_t*, size_t, size_t, float*);
-template Status alp_decode_body<double>(const uint8_t*, size_t, size_t, double*);
+template Status alp_decode_body<float>(const uint8_t*, size_t, size_t, size_t, float*);
+template Status alp_decode_body<double>(const uint8_t*, size_t, size_t, size_t, double*);
 
 } // namespace starrocks::alppage
 
@@ -320,10 +336,12 @@ Status AlpPageDecoder<Type>::init() {
         return Status::InternalError(
                 strings::Substitute("invalid size_of_elem:$0, expected:$1", size_of_element, (size_t)SIZE_OF_TYPE));
     }
-    if (_data.size != _num_element_after_padding * SIZE_OF_TYPE + ALP_PAGE_HEADER_SIZE) {
-        return Status::InternalError(
-                strings::Substitute("size information unmatched, data size:$0, expected:$1", _data.size,
-                                    _num_element_after_padding * SIZE_OF_TYPE + ALP_PAGE_HEADER_SIZE));
+    // The page-load pre-decoder retains only the real values, so the decoded
+    // slice holds num_elements values, without the tail vector's padding.
+    if (_data.size != _num_elements * SIZE_OF_TYPE + ALP_PAGE_HEADER_SIZE) {
+        return Status::InternalError(strings::Substitute("size information unmatched, data size:$0, expected:$1",
+                                                         _data.size,
+                                                         _num_elements * SIZE_OF_TYPE + ALP_PAGE_HEADER_SIZE));
     }
     _parsed = true;
     return Status::OK();
@@ -397,8 +415,8 @@ Status AlpPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst)
 }
 
 template <LogicalType Type>
-Status AlpPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
-                                            size_t* count, Column* column) {
+Status AlpPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                                            Column* column) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(*count == 0)) {
         return Status::OK();
@@ -416,9 +434,8 @@ Status AlpPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_pag
     if (read_count > 0) {
         size_t nappend = column->append_numbers(data.get(), SIZE_OF_TYPE * read_count);
         if (UNLIKELY(nappend != read_count)) {
-            return Status::InternalError(
-                    strings::Substitute("append_numbers failed, expected rows[$0], actual rows[$1]", read_count,
-                                        nappend));
+            return Status::InternalError(strings::Substitute(
+                    "append_numbers failed, expected rows[$0], actual rows[$1]", read_count, nappend));
         }
     }
     *count = read_count;

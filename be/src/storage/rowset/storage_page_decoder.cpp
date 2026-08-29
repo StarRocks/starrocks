@@ -169,7 +169,10 @@ public:
         }
 
         size_t header_size = ALP_PAGE_HEADER_SIZE;
-        size_t data_size = num_padded * size_of_element;
+        // Retain only the real values: the tail vector's padding is decoded
+        // into scratch space inside alp_decode_body and dropped, so partial
+        // pages do not waste page-cache memory.
+        size_t data_size = num_elements * size_of_element;
 
         std::unique_ptr<std::vector<uint8_t>> decoded_page(new std::vector<uint8_t>());
         size_t new_size = page_slice->size + data_size - (encoded_size - header_size);
@@ -179,11 +182,13 @@ public:
         const uint8_t* body = (const uint8_t*)page_slice->data + header_size;
         size_t body_size = encoded_size - header_size;
         if (size_of_element == 4) {
-            RETURN_IF_ERROR(alppage::alp_decode_body<float>(
-                    body, body_size, num_padded, reinterpret_cast<float*>(decoded_page->data() + header_size)));
+            RETURN_IF_ERROR(
+                    alppage::alp_decode_body<float>(body, body_size, num_padded, num_elements,
+                                                    reinterpret_cast<float*>(decoded_page->data() + header_size)));
         } else {
-            RETURN_IF_ERROR(alppage::alp_decode_body<double>(
-                    body, body_size, num_padded, reinterpret_cast<double*>(decoded_page->data() + header_size)));
+            RETURN_IF_ERROR(
+                    alppage::alp_decode_body<double>(body, body_size, num_padded, num_elements,
+                                                     reinterpret_cast<double*>(decoded_page->data() + header_size)));
         }
 
         DCHECK(footer->has_type()) << "type must be set";

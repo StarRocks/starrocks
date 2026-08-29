@@ -392,8 +392,7 @@ TEST_F(AlpPageTest, CorruptedBodyRejected) {
         page += body;
         encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 0, num);
         encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 4, page.size());
-        encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 8,
-                          (uint32_t)alppage::padded_element_count(num));
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 8, (uint32_t)alppage::padded_element_count(num));
         encode_fixed32_le(reinterpret_cast<uint8_t*>(page.data()) + 12, 8);
         return page;
     };

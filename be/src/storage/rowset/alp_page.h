@@ -87,9 +87,11 @@ inline constexpr size_t padded_element_count(size_t n) {
 template <typename PT>
 void alp_encode_body(const PT* vals, size_t num_padded, faststring* out);
 
-// Decode an encoded body back into |out| (capacity num_padded values).
+// Decode an encoded body back into |out| (capacity num_valid values). The
+// tail vector's padding values are decoded into scratch space and dropped so
+// that partial pages do not retain padded bytes in the page cache.
 template <typename PT>
-Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded, PT* out);
+Status alp_decode_body(const uint8_t* body, size_t body_size, size_t num_padded, size_t num_valid, PT* out);
 
 } // namespace alppage
 
