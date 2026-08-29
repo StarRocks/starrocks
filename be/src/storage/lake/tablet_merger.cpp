@@ -1780,10 +1780,9 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
     struct TargetWorkItem {
         const TargetSegmentDeclaration* declaration = nullptr;
         std::vector<IndexDeltaGroupEntryPB> entries;
+        std::unordered_map<std::string, size_t> seen_files;
     };
     std::map<uint32_t, TargetWorkItem> work_by_target;
-    // target rssid -> (.idx filename -> index into work_by_target[target]).
-    std::map<uint32_t, std::unordered_map<std::string, size_t>> seen_files_by_target;
 
     for (size_t context_index = 0; context_index < merge_contexts.size(); ++context_index) {
         const auto& context = merge_contexts[context_index];
@@ -1806,19 +1805,21 @@ Status merge_idg_meta(const std::vector<TabletMergeContext>& merge_contexts,
                 return Status::Corruption(fmt::format("tablet merge source-live IDG RSSID {} maps to missing target {}",
                                                       segment_id, target_rssid));
             }
-            auto& target_work = work_by_target[target_rssid];
-            target_work.declaration = &target_segment->second;
+            auto target_work_it =
+                    work_by_target.try_emplace(target_rssid, TargetWorkItem{.declaration = &target_segment->second})
+                            .first;
+            auto& target_work = target_work_it->second;
+            DCHECK(target_work.declaration == &target_segment->second);
             auto& entries = target_work.entries;
-            auto& seen = seen_files_by_target[target_rssid];
             for (const auto& entry : idg_ver.entries()) {
                 if (!entry.has_index_file() || entry.index_file().empty()) continue;
-                auto seen_it = seen.find(entry.index_file());
-                if (seen_it != seen.end()) {
+                auto seen_it = target_work.seen_files.find(entry.index_file());
+                if (seen_it != target_work.seen_files.end()) {
                     union_idg_dropped_keys(&entries[seen_it->second], entry); // same physical .idx
                     continue;
                 }
                 // shared_file is derived from the target segment's ownership in the emit loop.
-                seen[entry.index_file()] = entries.size();
+                target_work.seen_files[entry.index_file()] = entries.size();
                 entries.push_back(entry);
             }
         }
