@@ -101,6 +101,9 @@ set(EXPR_TEST_FILES
     unary_function_test.cpp
     vectorized_literal_test.cpp
 )
+if (STARROCKS_JIT_ENABLE)
+    list(APPEND EXPR_TEST_FILES jit_cache_test.cpp)
+endif()
 
 set(EXPR_JAVA_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
@@ -137,24 +140,14 @@ set(EXPR_TEST_LINK_LIBS
 
 add_library(starrocks_expr_test_objs OBJECT ${EXPR_TEST_FILES})
 target_link_libraries(starrocks_expr_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_expr_test_objs PROPERTIES
-    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
+set_target_properties(starrocks_expr_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
-set(EXPR_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_test_objs>)
-if (STARROCKS_JIT_ENABLE)
-    add_library(starrocks_expr_jit_test_objs OBJECT jit_cache_test.cpp)
-    target_link_libraries(starrocks_expr_jit_test_objs PRIVATE StarRocksPCH)
-    set_target_properties(starrocks_expr_jit_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-    list(APPEND EXPR_TEST_OBJECTS $<TARGET_OBJECTS:starrocks_expr_jit_test_objs>)
-endif()
-
-add_executable(expr_test expr_test_main.cpp ${EXPR_TEST_OBJECTS})
+add_executable(expr_test expr_test_main.cpp $<TARGET_OBJECTS:starrocks_expr_test_objs>)
 target_link_libraries(expr_test ${EXPR_TEST_LINK_LIBS})
 
 add_library(starrocks_expr_java_test_objs OBJECT ${EXPR_JAVA_TEST_FILES})
 target_link_libraries(starrocks_expr_java_test_objs PRIVATE StarRocksPCH)
-set_target_properties(starrocks_expr_java_test_objs PROPERTIES
-    COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
+set_target_properties(starrocks_expr_java_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 add_executable(expr_java_test expr_test_main.cpp $<TARGET_OBJECTS:starrocks_expr_java_test_objs>)
 target_link_libraries(expr_java_test ${EXPR_TEST_LINK_LIBS})
