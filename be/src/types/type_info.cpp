@@ -144,6 +144,12 @@ public:
 
     LogicalType type() const override { return _field_type; }
 
+    // DECIMALV2's precision and scale are fixed by the type itself rather than carried per column,
+    // so report them here. Every other scalar type has none of its own and keeps the base's -1.
+    int precision() const override { return _field_type == TYPE_DECIMALV2 ? DecimalV2Value::PRECISION : -1; }
+
+    int scale() const override { return _field_type == TYPE_DECIMALV2 ? DecimalV2Value::SCALE : -1; }
+
 protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
 
