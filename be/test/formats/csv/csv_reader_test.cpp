@@ -21,6 +21,23 @@
 
 namespace starrocks::csv {
 
+// Mock CSVReader for testing - implements the pure virtual function
+class MockCSVReader : public starrocks::CSVReader {
+public:
+    explicit MockCSVReader(const starrocks::CSVParseOptions& parse_options) : CSVReader(parse_options) {}
+
+protected:
+    starrocks::Status _fill_buffer() override {
+        // Mock implementation - not needed for split_record tests
+        return starrocks::Status::OK();
+    }
+
+    char* _find_line_delimiter(starrocks::CSVBuffer& buffer, size_t pos) override {
+        // Mock implementation - not needed for split_record tests
+        return nullptr;
+    }
+};
+
 // In-memory CSVReader used to drive the more_rows() state machine from a
 // fixed string buffer. Mirrors the behavior of
 // CSVScanner::ScannerCSVReader::_fill_buffer for the state-machine parser.
@@ -104,6 +121,48 @@ protected:
 
     starrocks::CSVParseOptions _parse_options;
 };
+
+// The multi-character delimiter path splits records in its own loop, so trim_space has to be
+// covered there as well and not only for a single-character delimiter.
+// NOLINTNEXTLINE
+TEST_F(CSVReaderTest, test_split_record_multi_char_delimiter_with_trim_space) {
+    starrocks::CSVParseOptions options;
+    options.column_delimiter = "||";
+    options.row_delimiter = "\n";
+    options.trim_space = true;
+
+    MockCSVReader reader(options);
+
+    starrocks::CSVReader::Record record1{" a || b || c ", 13};
+    starrocks::CSVReader::Fields fields1;
+    reader.split_record(record1, &fields1);
+
+    EXPECT_EQ(3, fields1.size());
+    EXPECT_EQ("a", fields1[0].to_string());
+    EXPECT_EQ("b", fields1[1].to_string());
+    EXPECT_EQ("c", fields1[2].to_string());
+
+    // Empty leading and trailing fields, which reach trim with a zero length -- the old helper
+    // computed `end = len - 1` and underflowed here.
+    starrocks::CSVReader::Record record2{"||x||", 5};
+    starrocks::CSVReader::Fields fields2;
+    reader.split_record(record2, &fields2);
+
+    EXPECT_EQ(3, fields2.size());
+    EXPECT_EQ("", fields2[0].to_string());
+    EXPECT_EQ("x", fields2[1].to_string());
+    EXPECT_EQ("", fields2[2].to_string());
+
+    // Fields that hold nothing but spaces must be trimmed down to empty ones.
+    starrocks::CSVReader::Record record3{" || x || ", 9};
+    starrocks::CSVReader::Fields fields3;
+    reader.split_record(record3, &fields3);
+
+    EXPECT_EQ(3, fields3.size());
+    EXPECT_EQ("", fields3[0].to_string());
+    EXPECT_EQ("x", fields3[1].to_string());
+    EXPECT_EQ("", fields3[2].to_string());
+}
 
 // Regression test for the multi-char column-delimiter buffer-expansion use-after-free:
 // is_column_delimiter() caches base_ptr = _buff.base_ptr(), then mid-match calls readMore(),
