@@ -16,31 +16,12 @@
 
 #include <unordered_set>
 
-#include "base/string/trim.h"
+#include "util/trim.h"
 
 namespace starrocks {
 
 using Field = Slice;
 
-<<<<<<< HEAD
-static std::pair<const char*, size_t> trim(const char* value, size_t len) {
-    size_t begin = 0;
-
-    while (begin < len && value[begin] == ' ') {
-        ++begin;
-    }
-
-    size_t end = len - 1;
-
-    while (end > begin && value[end] == ' ') {
-        --end;
-    }
-
-    return std::make_pair(value + begin, end - begin + 1);
-}
-
-=======
->>>>>>> 7521d92 ([Refactor] Deduplicate the space-trim helper into base/string (#78342))
 inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
     if (LIKELY(_column_delimiter_length == 1)) {
         if (*(_buff.position()) == _parse_options.column_delimiter[0]) {
