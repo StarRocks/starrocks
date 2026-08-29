@@ -39,6 +39,19 @@ void setTimeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts
     session.setKeepAliveTimeout(timeouts.http_keep_alive_timeout);
 }
 
+void apply_request_timeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts) {
+    // Only the per-request timeouts. Keep-alive is deliberately left as the pool set it:
+    // ConnectionTimeouts default-initializes http_keep_alive_timeout to zero, and pushing that
+    // onto a pooled session would work against the pool, which exists to reuse connections.
+    //
+    // A non-positive value means "unset" -- object_storage_request_timeout_ms defaults to -1,
+    // which reaches here as a negative Timespan, and Poco gives no defined meaning to that.
+    // Leave the session on its own default in that case rather than passing it through.
+    if (timeouts.send_timeout.totalMicroseconds() > 0 && timeouts.receive_timeout.totalMicroseconds() > 0) {
+        session.setTimeout(timeouts.connection_timeout, timeouts.send_timeout, timeouts.receive_timeout);
+    }
+}
+
 std::string getCurrentExceptionMessage() {
     std::stringstream ss;
 
@@ -119,6 +132,11 @@ PooledHTTPSessionPtr HTTPSessionPools::getSession(const Poco::URI& uri, const Co
     }
 
     auto session = pool->get(timeouts.connection_timeout.totalMicroseconds());
+    // A pooled session is reused, so whatever the previous caller left on it is still in
+    // effect -- apply this request's timeouts before handing it out. Without this the send and
+    // receive timeouts computed from ClientConfiguration were dropped here, and a read that
+    // stopped receiving waited out Poco's built-in default instead of the configured value.
+    apply_request_timeouts(*session, timeouts);
     session->attachSessionData({});
 
     return session;
