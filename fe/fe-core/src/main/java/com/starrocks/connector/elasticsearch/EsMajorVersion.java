@@ -50,7 +50,8 @@ public class EsMajorVersion {
     public static final EsMajorVersion V_6_X = new EsMajorVersion((byte) 6, "6.x");
     public static final EsMajorVersion V_7_X = new EsMajorVersion((byte) 7, "7.x");
     public static final EsMajorVersion V_8_X = new EsMajorVersion((byte) 8, "8.x");
-    public static final EsMajorVersion LATEST = V_7_X;
+    public static final EsMajorVersion V_9_X = new EsMajorVersion((byte) 9, "9.x");
+    public static final EsMajorVersion LATEST = V_9_X;
 
     public final byte major;
     private final String version;
@@ -85,6 +86,9 @@ public class EsMajorVersion {
     }
 
     public static EsMajorVersion parse(String version) throws StarRocksConnectorException {
+        if (version == null || version.isEmpty()) {
+            throw new StarRocksConnectorException("Elasticsearch version cannot be null or empty.");
+        }
         if (version.startsWith("0.")) {
             return new EsMajorVersion((byte) 0, version);
         }
@@ -103,9 +107,22 @@ public class EsMajorVersion {
         if (version.startsWith("7.")) {
             return new EsMajorVersion((byte) 7, version);
         }
-        // used for the next released ES version
         if (version.startsWith("8.")) {
             return new EsMajorVersion((byte) 8, version);
+        }
+        if (version.startsWith("9.")) {
+            return new EsMajorVersion((byte) 9, version);
+        }
+        try {
+            int dotIndex = version.indexOf('.');
+            if (dotIndex > 0) {
+                int major = Integer.parseInt(version.substring(0, dotIndex));
+                if (major >= 7 && major <= 127) {
+                    return new EsMajorVersion((byte) major, version);
+                }
+            }
+        } catch (NumberFormatException ignored) {
+            // fall through to exception
         }
         throw new StarRocksConnectorException("Unsupported/Unknown ES Cluster version [" + version + "]." +
                 "Highest supported version is [" + LATEST.version + "].");
