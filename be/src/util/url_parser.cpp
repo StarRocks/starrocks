@@ -36,7 +36,7 @@
 
 #include <string_view>
 
-#include "base/string/trim.h"
+#include "util/trim.h"
 
 namespace starrocks {
 

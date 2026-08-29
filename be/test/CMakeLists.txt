@@ -437,6 +437,7 @@ set(EXEC_FILES
         ./util/threadpool_test.cpp
         ./util/thrift_customize_test.cpp
         ./util/trace_test.cpp
+        ./util/trim_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/uuid_generator_test.cpp
