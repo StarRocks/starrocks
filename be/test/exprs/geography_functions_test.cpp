@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "column/column_viewer.h"
 #include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
@@ -458,6 +459,45 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     auto res = GeoFunctions::st_contains(ctx.get(), columns).value();
     ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(res));
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryWktWkbRoundTripTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto wkt_column = BinaryColumn::create();
+    wkt_column->append("POINT (30 10)");
+    wkt_column->append("GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))");
+    wkt_column->append("POLYGON ((0 0, 1 0, 1 1, 0 1))"); // unclosed ring
+
+    Columns columns{wkt_column};
+    auto geometry = GeoFunctions::st_geom_from_text(ctx.get(), columns).value();
+    ASSERT_EQ(3, geometry->size());
+    ASSERT_FALSE(geometry->is_null(0));
+    ASSERT_FALSE(geometry->is_null(1));
+    ASSERT_TRUE(geometry->is_null(2));
+
+    columns = {geometry};
+    auto text = GeoFunctions::st_geometry_as_text(ctx.get(), columns).value();
+    ColumnViewer<TYPE_VARCHAR> text_viewer(text);
+    EXPECT_EQ("POINT (30 10)", text_viewer.value(0).to_string());
+    EXPECT_EQ("GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))",
+              text_viewer.value(1).to_string());
+    EXPECT_TRUE(text->is_null(2));
+
+    auto binary = GeoFunctions::st_geometry_as_wkb(ctx.get(), columns).value();
+    ASSERT_FALSE(binary->is_null(0));
+    ASSERT_FALSE(binary->is_null(1));
+    EXPECT_TRUE(binary->is_null(2));
+
+    columns = {binary};
+    auto decoded = GeoFunctions::st_geom_from_wkb(ctx.get(), columns).value();
+    columns = {decoded};
+    auto decoded_text = GeoFunctions::st_geometry_as_text(ctx.get(), columns).value();
+    ColumnViewer<TYPE_VARCHAR> decoded_text_viewer(decoded_text);
+    EXPECT_EQ("POINT (30 10)", decoded_text_viewer.value(0).to_string());
+    EXPECT_EQ("GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))",
+              decoded_text_viewer.value(1).to_string());
+    EXPECT_TRUE(decoded_text->is_null(2));
 }
 
 } // namespace starrocks

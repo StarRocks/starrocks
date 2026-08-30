@@ -101,6 +101,7 @@ import static com.starrocks.type.DecimalType.DECIMALV2;
 import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.FloatType.FLOAT;
 import static com.starrocks.type.FunctionType.FUNCTION;
+import static com.starrocks.type.GeometryType.GEOMETRY;
 import static com.starrocks.type.HLLType.HLL;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;

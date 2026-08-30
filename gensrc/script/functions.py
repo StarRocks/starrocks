@@ -1038,8 +1038,9 @@ vectorized_functions = [
     [120005, "ST_AsWKT", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_as_wkt"],
     [120006, "ST_GeometryFromText", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_from_wkt",
      "GeoFunctions::st_from_wkt_prepare", "GeoFunctions::st_from_wkt_close"],
-    [120007, "ST_GeomFromText", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_from_wkt",
-     "GeoFunctions::st_from_wkt_prepare", "GeoFunctions::st_from_wkt_close"],
+    # Native OGC WKB-backed GEOMETRY. Keep ST_GeometryFromText above as the
+    # legacy VARCHAR constructor while the public compatibility path is reviewed.
+    [120007, "ST_GeomFromText", False, False, "GEOMETRY", ["VARCHAR"], "GeoFunctions::st_geom_from_text"],
     [120008, "ST_LineFromText", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_line",
      "GeoFunctions::st_line_prepare", "GeoFunctions::st_from_wkt_close"],
     [120009, "ST_LineStringFromText", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_line",
@@ -1054,6 +1055,12 @@ vectorized_functions = [
      "GeoFunctions::st_circle_prepare", "GeoFunctions::st_from_wkt_close"],
     [120014, "ST_Contains", False, False, "BOOLEAN", ["VARCHAR", "VARCHAR"], "GeoFunctions::st_contains",
      "GeoFunctions::st_contains_prepare", "GeoFunctions::st_contains_close"],
+    [120015, "ST_GeomFromWKB", False, False, "GEOMETRY", ["VARBINARY"], "GeoFunctions::st_geom_from_wkb"],
+    [120016, "ST_GeometryFromWKB", False, False, "GEOMETRY", ["VARBINARY"], "GeoFunctions::st_geom_from_wkb"],
+    [120017, "ST_AsText", False, False, "VARCHAR", ["GEOMETRY"], "GeoFunctions::st_geometry_as_text"],
+    [120018, "ST_AsWKT", False, False, "VARCHAR", ["GEOMETRY"], "GeoFunctions::st_geometry_as_text"],
+    [120019, "ST_AsBinary", False, False, "VARBINARY", ["GEOMETRY"], "GeoFunctions::st_geometry_as_wkb"],
+    [120020, "ST_AsWKB", False, False, "VARBINARY", ["GEOMETRY"], "GeoFunctions::st_geometry_as_wkb"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],

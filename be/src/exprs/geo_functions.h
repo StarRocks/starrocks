@@ -63,6 +63,13 @@ public:
      */
     DEFINE_VECTORIZED_FN(st_as_wkt);
 
+    // Native GEOMETRY/WKB boundary. These functions use canonical OGC WKB as
+    // the persisted value rather than the legacy S2-encoded VARCHAR format.
+    DEFINE_VECTORIZED_FN(st_geom_from_text);
+    DEFINE_VECTORIZED_FN(st_geom_from_wkb);
+    DEFINE_VECTORIZED_FN(st_geometry_as_text);
+    DEFINE_VECTORIZED_FN(st_geometry_as_wkb);
+
     // from wkt
     static Status st_from_wkt_prepare_common(FunctionContext*, FunctionContext::FunctionStateScope,
                                              GeoShapeType shape_type);
