@@ -1,5 +1,5 @@
 name: Repo Sync
-run-name: Repo Sync(CD PR #${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
+run-name: "Repo Sync(CD PR #${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])"
 
 # Reverse sync executor (CD -> SR), MAIN ONLY. Cherry-pick a CelerData open-source PR's
 # commit onto StarRocks `main` and open a NATIVE-looking SR PR. Dispatched by TSP's
