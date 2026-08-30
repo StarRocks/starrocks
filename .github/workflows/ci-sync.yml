@@ -24,8 +24,11 @@ jobs:
           set -x
           pr_info=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json mergeCommit,labels)
           labels=`echo $pr_info | jq -r '.labels[].name'`
-          if [[ "${labels}" =~ sync ]]; then
-            echo "is_sync=true" >> $GITHUB_OUTPUT         
+          # Anti-loop: skip forward SR->CD sync for reverse-synced PRs. `sync` covers the
+          # SR main PR; `cd-contributed` also covers its mergify backport PRs (which do NOT
+          # inherit `sync` — contributed-backport-label.yml stamps them cd-contributed).
+          if [[ "${labels}" =~ sync || "${labels}" =~ cd-contributed ]]; then
+            echo "is_sync=true" >> $GITHUB_OUTPUT
           else
             commit_sha=`echo $pr_info | jq -r '.mergeCommit.oid'`
             echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT

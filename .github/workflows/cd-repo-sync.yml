@@ -182,7 +182,11 @@ jobs:
       #   SHA / conflict -> source recovery + conflict flag (unchanged)
       - name: compute labels
         id: labels
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
+          # Ensure the cd-contributed label exists (adding a non-existent label 422s).
+          gh label create cd-contributed -R ${{ github.repository }} -c 5319e7 -f >/dev/null 2>&1 || true
           labels="sync,cd-contributed"
           for b in $(echo "${{ inputs.BACKPORT_BRANCHES }}" | tr ',' ' '); do
             v="${b#branch-}"
