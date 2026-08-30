@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/utility/defer_op.h"
 #include "jemalloc/jemalloc.h"
 
 namespace starrocks {
@@ -56,6 +57,18 @@ TEST(HeapProfTest, toggling_the_profile_keeps_thread_active_init) {
         GTEST_SKIP() << "the process was not started with prof:true, so prof.thread_active_init "
                         "cannot be written and the regression cannot be reproduced";
     }
+
+    // Restore the global switch on the way out, including when an assertion returns early:
+    // the test only runs on a process started with prof:true, which is exactly a process
+    // whose remaining tests would then run with profiling silently turned off.
+    const bool was_active = HeapProf::getInstance().has_enable();
+    DeferOp restore([was_active] {
+        if (was_active) {
+            HeapProf::getInstance().enable_prof();
+        } else {
+            HeapProf::getInstance().disable_prof();
+        }
+    });
 
     bool before = false;
     ASSERT_TRUE(read_thread_active_init(&before));
