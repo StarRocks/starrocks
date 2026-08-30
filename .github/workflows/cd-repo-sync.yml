@@ -7,19 +7,20 @@ run-name: Repo Sync(CD PR #${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
 # are produced by StarRocks' own mergify (ci-merged.yml) on merge, via the version labels
 # this PR carries. (The old branch-mode job is removed; TSP never dispatches non-main.)
 #
-# Labels on the created SR PR (see "compute labels" step):
-#   - `sync`           : reverse-PR identification for the pending scan (unchanged)
+# Labels on the created SR PR (see "compute labels" step) — NO `sync` label on purpose:
+# pr-checker/ci-pipeline skip sync-labeled PRs, and we WANT native CI + native auto-backport.
+# (`sync` is CelerData's opt-OUT of auto-backport; the reverse direction opts IN.)
 #   - `cd-contributed` : provenance + FORWARD anti-loop marker (forward SR->CD skips it)
 #   - `<version>`      : from BACKPORT_BRANCHES (branch-4.1 -> 4.1), so ci-merged auto-
 #                        backports to SR release branches via mergify on merge
-#   - `SHA:<commit>`   : source recovery for previous-check serialization
+#   - `SHA:<commit>`   : source recovery
 # Title = CD title verbatim (get_pr_info.py no longer scrubs the title); SR treats it as a
 # native contribution. The CD source PR gets the fixed `sr-synced` label (provenance / "already
 # dispatched"); NO SR-PR-URL comment write-back — TSP finds the SR PR by the deterministic
 # head branch `main-cd-contributed-pr-<CD PR id>`.
 #
-# Serialization: the single sync-main runner + previous-check ordering (pr_sequence_checker_reverse)
-# holds; pending PRs are released/recreated by cd-scan-pending.yml (their number changes until merged).
+# No pending/ordering: the SR PR is created directly and goes through native review + rebase;
+# the old sync-based pending machinery (previous-check / cd-scan-pending) is retired here.
 #
 # Runner pools: sync-normal = glue (pr-info), sync-main = one machine (executor serialization).
 # Runner prerequisites (SR-side self-hosted sync runner):
@@ -147,19 +148,6 @@ jobs:
           git checkout ${pr_branch}
           git push -u origin ${pr_branch}
 
-      # Ordering: if a file-overlapping, earlier-merged cd-sync PR is still open,
-      # this PR must wait -> RES != True -> created as pending (see Create pending pr).
-      - name: previous check
-        id: previous-check
-        run: |
-          cd ${{ github.workspace }}/elastic-service
-          check_res=$(python3 lib/pr_sequence_checker_reverse.py new ${{ inputs.BRANCH }} ${{ inputs.PR_ID }} ${{ inputs.COMMIT_ID }})
-          echo "${check_res}"
-          conflict_prs=$(echo ${check_res} | awk -F'Files:' '{print $1}' | awk -F' ' '{print $NF}')
-          echo CONFLICT_PRS=${conflict_prs} >> $GITHUB_OUTPUT
-          res=$(echo ${check_res} | tail -n 1)
-          echo RES=${res} >> $GITHUB_OUTPUT
-
       - name: refresh base before cherry-pick
         run: |
           cd ${{ github.workspace }}
@@ -174,12 +162,13 @@ jobs:
           cd ${{ github.workspace }}
           git push -u origin ${{ inputs.BRANCH }}-cd-contributed-pr-${{ inputs.PR_ID }}
 
-      # Build the SR PR label set:
-      #   sync           -> pending scan / reverse-PR identification (unchanged)
+      # Build the SR PR label set. NO `sync` label on purpose: pr-checker / ci-pipeline skip
+      # sync-labeled PRs, and we WANT the SR PR to run native CI and be auto-backported by
+      # ci-merged's mergify. (`sync` is CelerData's opt-OUT of auto-backport; we opt IN.)
       #   cd-contributed -> provenance + forward anti-loop marker
       #   <version>      -> BACKPORT_BRANCHES mapped to SR version labels (branch-4.1 -> 4.1),
-      #                     so ci-merged's backport job fans out to SR branches via mergify on merge
-      #   SHA / conflict -> source recovery + conflict flag (unchanged)
+      #                     so ci-merged fans out to SR branches via mergify on merge
+      #   SHA / conflict -> source recovery + conflict flag
       - name: compute labels
         id: labels
         env:
@@ -187,7 +176,7 @@ jobs:
         run: |
           # Ensure the cd-contributed label exists (adding a non-existent label 422s).
           gh label create cd-contributed -R ${{ github.repository }} -c 5319e7 -f >/dev/null 2>&1 || true
-          labels="sync,cd-contributed"
+          labels="cd-contributed"
           for b in $(echo "${{ inputs.BACKPORT_BRANCHES }}" | tr ',' ' '); do
             v="${b#branch-}"
             [ -n "$v" ] && labels="${labels},${v}"
@@ -195,9 +184,10 @@ jobs:
           labels="${labels},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}"
           echo "BASE_LABELS=${labels}" >> $GITHUB_OUTPUT
 
+      # Create the SR PR directly (no pending/ordering — native review + rebase handle
+      # file-overlap ordering; the sync-based pending machinery is retired for this flow).
       - name: Create pull request
         id: create_pr
-        if: steps.previous-check.outputs.RES == 'True'
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_LABEL: ${{ steps.labels.outputs.BASE_LABELS }}
@@ -205,28 +195,9 @@ jobs:
           # Native CD title verbatim (get_pr_info.py no longer scrubs). SR treats it as a
           # native PR; ci-merged auto-backports on merge via the version labels above.
           TITLE: "${{ needs.pr-info.outputs.title }}"
-          # Mirror the forward flow (repo-sync.yml): carry the source PR's full body
-          # (official template, all sections) via the file get_pr_info.py wrote in the
-          # pr-info job (scrubbed), plus any conflict info run_cherry_pick.sh prepended.
+          # Carry the source PR's full body (scrubbed by get_pr_info.py in the pr-info job),
+          # plus any conflict info run_cherry_pick.sh prepended.
           BODY_FILE: /var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt
-          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
-          BASE: ${{ inputs.BRANCH }}
-        run: |
-          cd ${{ github.workspace }}/elastic-service
-          ./scripts/create_sync_repo.sh
-
-      # A file-overlapping predecessor is still open -> hold this PR as pending.
-      # cd-sync-pipeline.yml skips `pending` PRs; cd-scan-pending.yml releases it
-      # (removes pending + re-dispatches this workflow) once predecessors merge.
-      - name: Create pending pull request
-        id: create_pending_pr
-        if: steps.previous-check.outputs.RES != 'True'
-        env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
-          PR_LABEL: ${{ steps.labels.outputs.BASE_LABELS }},pending
-          HEAD: ${{ inputs.BRANCH }}-cd-contributed-pr-${{ inputs.PR_ID }}
-          TITLE: "${{ needs.pr-info.outputs.title }}"
-          BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
           BASE: ${{ inputs.BRANCH }}
         run: |
@@ -268,9 +239,6 @@ jobs:
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
             this_pr_url=${{ steps.create_pr.outputs.pr_url }}
-          elif [[ "${{ steps.create_pending_pr.outcome }}" == 'success' ]]; then
-            msg_type="pending"
-            this_pr_url=${{ steps.create_pending_pr.outputs.pr_url }}
           elif [[ "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             exit 0
           else
@@ -278,15 +246,6 @@ jobs:
             this_pr_url=""
           fi
           python3 lib/sync_notify.py ${msg_type} ${branch} ${source_pr} ${source_commit_id} ${action_url} ${this_pr_url}
-
-      # Kick the pending scan so a just-created pending PR is (re)evaluated promptly,
-      # and any now-releasable pending PR (predecessor merged) gets picked up.
-      - name: Trigger pending scan
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.SYNC_PAT }}
-        run: |
-          gh workflow run cd-scan-pending.yml -R ${{ github.repository }} || true
 
       - name: clean
         if: always()
