@@ -231,15 +231,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
-          # On conflict, ALSO tag cd-contributed-conflict for visibility (the SR PR still
-          # needs manual conflict resolution).
-          LABEL_ARGS=(-f "labels[]=sr-synced")
+          # Apply sr-synced INDEPENDENTLY (it is the provenance / dedup marker — must not be
+          # dropped just because another label is missing). Ensure labels exist first: adding
+          # a non-existent label 422s the whole request.
+          gh label create sr-synced -R "${{ inputs.SOURCE_REPO }}" -c 0e8a16 -f >/dev/null 2>&1 || true
+          gh api -X POST "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
+            -f "labels[]=sr-synced" \
+            || echo "::warning::failed to label sr-synced on ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
+          # On conflict, ALSO tag cd-contributed-conflict for visibility (separate request).
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' ]]; then
-            LABEL_ARGS+=(-f "labels[]=cd-contributed-conflict")
+            gh label create cd-contributed-conflict -R "${{ inputs.SOURCE_REPO }}" -c d93f0b -f >/dev/null 2>&1 || true
+            gh api -X POST "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
+              -f "labels[]=cd-contributed-conflict" \
+              || echo "::warning::failed to label cd-contributed-conflict on ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
           fi
-          gh api -X POST \
-            "repos/${{ inputs.SOURCE_REPO }}/issues/${{ inputs.PR_ID }}/labels" \
-            "${LABEL_ARGS[@]}" || echo "::warning::failed to label ${{ inputs.SOURCE_REPO }}#${{ inputs.PR_ID }}"
 
       - name: notify
         if: always()

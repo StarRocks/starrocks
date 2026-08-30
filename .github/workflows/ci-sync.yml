@@ -22,12 +22,31 @@ jobs:
         id: commit_sha
         run: |
           set -x
-          pr_info=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json mergeCommit,labels)
+          pr_info=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json mergeCommit,labels,title,headRefName)
           labels=`echo $pr_info | jq -r '.labels[].name'`
-          # Anti-loop: skip forward SR->CD sync for reverse-synced PRs. `sync` covers the
-          # SR main PR; `cd-contributed` also covers its mergify backport PRs (which do NOT
-          # inherit `sync` — contributed-backport-label.yml stamps them cd-contributed).
+          # Anti-loop: skip forward SR->CD sync for reverse-synced PRs. `sync` covers the SR
+          # main PR; `cd-contributed` covers its mergify backport PRs (which do NOT inherit
+          # `sync`; contributed-backport-label.yml adds cd-contributed to them).
+          is_sync=false
           if [[ "${labels}" =~ sync || "${labels}" =~ cd-contributed ]]; then
+            is_sync=true
+          else
+            # Durable fallback (don't rely solely on the opened-time labeling): a mergify
+            # backport whose SOURCE main PR is cd-contributed must be skipped even if this
+            # backport PR itself is missing the label. Recompute from the source at merge time.
+            title=`echo $pr_info | jq -r '.title'`
+            head=`echo $pr_info | jq -r '.headRefName'`
+            src=""
+            if [[ "$head" =~ ^mergify/bp/.*/pr-([0-9]+)$ ]]; then
+              src="${BASH_REMATCH[1]}"
+            else
+              src=$(echo "$title" | grep -oP '\(backport #\K[0-9]+' | tail -n1 || true)
+            fi
+            if [[ -n "$src" ]] && gh pr view "$src" -R ${{ github.repository }} --json labels -q '.labels[].name' | grep -qx 'cd-contributed'; then
+              is_sync=true
+            fi
+          fi
+          if [[ "$is_sync" == "true" ]]; then
             echo "is_sync=true" >> $GITHUB_OUTPUT
           else
             commit_sha=`echo $pr_info | jq -r '.mergeCommit.oid'`
