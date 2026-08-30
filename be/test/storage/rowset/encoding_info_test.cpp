@@ -135,7 +135,7 @@ TEST_F(EncodingInfoTest, get_default_encoding_number_types) {
 
 TEST_F(EncodingInfoTest, default_encoding) {
     std::map<LogicalType, EncodingTypePB> default_expected = {
-            {TYPE_TINYINT, BIT_SHUFFLE},  {TYPE_SMALLINT, BIT_SHUFFLE},  {TYPE_INT, BIT_SHUFFLE},
+            {TYPE_TINYINT, BIT_SHUFFLE},  {TYPE_SMALLINT, BIT_SHUFFLE},    {TYPE_INT, BIT_SHUFFLE},
             {TYPE_BIGINT, BIT_SHUFFLE},   {TYPE_LARGEINT, BIT_SHUFFLE},
 
             {TYPE_FLOAT, BIT_SHUFFLE},    {TYPE_DOUBLE, BIT_SHUFFLE},
@@ -144,13 +144,13 @@ TEST_F(EncodingInfoTest, default_encoding) {
 
             {TYPE_BOOLEAN, RLE},
 
-            {TYPE_DATE_V1, BIT_SHUFFLE},  {TYPE_DATE, BIT_SHUFFLE},      {TYPE_DATETIME_V1, BIT_SHUFFLE},
+            {TYPE_DATE_V1, BIT_SHUFFLE},  {TYPE_DATE, BIT_SHUFFLE},        {TYPE_DATETIME_V1, BIT_SHUFFLE},
             {TYPE_DATETIME, BIT_SHUFFLE},
 
             {TYPE_DECIMAL, BIT_SHUFFLE},  {TYPE_DECIMALV2, BIT_SHUFFLE},
 
-            {TYPE_HLL, PLAIN_ENCODING},   {TYPE_OBJECT, PLAIN_ENCODING}, {TYPE_PERCENTILE, PLAIN_ENCODING},
-            {TYPE_JSON, PLAIN_ENCODING}, {TYPE_GEOMETRY, PLAIN_ENCODING},
+            {TYPE_HLL, PLAIN_ENCODING},   {TYPE_OBJECT, PLAIN_ENCODING},   {TYPE_PERCENTILE, PLAIN_ENCODING},
+            {TYPE_JSON, PLAIN_ENCODING},  {TYPE_GEOMETRY, PLAIN_ENCODING},
     };
     std::map<LogicalType, EncodingTypePB> value_seek_expected = {
             {TYPE_TINYINT, FOR_ENCODING},    {TYPE_SMALLINT, FOR_ENCODING},    {TYPE_INT, FOR_ENCODING},

@@ -480,8 +480,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryWktWkbRoundTripTest) {
     auto text = GeoFunctions::st_geometry_as_text(ctx.get(), columns).value();
     ColumnViewer<TYPE_VARCHAR> text_viewer(text);
     EXPECT_EQ("POINT (30 10)", text_viewer.value(0).to_string());
-    EXPECT_EQ("GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))",
-              text_viewer.value(1).to_string());
+    EXPECT_EQ("GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))", text_viewer.value(1).to_string());
     EXPECT_TRUE(text->is_null(2));
 
     auto binary = GeoFunctions::st_geometry_as_wkb(ctx.get(), columns).value();
@@ -495,8 +494,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryWktWkbRoundTripTest) {
     auto decoded_text = GeoFunctions::st_geometry_as_text(ctx.get(), columns).value();
     ColumnViewer<TYPE_VARCHAR> decoded_text_viewer(decoded_text);
     EXPECT_EQ("POINT (30 10)", decoded_text_viewer.value(0).to_string());
-    EXPECT_EQ("GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))",
-              decoded_text_viewer.value(1).to_string());
+    EXPECT_EQ("GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))", decoded_text_viewer.value(1).to_string());
     EXPECT_TRUE(decoded_text->is_null(2));
 }
 

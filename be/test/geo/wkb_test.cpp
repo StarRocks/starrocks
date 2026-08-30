@@ -14,12 +14,12 @@
 
 #include "geo/wkb.h"
 
+#include <gtest/gtest.h>
+
 #include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 namespace starrocks {
 namespace {
@@ -50,12 +50,10 @@ TEST(WkbCodecTest, RoundTripsAllSupportedGeometryTypes) {
             {"LINESTRING(30 10,10 30,40 40)", "LINESTRING (30 10, 10 30, 40 40)"},
             {"POLYGON((30 10,40 40,20 40,10 20,30 10),(20 20,25 20,25 25,20 20))",
              "POLYGON ((30 10, 40 40, 20 40, 10 20, 30 10), (20 20, 25 20, 25 25, 20 20))"},
-            {"MULTIPOINT(10 40,(40 30),20 20,30 10)",
-             "MULTIPOINT ((10 40), (40 30), (20 20), (30 10))"},
+            {"MULTIPOINT(10 40,(40 30),20 20,30 10)", "MULTIPOINT ((10 40), (40 30), (20 20), (30 10))"},
             {"MULTILINESTRING((10 10,20 20,10 40),(40 40,30 30,40 20,30 10))",
              "MULTILINESTRING ((10 10, 20 20, 10 40), (40 40, 30 30, 40 20, 30 10))"},
-            {"MULTIPOLYGON(((30 20,45 40,10 40,30 20)))",
-             "MULTIPOLYGON (((30 20, 45 40, 10 40, 30 20)))"},
+            {"MULTIPOLYGON(((30 20,45 40,10 40,30 20)))", "MULTIPOLYGON (((30 20, 45 40, 10 40, 30 20)))"},
             {"GEOMETRYCOLLECTION(POINT(4 6),LINESTRING(4 6,7 10))",
              "GEOMETRYCOLLECTION (POINT (4 6), LINESTRING (4 6, 7 10))"},
     };
@@ -82,8 +80,13 @@ TEST(WkbCodecTest, RoundTripsAllSupportedGeometryTypes) {
 
 TEST(WkbCodecTest, RoundTripsEmptyGeometries) {
     const std::vector<std::string> cases = {
-            "POINT EMPTY",          "LINESTRING EMPTY",       "POLYGON EMPTY", "MULTIPOINT EMPTY",
-            "MULTILINESTRING EMPTY", "MULTIPOLYGON EMPTY",     "GEOMETRYCOLLECTION EMPTY",
+            "POINT EMPTY",
+            "LINESTRING EMPTY",
+            "POLYGON EMPTY",
+            "MULTIPOINT EMPTY",
+            "MULTILINESTRING EMPTY",
+            "MULTIPOLYGON EMPTY",
+            "GEOMETRYCOLLECTION EMPTY",
     };
 
     for (const auto& input : cases) {
@@ -134,14 +137,14 @@ TEST(WkbCodecTest, SupportsEmptyChildrenInMultiGeometries) {
 
 TEST(WkbCodecTest, RejectsMalformedWkt) {
     const std::vector<std::string> cases = {
-            "",                                  // no type
-            "POINT (1-2)",                       // ordinates need whitespace
-            "POINT Z (1 2 3)",                   // dimensional coordinates are not in phase one
-            "POINT (NaN 2)",                     // non-finite coordinate
-            "POINT (0x1p1 2)",                   // hexadecimal floating point is not OGC WKT
-            "POINT (1e 2)",                      // exponent requires at least one digit
-            "LINESTRING (1 2)",                  // too few vertices
-            "POLYGON ((0 0, 1 0, 1 1, 0 1))",    // ring is not closed
+            "",                                   // no type
+            "POINT (1-2)",                        // ordinates need whitespace
+            "POINT Z (1 2 3)",                    // dimensional coordinates are not in phase one
+            "POINT (NaN 2)",                      // non-finite coordinate
+            "POINT (0x1p1 2)",                    // hexadecimal floating point is not OGC WKT
+            "POINT (1e 2)",                       // exponent requires at least one digit
+            "LINESTRING (1 2)",                   // too few vertices
+            "POLYGON ((0 0, 1 0, 1 1, 0 1))",     // ring is not closed
             "MULTIPOINT (LINESTRING (0 0, 1 1))", // wrong child syntax
             "SRID=4326;POINT (1 2)",              // EWKT is deliberately deferred
             "POINT (1 2) trailing",               // trailing input
@@ -156,11 +159,11 @@ TEST(WkbCodecTest, RejectsMalformedWkt) {
 TEST(WkbCodecTest, RejectsMalformedWkb) {
     const std::vector<std::string> cases = {
             "",
-            from_hex("02"),                           // invalid byte order
-            from_hex("0101000000000000000000f03f"),   // truncated POINT
-            from_hex("0101000020"),                   // EWKB SRID flag
-            from_hex("010200000041420f00"),           // element count exceeds safety limit
-            from_hex("010400000001000000010200000000000000"), // MULTIPOINT containing LINESTRING EMPTY
+            from_hex("02"),                                           // invalid byte order
+            from_hex("0101000000000000000000f03f"),                   // truncated POINT
+            from_hex("0101000020"),                                   // EWKB SRID flag
+            from_hex("010200000041420f00"),                           // element count exceeds safety limit
+            from_hex("010400000001000000010200000000000000"),         // MULTIPOINT containing LINESTRING EMPTY
             from_hex("0101000000000000000000f03f000000000000004000"), // trailing byte
     };
 

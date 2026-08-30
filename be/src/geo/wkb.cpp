@@ -268,8 +268,7 @@ private:
     Status parse_coordinate(WkbCoordinate* coordinate) {
         RETURN_IF_ERROR(parse_number(&coordinate->x));
         if (_position == _input.size() || !is_space(_input[_position])) {
-            return invalid_wkt("expected whitespace between coordinate ordinates at byte " +
-                               std::to_string(_position));
+            return invalid_wkt("expected whitespace between coordinate ordinates at byte " + std::to_string(_position));
         }
         RETURN_IF_ERROR(parse_number(&coordinate->y));
         skip_spaces();
@@ -381,13 +380,9 @@ private:
         return _position < _input.size() && is_alpha(_input[_position]);
     }
 
-    static bool is_alpha(char value) {
-        return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z');
-    }
+    static bool is_alpha(char value) { return (value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z'); }
 
-    static bool is_space(char value) {
-        return value == ' ' || value == '\t' || value == '\r' || value == '\n';
-    }
+    static bool is_space(char value) { return value == ' ' || value == '\t' || value == '\r' || value == '\n'; }
 
     std::string _input;
     size_t _position = 0;
@@ -395,8 +390,7 @@ private:
 
 class WkbReader {
 public:
-    explicit WkbReader(const Slice& input)
-            : _data(reinterpret_cast<const uint8_t*>(input.data)), _size(input.size) {}
+    explicit WkbReader(const Slice& input) : _data(reinterpret_cast<const uint8_t*>(input.data)), _size(input.size) {}
 
     Status parse(WkbGeometry* output) {
         RETURN_IF_ERROR(parse_geometry(0, output));
