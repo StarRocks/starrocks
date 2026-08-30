@@ -235,4 +235,54 @@ TEST_F(S3PocoHttpClientTest, TestNotFoundKey) {
     EXPECT_TRUE(r.status().message().find("SdkErrorType=16") != std::string::npos);
 }
 
+// The timeouts a caller hands to makeHTTPSession() have to reach the session. They used to be
+// dropped: getSession() consumed only connection_timeout, to bound the pool wait, and returned
+// without touching send/receive, so object_storage_request_timeout_ms had no effect on this path
+// and a read that stopped receiving waited out Poco's own default instead.
+//
+// No network is involved -- Poco connects lazily on sendRequest(), so constructing a session for
+// an address nothing listens on is enough to inspect what was applied to it.
+TEST(PocoSessionTimeoutTest, SendAndReceiveTimeoutsReachTheSession) {
+    const Poco::Timespan connect(1 * 1000000);
+    const Poco::Timespan request(5 * 1000000);
+    ConnectionTimeouts timeouts(connect, request, request);
+
+    Poco::URI uri("http://127.0.0.1:1/");
+    auto session = makeHTTPSession(uri, timeouts, false);
+
+    EXPECT_EQ(request.totalMicroseconds(), session->getSendTimeout().totalMicroseconds());
+    EXPECT_EQ(request.totalMicroseconds(), session->getReceiveTimeout().totalMicroseconds());
+}
+
+// object_storage_request_timeout_ms defaults to -1, which arrives here as a negative Timespan,
+// and Poco gives no defined meaning to that. Treat non-positive as "unset" and leave the session
+// on its own default rather than passing the value through.
+TEST(PocoSessionTimeoutTest, NonPositiveTimeoutLeavesTheSessionDefault) {
+    Poco::Net::HTTPClientSession session("127.0.0.1", 1);
+    const Poco::Timespan before_send = session.getSendTimeout();
+    const Poco::Timespan before_recv = session.getReceiveTimeout();
+
+    ConnectionTimeouts negative(Poco::Timespan(1 * 1000000), Poco::Timespan(-1 * 1000),
+                                Poco::Timespan(-1 * 1000));
+    apply_request_timeouts(session, negative);
+
+    EXPECT_EQ(before_send.totalMicroseconds(), session.getSendTimeout().totalMicroseconds());
+    EXPECT_EQ(before_recv.totalMicroseconds(), session.getReceiveTimeout().totalMicroseconds());
+}
+
+// Keep-alive belongs to the pool, not to a single request: ConnectionTimeouts default-initializes
+// http_keep_alive_timeout to zero, and pushing that onto a pooled session would work against the
+// pool, which exists to reuse connections.
+TEST(PocoSessionTimeoutTest, KeepAliveTimeoutIsLeftAlone) {
+    Poco::Net::HTTPClientSession session("127.0.0.1", 1);
+    const Poco::Timespan before = session.getKeepAliveTimeout();
+
+    ConnectionTimeouts timeouts(Poco::Timespan(1 * 1000000), Poco::Timespan(5 * 1000000),
+                                Poco::Timespan(5 * 1000000));
+    ASSERT_EQ(0, timeouts.http_keep_alive_timeout.totalMicroseconds());
+    apply_request_timeouts(session, timeouts);
+
+    EXPECT_EQ(before.totalMicroseconds(), session.getKeepAliveTimeout().totalMicroseconds());
+}
+
 } // namespace starrocks::poco
