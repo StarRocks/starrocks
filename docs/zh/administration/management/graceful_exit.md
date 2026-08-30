@@ -112,23 +112,23 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 
 #### `graceful_exit_accept_new_window_ms`
 
-- 描述：在优雅退出（由 `SIGUSR1` 触发）期间，FE 会在这段毫秒数内持续接受新请求，之后才开始排空。上游负载均衡器在其健康检查探测盲窗内转发过来的请求仍会被正常服务，而不会以 502 失败。FE 不会在该窗口结束前退出：stopAccept（关闭 MySQL 端口）是 L4/TCP 探测型负载均衡器开始排空的唯一触发点，因此提前退出会将新连接路由到一个已死的 FE。
+- 描述：在优雅退出（由 `SIGUSR1` 触发）期间，探活失败会立即触发：`stopAccept()` 关闭 MySQL 端口（TCP 探活，查询链路），HealthAction 返回 500（HTTP 探活，导入链路）。空闲连接从一开始就会被强制关闭，因此窗口内不会再有新查询进入。FE 在此毫秒数内保持存活——即接受新连接窗口——以便负载均衡器（探活失败需要经过其自身的探测周期才能被感知）停止路由新连接，同时在途事务自然排空。LB 在窗口内转发的新连接会干净地失败（端口已关闭），而不会在 FE 退出后路由到一个已死的 FE。窗口结束后，当连接和运行中的事务全部清空、且从信号发出起已满足 `min_graceful_exit_time_second` 时，FE 立即退出。建议设置为大于负载均衡器的摘除延迟加上预期的最大排空时间。优雅退出期间不会拒绝新的导入事务（loadTxnBegin）：排空会等待 runningTxnNums 降至 0（受 `max_graceful_exit_time_second` 约束），因此拒绝新的 BEGIN 只会造成一个所有导入在 FE 实际停止前都失败的窗口。
 - 默认值：60000
 - 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
 
 #### `min_graceful_exit_time_second`
 
-- 描述：stopAccept（接受新连接窗口结束）与 FE 退出之间的最短等待时间，从 stopAccept 开始计时。该值必须大于负载均衡器的摘除延迟（通常为 7-11 秒），以确保负载均衡器在 FE 退出前已完成节点排空。
+- 描述：优雅退出（SIGUSR1）标记后 FE 保持存活的最短时间，从信号发出时开始计时。探活失败最早触发：HealthAction 返回 500（HTTP 探活，导入链路），`stopAccept()` 关闭 MySQL 端口（TCP 探活，查询链路）。FE 不能早于负载均衡器在其探测周期内感知到这些失败并停止路由之前退出；该等待必须大于负载均衡器的摘除延迟（通常为 7-11 秒）。实践中 `graceful_exit_accept_new_window_ms` 大于此值，因此接受新连接窗口结束时该最小值通常已经满足。必须小于 `max_graceful_exit_time_second`。
 - 默认值：15
 - 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
 - 时序关系：必须小于 `max_graceful_exit_time_second`。
 
 #### `max_graceful_exit_time_second`
 
-- 描述：优雅退出超时时间。
+- 描述：整个优雅退出的硬超时，从信号（SIGUSR1）发出时开始计时。必须大于 `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`：优雅退出线程的硬超时 join(max) 从信号发出时开始计时，且 FE 不能早于接受新连接窗口结束加窗口后排空完成之前退出，因此 max 必须覆盖整个窗口加最短排空。如果 max < window + min，线程会在排空完成前被强制终止，破坏优雅退出。请一起设置窗口和 max。
 - 默认值：120
 - 如何应用：在 `fe.conf` 配置文件中修改或动态更新。
-- 时序关系：必须大于 `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`：优雅退出线程的硬超时 join(max) 从信号发出时开始计时，而 `min_graceful_exit_time_second` 仅从接受新连接窗口结束时开始计时。如果 max < window + min，线程会在最短排空完成前被强制终止。这些参数应一起设置。
+- 时序关系：必须大于 `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`。这些参数应一起设置。
 
 ### BE/CN 配置
 

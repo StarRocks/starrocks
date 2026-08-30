@@ -902,7 +902,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: ms
 - Is mutable: Yes
-- Description: During graceful exit (triggered by `SIGUSR1`), the FE keeps accepting new requests for this many milliseconds before it starts to drain, so requests forwarded by an upstream Load Balancer within its health-check probe-blind window are still served successfully instead of failing with 502. The FE does not exit before this window ends: stopAccept (which closes the MySQL port) is the only trigger for an L4/TCP-probing Load Balancer to drain, so exiting earlier would route new connections into a dead FE. After the window ends, the FE exits as soon as connections and in-flight transactions are gone and `min_graceful_exit_time_second` (measured from stopAccept) has elapsed. Set it above the Load Balancer detach latency plus the expected max drain time. New load transactions (loadTxnBegin) are NOT rejected during graceful exit: the drain waits for runningTxnNums to reach 0 (bounded by `max_graceful_exit_time_second`), so rejecting new BEGINs would only create a window where every load fails before the FE actually stops.
+- Description: During graceful exit (triggered by `SIGUSR1`), probe failure fires immediately: `stopAccept()` closes the MySQL port (TCP probe, query) and HealthAction returns 500 (HTTP probe, load). Idle connections are force-closed from the very start, so no new query can slip in during the window. The FE then stays alive for this many milliseconds — the accept-new window — so the Load Balancer, which only notices a probe failure after its own probe interval, stops routing new connections while in-flight transactions drain naturally. New connections sent by the LB within this window fail cleanly (the port is already closed) rather than landing on a dead FE after it exits. Once the window elapses, the FE exits as soon as connections and running transactions are gone and `min_graceful_exit_time_second` has elapsed since the signal. Set it above the Load Balancer detach latency plus the expected max drain time. New load transactions (loadTxnBegin) are NOT rejected during graceful exit: the drain waits for runningTxnNums to reach 0 (bounded by `max_graceful_exit_time_second`), so rejecting new BEGINs would only create a window where every load fails before the FE actually stops.
 - Introduced in: -
 
 ### `http_async_threads_num`
@@ -1005,7 +1005,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: s
 - Is mutable: Yes
-- Description: Timeout for graceful exit. MUST be greater than `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`: the graceful-exit thread's hard timeout is join(max) measured from the signal, while `min_graceful_exit_time_second` is measured only from the end of the accept-new window. If max < window + min the thread is force-killed before the minimum drain completes. Set these parameters together.
+- Description: Hard timeout for the whole graceful exit, measured from the signal (SIGUSR1). MUST be greater than `graceful_exit_accept_new_window_ms` + `min_graceful_exit_time_second`: the graceful-exit thread's hard timeout is join(max) measured from the signal, and the FE may not exit before the accept-new window elapses plus the post-window drain, so max must cover the whole window plus the minimum. If max < window + min the thread is force-killed before the drain completes, defeating graceful shutdown. Set window and max together.
 - Introduced in: -
 
 ### `max_mysql_service_task_threads_num`
@@ -1050,7 +1050,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: s
 - Is mutable: Yes
-- Description: The minimum wait time between stopAccept (the end of the accept-new window) and FE exit, measured from stopAccept. Must be greater than the Load Balancer detach latency (typically 7-11 seconds) so the Load Balancer has finished draining the node before the FE exits. Must be smaller than `max_graceful_exit_time_second`.
+- Description: Minimum time the FE stays alive after graceful exit (SIGUSR1) is marked, measured from the signal. Probe failure fires at the very start: HealthAction returns 500 (HTTP probe, load) and `stopAccept()` closes the MySQL port (TCP probe, query). The FE must not exit before the Load Balancer notices these failures within its probe interval and stops routing; this wait must be greater than the Load Balancer detach latency (typically 7-11 seconds). In practice `graceful_exit_accept_new_window_ms` is larger than this value, so this minimum is usually already satisfied when the accept-new window elapses. Must be smaller than `max_graceful_exit_time_second`.
 - Introduced in: -
 
 ### `mysql_nio_backlog_num`

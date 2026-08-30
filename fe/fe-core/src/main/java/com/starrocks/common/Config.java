@@ -4780,10 +4780,11 @@ public class Config extends ConfigBase {
 
     /**
      * Hard timeout for the whole graceful exit, measured from the signal (SIGUSR1). MUST be greater than
-     * graceful_exit_accept_new_window_ms: the thread's hard timeout is join(max), and the FE may not exit
-     * before the accept-new window elapses (graceful_exit_accept_new_window_ms) plus the Load Balancer
-     * detach latency, so max must cover the whole window. If max &lt; window, the thread is force-killed
-     * before the drain completes, defeating graceful shutdown. Set window and max together.
+     * graceful_exit_accept_new_window_ms + min_graceful_exit_time_second: the graceful-exit thread's hard
+     * timeout is join(max) measured from the signal, and the FE may not exit before the accept-new window
+     * elapses plus the post-window drain, so max must cover the whole window plus the minimum. If max &lt;
+     * window + min the thread is force-killed before the drain completes, defeating graceful shutdown.
+     * Set window and max together.
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 120;
