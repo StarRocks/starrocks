@@ -1103,6 +1103,7 @@ struct ColumnRangeBuilder {
     Status operator()(ChunkPredicateBuilder<E, Type>* parent, const SlotDescriptor* slot,
                       std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || ltype == TYPE_VARIANT ||
+                      ltype == TYPE_GEOMETRY ||
                       lt_is_float<ltype> || lt_is_binary<ltype>) {
             return Status::OK();
         } else {

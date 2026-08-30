@@ -80,6 +80,7 @@ public enum PrimitiveType {
 
     BINARY("BINARY", -1),
     VARBINARY("VARBINARY", 16),
+    GEOMETRY("GEOMETRY", 16),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
     UNKNOWN_TYPE("UNKNOWN_TYPE", -1);
@@ -115,7 +116,7 @@ public enum PrimitiveType {
                     .build();
     // TODO(mofei) support them
     public static final ImmutableList<PrimitiveType> JSON_UNCOMPATIBLE_TYPE =
-            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
+            ImmutableList.of(DATE, DATETIME, TIME, HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY, GEOMETRY);
 
     public static final ImmutableList<PrimitiveType> VARIANT_COMPATIBLE_TYPE =
             new ImmutableList.Builder<PrimitiveType>()
@@ -129,7 +130,7 @@ public enum PrimitiveType {
                     .build();
 
     public static final ImmutableList<PrimitiveType> VARIANT_INCOMPATIBLE_TYPES =
-            ImmutableList.of(HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY);
+            ImmutableList.of(HLL, BITMAP, PERCENTILE, FUNCTION, VARBINARY, GEOMETRY);
 
     private static final ImmutableList<PrimitiveType> TIME_TYPE_LIST =
             ImmutableList.of(TIME, DATE, DATETIME);
@@ -158,7 +159,7 @@ public enum PrimitiveType {
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY, VARIANT));
+        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY, VARIANT, GEOMETRY));
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);
@@ -380,6 +381,7 @@ public enum PrimitiveType {
             case CHAR:
             case VARCHAR:
             case VARBINARY:
+            case GEOMETRY:
                 // use 16 as char type estimate size
                 typeSize = 16;
                 break;
@@ -415,6 +417,7 @@ public enum PrimitiveType {
             case CHAR:
             case VARCHAR:
             case VARBINARY:
+            case GEOMETRY:
             case HLL:
                 return true;
         }

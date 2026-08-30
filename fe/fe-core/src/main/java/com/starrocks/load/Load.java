@@ -170,6 +170,7 @@ public class Load {
                 case FUNCTION:
                 case BINARY:
                 case VARBINARY:
+                case GEOMETRY:
                 case JSON:
                 case HLL:
                 case UNKNOWN_TYPE:

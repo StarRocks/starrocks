@@ -690,6 +690,7 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
             TYPE_CASE_CLAUSE(TYPE_JSON)
             TYPE_CASE_CLAUSE(TYPE_VARIANT)
             TYPE_CASE_CLAUSE(TYPE_VARBINARY)
+            TYPE_CASE_CLAUSE(TYPE_GEOMETRY)
         case TYPE_DECIMAL32:
         case TYPE_DECIMAL64:
         case TYPE_DECIMAL128:

@@ -53,6 +53,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.FunctionType;
+import com.starrocks.type.GeometryType;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.JsonType;
@@ -428,6 +429,10 @@ public class TypeTest {
         ScalarType decimal = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 3);
         Type restoredDecimal = TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(decimal));
         Assertions.assertEquals(decimal, restoredDecimal);
+
+        Type restoredGeometry = TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(GeometryType.GEOMETRY));
+        Assertions.assertEquals(GeometryType.GEOMETRY, restoredGeometry);
+        Assertions.assertEquals(TPrimitiveType.GEOMETRY, TypeSerializer.toThrift(PrimitiveType.GEOMETRY));
     }
 
     @Test
@@ -506,9 +511,26 @@ public class TypeTest {
         Assertions.assertFalse(JsonType.JSON.supportZoneMap());
         Assertions.assertFalse(FunctionType.FUNCTION.supportZoneMap());
         Assertions.assertFalse(VarbinaryType.VARBINARY.supportZoneMap());
+        Assertions.assertFalse(GeometryType.GEOMETRY.supportZoneMap());
         Assertions.assertFalse(ArrayType.ARRAY_INT.supportZoneMap());
         Assertions.assertFalse(MapType.MAP_VARCHAR_VARCHAR.supportZoneMap());
         Assertions.assertFalse(new StructType(Lists.newArrayList(IntegerType.INT)).supportZoneMap());
+    }
+
+    @Test
+    public void testGeometryTypeRestrictions() {
+        Type geometry = GeometryType.GEOMETRY;
+        Assertions.assertEquals("geometry", geometry.toSql());
+        Assertions.assertFalse(geometry.isValidMapKeyType());
+        Assertions.assertFalse(geometry.canApplyToNumeric());
+        Assertions.assertFalse(geometry.canJoinOn());
+        Assertions.assertFalse(geometry.canGroupBy());
+        Assertions.assertFalse(geometry.canOrderBy());
+        Assertions.assertFalse(geometry.canPartitionBy());
+        Assertions.assertFalse(geometry.canDistinct());
+        Assertions.assertFalse(geometry.canStatistic());
+        Assertions.assertFalse(geometry.canDistributedBy());
+        Assertions.assertFalse(geometry.supportBloomFilter());
     }
 
     @Test

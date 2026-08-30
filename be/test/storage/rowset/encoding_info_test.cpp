@@ -150,7 +150,7 @@ TEST_F(EncodingInfoTest, default_encoding) {
             {TYPE_DECIMAL, BIT_SHUFFLE},  {TYPE_DECIMALV2, BIT_SHUFFLE},
 
             {TYPE_HLL, PLAIN_ENCODING},   {TYPE_OBJECT, PLAIN_ENCODING}, {TYPE_PERCENTILE, PLAIN_ENCODING},
-            {TYPE_JSON, PLAIN_ENCODING},
+            {TYPE_JSON, PLAIN_ENCODING}, {TYPE_GEOMETRY, PLAIN_ENCODING},
     };
     std::map<LogicalType, EncodingTypePB> value_seek_expected = {
             {TYPE_TINYINT, FOR_ENCODING},    {TYPE_SMALLINT, FOR_ENCODING},    {TYPE_INT, FOR_ENCODING},
@@ -207,6 +207,39 @@ TEST_F(EncodingInfoTest, plain_encoding_delta_offset) {
             ASSERT_EQ(slices[i], col->immutable_data()[i]);
         }
     }
+}
+
+TEST_F(EncodingInfoTest, geometry_plain_encoding_round_trip) {
+    const EncodingInfo* info = nullptr;
+    ASSERT_TRUE(EncodingInfo::get(TYPE_GEOMETRY, DEFAULT_ENCODING, &info).ok());
+    ASSERT_NE(nullptr, info);
+    EXPECT_EQ(PLAIN_ENCODING, info->encoding());
+
+    // Little-endian WKB for POINT (0 0). Embedded zero bytes verify that
+    // GEOMETRY is persisted as binary data rather than a C string.
+    std::string wkb("\x01\x01\x00\x00\x00", 5);
+    wkb.append(16, '\0');
+    Slice input(wkb);
+
+    PageBuilderOptions opts;
+    opts.data_page_size = 256 * 1024;
+    PageBuilder* raw_builder = nullptr;
+    ASSERT_TRUE(info->create_page_builder(opts, &raw_builder).ok());
+    std::unique_ptr<PageBuilder> builder(raw_builder);
+    ASSERT_EQ(1, builder->add(reinterpret_cast<const uint8_t*>(&input), 1));
+    OwnedSlice owned = builder->finish()->build();
+
+    PageDecoder* raw_decoder = nullptr;
+    ASSERT_TRUE(info->create_page_decoder(owned.slice(), &raw_decoder).ok());
+    std::unique_ptr<PageDecoder> decoder(raw_decoder);
+    ASSERT_TRUE(decoder->init().ok());
+
+    auto column = BinaryColumn::create();
+    size_t count = 1;
+    ASSERT_TRUE(decoder->next_batch(&count, column.get()).ok());
+    ASSERT_EQ(1, count);
+    ASSERT_EQ(1, column->size());
+    EXPECT_EQ(input, column->get_slice(0));
 }
 
 } // namespace starrocks

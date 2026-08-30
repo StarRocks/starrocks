@@ -562,7 +562,8 @@ public class StatisticUtils {
     }
 
     public static boolean isUnsupportedHistogramColumnType(Type type) {
-        return type.isComplexType() || type.isJsonType() || type.isOnlyMetricType() || type.isBinaryType();
+        return type.isComplexType() || type.isJsonType() || type.isOnlyMetricType() || type.isBinaryType()
+                || type.isGeometryType();
     }
 
     public static double multiplyRowCount(double left, double right) {

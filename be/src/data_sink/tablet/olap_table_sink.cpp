@@ -1099,7 +1099,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         switch (desc->type().type) {
         case TYPE_CHAR:
         case TYPE_VARCHAR:
-        case TYPE_VARBINARY: {
+        case TYPE_VARBINARY:
+        case TYPE_GEOMETRY: {
             if (!config::enable_check_string_lengths) {
                 continue;
             }

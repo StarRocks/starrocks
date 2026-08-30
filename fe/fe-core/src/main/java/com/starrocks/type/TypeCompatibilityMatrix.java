@@ -30,7 +30,7 @@ public class TypeCompatibilityMatrix {
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128, PrimitiveType.DECIMAL256,
             PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION,
-            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT);
+            PrimitiveType.BINARY, PrimitiveType.VARBINARY, PrimitiveType.VARIANT, PrimitiveType.GEOMETRY);
 
     private static final PrimitiveType[][] COMPATIBILITY_MATRIX =
             new PrimitiveType[PrimitiveType.values().length][PrimitiveType.values().length];

@@ -721,6 +721,7 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     case TYPE_TIME:
     case TYPE_BINARY:
     case TYPE_VARBINARY:
+    case TYPE_GEOMETRY:
     case TYPE_MAX_VALUE:
     case TYPE_INT256:
         return nullptr;

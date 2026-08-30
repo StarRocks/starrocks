@@ -121,6 +121,8 @@ public class ColumnDefAnalyzer {
             ScalarType scalarType = (ScalarType) typeDef.getType();
             if (scalarType.getPrimitiveType() == PrimitiveType.VARBINARY && scalarType.getLength() < 0) {
                 typeDef.setType(TypeFactory.createVarbinary(TypeFactory.getOlapMaxVarcharLength()));
+            } else if (scalarType.getPrimitiveType() == PrimitiveType.GEOMETRY && scalarType.getLength() < 0) {
+                typeDef.setType(TypeFactory.createGeometry(TypeFactory.getOlapMaxVarcharLength()));
             }
         }
 
@@ -308,6 +310,8 @@ public class ColumnDefAnalyzer {
                                 String.format("Type '%s' only supports empty string \"\" as default value", type));
                     }
                     break;
+                case GEOMETRY:
+                    throw new AnalysisException("GEOMETRY only supports NULL as a default value");
                 case JSON:
                     try (JsonReader reader = new JsonReader(new StringReader(defaultValue))) {
                         // Strict mode: reject non-standard JSON

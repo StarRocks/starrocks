@@ -70,6 +70,7 @@ uint32_t get_tablet_column_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_JSON:
     case TYPE_VARIANT:
     case TYPE_VARBINARY:
+    case TYPE_GEOMETRY:
         return string_length + sizeof(uint32_t);
     case TYPE_ARRAY:
         return string_length;

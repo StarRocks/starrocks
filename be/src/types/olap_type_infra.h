@@ -74,7 +74,8 @@ namespace starrocks {
 #define APPLY_FOR_BASIC_LOGICAL_TYPE(M) \
     APPLY_FOR_BITMAP_INDEX_TYPE(M)      \
     M(TYPE_JSON)                        \
-    M(TYPE_VARBINARY)
+    M(TYPE_VARBINARY)                   \
+    M(TYPE_GEOMETRY)
 
 #define APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M) \
     M(TYPE_UNSIGNED_INT)                   \
