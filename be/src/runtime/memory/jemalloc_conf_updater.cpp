@@ -342,9 +342,12 @@ Status JemallocConfUpdater::update(std::string_view new_conf) {
         }
     }
 
-    // Apply the options one by one and record what actually landed: the config value
-    // is rolled back on failure, so the baseline must keep describing the real state
-    // of jemalloc instead of the rolled back string.
+    // Apply the options one by one and record each one that landed, because the config value
+    // is rolled back on failure and the baseline should follow jemalloc rather than the rolled
+    // back string. This is per option, not per arena: apply_decay_ms() writes the default for
+    // future arenas before it walks the existing ones, so a failure in the middle of that walk
+    // still leaves the option half applied with the baseline claiming the old value. Only a
+    // wrong newlen makes that ctl fail, which cannot happen here, so the gap is left unclosed.
     if (dirty_decay_ms.has_value()) {
         RETURN_IF_ERROR(apply_decay_ms(kDirtyDecayMs, true, *dirty_decay_ms));
         _applied[kDirtyDecayMs] = changed.at(kDirtyDecayMs);
