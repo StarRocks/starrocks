@@ -39,17 +39,36 @@ void setTimeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts
     session.setKeepAliveTimeout(timeouts.http_keep_alive_timeout);
 }
 
+// Poco's own send/receive default, read from a freshly constructed session rather than hardcoded
+// so it cannot drift from the bundled Poco version.
+static const Poco::Timespan& poco_default_timeout() {
+    static const Poco::Timespan kDefault = [] {
+        Poco::Net::HTTPClientSession probe;
+        return probe.getReceiveTimeout();
+    }();
+    return kDefault;
+}
+
 void apply_request_timeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts) {
-    // Only the per-request timeouts. Keep-alive is deliberately left as the pool set it:
-    // ConnectionTimeouts default-initializes http_keep_alive_timeout to zero, and pushing that
-    // onto a pooled session would work against the pool, which exists to reuse connections.
+    // Sessions are pooled per endpoint, not per client, and clients that share an endpoint do not
+    // share a timeout: a RENAME_FILE client carries object_storage_rename_file_request_timeout_ms
+    // (30 s by default) while an ordinary read carries object_storage_request_timeout_ms (unset by
+    // default). So this has to leave the session in the state THIS request asked for, never in
+    // whatever state the previous borrower left behind -- skipping the call when a request has no
+    // timeout would let it inherit another client's.
     //
-    // A non-positive value means "unset" -- object_storage_request_timeout_ms defaults to -1,
-    // which reaches here as a negative Timespan, and Poco gives no defined meaning to that.
-    // Leave the session on its own default in that case rather than passing it through.
-    if (timeouts.send_timeout.totalMicroseconds() > 0 && timeouts.receive_timeout.totalMicroseconds() > 0) {
-        session.setTimeout(timeouts.connection_timeout, timeouts.send_timeout, timeouts.receive_timeout);
-    }
+    // A non-positive value means "unset": object_storage_request_timeout_ms defaults to -1, which
+    // arrives as a negative Timespan, and Poco gives no defined meaning to that. Unset restores
+    // Poco's default instead of passing the value through.
+    const bool has_timeout =
+            timeouts.send_timeout.totalMicroseconds() > 0 && timeouts.receive_timeout.totalMicroseconds() > 0;
+    const Poco::Timespan& send = has_timeout ? timeouts.send_timeout : poco_default_timeout();
+    const Poco::Timespan& receive = has_timeout ? timeouts.receive_timeout : poco_default_timeout();
+    session.setTimeout(timeouts.connection_timeout, send, receive);
+
+    // Keep-alive is deliberately not touched: ConnectionTimeouts default-initializes
+    // http_keep_alive_timeout to zero and PocoHttpClient never sets it, so writing it through
+    // would work against the pool, which exists to reuse connections.
 }
 
 std::string getCurrentExceptionMessage() {
