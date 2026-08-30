@@ -16,6 +16,7 @@
 
 #include <sys/types.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -63,13 +64,46 @@ Status mallctl_failed(const std::string& name, int err) {
     return Status::InternalError(fmt::format("mallctl('{}') failed: {}", name, std::strerror(err)));
 }
 
+// jemalloc lays the arena indexes out as three groups:
+//
+//   [0, narenas_auto)  the automatic arenas, which serve the ordinary allocations
+//   narenas_auto       the "huge" arena, present when `oversize_threshold` is in effect
+//   > narenas_auto     the arenas created through `arenas.create`
+//
+// Only the first group belongs to this config. The huge arena in particular must be left
+// alone: arena_choose_huge() deliberately puts it on eager purge (decay 0) whenever the
+// default is positive, because huge allocations are few and rarely reused, so writing the
+// configured decay time into it would both defeat that and spawn a background thread that
+// arena_new_create_background_thread() purposely skips for it. Future arenas are unaffected
+// either way, since the huge arena re-applies its own policy when it is created.
+//
+// `narenas_auto` has no mallctl node of its own, but malloc_init_narenas() derives it from
+// `opt.narenas`, which does, by the two steps mirrored below. Note that the clamp does not
+// write back into `opt_narenas`, so reading `opt.narenas` alone is not enough.
+StatusOr<unsigned> auto_arena_count() {
+    // MALLOCX_ARENA_LIMIT lives in jemalloc's internal headers, but its value is pinned by
+    // the public MALLOCX_ARENA(a) == ((a) + 1) << 20 macro, which encodes an arena index in
+    // the 12 flag bits starting at bit 20.
+    constexpr unsigned kMallocxArenaLimit = (1u << 12) - 1;
+
+    unsigned opt_narenas = 0;
+    size_t size = sizeof(opt_narenas);
+    if (int err = je_mallctl("opt.narenas", &opt_narenas, &size, nullptr, 0); err != 0) {
+        return mallctl_failed("opt.narenas", err);
+    }
+    return std::min(opt_narenas, kMallocxArenaLimit - 1);
+}
+
 // Sets `arenas.<dirty|muzzy>_decay_ms`, which only takes effect for the arenas
-// created afterwards, and then walks the existing arenas.
+// created afterwards, and then walks the existing automatic arenas.
 //
 // Note that `arena.<i>.*_decay_ms` does not accept MALLCTL_ARENAS_ALL: unlike
 // `arena.<i>.purge`, its ctl handler resolves the index through
 // arena_get(ind, false) and returns EFAULT for the pseudo index. So the arenas
 // have to be walked one by one.
+//
+// The walk stops at `narenas_auto` rather than at `arenas.narenas`, see
+// auto_arena_count() for why.
 Status apply_decay_ms(const std::string& option, bool dirty, ssize_t decay_ms) {
     const std::string default_name = dirty ? "arenas.dirty_decay_ms" : "arenas.muzzy_decay_ms";
     if (int err = je_mallctl(default_name.c_str(), nullptr, nullptr, &decay_ms, sizeof(decay_ms)); err != 0) {
@@ -87,6 +121,11 @@ Status apply_decay_ms(const std::string& option, bool dirty, ssize_t decay_ms) {
     if (int err = je_mallctl("arenas.narenas", &narenas, &narenas_size, nullptr, 0); err != 0) {
         return mallctl_failed("arenas.narenas", err);
     }
+
+    // `arenas.narenas` counts every arena, including the huge one and the manually created
+    // ones that must keep their own decay policy.
+    ASSIGN_OR_RETURN(unsigned narenas_auto, auto_arena_count());
+    narenas = std::min(narenas, narenas_auto);
 
     size_t updated = 0;
     size_t absent = 0;
@@ -107,13 +146,13 @@ Status apply_decay_ms(const std::string& option, bool dirty, ssize_t decay_ms) {
 
     if (decay_ms == 0) {
         LOG(WARNING) << "set jemalloc " << option << " to 0, which purges every unused page of " << updated
-                     << " arenas synchronously in the current thread";
+                     << " automatic arenas synchronously in the current thread";
     } else {
         // With `background_thread:true` the calling thread does not purge, but the
         // decay backlog is restarted from scratch, so the background thread purges
         // the currently unused pages on its next run.
-        LOG(INFO) << "set jemalloc " << option << " to " << decay_ms << " for " << updated << " arenas, " << absent
-                  << " arenas not created yet";
+        LOG(INFO) << "set jemalloc " << option << " to " << decay_ms << " for " << updated << " automatic arenas, "
+                  << absent << " not created yet";
     }
     return Status::OK();
 }

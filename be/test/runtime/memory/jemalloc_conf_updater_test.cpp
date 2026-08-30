@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 #include <sys/types.h>
 
+#include <algorithm>
 #include <string>
 
 #include "base/testutil/assert.h"
@@ -163,6 +164,45 @@ TEST_F(JemallocConfUpdaterTest, update_without_change_is_a_noop) {
             updater.update("prof_active:false,prof:true,background_thread:true,metadata_thp:auto,"
                            "dirty_decay_ms:5000,muzzy_decay_ms:5000,oversize_threshold:0,percpu_arena:percpu"));
     EXPECT_EQ("5000", updater.applied_options()["muzzy_decay_ms"]);
+}
+
+// The decay times must reach the automatic arenas only. jemalloc keeps its dedicated huge
+// arena at index narenas_auto and puts it on eager purge on purpose, and the arenas created
+// through `arenas.create` sit above that, so neither may be retuned from here.
+//
+// This process has no huge arena (`oversize_threshold:0`), but a manually created arena is
+// on the same side of narenas_auto, so it stands in for one: if the walk stopped at
+// `arenas.narenas` it would reach this arena too.
+TEST_F(JemallocConfUpdaterTest, decay_ms_skips_the_arenas_above_narenas_auto) {
+    unsigned manual_arena = 0;
+    size_t size = sizeof(manual_arena);
+    // Not destroyed afterwards: that needs `arena.<i>.reset` plus `arena.<i>.destroy` and the
+    // arena is empty anyway. It cannot disturb the other cases, because the walk is now
+    // bounded by narenas_auto rather than by the arena count this bumps.
+    ASSERT_EQ(0, je_mallctl("arenas.create", &manual_arena, &size, nullptr, 0));
+
+    // Mirrors auto_arena_count(): narenas_auto = min(opt.narenas, MALLOCX_ARENA_LIMIT - 1).
+    // Without a huge arena the first manually created arena lands exactly on narenas_auto,
+    // so the relation is >=, not >.
+    unsigned opt_narenas = 0;
+    size = sizeof(opt_narenas);
+    ASSERT_EQ(0, je_mallctl("opt.narenas", &opt_narenas, &size, nullptr, 0));
+    const unsigned narenas_auto = std::min(opt_narenas, (1u << 12) - 2);
+    ASSERT_GE(manual_arena, narenas_auto) << "a manually created arena must sit at or above narenas_auto";
+
+    const std::string name = fmt::format("arena.{}.dirty_decay_ms", manual_arena);
+    ssize_t sentinel = 12345;
+    ASSERT_EQ(0, je_mallctl(name.c_str(), nullptr, nullptr, &sentinel, sizeof(sentinel)));
+
+    ASSERT_OK(JemallocConfUpdater::instance().update(make_conf("6000", "5000", "false")));
+
+    // The automatic arenas took the new value...
+    EXPECT_EQ(6000, read_default_decay_ms(true));
+    // ... while the arena above narenas_auto kept its own.
+    ssize_t after = 0;
+    size = sizeof(after);
+    ASSERT_EQ(0, je_mallctl(name.c_str(), &after, &size, nullptr, 0));
+    EXPECT_EQ(sentinel, after);
 }
 
 TEST_F(JemallocConfUpdaterTest, apply_decay_ms) {
