@@ -13,12 +13,11 @@ run-name: Contributed Backport Label(#${{ github.event.number }})
 on:
   pull_request_target:
     types: [opened]
+    # All release branches (glob) — no need to update when a new branch is cut. `main`
+    # is not matched. Over-triggering is harmless: the job early-exits unless the PR is a
+    # backport whose source main PR carries cd-contributed.
     branches:
-      - branch-4.1
-      - branch-4.0
-      - branch-3.5
-      - branch-3.4
-      - branch-3.3
+      - 'branch-*'
 
 permissions:
   contents: read
