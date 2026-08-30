@@ -4,7 +4,7 @@ run-name: Contributed Backport Label(#${{ github.event.number }})
 # Anti-loop helper for the CD->SR reverse sync. A mergify backport PR does NOT inherit
 # labels, so backporting a `cd-contributed` main PR would lose the marker and let ci-sync.yml
 # bounce the fix back to CelerData. When a backport PR opens against a release branch, if its
-# source main PR carries `cd-contributed`, stamp this backport PR `cd-contributed` too —
+# source main PR carries `cd-contributed`, add `cd-contributed` to this backport PR too —
 # before it can merge — so the forward anti-loop skips it.
 #
 # Generic name reserves room for other `*-contributed` sources later; today only
@@ -25,8 +25,8 @@ permissions:
   issues: write
 
 jobs:
-  stamp:
-    name: Stamp cd-contributed on backport PRs
+  add_label:
+    name: Add cd-contributed label to backport PRs
     if: github.repository == 'StarRocks/starrocks'
     runs-on: ubuntu-latest
     env:
@@ -36,7 +36,7 @@ jobs:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       TITLE: ${{ github.event.pull_request.title }}
     steps:
-      - name: stamp from source main PR
+      - name: add cd-contributed if source main PR has it
         run: |
           set -eo pipefail
           # A mergify backport PR: head `mergify/bp/<branch>/pr-<SR_main>`, or title `(backport #N)`.
@@ -53,7 +53,7 @@ jobs:
           if gh pr view "$src" -R "$REPO" --json labels -q '.labels[].name' | grep -qx 'cd-contributed'; then
             gh label create cd-contributed -R "$REPO" -c 5319e7 -f >/dev/null 2>&1 || true
             gh pr edit "$PR_NUMBER" -R "$REPO" --add-label cd-contributed
-            echo "stamped cd-contributed on #$PR_NUMBER (source main #$src)"
+            echo "added cd-contributed to #$PR_NUMBER (source main #$src)"
           else
             echo "source main #$src has no cd-contributed; skip"
           fi
