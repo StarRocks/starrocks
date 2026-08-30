@@ -89,6 +89,13 @@ TEST_F(JemallocConfUpdaterTest, parse_conf) {
     EXPECT_EQ("100", options["dirty_decay_ms"]);
     EXPECT_EQ("true", options["prof_active"]);
 
+    // Only spaces are trimmed. jemalloc does not accept any other whitespace inside
+    // JEMALLOC_CONF either, so a stray tab stays part of the name and is reported as an
+    // unknown option instead of being silently accepted.
+    ASSIGN_OR_ABORT(options, parse_jemalloc_conf("\tdirty_decay_ms:100"));
+    EXPECT_EQ(1, options.size());
+    EXPECT_EQ("100", options["\tdirty_decay_ms"]);
+
     // jemalloc itself lets the last assignment win.
     ASSIGN_OR_ABORT(options, parse_jemalloc_conf("dirty_decay_ms:1,dirty_decay_ms:2"));
     EXPECT_EQ(1, options.size());

@@ -16,13 +16,13 @@
 
 #include <sys/types.h>
 
-#include <cctype>
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <vector>
 
+#include "base/string/trim.h"
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
@@ -36,16 +36,6 @@ namespace {
 const char* const kDirtyDecayMs = "dirty_decay_ms";
 const char* const kMuzzyDecayMs = "muzzy_decay_ms";
 const char* const kProfActive = "prof_active";
-
-std::string_view trim(std::string_view str) {
-    while (!str.empty() && std::isspace(static_cast<unsigned char>(str.front()))) {
-        str.remove_prefix(1);
-    }
-    while (!str.empty() && std::isspace(static_cast<unsigned char>(str.back()))) {
-        str.remove_suffix(1);
-    }
-    return str;
-}
 
 StatusOr<ssize_t> parse_decay_ms(const std::string& option, const std::string& value) {
     errno = 0;
@@ -161,17 +151,19 @@ StatusOr<JemallocOptions> parse_jemalloc_conf(std::string_view conf) {
     for (size_t pos = 0; pos < conf.size();) {
         size_t comma = conf.find(',', pos);
         size_t len = comma == std::string_view::npos ? conf.size() - pos : comma - pos;
-        std::string_view segment = trim(conf.substr(pos, len));
+        std::string_view segment = trim_spaces(conf.substr(pos, len));
         pos = comma == std::string_view::npos ? conf.size() : comma + 1;
         if (segment.empty()) {
             continue;
         }
         size_t colon = segment.find(':');
-        if (colon == std::string_view::npos || trim(segment.substr(0, colon)).empty()) {
+        std::string_view name =
+                colon == std::string_view::npos ? std::string_view() : trim_spaces(segment.substr(0, colon));
+        if (name.empty()) {
             return Status::InvalidArgument(
                     fmt::format("invalid jemalloc option '{}', expect '<name>:<value>'", segment));
         }
-        options[std::string(trim(segment.substr(0, colon)))] = std::string(trim(segment.substr(colon + 1)));
+        options[std::string(name)] = std::string(trim_spaces(segment.substr(colon + 1)));
     }
     return options;
 }
