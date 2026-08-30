@@ -47,7 +47,7 @@ TEST(ChunkFactoryTest, column_from_field) {
     ASSERT_TRUE(ColumnHelper::get_data_column(array_column.get())->is_array());
 
     Field map_field(2, "map_col", get_map_type_info(get_type_info(TYPE_INT), get_type_info(TYPE_VARCHAR)), true);
-    map_field.add_sub_field(Field(2, "key", TYPE_INT, false));
+    map_field.add_sub_field(Field(2, "key", TYPE_INT, true));
     map_field.add_sub_field(Field(2, "value", TYPE_VARCHAR, true));
     auto map_column = ChunkFactory::column_from_field(map_field);
     ASSERT_TRUE(map_column->is_nullable());
