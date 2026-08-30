@@ -284,8 +284,7 @@ TEST(PocoSessionTimeoutTest, KeepAliveTimeoutIsLeftAlone) {
     Poco::Net::HTTPClientSession session("127.0.0.1", 1);
     const Poco::Timespan before = session.getKeepAliveTimeout();
 
-    ConnectionTimeouts timeouts(Poco::Timespan(1 * 1000000), Poco::Timespan(5 * 1000000),
-                                Poco::Timespan(5 * 1000000));
+    ConnectionTimeouts timeouts(Poco::Timespan(1 * 1000000), Poco::Timespan(5 * 1000000), Poco::Timespan(5 * 1000000));
     ASSERT_EQ(0, timeouts.http_keep_alive_timeout.totalMicroseconds());
     apply_request_timeouts(session, timeouts);
 
