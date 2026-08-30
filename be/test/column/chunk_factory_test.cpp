@@ -17,11 +17,14 @@
 #include <memory>
 #include <utility>
 
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/field.h"
+#include "column/map_column.h"
 #include "column/schema.h"
 #include "gtest/gtest.h"
+#include "gutil/casts.h"
 #include "types/type_info.h"
 
 namespace starrocks {
@@ -45,13 +48,27 @@ TEST(ChunkFactoryTest, column_from_field) {
     auto array_column = ChunkFactory::column_from_field(array_field);
     ASSERT_TRUE(array_column->is_nullable());
     ASSERT_TRUE(ColumnHelper::get_data_column(array_column.get())->is_array());
+    array_column->check_or_die();
 
+    // The element sub-field is declared NOT NULL, but the elements column must still be nullable.
+    Field array_field_with_not_null_element(1, "array_col2", get_array_type_info(get_type_info(TYPE_INT)), true);
+    array_field_with_not_null_element.add_sub_field(Field(1, "item", TYPE_INT, false));
+    auto array_column2 = ChunkFactory::column_from_field(array_field_with_not_null_element);
+    auto* array_data2 = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(array_column2.get()));
+    ASSERT_TRUE(array_data2->elements_column()->is_nullable());
+    array_column2->check_or_die();
+
+    // Map keys are always declared NOT NULL in the tablet schema, but the keys column must still be nullable.
     Field map_field(2, "map_col", get_map_type_info(get_type_info(TYPE_INT), get_type_info(TYPE_VARCHAR)), true);
     map_field.add_sub_field(Field(2, "key", TYPE_INT, true));
     map_field.add_sub_field(Field(2, "value", TYPE_VARCHAR, true));
     auto map_column = ChunkFactory::column_from_field(map_field);
     ASSERT_TRUE(map_column->is_nullable());
     ASSERT_TRUE(ColumnHelper::get_data_column(map_column.get())->is_map());
+    auto* map_data = down_cast<MapColumn*>(ColumnHelper::get_data_column(map_column.get()));
+    ASSERT_TRUE(map_data->keys_column()->is_nullable());
+    ASSERT_TRUE(map_data->values_column()->is_nullable());
+    map_column->check_or_die();
 
     Field struct_field(3, "struct_col", get_struct_type_info({get_type_info(TYPE_INT), get_type_info(TYPE_VARCHAR)}),
                        true);
