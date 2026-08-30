@@ -22,6 +22,8 @@ namespace starrocks {
 
 namespace {
 
+#ifndef __APPLE__
+
 // Reading this node only needs jemalloc to be built with profiling support; writing it is
 // what additionally requires the process to have been started with `prof:true`.
 bool read_thread_active_init(bool* value) {
@@ -35,6 +37,8 @@ bool prof_enabled_at_startup() {
     return je_mallctl("opt.prof", &enabled, &size, nullptr, 0) == 0 && enabled;
 }
 
+#endif
+
 } // namespace
 
 // Toggling the heap profile must leave `prof.thread_active_init` alone. It is not a second
@@ -44,6 +48,10 @@ bool prof_enabled_at_startup() {
 // the operator, who may have started the process with `prof_thread_active_init:false` to
 // sample selected threads only.
 TEST(HeapProfTest, toggling_the_profile_keeps_thread_active_init) {
+#ifdef __APPLE__
+    GTEST_SKIP() << "HeapProf is a no-op on macOS: enable_prof() and disable_prof() do nothing and "
+                    "has_enable() always reports false, so there is no toggle to observe";
+#else
     if (!prof_enabled_at_startup()) {
         GTEST_SKIP() << "the process was not started with prof:true, so prof.thread_active_init "
                         "cannot be written and the regression cannot be reproduced";
@@ -65,6 +73,7 @@ TEST(HeapProfTest, toggling_the_profile_keeps_thread_active_init) {
     bool after = false;
     ASSERT_TRUE(read_thread_active_init(&after));
     EXPECT_EQ(before, after) << "disabling the heap profile must not touch prof.thread_active_init";
+#endif
 }
 
 } // namespace starrocks
