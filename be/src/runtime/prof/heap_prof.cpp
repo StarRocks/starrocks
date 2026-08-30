@@ -38,7 +38,7 @@ static int set_jemalloc_profiling(bool enable) {
     // overriding that is not ours to do. Lowering it is worse: a thread may only change its
     // own thread.prof.active, so every thread created while the flag was down stays unsampled
     // for the rest of its life, and re-enabling cannot repair it.
-    return je_mallctl("prof.active", nullptr, nullptr, &enable, 1);
+    return je_mallctl("prof.active", nullptr, nullptr, &enable, sizeof(enable));
 }
 
 static int has_enable_heap_profile() {
