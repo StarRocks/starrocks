@@ -157,8 +157,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         return Status::OK();
     });
 
-    // jemalloc has already been configured from JEMALLOC_CONF by the time we get
-    // here, so take the value the process was started with as the baseline.
+    // jemalloc has already read JEMALLOC_CONF by the time we get here. init() takes the
+    // option string that actually took effect as the baseline, and republishes it as
+    // `jemalloc_conf` when the config claims something else.
     JemallocConfUpdater::instance().init(config::jemalloc_conf.value());
     registry->register_callback("jemalloc_conf", []() -> Status {
         return JemallocConfUpdater::instance().update(config::jemalloc_conf.value());

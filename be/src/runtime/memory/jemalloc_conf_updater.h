@@ -31,6 +31,12 @@ using JemallocOptions = std::map<std::string, std::string>;
 
 StatusOr<JemallocOptions> parse_jemalloc_conf(std::string_view conf);
 
+// The option string jemalloc initialized itself from: the JEMALLOC_CONF environment variable
+// when it is set, and `config_value` otherwise. bin/start_backend.sh normally exports the
+// config value into that variable, but it leaves an already-set variable alone and forces its
+// own string under --jemalloc_debug and --check_mem_leak, so the two can differ.
+std::string startup_jemalloc_conf(std::string_view config_value);
+
 // Applies the runtime-mutable subset of the `jemalloc_conf` config.
 //
 // Most jemalloc options are frozen once the process is initialized, because their
@@ -41,8 +47,10 @@ class JemallocConfUpdater {
 public:
     static JemallocConfUpdater& instance();
 
-    // Seeds the baseline with the option string the process was started with.
-    void init(std::string_view startup_conf);
+    // Seeds the baseline with the option string jemalloc actually started with, and rewrites
+    // `jemalloc_conf` to it when the config says something else, so that the value shown by
+    // information_schema.be_configs is the one an update is diffed against.
+    void init(std::string_view config_value);
 
     // Diffs `new_conf` against the options applied so far and pushes the changed
     // ones into jemalloc. Returns an error without touching jemalloc if any option

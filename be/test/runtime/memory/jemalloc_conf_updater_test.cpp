@@ -18,9 +18,12 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 
 #include "base/testutil/assert.h"
+#include "common/config_memory_allocator_fwd.h"
+#include "common/configbase.h"
 #include "fmt/format.h"
 #include "jemalloc/jemalloc.h"
 
@@ -41,6 +44,9 @@ std::string startup_conf() {
     return make_conf("5000", "5000", "false");
 }
 
+constexpr const char* kJemallocConfEnv = "JEMALLOC_CONF";
+constexpr const char* kJemallocConfName = "jemalloc_conf";
+
 bool prof_enabled_at_startup() {
     bool enabled = false;
     size_t size = sizeof(enabled);
@@ -59,6 +65,14 @@ ssize_t read_default_decay_ms(bool dirty) {
 class JemallocConfUpdaterTest : public testing::Test {
 public:
     void SetUp() override {
+        if (const char* env = std::getenv(kJemallocConfEnv); env != nullptr) {
+            _saved_env = env;
+            _env_was_set = true;
+        }
+        // init() prefers the environment, so clear it to make the seed of a test the string
+        // the test passes in. The cases that exercise the environment set it themselves.
+        ::unsetenv(kJemallocConfEnv);
+        _saved_config = config::jemalloc_conf.value();
         _saved_dirty_decay_ms = read_default_decay_ms(true);
         _saved_muzzy_decay_ms = read_default_decay_ms(false);
         JemallocConfUpdater::instance().init(startup_conf());
@@ -67,14 +81,22 @@ public:
     // Push the saved values back through the updater, so that the arenas of the test
     // process are left with the decay times they had before the test.
     void TearDown() override {
+        ::unsetenv(kJemallocConfEnv);
         JemallocConfUpdater::instance().init(startup_conf());
         EXPECT_OK(JemallocConfUpdater::instance().update(
                 make_conf(std::to_string(_saved_dirty_decay_ms), std::to_string(_saved_muzzy_decay_ms), "false")));
+        EXPECT_OK(config::set_config(kJemallocConfName, _saved_config));
+        if (_env_was_set) {
+            ::setenv(kJemallocConfEnv, _saved_env.c_str(), 1);
+        }
     }
 
 private:
     ssize_t _saved_dirty_decay_ms = 0;
     ssize_t _saved_muzzy_decay_ms = 0;
+    std::string _saved_config;
+    std::string _saved_env;
+    bool _env_was_set = false;
 };
 
 TEST_F(JemallocConfUpdaterTest, parse_conf) {
@@ -107,6 +129,44 @@ TEST_F(JemallocConfUpdaterTest, parse_conf) {
 
     EXPECT_TRUE(parse_jemalloc_conf("dirty_decay_ms").status().is_invalid_argument());
     EXPECT_TRUE(parse_jemalloc_conf("dirty_decay_ms:1,:2").status().is_invalid_argument());
+}
+
+TEST_F(JemallocConfUpdaterTest, startup_conf_prefers_the_environment) {
+    ::setenv(kJemallocConfEnv, "dirty_decay_ms:1234", 1);
+    EXPECT_EQ("dirty_decay_ms:1234", startup_jemalloc_conf("dirty_decay_ms:5000"));
+
+    // A set but empty variable is an empty option set, not a missing one.
+    ::setenv(kJemallocConfEnv, "", 1);
+    EXPECT_EQ("", startup_jemalloc_conf("dirty_decay_ms:5000"));
+
+    ::unsetenv(kJemallocConfEnv);
+    EXPECT_EQ("dirty_decay_ms:5000", startup_jemalloc_conf("dirty_decay_ms:5000"));
+}
+
+TEST_F(JemallocConfUpdaterTest, init_leaves_the_config_alone_when_it_took_effect) {
+    ::setenv(kJemallocConfEnv, startup_conf().c_str(), 1);
+    ASSERT_OK(config::set_config(kJemallocConfName, startup_conf()));
+
+    JemallocConfUpdater::instance().init(startup_conf());
+    EXPECT_EQ(startup_conf(), config::jemalloc_conf.value());
+}
+
+// bin/start_backend.sh forces its own JEMALLOC_CONF under --jemalloc_debug and
+// --check_mem_leak. The config then describes options jemalloc never saw, so init() has to
+// publish the effective string; otherwise an operator is shown one option set and diffed
+// against another.
+TEST_F(JemallocConfUpdaterTest, init_publishes_the_effective_conf_when_the_environment_differs) {
+    const std::string forced = "junk:true,tcache:false,prof:true";
+    ::setenv(kJemallocConfEnv, forced.c_str(), 1);
+    ASSERT_OK(config::set_config(kJemallocConfName, startup_conf()));
+
+    JemallocConfUpdater::instance().init(startup_conf());
+    EXPECT_EQ(forced, config::jemalloc_conf.value());
+
+    // And an update on top of what be_configs now shows goes through, instead of being
+    // rejected over options the operator can see nowhere.
+    ASSERT_OK(JemallocConfUpdater::instance().update(forced + ",dirty_decay_ms:4000"));
+    EXPECT_EQ(4000, read_default_decay_ms(true));
 }
 
 TEST_F(JemallocConfUpdaterTest, reject_immutable_option) {

@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "base/string/trim.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
@@ -33,6 +34,12 @@
 namespace starrocks {
 
 namespace {
+
+// The variable jemalloc derives as JEMALLOC_CPREFIX "MALLOC_CONF". The prefix is "JE" because
+// thirdparty builds jemalloc with `--with-jemalloc-prefix=je`, but that macro lives in jemalloc's
+// internal headers, so the name is spelled out here the way bin/start_backend.sh spells it out.
+const char* const kJemallocConfEnv = "JEMALLOC_CONF";
+const char* const kJemallocConfName = "jemalloc_conf";
 
 const char* const kDirtyDecayMs = "dirty_decay_ms";
 const char* const kMuzzyDecayMs = "muzzy_decay_ms";
@@ -217,8 +224,33 @@ const std::set<std::string>& JemallocConfUpdater::mutable_options() {
     return kMutableOptions;
 }
 
-void JemallocConfUpdater::init(std::string_view startup_conf) {
+std::string startup_jemalloc_conf(std::string_view config_value) {
+    // Only an unset variable falls back. jemalloc treats a set but empty variable as a valid,
+    // empty option set rather than a missing one, and falling back there would claim options
+    // that were never applied.
+    if (const char* env = std::getenv(kJemallocConfEnv); env != nullptr) {
+        return env;
+    }
+    return std::string(config_value);
+}
+
+void JemallocConfUpdater::init(std::string_view config_value) {
     std::lock_guard guard(_mutex);
+
+    std::string startup_conf = startup_jemalloc_conf(config_value);
+    if (startup_conf != config_value) {
+        // The config describes a set of options jemalloc never saw. Publish what is really in
+        // effect instead, so that be_configs shows it and an update is diffed against the same
+        // string the operator is looking at. set_config() is used rather than assigning the
+        // field, to keep the rollback bookkeeping of ConfigUpdateRegistry intact, and the
+        // update hook is deliberately not invoked: there is nothing to re-apply here.
+        LOG(WARNING) << "jemalloc was started with '" << startup_conf << "' rather than the configured '"
+                     << config_value << "', publishing the effective option string as " << kJemallocConfName;
+        if (Status st = config::set_config(kJemallocConfName, startup_conf); !st.ok()) {
+            LOG(WARNING) << "failed to publish the effective jemalloc option string: " << st;
+        }
+    }
+
     auto options = parse_jemalloc_conf(startup_conf);
     if (!options.ok()) {
         // Keep the baseline empty: every option of the new value then looks newly
