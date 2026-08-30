@@ -65,7 +65,6 @@ TEST(HeapProfTest, toggling_the_profile_keeps_thread_active_init) {
     bool after = false;
     ASSERT_TRUE(read_thread_active_init(&after));
     EXPECT_EQ(before, after) << "disabling the heap profile must not touch prof.thread_active_init";
-
 }
 
 } // namespace starrocks
