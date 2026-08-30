@@ -17,7 +17,7 @@ The following OGC geometry families are supported:
 - `MULTIPOLYGON`
 - `GEOMETRYCOLLECTION`
 
-Each family also supports `EMPTY` values. Use [ST_GeomFromText](../../sql-functions/spatial-functions/st_geometryfromtext.md) or [ST_GeomFromWKB](../../sql-functions/spatial-functions/st_geometryfromwkb.md) to construct a value, and use [ST_AsText](../../sql-functions/spatial-functions/st_astext.md) or [ST_AsBinary](../../sql-functions/spatial-functions/st_asbinary.md) to serialize it.
+Each family also supports `EMPTY` values. Use [ST_GeomFromText](pathname:///docs/sql-reference/sql-functions/spatial-functions/st_geometryfromtext/) or [ST_GeomFromWKB](pathname:///docs/sql-reference/sql-functions/spatial-functions/st_geometryfromwkb/) to construct a value, and use [ST_AsText](pathname:///docs/sql-reference/sql-functions/spatial-functions/st_astext/) or [ST_AsBinary](pathname:///docs/sql-reference/sql-functions/spatial-functions/st_asbinary/) to serialize it.
 
 ## Example
 
