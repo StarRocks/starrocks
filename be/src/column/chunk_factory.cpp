@@ -156,13 +156,15 @@ MutableColumnPtr ChunkFactory::column_from_field(const Field& field) {
     case TYPE_DECIMAL256:
         return NullableIfNeed(Decimal256Column::create(field.type()->precision(), field.type()->scale()));
     case TYPE_ARRAY: {
-        return NullableIfNeed(
-                ArrayColumn::create(ChunkFactory::column_from_field(field.sub_field(0)), UInt32Column::create()));
+        // ArrayColumn/MapColumn require nullable children, no matter how the sub-fields are declared.
+        auto elements = NullableColumn::wrap_if_necessary(ChunkFactory::column_from_field(field.sub_field(0)));
+        return NullableIfNeed(ArrayColumn::create(std::move(elements), UInt32Column::create()));
     }
-    case TYPE_MAP:
-        return NullableIfNeed(MapColumn::create(ChunkFactory::column_from_field(field.sub_field(0)),
-                                                ChunkFactory::column_from_field(field.sub_field(1)),
-                                                UInt32Column::create()));
+    case TYPE_MAP: {
+        auto keys = NullableColumn::wrap_if_necessary(ChunkFactory::column_from_field(field.sub_field(0)));
+        auto values = NullableColumn::wrap_if_necessary(ChunkFactory::column_from_field(field.sub_field(1)));
+        return NullableIfNeed(MapColumn::create(std::move(keys), std::move(values), UInt32Column::create()));
+    }
     case TYPE_STRUCT: {
         std::vector<std::string> names;
         MutableColumns fields;
