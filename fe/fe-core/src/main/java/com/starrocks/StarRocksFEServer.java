@@ -259,8 +259,19 @@ public class StarRocksFEServer {
     private static void waitForDraining() throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         final long waitInterval = 1000L;
-        boolean acceptStopped = false;
-        long stopAcceptTimeNano = 0L;
+        // Probe failure fires at the very start of graceful exit: the TCP probe (query, MySQL port)
+        // fails as soon as stopAccept closes the port, and the HTTP probe (load) fails because
+        // HealthAction returns 500. Idle connections are force-closed from the very start (a client
+        // reconnecting now fails because the port is already closed), so no new query can slip in
+        // during the accept-new window. The FE then stays alive through the accept-new window
+        // (graceful_exit_accept_new_window_ms) so the Load Balancer notices both failures within its
+        // probe interval and stops routing, while in-flight transactions drain naturally, bounded by
+        // the hard timeout.
+        long stopAcceptTimeNano = System.nanoTime();
+        if (QE_SERVICE != null) {
+            QE_SERVICE.stopAccept();
+            LOG.info("Stopped accepting new JDBC connections (graceful exit).");
+        }
         while (true) {
             connectScheduler.closeAllIdleConnection();
             int totalConns = connectScheduler.getTotalConnCount();
@@ -269,18 +280,7 @@ public class StarRocksFEServer {
             boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
             int runningTxnNums = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getRunningTxnNums();
 
-            // Keep the MySQL listen socket open during the accept-new window. Closing it after the
-            // window lets an L4 load balancer stop routing new connections while established sessions drain.
-            if (!GracefulExitFlag.shouldAcceptNewRequest() && !acceptStopped) {
-                acceptStopped = true;
-                stopAcceptTimeNano = System.nanoTime();
-                if (QE_SERVICE != null) {
-                    QE_SERVICE.stopAccept();
-                    LOG.info("Stopped accepting new JDBC connections (graceful exit accept-new window over).");
-                }
-            }
-
-            if (acceptStopped
+            if (!GracefulExitFlag.shouldAcceptNewRequest()
                     && totalConns == 0 && (!isLeader || runningTxnNums == 0)
                     && System.nanoTime() - stopAcceptTimeNano
                     > TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second)) {
@@ -291,7 +291,7 @@ public class StarRocksFEServer {
                 LOG.info("waiting for {} connections to drain", totalConns);
             } else if (isLeader && runningTxnNums > 0) {
                 LOG.info("waiting for {} running transactions to drain", runningTxnNums);
-            } else if (acceptStopped) {
+            } else if (!GracefulExitFlag.shouldAcceptNewRequest()) {
                 long remainingMs = TimeUnit.SECONDS.toMillis(Config.min_graceful_exit_time_second) -
                         TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - stopAcceptTimeNano);
                 LOG.info("drained, waiting for min_graceful_exit_time_second ({} ms remaining) before exit",

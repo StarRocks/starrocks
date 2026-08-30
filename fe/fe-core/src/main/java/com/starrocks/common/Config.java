@@ -4767,38 +4767,39 @@ public class Config extends ConfigBase {
     public static int max_spm_cache_baseline_size = 1000;
 
     /**
-     * The FE must not exit while an L4/TCP-probing Load Balancer still routes new connections to it. The MySQL
-     * port stays up through the accept-new window (graceful_exit_accept_new_window_ms), so the Load Balancer
-     * keeps forwarding until stopAccept closes it; the FE therefore does NOT exit before the window
-     * ends. This is the wait between stopAccept (window end) and exit, measured FROM stopAccept, and
-     * must be &gt; the Load Balancer detach latency (typically 7-11s) so the Load Balancer
-     * has finished draining the node before the FE exits. Must be &lt; max_graceful_exit_time_second.
+     * Minimum time the FE stays alive after graceful exit (SIGUSR1) is marked, measured from the signal.
+     * Probe failure fires at the very start: HealthAction returns 500 (HTTP probe, load) and stopAccept
+     * closes the MySQL port (TCP probe, query). The FE must not exit before the Load Balancer notices
+     * these failures within its probe interval and stops routing; this wait must be &gt; the Load Balancer
+     * detach latency (typically 7-11s). In practice graceful_exit_accept_new_window_ms is larger than
+     * this value, so this minimum is usually already satisfied when the accept-new window elapses.
+     * Must be &lt; max_graceful_exit_time_second.
      */
     @ConfField(mutable = true)
     public static long min_graceful_exit_time_second = 15;
 
     /**
-     * Timeout for graceful exit. MUST be greater than graceful_exit_accept_new_window_ms +
-     * min_graceful_exit_time_second: the graceful-exit thread's hard timeout is join(max) measured from
-     * the signal, while min_graceful_exit_time_second is measured only from the end of the accept-new
-     * window, so max must cover the whole window plus the post-window minimum. If max &lt; window + min
-     * the thread is force-killed before the minimum drain completes, defeating graceful shutdown. Set
-     * both together.
+     * Hard timeout for the whole graceful exit, measured from the signal (SIGUSR1). MUST be greater than
+     * graceful_exit_accept_new_window_ms: the thread's hard timeout is join(max), and the FE may not exit
+     * before the accept-new window elapses (graceful_exit_accept_new_window_ms) plus the Load Balancer
+     * detach latency, so max must cover the whole window. If max &lt; window, the thread is force-killed
+     * before the drain completes, defeating graceful shutdown. Set window and max together.
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 120;
 
     /**
-     * During graceful exit (SIGUSR1), keep accepting new requests for this many milliseconds
-     * before starting to drain, so requests forwarded by an upstream Load Balancer within its health-check
-     * probe-blind window are still served successfully instead of failing with 502.
-     * The FE does NOT exit before this window ends: stopAccept (which closes the MySQL port) is the
-     * only trigger for an L4/TCP-probing Load Balancer to drain, so exiting earlier would
-     * route new connections into a dead FE. After the window ends, the FE exits as soon as
-     * connections and in-flight transactions are gone and min_graceful_exit_time_second
-     * (measured from stopAccept) has elapsed. Set it above the Load Balancer detach latency plus the expected max drain time.
-     * New load transactions (loadTxnBegin) are NOT rejected during graceful exit: the drain waits
-     * for runningTxnNums to reach 0 (bounded by max_graceful_exit_time_second), so rejecting new
+     * During graceful exit (SIGUSR1), probe failure fires immediately: HealthAction returns 500 (HTTP
+     * probe, load) and stopAccept closes the MySQL port (TCP probe, query). Idle connections are
+     * force-closed from the very start, so no new query can slip in. The FE then stays alive for this
+     * many milliseconds — the accept-new window — so the Load Balancer, which only notices a probe
+     * failure after its own probe interval, stops routing new connections while in-flight transactions
+     * drain naturally. New connections sent by the LB within this window fail cleanly (the port is
+     * already closed) rather than landing on a dead FE after it exits. Once the window elapses, the FE
+     * exits as soon as connections and running transactions are gone and min_graceful_exit_time_second
+     * has elapsed since the signal. Set it above the Load Balancer detach latency plus the expected max
+     * drain time. New load transactions (loadTxnBegin) are NOT rejected during graceful exit: the drain
+     * waits for runningTxnNums to reach 0 (bounded by max_graceful_exit_time_second), so rejecting new
      * BEGINs would only create a window where every load fails before the FE actually stops.
      */
     @ConfField(mutable = true)
