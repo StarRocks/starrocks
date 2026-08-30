@@ -7,23 +7,24 @@ description: "Converts a geometric figure to WKT (Well Known Text) format."
 
 
 
-Converts a geometric figure to WKT (Well Known Text) format.
+Converts a native `GEOMETRY` value or a legacy geography value to Well-Known Text (WKT).
 
 ## Syntax
 
 ```Haskell
 VARCHAR ST_AsText(GEOMETRY geo)
+VARCHAR ST_AsWKT(GEOMETRY geo)
 ```
 
 ## Examples
 
 ```Plain Text
-MySQL > SELECT ST_AsText(ST_Point(24.7, 56.7));
-+---------------------------------+
-| st_astext(st_point(24.7, 56.7)) |
-+---------------------------------+
-| POINT (24.7 56.7)               |
-+---------------------------------+
+MySQL > SELECT ST_AsText(ST_GeomFromText('MULTIPOINT (1 2, 3 4)'));
++--------------------------------------------------------------+
+| st_astext(st_geomfromtext('MULTIPOINT (1 2, 3 4)'))          |
++--------------------------------------------------------------+
+| MULTIPOINT ((1 2), (3 4))                                    |
++--------------------------------------------------------------+
 ```
 
 ## keyword
