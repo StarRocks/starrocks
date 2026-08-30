@@ -1,5 +1,5 @@
 name: Repo Sync
-run-name: Repo Sync(CD PR #${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])
+run-name: "Repo Sync(CD PR #${{ inputs.PR_ID }} [${{ inputs.BRANCH }}])"
 
 # Reverse sync executor (CD -> SR), MAIN ONLY. Cherry-pick a CelerData open-source PR's
 # commit onto StarRocks `main` and open a NATIVE-looking SR PR. Dispatched by TSP's
@@ -184,24 +184,30 @@ jobs:
           labels="${labels},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}"
           echo "BASE_LABELS=${labels}" >> $GITHUB_OUTPUT
 
-      # pr-checker.yml is authoritative for version labels: it ADDS/REMOVES `<version>` labels
-      # from the PR body's `[x]/[ ] <version>` rows and FAILS if "I have checked the version
-      # labels" is left unchecked. The copied source body has those rows unchecked, which would
-      # strip the backport labels above and fail native CI. Rewrite the body so exactly the
-      # requested versions (BACKPORT_BRANCHES) are checked and the acknowledgement row is checked.
-      - name: sync backport checkboxes in body
+      # Rebuild the "Bugfix cherry-pick branch check" section for StarRocks. get_pr_info's scrub
+      # drops the source body's section (it carries CelerData-only versions like 26.2). Take the
+      # authoritative version list from StarRocks' own PR TEMPLATE (so CD-only branches never leak
+      # and the list stays in sync with SR), then check the intersection with BACKPORT_BRANCHES.
+      # pr-checker.yml syncs <version> labels from these rows and fails if the acknowledgement row
+      # is unchecked — so target versions must be [x], letting native CI pass + mergify backport.
+      - name: rebuild backport section in body
         run: |
           F="/var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt"
+          TPL="${{ github.workspace }}/.github/PULL_REQUEST_TEMPLATE.md"
           [ -f "$F" ] || exit 0
-          sed -i 's/\[ \] I have checked the version labels/[x] I have checked the version labels/' "$F"
-          for v in 4.1 4.0 3.5 3.4 3.3; do          # uncheck all known version rows first
-            vr=${v//./\\.}
-            sed -i "s/\[x\] ${vr}/[ ] ${v}/g" "$F"
-          done
-          for b in $(echo "${{ inputs.BACKPORT_BRANCHES }}" | tr ',' ' '); do
-            v="${b#branch-}"; vr=${v//./\\.}
-            [ -n "$v" ] && sed -i "s/\[ \] ${vr}/[x] ${v}/g" "$F"
-          done
+          # drop the source body's (scrubbed/CD) section, which runs to EOF
+          sed -i '/^##[[:space:]]*Bugfix cherry-pick branch check:/,$d' "$F"
+          # append StarRocks' own section (version list = the template's), then check the
+          # acknowledgement row + the versions that intersect BACKPORT_BRANCHES
+          if [ -f "$TPL" ]; then
+            echo "" >> "$F"
+            sed -n '/^##[[:space:]]*Bugfix cherry-pick branch check:/,$p' "$TPL" >> "$F"
+            sed -i 's/\[ \] I have checked the version labels/[x] I have checked the version labels/' "$F"
+            for b in $(echo "${{ inputs.BACKPORT_BRANCHES }}" | tr ',' ' '); do
+              v="${b#branch-}"; vr=${v//./\\.}
+              [ -n "$v" ] && sed -i "s/\[ \] ${vr}/[x] ${v}/g" "$F"
+            done
+          fi
 
       # Create the SR PR directly (no pending/ordering — native review + rebase handle
       # file-overlap ordering; the sync-based pending machinery is retired for this flow).
