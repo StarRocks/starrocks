@@ -144,4 +144,29 @@ TEST_F(FragmentExecutorPartitionTest, PartitionDescriptorOutlivesFragmentPool) {
     (void)partition->thrift_partition_key_exprs().size();
 }
 
+// Guards the final-sink classification for every sink type that decomposes to a
+// ConnectorSinkOperator: the last connector sinker reports audit statistics through
+// QueryContext::final_query_statistic(), which DCHECKs is_final_sink(). Dropping any of
+// these types from FragmentExecutor::is_final_sink_type would abort debug builds and
+// violate final_query_statistic()'s precondition in release builds (issue #62262). The
+// connector-sink unit tests call set_final_sink() manually, so they cannot catch such a
+// regression.
+TEST(FragmentExecutorFinalSinkTest, connector_backed_sink_types_are_final_sinks) {
+    EXPECT_TRUE(FragmentExecutor::is_final_sink_type(TDataSinkType::ICEBERG_TABLE_SINK));
+    EXPECT_TRUE(FragmentExecutor::is_final_sink_type(TDataSinkType::ICEBERG_DELETE_SINK));
+    EXPECT_TRUE(FragmentExecutor::is_final_sink_type(TDataSinkType::ICEBERG_ROW_DELTA_SINK));
+    EXPECT_TRUE(FragmentExecutor::is_final_sink_type(TDataSinkType::HIVE_TABLE_SINK));
+    EXPECT_TRUE(FragmentExecutor::is_final_sink_type(TDataSinkType::TABLE_FUNCTION_TABLE_SINK));
+
+    // Exchange sinks hand off to a downstream fragment and must NOT be classified as final.
+    EXPECT_FALSE(FragmentExecutor::is_final_sink_type(TDataSinkType::DATA_STREAM_SINK));
+}
+
+// REMOTE_SCAN_RESULT_SINK terminates the plan the same way RESULT_SINK does, but it exists
+// only downstream, so upstream refactors of is_final_sink_type cannot see it. Pinned here so
+// a future sync that rewrites the sink list fails loudly instead of silently dropping it.
+TEST(FragmentExecutorFinalSinkTest, remote_scan_result_sink_is_a_final_sink) {
+    EXPECT_TRUE(FragmentExecutor::is_final_sink_type(TDataSinkType::REMOTE_SCAN_RESULT_SINK));
+}
+
 } // namespace starrocks::orchestration

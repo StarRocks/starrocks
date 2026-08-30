@@ -30,8 +30,8 @@ class ConnectorSinkOperator final : public Operator {
 public:
     ConnectorSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           std::unique_ptr<connector::ConnectorSink> connector_sink,
-                          std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr,
-                          FragmentContext* fragment_context);
+                          std::shared_ptr<connector::SinkMemoryManager> sink_mem_mgr, FragmentContext* fragment_context,
+                          std::atomic<int32_t>& num_sinkers);
 
     ~ConnectorSinkOperator() override = default;
 
@@ -63,6 +63,7 @@ private:
     bool _no_more_input = false;
     bool _is_cancelled = false;
     FragmentContext* _fragment_context;
+    std::atomic<int32_t>& _num_sinkers;
 };
 
 class ConnectorSinkOperatorFactory final : public OperatorFactory {
@@ -75,9 +76,12 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
+    void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
+
     std::unique_ptr<connector::ConnectorSinkProvider> _data_sink_provider;
     std::shared_ptr<connector::SinkMemoryManager> _sink_mem_mgr;
     FragmentContext* _fragment_context;
+    std::atomic<int32_t> _num_sinkers = 0;
 };
 
 } // namespace starrocks::pipeline
