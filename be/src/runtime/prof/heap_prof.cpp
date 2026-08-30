@@ -29,9 +29,16 @@ namespace starrocks {
 // detail implements for allocator
 #ifndef __APPLE__
 static int set_jemalloc_profiling(bool enable) {
-    int ret = je_mallctl("prof.active", nullptr, nullptr, &enable, 1);
-    ret |= je_mallctl("prof.thread_active_init", nullptr, nullptr, &enable, 1);
-    return ret;
+    // Only prof.active, which is also what `prof_active` in JEMALLOC_CONF maps to.
+    //
+    // prof.thread_active_init is deliberately left alone. It is not a second switch but the
+    // value copied into thread.prof.active when a thread is created, and it already defaults
+    // to true, so raising it here would change nothing -- except when an operator started the
+    // process with `prof_thread_active_init:false` to sample selected threads only, and
+    // overriding that is not ours to do. Lowering it is worse: a thread may only change its
+    // own thread.prof.active, so every thread created while the flag was down stays unsampled
+    // for the rest of its life, and re-enabling cannot repair it.
+    return je_mallctl("prof.active", nullptr, nullptr, &enable, 1);
 }
 
 static int has_enable_heap_profile() {
