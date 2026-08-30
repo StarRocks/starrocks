@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Stores two-dimensional OGC geometry values in native WKB form."
 ---
 
 # GEOMETRY
