@@ -184,6 +184,25 @@ jobs:
           labels="${labels},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}"
           echo "BASE_LABELS=${labels}" >> $GITHUB_OUTPUT
 
+      # pr-checker.yml is authoritative for version labels: it ADDS/REMOVES `<version>` labels
+      # from the PR body's `[x]/[ ] <version>` rows and FAILS if "I have checked the version
+      # labels" is left unchecked. The copied source body has those rows unchecked, which would
+      # strip the backport labels above and fail native CI. Rewrite the body so exactly the
+      # requested versions (BACKPORT_BRANCHES) are checked and the acknowledgement row is checked.
+      - name: sync backport checkboxes in body
+        run: |
+          F="/var/local/env/body/${{ github.repository }}/${{ inputs.PR_ID }}.txt"
+          [ -f "$F" ] || exit 0
+          sed -i 's/\[ \] I have checked the version labels/[x] I have checked the version labels/' "$F"
+          for v in 4.1 4.0 3.5 3.4 3.3; do          # uncheck all known version rows first
+            vr=${v//./\\.}
+            sed -i "s/\[x\] ${vr}/[ ] ${v}/g" "$F"
+          done
+          for b in $(echo "${{ inputs.BACKPORT_BRANCHES }}" | tr ',' ' '); do
+            v="${b#branch-}"; vr=${v//./\\.}
+            [ -n "$v" ] && sed -i "s/\[ \] ${vr}/[x] ${v}/g" "$F"
+          done
+
       # Create the SR PR directly (no pending/ordering — native review + rebase handle
       # file-overlap ordering; the sync-based pending machinery is retired for this flow).
       - name: Create pull request
