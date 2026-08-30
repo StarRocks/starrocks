@@ -997,6 +997,15 @@ public class ConnectContext {
                     TransactionStmtExecutor.rollbackStmt(this, null);
                 } catch (Exception ignored) {
                 }
+            } else if (!globalStateMgr.isLeader()) {
+                // A follower's explicit transaction is owned by the leader (BEGIN/COMMIT/ROLLBACK are
+                // forwarded there), so this node has no local explicitTxnState. Forward the rollback to
+                // the leader; otherwise the leader keeps the PREPARE txn (runningTxnNums > 0) until its
+                // timeout and a later leader graceful exit is blocked.
+                try {
+                    forwardRollbackToLeader();
+                } catch (Exception ignored) {
+                }
             }
             try {
                 globalStateMgr.getGlobalTransactionMgr().clearExplicitTxnState(txnId);
@@ -1009,6 +1018,12 @@ public class ConnectContext {
         threadLocalInfo.remove();
         returnRows = 0;
         computeResource = null;
+    }
+
+    private void forwardRollbackToLeader() throws Exception {
+        LeaderOpExecutor executor = new LeaderOpExecutor(
+                new OriginStatement("ROLLBACK", 0), this, RedirectStatus.FORWARD_WITH_SYNC);
+        executor.execute();
     }
 
     public boolean isKilled() {
