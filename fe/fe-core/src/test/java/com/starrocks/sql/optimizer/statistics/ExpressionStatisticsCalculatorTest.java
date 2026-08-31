@@ -581,176 +581,364 @@ public class ExpressionStatisticsCalculatorTest {
 
     }
 
+    private static final double BINARY_LEFT_MIN = -100.0;
+    private static final double BINARY_LEFT_MAX = 100.0;
+    private static final double BINARY_RIGHT_MIN = 100.0;
+    private static final double BINARY_RIGHT_MAX = 200.0;
+    private static final double BINARY_DISTINCT_VALUES = 100.0;
+    private static final double BINARY_ROW_COUNT = 100.0;
+
+    private static ColumnRefOperator binaryLeftColumn() {
+        return new ColumnRefOperator(0, IntegerType.INT, "left", true);
+    }
+
+    private static ColumnRefOperator binaryRightColumn() {
+        return new ColumnRefOperator(1, IntegerType.INT, "right", true);
+    }
+
+    private static Statistics binaryInputStatistics(ColumnRefOperator leftColumn, ColumnRefOperator rightColumn) {
+        return Statistics.builder()
+                .setOutputRowCount(BINARY_ROW_COUNT)
+                .addColumnStatistic(leftColumn,
+                        new ColumnStatistic(BINARY_LEFT_MIN, BINARY_LEFT_MAX, 0, 0, BINARY_DISTINCT_VALUES))
+                .addColumnStatistic(rightColumn,
+                        new ColumnStatistic(BINARY_RIGHT_MIN, BINARY_RIGHT_MAX, 0, 0, BINARY_DISTINCT_VALUES))
+                .build();
+    }
+
+    private static Stream<Arguments> rangeAddingBinaryFunctions() {
+        return Stream.of(
+                Arguments.of(FunctionSet.ADD),
+                Arguments.of(FunctionSet.DATE_ADD));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rangeAddingBinaryFunctions")
+    public void testBinaryFunctionAddsBothOperandRanges(String functionName) {
+        // Given <functionName>(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN the function adds its operands
+        //      THEN min = leftMin + rightMin = 0 and max = leftMax + rightMax = 300 END
+
+        final double expectedMin = 0;
+        final double expectedMax = 300;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator functionCall =
+                new CallOperator(functionName, IntegerType.BIGINT, Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(functionCall, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    private static Stream<Arguments> rangeSubtractingBinaryFunctions() {
+        return Stream.of(
+                Arguments.of(FunctionSet.SUBTRACT),
+                Arguments.of(FunctionSet.TIMEDIFF),
+                Arguments.of(FunctionSet.DATE_SUB));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("rangeSubtractingBinaryFunctions")
+    public void testBinaryFunctionSubtractsRightRangeFromLeft(String functionName) {
+        // Given <functionName>(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN the function subtracts its right operand from its left
+        //      THEN min = leftMin - rightMax = -300 and max = leftMax - rightMin = 0 END
+
+        final double expectedMin = -300;
+        final double expectedMax = 0;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator functionCall =
+                new CallOperator(functionName, IntegerType.BIGINT, Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(functionCall, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    private static Stream<Arguments> timeUnitScalingBinaryFunctions() {
+        // The difference in seconds spans [-300, 0]; each function divides it by the seconds in its own unit,
+        // so the wider the unit the closer both bounds sit to zero. The delta tolerates that rounding.
+        return Stream.of(
+                Arguments.of(FunctionSet.YEARS_DIFF, 0.0, 0.0, 0.001),
+                Arguments.of(FunctionSet.MONTHS_DIFF, 0.0, 0.0, 0.001),
+                Arguments.of(FunctionSet.WEEKS_DIFF, 0.0, 0.0, 0.001),
+                Arguments.of(FunctionSet.DAYS_DIFF, 0.0, 0.0, 0.01),
+                Arguments.of(FunctionSet.DATEDIFF, 0.0, 0.0, 0.01),
+                Arguments.of(FunctionSet.HOURS_DIFF, 0.0, 0.0, 1.0),
+                Arguments.of(FunctionSet.MINUTES_DIFF, -5.0, 0.0, 1.0),
+                Arguments.of(FunctionSet.SECONDS_DIFF, -300.0, 0.0, 1.0));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("timeUnitScalingBinaryFunctions")
+    public void testBinaryDiffFunctionScalesRangeByItsTimeUnit(String functionName, double expectedMin,
+                                                               double expectedMax, double delta) {
+        // Given <functionName>(left, right), where left is [-100, 100] and right is [100, 200] seconds
+        // CASE WHEN the function reports a difference in its own time unit
+        //      THEN min/max are the second-level difference range divided by the seconds in that unit END
+
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator functionCall =
+                new CallOperator(functionName, IntegerType.BIGINT, Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(functionCall, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), delta);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), delta);
+    }
+
+    private static Stream<Arguments> modulusBinaryFunctions() {
+        return Stream.of(
+                Arguments.of(FunctionSet.MOD),
+                Arguments.of(FunctionSet.FMOD),
+                Arguments.of(FunctionSet.PMOD));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("modulusBinaryFunctions")
+    public void testBinaryModulusIsBoundedByRightOperandMagnitude(String functionName) {
+        // Given <functionName>(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN a remainder is always smaller in magnitude than its divisor
+        //      THEN the range is the largest divisor magnitude either way, i.e. [-200, 200] END
+
+        final double expectedMin = -200;
+        final double expectedMax = 200;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator functionCall =
+                new CallOperator(functionName, IntegerType.BIGINT, Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(functionCall, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    private static Stream<Arguments> trimmingBinaryFunctions() {
+        return Stream.of(
+                Arguments.of(FunctionSet.LTRIM),
+                Arguments.of(FunctionSet.LTRIM_STRING),
+                Arguments.of(FunctionSet.RTRIM),
+                Arguments.of(FunctionSet.RTRIM_STRING));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("trimmingBinaryFunctions")
+    public void testBinaryTrimKeepsLeftDistinctValuesAndInfiniteBounds(String functionName) {
+        // Given <functionName>(left, right), where left has 100 distinct values
+        // CASE WHEN trimming a string cannot be ordered numerically
+        //      THEN min/max stay [-inf, +inf] and the distinct value count comes from the trimmed operand END
+
+        final double expectedMin = Double.NEGATIVE_INFINITY;
+        final double expectedMax = Double.POSITIVE_INFINITY;
+        final double expectedDistinctValues = BINARY_DISTINCT_VALUES;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator functionCall =
+                new CallOperator(functionName, VarcharType.VARCHAR, Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(functionCall, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+    }
+
+    private static Stream<Arguments> patternMatchingBinaryFunctions() {
+        return Stream.of(
+                Arguments.of(FunctionSet.LIKE),
+                Arguments.of(FunctionSet.ILIKE));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("patternMatchingBinaryFunctions")
+    public void testBinaryPatternMatchReturnsBooleanRange(String functionName) {
+        // Given <functionName>(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN the function answers a yes/no question
+        //      THEN min = 0, max = 1 and there are 2 distinct values, whatever the operand ranges were END
+
+        final double expectedMin = 0;
+        final double expectedMax = 1;
+        final double expectedDistinctValues = 2;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator functionCall =
+                new CallOperator(functionName, BooleanType.BOOLEAN, Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(functionCall, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+    }
+
     @Test
-    public void testBinaryFunctionCall() {
-        ColumnRefOperator left = new ColumnRefOperator(0, IntegerType.INT, "left", true);
-        ColumnRefOperator right = new ColumnRefOperator(1, IntegerType.INT, "right", true);
-        Statistics.Builder builder = Statistics.builder();
-        ColumnStatistic leftStatistic = new ColumnStatistic(-100, 100, 0, 0, 100);
-        ColumnStatistic rightStatistic = new ColumnStatistic(100, 200, 0, 0, 100);
-        builder.setOutputRowCount(100);
-        builder.addColumnStatistic(left, leftStatistic);
-        builder.addColumnStatistic(right, rightStatistic);
+    public void testFromUnixtimeWithFormatKeepsLeftDistinctValues() {
+        // Given FROM_UNIXTIME(left, right), where left has 100 distinct values
+        // CASE WHEN the formatted timestamp cannot be ordered numerically
+        //      THEN min/max stay [-inf, +inf] and the distinct value count comes from the timestamp operand END
 
-        // test add function
-        CallOperator callOperator = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(300, columnStatistic.getMaxValue(), 0.001);
-        // test date_add function
-        callOperator = new CallOperator(FunctionSet.DATE_ADD, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(300, columnStatistic.getMaxValue(), 0.001);
-        // test substract function
-        callOperator = new CallOperator(FunctionSet.SUBTRACT, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
-        // test timediff function
-        callOperator = new CallOperator(FunctionSet.TIMEDIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
-        // test date_sub function
-        callOperator = new CallOperator(FunctionSet.DATE_SUB, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-300, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
-        // test from_unix function
-        callOperator = new CallOperator(FunctionSet.FROM_UNIXTIME, VarcharType.VARCHAR, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(leftStatistic.getDistinctValuesCount(), columnStatistic.getDistinctValuesCount(), 0.001);
-        // test years_diff function
-        callOperator = new CallOperator(FunctionSet.YEARS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
-        // test months_diff function
-        callOperator = new CallOperator(FunctionSet.MONTHS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
-        // test weeks_diff function
-        callOperator = new CallOperator(FunctionSet.WEEKS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001);
-        // test days_diff function
-        callOperator = new CallOperator(FunctionSet.DAYS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.01);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.01);
-        // test datediff function
-        callOperator = new CallOperator(FunctionSet.DATEDIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.01);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.01);
-        // test hours_diff function
-        callOperator = new CallOperator(FunctionSet.HOURS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 1);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 1);
-        // test minutes_diff function
-        callOperator = new CallOperator(FunctionSet.MINUTES_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-5, columnStatistic.getMinValue(), 1);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 1);
-        // test seconds_diff function
-        callOperator = new CallOperator(FunctionSet.SECONDS_DIFF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-300, columnStatistic.getMinValue(), 1);
-        Assertions.assertEquals(0, columnStatistic.getMaxValue(), 1);
-        // test mod function
-        callOperator = new CallOperator(FunctionSet.MOD, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-200, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(200, columnStatistic.getMaxValue(), 0.001);
-        // test fmod function
-        callOperator = new CallOperator(FunctionSet.FMOD, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-200, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(200, columnStatistic.getMaxValue(), 0.001);
-        // test pmod function
-        callOperator = new CallOperator(FunctionSet.PMOD, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-200, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(200, columnStatistic.getMaxValue(), 0.001);
-        // test ifnull function
-        callOperator = new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-100, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(200, columnStatistic.getMaxValue(), 0.001);
-        // test nullif function
-        callOperator = new CallOperator(FunctionSet.NULLIF, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-100, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(100, columnStatistic.getMaxValue(), 0.001);
-        // test ltrim function
-        callOperator = new CallOperator(FunctionSet.LTRIM, VarcharType.VARCHAR, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
-        // test ltrim_string function
-        callOperator = new CallOperator(FunctionSet.LTRIM_STRING, VarcharType.VARCHAR, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
-        // test rtrim function
-        callOperator = new CallOperator(FunctionSet.RTRIM, VarcharType.VARCHAR, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
-        // test rtrim_string function
-        callOperator = new CallOperator(FunctionSet.RTRIM_STRING, VarcharType.VARCHAR, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(Double.NEGATIVE_INFINITY, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(Double.POSITIVE_INFINITY, columnStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+        final double expectedMin = Double.NEGATIVE_INFINITY;
+        final double expectedMax = Double.POSITIVE_INFINITY;
+        final double expectedDistinctValues = BINARY_DISTINCT_VALUES;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator fromUnixtime = new CallOperator(FunctionSet.FROM_UNIXTIME, VarcharType.VARCHAR,
+                Lists.newArrayList(leftColumn, rightColumn));
 
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(fromUnixtime, statistics);
 
-        callOperator = new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-20000, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(20000, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedDistinctValues, actualStatistic.getDistinctValuesCount(), 0.001);
+    }
 
-        callOperator = new CallOperator(FunctionSet.DIVIDE, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-1, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
+    @Test
+    public void testIfnullSpansBothOperandRanges() {
+        // Given IFNULL(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN the result can come from either operand
+        //      THEN min = min(leftMin, rightMin) = -100 and max = max(leftMax, rightMax) = 200 END
 
-        callOperator = new CallOperator(FunctionSet.LIKE, BooleanType.BOOLEAN, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+        final double expectedMin = -100;
+        final double expectedMax = 200;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator ifnull = new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT,
+                Lists.newArrayList(leftColumn, rightColumn));
 
-        callOperator = new CallOperator(FunctionSet.ILIKE, BooleanType.BOOLEAN, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
-        // test multiply/divide column rang is negative
-        builder = Statistics.builder();
-        leftStatistic = new ColumnStatistic(-100, -10, 0, 0, 20);
-        rightStatistic = new ColumnStatistic(-2, 0, 0, 0, 1);
-        builder.setOutputRowCount(100);
-        builder.addColumnStatistic(left, leftStatistic);
-        builder.addColumnStatistic(right, rightStatistic);
-        callOperator = new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(200, columnStatistic.getMaxValue(), 0.001);
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(ifnull, statistics);
 
-        callOperator = new CallOperator(FunctionSet.DIVIDE, IntegerType.BIGINT, Lists.newArrayList(left, right));
-        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
-        Assertions.assertEquals(-100, columnStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(50, columnStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testNullifKeepsLeftOperandRange() {
+        // Given NULLIF(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN the result is either the left operand or null
+        //      THEN min/max are the left operand's range and the right operand does not widen it END
+
+        final double expectedMin = -100;
+        final double expectedMax = 100;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator nullif = new CallOperator(FunctionSet.NULLIF, IntegerType.BIGINT,
+                Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(nullif, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testMultiplySpansEveryCrossProductOfBothRanges() {
+        // Given MULTIPLY(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN the extreme products are -100*200 and 100*200
+        //      THEN min = -20000 and max = 20000 END
+
+        final double expectedMin = -20000;
+        final double expectedMax = 20000;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator multiply = new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT,
+                Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(multiply, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testDivideSpansEveryQuotientOfBothRanges() {
+        // Given DIVIDE(left, right), where left is [-100, 100] and right is [100, 200]
+        // CASE WHEN the extreme quotients are -100/100 and 100/100
+        //      THEN min = -1 and max = 1 END
+
+        final double expectedMin = -1;
+        final double expectedMax = 1;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = binaryInputStatistics(leftColumn, rightColumn);
+        final CallOperator divide = new CallOperator(FunctionSet.DIVIDE, IntegerType.BIGINT,
+                Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(divide, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testMultiplyOfTwoNegativeRangesIsNonNegative() {
+        // Given MULTIPLY(left, right), where left is [-100, -10] and right is [-2, 0]
+        // CASE WHEN both operand ranges are non-positive
+        //      THEN every product is non-negative, so min = -10*0 = 0 and max = -100*-2 = 200 END
+
+        final double leftMin = -100;
+        final double leftMax = -10;
+        final double rightMin = -2;
+        final double rightMax = 0;
+        final double expectedMin = 0;
+        final double expectedMax = 200;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(BINARY_ROW_COUNT)
+                .addColumnStatistic(leftColumn, new ColumnStatistic(leftMin, leftMax, 0, 0, 20))
+                .addColumnStatistic(rightColumn, new ColumnStatistic(rightMin, rightMax, 0, 0, 1))
+                .build();
+        final CallOperator multiply = new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT,
+                Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(multiply, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
+    }
+
+    @Test
+    public void testDivideOfTwoNegativeRangesSpansBothSigns() {
+        // Given DIVIDE(left, right), where left is [-100, -10] and right is [-2, 0]
+        // CASE WHEN a divisor bound is zero THEN it is treated as one, so -100/1 = -100 is the smallest quotient
+        //      ELSE the largest quotient is -100/-2 = 50 END
+
+        final double leftMin = -100;
+        final double leftMax = -10;
+        final double rightMin = -2;
+        final double rightMax = 0;
+        final double expectedMin = -100;
+        final double expectedMax = 50;
+        final ColumnRefOperator leftColumn = binaryLeftColumn();
+        final ColumnRefOperator rightColumn = binaryRightColumn();
+        final Statistics statistics = Statistics.builder()
+                .setOutputRowCount(BINARY_ROW_COUNT)
+                .addColumnStatistic(leftColumn, new ColumnStatistic(leftMin, leftMax, 0, 0, 20))
+                .addColumnStatistic(rightColumn, new ColumnStatistic(rightMin, rightMax, 0, 0, 1))
+                .build();
+        final CallOperator divide = new CallOperator(FunctionSet.DIVIDE, IntegerType.BIGINT,
+                Lists.newArrayList(leftColumn, rightColumn));
+
+        final ColumnStatistic actualStatistic = ExpressionStatisticCalculator.calculate(divide, statistics);
+
+        Assertions.assertEquals(expectedMin, actualStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(expectedMax, actualStatistic.getMaxValue(), 0.001);
     }
 
     @Test
