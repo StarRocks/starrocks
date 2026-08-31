@@ -71,7 +71,7 @@ public class PaimonConnector implements Connector {
     private static final MemorySize CACHE_MANIFEST_MEMORY = MemorySize.ofMebiBytes(1024);
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
-    private ExecutorService refreshExecutor;
+    private final ExecutorService refreshExecutor;
     private final long tableCacheRefreshIntervalSec;
     private final String catalogName;
     private final Options paimonOptions;
@@ -121,6 +121,10 @@ public class PaimonConnector implements Connector {
                 PropertyUtil.propertyAsLong(properties, PAIMON_META_CACHE_TTL, DEFAULT_META_CACHE_TTL_SEC));
         this.tableCacheRefreshIntervalSec = PropertyUtil.propertyAsLong(properties, PAIMON_TABLE_CACHE_REFRESH_INTERVAL,
                 DEFAULT_TABLE_CACHE_REFRESH_INTERVAL_SEC);
+        // built here, not on the lazy catalog path: two concurrent first queries would otherwise
+        // each build a pool and only the last one stored could ever be shut down
+        this.refreshExecutor = ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(
+                REFRESH_THREAD_NUM, catalogName + "-paimon-refresh-pool", true);
         this.paimonOptions.set(CatalogOptions.CACHE_EXPIRE_AFTER_ACCESS, metaCacheTtl);
         this.paimonOptions.set(CatalogOptions.CACHE_EXPIRE_AFTER_WRITE, metaCacheTtl);
         // max num of cached partitions of a Paimon catalog
@@ -192,21 +196,11 @@ public class PaimonConnector implements Connector {
                 this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(unwrapped, getPaimonOptions());
                 return paimonNativeCatalog;
             }
-            ExecutorService executor = ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(
-                    REFRESH_THREAD_NUM, catalogName + "-paimon-refresh-pool", true);
-            try {
-                CachingPaimonCatalog cachingCatalog = new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions(),
-                        executor, tableCacheRefreshIntervalSec);
-                Catalog catalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
-                GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                        .registerPaimonCatalog(catalogName, cachingCatalog);
-                this.refreshExecutor = executor;
-                this.paimonNativeCatalog = catalog;
-            } catch (Exception e) {
-                // a later call would build a second pool under the same name, leaving this one behind
-                executor.shutdownNow();
-                throw e;
-            }
+            CachingPaimonCatalog cachingCatalog = new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions(),
+                    refreshExecutor, tableCacheRefreshIntervalSec);
+            this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
+            GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                    .registerPaimonCatalog(catalogName, cachingCatalog);
         }
         return paimonNativeCatalog;
     }
@@ -219,8 +213,6 @@ public class PaimonConnector implements Connector {
     @Override
     public void shutdown() {
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterPaimonCatalog(catalogName);
-        if (refreshExecutor != null) {
-            refreshExecutor.shutdown();
-        }
+        refreshExecutor.shutdown();
     }
 }

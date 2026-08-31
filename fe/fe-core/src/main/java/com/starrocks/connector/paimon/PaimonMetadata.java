@@ -410,11 +410,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         // the caching layer sits under the privilege wrapper when paimon privileges are on.
         // DelegateCatalog.rootCatalog would strip it too, since CachingCatalog is itself a delegate
         Catalog catalog = paimonNativeCatalog;
-        while (catalog instanceof DelegateCatalog && !(catalog instanceof CachingPaimonCatalog)) {
-            catalog = ((DelegateCatalog) catalog).wrapped();
+        while (catalog instanceof DelegateCatalog delegate && !(catalog instanceof CachingPaimonCatalog)) {
+            catalog = delegate.wrapped();
         }
-        if (catalog instanceof CachingPaimonCatalog) {
-            ((CachingPaimonCatalog) catalog).maybeRefreshAsync(
+        if (catalog instanceof CachingPaimonCatalog cachingPaimonCatalog) {
+            cachingPaimonCatalog.maybeRefreshAsync(
                     new Identifier(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName()), snapshotId);
         }
     }
