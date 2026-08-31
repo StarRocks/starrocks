@@ -217,6 +217,28 @@ public class BasicStatsMetaTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testRemoveColumnStatsMeta() {
+        BasicStatsMeta meta = new BasicStatsMeta(1L, 2L, Lists.newArrayList("c1", "c2"),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+        meta.addColumnStatsMeta(new ColumnStatsMeta("c2", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
+
+        // removal is case-insensitive and updates both the meta map and the deprecated legacy list
+        meta.removeColumnStatsMeta(List.of("C1"));
+        Assertions.assertEquals(List.of("c2"), meta.getColumns());
+        Assertions.assertFalse(meta.getAnalyzedColumns().containsKey("c1"));
+
+        // the removal survives the GSON round-trip used by clone()/edit log persistence
+        BasicStatsMeta cloned = meta.clone();
+        Assertions.assertEquals(List.of("c2"), cloned.getColumns());
+
+        // once the map becomes empty, getColumns() falls back to the legacy list, which must not
+        // resurrect removed entries
+        meta.removeColumnStatsMeta(List.of("c2"));
+        Assertions.assertTrue(meta.getColumns().isEmpty());
+    }
+
     @AfterEach
     public void after() {
         FeConstants.runningUnitTest = false;

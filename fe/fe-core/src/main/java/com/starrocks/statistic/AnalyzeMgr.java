@@ -850,6 +850,41 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    /**
+     * Drop the persisted statistics rows and the per-column meta entries for the given columns of a table,
+     * then invalidate the FE statistics cache for them. Used when a schema change makes the previously
+     * collected statistics of a column semantically invalid (e.g. a column type change with different
+     * ordering semantics).
+     *
+     * @return true iff the persisted rows were deleted (and the meta was updated accordingly)
+     */
+    public boolean dropColumnStatsMetaAndData(ConnectContext statsConnectCtx, long dbId, long tableId,
+                                              List<String> columns) {
+        if (columns == null || columns.isEmpty()) {
+            return true;
+        }
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        try (var guard = statsConnectCtx.bindScope()) {
+            boolean sampleOk = statisticExecutor.dropColumnStatistics(statsConnectCtx, tableId, columns,
+                    StatsConstants.AnalyzeType.SAMPLE);
+            boolean fullOk = statisticExecutor.dropColumnStatistics(statsConnectCtx, tableId, columns,
+                    StatsConstants.AnalyzeType.FULL);
+            if (!sampleOk || !fullOk) {
+                return false;
+            }
+
+            BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
+            if (basicStatsMeta != null && basicStatsMeta.getColumns().stream()
+                    .anyMatch(c -> columns.stream().anyMatch(c::equalsIgnoreCase))) {
+                BasicStatsMeta newMeta = basicStatsMeta.clone();
+                newMeta.removeColumnStatsMeta(columns);
+                addBasicStatsMeta(newMeta);
+            }
+            expireTableAndColumnStatistics(dbId, tableId, columns);
+            return true;
+        }
+    }
+
     public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
         if (tableIds == null || tableIds.isEmpty()) {
             return;

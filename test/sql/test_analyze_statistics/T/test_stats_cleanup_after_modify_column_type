@@ -1,0 +1,31 @@
+-- name: test_stats_cleanup_after_modify_column_type
+create database sc_stats_${uuid0};
+use sc_stats_${uuid0};
+CREATE TABLE `t1` (
+  `c1` int,
+  `c_str` varchar(64)
+)
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+insert into t1 values (1, '2'), (2, '19'), (3, '30');
+analyze full table t1 with sync mode;
+-- as a varchar column, min/max are lexicographic extremes: min='19', max='30'
+select column_name, `min`, `max` from default_catalog._statistics_.column_statistics where table_name = 'sc_stats_${uuid0}.t1' order by column_name;
+alter table t1 modify column c_str bigint;
+function: wait_table_schema_change_finish("sc_stats_${uuid0}", "t1")
+-- after the type change finishes, the stale varchar-era stats of c_str must be dropped and
+-- re-collected under the new type; without cleanup the lexicographic min '19' would be served
+-- as a bigint min forever (real numeric min is 2)
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait stale stats cleanup and re-collection after type change"}
+  result=select count(*) from default_catalog._statistics_.column_statistics where table_name = 'sc_stats_${uuid0}.t1' and column_name = 'c_str' and `min` = '2' and `max` = '30';
+  CHECK: str(to_array(${result})[0][0]) == "1"
+} END LOOP
+-- untouched column c1 keeps its stats; c_str now carries numeric-semantics min/max
+select column_name, `min`, `max` from default_catalog._statistics_.column_statistics where table_name = 'sc_stats_${uuid0}.t1' order by column_name;
+drop database sc_stats_${uuid0};
+
+CLEANUP {
+    drop database if exists sc_stats_${uuid0};
+} END CLEANUP

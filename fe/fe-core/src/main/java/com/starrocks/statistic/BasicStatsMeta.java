@@ -298,6 +298,21 @@ public class BasicStatsMeta implements Writable {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
     }
 
+    public void removeColumnStatsMeta(Collection<String> columnNames) {
+        for (String columnName : columnNames) {
+            columnStatsMetaMap.keySet().removeIf(k -> k.equalsIgnoreCase(columnName));
+        }
+        // The deprecated legacy column list is still serialized for rollback compatibility and
+        // becomes authoritative again once columnStatsMetaMap is empty (see getColumns()), so it
+        // must be kept consistent, otherwise a removed entry would resurrect. Rebuild instead of
+        // removeIf: the passed-in list may be immutable.
+        if (columns != null) {
+            columns = columns.stream()
+                    .filter(c -> columnNames.stream().noneMatch(c::equalsIgnoreCase))
+                    .collect(Collectors.toList());
+        }
+    }
+
     public void resetDeltaRows() {
         this.deltaRows = 0;
     }
