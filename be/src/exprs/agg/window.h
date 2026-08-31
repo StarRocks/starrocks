@@ -770,8 +770,8 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     // non-null is not yet in [current+1, available_end). Once the partition is complete, the
     // existing update path may emit the default.
     bool is_window_result_ready(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& columns,
-                                int64_t partition_start, int64_t available_end, int64_t frame_start,
-                                int64_t frame_end, bool partition_is_complete) const override {
+                                int64_t partition_start, int64_t available_end, int64_t frame_start, int64_t frame_end,
+                                bool partition_is_complete) const override {
         if constexpr (!(ignoreNulls && !isLag)) {
             return true;
         }
