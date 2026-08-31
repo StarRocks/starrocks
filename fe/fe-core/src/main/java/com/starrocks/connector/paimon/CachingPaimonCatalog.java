@@ -33,9 +33,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
- * Paimon's caching catalog plus the bookkeeping background refresh needs to prune its work:
- * per-table last access time, and the snapshot / schema revision each table was last refreshed at.
- * Mirrors CachingIcebergCatalog.
+ * Paimon's caching catalog plus the bookkeeping refresh needs to prune its work: per-table last
+ * access time, and the snapshot / schema revision each table was last refreshed at. An access also
+ * queues a refresh of that table once the interval has elapsed, the way Caffeine's
+ * refreshAfterWrite does for iceberg. Mirrors CachingIcebergCatalog.
  */
 public class CachingPaimonCatalog extends CachingCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingPaimonCatalog.class);
@@ -66,6 +67,7 @@ public class CachingPaimonCatalog extends CachingCatalog {
         // a system table has no snapshot of its own, a branch/tag pins a fixed version: neither goes stale
         if (!id.isSystemTable() && id.getBranchName() == null) {
             tableLatestAccessTime.put(id, System.currentTimeMillis());
+            maybeRefreshAsync(id);
         }
         return table;
     }
@@ -79,20 +81,14 @@ public class CachingPaimonCatalog extends CachingCatalog {
     }
 
     /**
-     * Queue a refresh when a query just read a snapshot newer than the one this catalog was last
-     * refreshed to. Runs on the background pool, the caller never waits for it.
+     * Queue a refresh for a table that has not been looked at for a while. Only the interval check
+     * runs on the caller's thread; reading the lake and comparing revisions happens on the pool, so
+     * an access never waits and never adds an RPC of its own.
      */
-    public void maybeRefreshAsync(Identifier id, long observedSnapshotId) {
-        // zero or less turns query-triggered refresh off, as it turns off Caffeine's refreshAfterWrite for iceberg
-        if (refreshIntervalSec <= 0 || observedSnapshotId < 0) {
-            return;
-        }
-        // same exclusions as the access time ledger: neither kind of table goes stale
-        if (id.isSystemTable() || id.getBranchName() != null) {
-            return;
-        }
-        TableRevision refreshed = lastRefreshedRevision.get(id);
-        if (refreshed != null && refreshed.snapshotId() == observedSnapshotId) {
+    @VisibleForTesting
+    void maybeRefreshAsync(Identifier id) {
+        // zero or less turns this off, as a non-positive interval turns off Caffeine's refreshAfterWrite for iceberg
+        if (refreshIntervalSec <= 0) {
             return;
         }
         Long refreshedAt = lastRefreshTime.get(id);
