@@ -48,10 +48,23 @@ jobs:
 
   # INTERIM (pre-reconcile): branch-26.2 is CD-exclusive — StarRocks has no 26.2 branch, so a
   # fix synced onto the shared branch-4.1 line has no other way to reach 26.2. When a SYNCED
-  # PR MERGES into branch-4.1, ask Mergify to also backport it to branch-26.2. Keyed on the
-  # MERGE (not sync-PR creation): repo-sync pending PRs get closed & recreated, so acting at
-  # creation would double-post; only the single final merge fires this. REMOVE once
-  # reconcile --synced derives the full CD window incl 26.2 for synced PRs.
+  # PR MERGES into branch-4.1, drive a branch-26.2 backport for it. Keyed on the MERGE (not
+  # sync-PR creation): repo-sync pending PRs get closed & recreated, so acting at creation
+  # would double-post; only the single final merge fires this. REMOVE once reconcile --synced
+  # derives the full CD window incl 26.2 for synced PRs.
+  #
+  # SOURCE = the CD main PR, NOT this 4.1 PR. branch-26.2 is cut from main, whereas branch-4.1
+  # long ago diverged from a since-refactored main, so cherry-picking the 4.1-flavored commit
+  # onto 26.2 almost always conflicts. Instead reverse-look-up the main-line counterpart and
+  # post @Mergifyio backport there, so ci-comment-tools' backport.sh sources the main merge
+  # commit (same genealogy as 26.2 -> clean pick):
+  #   - this 4.1 sync PR title carries `(backport #<SR_MAIN_PR>)` — the ORIGINAL StarRocks main
+  #     PR (marker semantics: ci-tool/bin/ai_conflict_fix.sh:86-98);
+  #   - the CD main sync PR for it has head `main-sync-pr-<SR_MAIN_PR>` (repo-sync's
+  #     `${BRANCH}-sync-pr-${PR_ID}`, where PR_ID is the SR source PR number).
+  # FALLBACK: if there is no `(backport #N)` marker (a PR opened directly on 4.1, no main
+  # counterpart) or no MERGED CD main PR is found, post on THIS 4.1 PR — the prior behavior —
+  # so 26.2 is never silently skipped (it may still conflict for that minority).
   #
   # Discriminator = the machine-generated head branch `branch-4.1-sync-pr-<N>` (repo-sync's
   # `${BRANCH}-sync-pr-${PR_ID}`), AND the `sync` label. Both are set by repo-sync and always
@@ -69,9 +82,36 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT }}
     steps:
-      - name: also backport this merged branch-4.1 synced fix to branch-26.2
+      - name: drive branch-26.2 backport from the main PR (reverse-lookup; fallback to this 4.1 PR)
         run: |
-          gh pr comment "${PR_NUMBER}" -R "${GITHUB_REPOSITORY}" --body "@Mergifyio backport branch-26.2"
+          set -eo pipefail
+          TITLE=$(gh pr view "${PR_NUMBER}" -R "${GITHUB_REPOSITORY}" --json title -q '.title')
+          echo "4.1 sync PR #${PR_NUMBER} title: ${TITLE}"
+
+          # Extract the original StarRocks main PR number from the `(backport #N)` marker.
+          SR_MAIN=$(printf '%s' "${TITLE}" | grep -oiE '\(backport #[0-9]+\)' | grep -oE '[0-9]+' | tail -1 || true)
+
+          TARGET_PR=""
+          if [ -n "${SR_MAIN}" ]; then
+            echo "SR main PR = #${SR_MAIN}; looking up CD main sync PR head=main-sync-pr-${SR_MAIN}"
+            # Only a MERGED main PR can be backported (backport.sh needs its merge commit).
+            TARGET_PR=$(gh pr list -R "${GITHUB_REPOSITORY}" --base main --head "main-sync-pr-${SR_MAIN}" \
+              --state all --json number,mergedAt -q '[.[] | select(.mergedAt != null)][0].number // empty')
+            if [ -n "${TARGET_PR}" ]; then
+              echo "reverse-lookup hit: driving 26.2 from merged CD main PR #${TARGET_PR}"
+            else
+              echo "no merged CD main sync PR found for main-sync-pr-${SR_MAIN}"
+            fi
+          else
+            echo "no (backport #N) marker — PR opened directly on 4.1, no main counterpart"
+          fi
+
+          if [ -z "${TARGET_PR}" ]; then
+            TARGET_PR="${PR_NUMBER}"
+            echo "fallback: driving 26.2 from this 4.1 PR #${TARGET_PR} (preserves prior behavior; may conflict)"
+          fi
+
+          gh pr comment "${TARGET_PR}" -R "${GITHUB_REPOSITORY}" --body "@Mergifyio backport branch-26.2"
 
   # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
   # job above and only PRINTS the computed target set (never posts @Mergifyio), for
@@ -97,33 +137,6 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
-
-  # Backport fan-out — SYNC-EXCLUSIVE dry-run shadow. Fires ONLY on sync PRs (SR -> CD
-  # forward sync merged to main), the mirror of the job above (which excludes them).
-  # Restricts the target set to release lines CD has but SR LACKS (e.g. enterprise-only
-  # branch-26.2, when SR tops out at 4.1): shared lines arrive by syncing SR's own
-  # backports, so only CD-exclusive lines need a local fan-out. DRY-RUN (prints only) +
-  # continue-on-error during shadow. Depends on ci-tool #4918 (--exclusive-vs) on the runner.
-  backport-fanout-sync-shadow:
-    name: Backport Fan-out sync-exclusive (dry-run shadow)
-    runs-on: [ self-hosted, quick ]
-    if: >
-      github.event.pull_request.merged == true &&
-      github.base_ref == 'main' && (
-      contains(github.event.pull_request.title, '(sync #') ||
-      contains(github.event.pull_request.labels.*.name, 'sync') ||
-      contains(github.head_ref, '-sync-')) &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
-    continue-on-error: true
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      GH_TOKEN: ${{ secrets.PAT }}
-    steps:
-      - name: fan-out dry-run (sync-exclusive)
-        run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --exclusive-vs StarRocks/starrocks --dry-run
 
   thirdparty-filter:
     runs-on: ubuntu-latest
