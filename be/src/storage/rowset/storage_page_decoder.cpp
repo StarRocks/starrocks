@@ -45,7 +45,12 @@ public:
         size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);
         size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 8);
         size_t size_of_element = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 12);
-        if (num_element_after_padding != ALIGN_UP(num_elements, 8U)) {
+        // Compute the expected padded count with a full-width size_t so that a
+        // corrupted num_elements near 2^32 cannot wrap: ALIGN_UP()'s mask is
+        // 32-bit, so ALIGN_UP(0xffffffff, 8U) would wrap to 0 and match a
+        // crafted padded count of 0.
+        size_t expected_padded = (num_elements + 7) & ~static_cast<size_t>(7);
+        if (num_element_after_padding != expected_padded) {
             return Status::Corruption(strings::Substitute("bitshuffle element count corrupted, padded:$0, num:$1",
                                                           num_element_after_padding, num_elements));
         }

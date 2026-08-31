@@ -564,6 +564,16 @@ TEST_F(BitShufflePageTest, TestCorruptedPagePreDecodeRejected) {
         ASSERT_FALSE(decode(bad).ok());
     }
 
+    // num_elements = 0xffffffff with a padded count of 0: ALIGN_UP(0xffffffff,
+    // 8U) wraps to 0 with the 32-bit mask, so a full-width check is required to
+    // reject this instead of reconstructing a page that reports ~4.29e9 rows.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 0, 0xffffffff);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, 0);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
     // An element size outside the supported set would drive an absurd
     // allocation (e.g. 8 * 0xffffffff bytes) before any decode.
     {

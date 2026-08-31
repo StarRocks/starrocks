@@ -257,7 +257,10 @@ public:
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _compressed_size = decode_fixed32_le((const uint8_t*)&_data[4]);
         _num_element_after_padding = decode_fixed32_le((const uint8_t*)&_data[8]);
-        if (_num_element_after_padding != ALIGN_UP(_num_elements, 8U)) {
+        // Use a full-width size_t alignment: ALIGN_UP()'s mask is 32-bit, so
+        // ALIGN_UP(0xffffffff, 8U) would wrap to 0 and accept a corrupted page
+        // whose padded count is 0.
+        if (_num_element_after_padding != ((static_cast<size_t>(_num_elements) + 7) & ~static_cast<size_t>(7))) {
             std::stringstream ss;
             ss << "num of element information corrupted,"
                << " _num_element_after_padding:" << _num_element_after_padding << ", _num_elements:" << _num_elements;
