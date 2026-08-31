@@ -411,6 +411,15 @@ Paimon catalog 的描述。此参数是可选的。
     | gcp.gcs.service_account_private_key    | ""            | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建元服务账户时生成的 JSON 文件中的私钥。                 |
     | gcp.gcs.impersonation_service_account  | ""            | "hello"                                                      | 您要模拟的数据服务账户。                                     |
 
+#### MetadataCacheParams（可选）
+
+StarRocks 会缓存 Paimon 元数据并在后台刷新，以下可选属性用于调整该缓存。
+
+| 参数                                     | 默认值   | 说明                                                         |
+| ---------------------------------------- | -------- | ------------------------------------------------------------ |
+| paimon_meta_cache_ttl_sec                | 86400    | 缓存条目的存活时间，单位为秒。 |
+| paimon_table_cache_refresh_interval_sec  | 60       | 同一张表由查询触发的两次刷新之间的最小间隔，单位为秒。当查询读到比上次刷新更新的 Snapshot 时触发，刷新在后台执行，查询不会等待。设置为 `0` 表示只依赖周期性后台刷新。自 v4.2.0 起支持。 |
+
 ### 示例
 
 以下示例创建一个名为 `paimon_catalog_fs` 的 Paimon catalog，其元存储类型 `paimon.catalog.type` 设置为 `filesystem`，用于从您的 Paimon 集群查询数据。
