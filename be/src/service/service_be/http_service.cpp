@@ -39,6 +39,7 @@
 #include <optional>
 
 #include "cache/datacache.h"
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/stl_util.h"
@@ -75,6 +76,7 @@
 #include "http/utils.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "service/service_be/http_auth_response.h"
 #include "util/starrocks_metrics.h"
 
@@ -257,6 +259,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/running", show_running_action);
     _http_handlers.emplace_back(show_running_action);
 
+    // jemalloc read JEMALLOC_CONF at process init, before BE config parsing. Take the option
+    // string that actually took effect as the baseline, and republish it as `jemalloc_conf` when
+    // the config claims something else, so an update is diffed against what jemalloc really has.
+    JemallocConfUpdater::instance().init(config::jemalloc_conf.value());
     auto* update_config_action = new UpdateConfigAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
