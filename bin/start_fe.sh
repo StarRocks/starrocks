@@ -158,10 +158,9 @@ elif [[ "$JAVA_VERSION" -lt $RECOMMENDED_JDK_VERSION ]]; then
 fi
 
 final_java_opt=${JAVA_OPTS}
-# Compatible with scenarios upgraded from jdk11
+# JAVA_OPTS_FOR_JDK_11 is no longer supported, warn loudly if it is still set
 if [ ! -z "${JAVA_OPTS_FOR_JDK_11}" ] ; then
-    warn_deprecated_java_opts "StarRocks FE" "JAVA_OPTS_FOR_JDK_11" "$STARROCKS_HOME/conf/fe.conf"
-    final_java_opt=${JAVA_OPTS_FOR_JDK_11}
+    warn_removed_java_opts "StarRocks FE" "JAVA_OPTS_FOR_JDK_11" "$STARROCKS_HOME/conf/fe.conf"
 fi
 
 if [ -z "$final_java_opt" ] ; then
