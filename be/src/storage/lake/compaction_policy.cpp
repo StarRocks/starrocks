@@ -621,6 +621,9 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create(TabletManager* tablet_mgr
         if (!tablet_metadata->has_range()) {
             return Status::InvalidArgument("unshare compaction requires a tablet range");
         }
+        if (!TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
+            return Status::InvalidArgument("unshare compaction requires a sort key separate from the primary key");
+        }
         if ((tablet_metadata->has_dcg_meta() && !tablet_metadata->dcg_meta().dcgs().empty()) ||
             (tablet_metadata->has_idg_meta() && !tablet_metadata->idg_meta().idgs().empty())) {
             return Status::NotSupported("unshare compaction does not support DCG or IDG metadata yet");
