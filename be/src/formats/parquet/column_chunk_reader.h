@@ -82,7 +82,11 @@ public:
     Status decode_values(size_t n, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
                          const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        if (_current_row_group_no_null || _current_page_no_null) {
+        // A `null_count` statistic is only a hint. Old parquet-mr writers are known to under-report
+        // it, and a page that claims no NULLs stores one physical value per non-NULL row only, so
+        // decoding one value per row walks off the end of the page. `null_infos` is derived from the
+        // definition levels the caller has just decoded, so cross-checking is authoritative and free.
+        if ((_current_row_group_no_null || _current_page_no_null) && null_infos.num_nulls == 0) {
             return _cur_decoder->next_batch(n, content_type, dst, filter);
         }
         return _cur_decoder->next_batch_with_nulls(n, null_infos, content_type, dst, filter);
