@@ -98,9 +98,25 @@ void DownloadAction::handle_normal(HttpRequest* req, const std::string& file_par
 }
 
 void DownloadAction::handle_error_log(HttpRequest* req, const std::string& file_param) {
+    // need_auth() gates this on config::enable_http_auth, which defaults to false, so this
+    // path is effectively unauthenticated in a default deployment. Add the same
+    // shared-token check already used by handle_normal() as defense-in-depth so error logs
+    // (which can contain sensitive query text/data) aren't served to anyone who can reach the
+    // BE HTTP port when enable_http_auth is left at its default.
+    Status status;
+    if (config::enable_token_check) {
+        status = check_token(req);
+        if (!status.ok()) {
+            HttpChannel::send_reply(req, status.message());
+            LOG(WARNING) << "Download method:" << to_method_desc(req->method()) << " " << file_param
+                         << " error:" << status;
+            return;
+        }
+    }
+
     const std::string absolute_path = _error_log_root_dir + "/" + file_param;
 
-    Status status = check_log_path_is_allowed(absolute_path);
+    status = check_log_path_is_allowed(absolute_path);
     if (!status.ok()) {
         HttpChannel::send_reply(req, status.message());
         return;
