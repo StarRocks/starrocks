@@ -251,7 +251,8 @@ TEST_F(PaimonFileSystemTest, GetStatusListAndExists) {
     EXPECT_FALSE(file_status->IsDir());
     EXPECT_EQ(_content.size(), file_status->GetLen());
     ASSIGN_OR_ABORT(auto starrocks_modification_time, _local_fs->get_file_modified_time(_data_path));
-    EXPECT_EQ(starrocks_modification_time, file_status->GetModificationTime());
+    // StarRocks reports seconds, paimon::FileStatus carries milliseconds.
+    EXPECT_EQ(starrocks_modification_time * 1000, file_status->GetModificationTime());
 
     auto directory_status_result = file_system.GetFileStatus(_child_dir);
     ASSERT_TRUE(directory_status_result.ok()) << directory_status_result.status().ToString();

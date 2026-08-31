@@ -216,15 +216,26 @@ public:
             return paimon::Status::Invalid(fmt::format("negative read size {} for {}", size, _file->filename()));
         }
         const int64_t start_ns = MonotonicNanos();
-        auto result = _file->read_at(_pos, buffer, size);
-        _stats->record_app_read(PaimonFileSystemStats::ReadType::SEQUENTIAL, result.ok() ? result.value() : 0,
-                                MonotonicNanos() - start_ns);
-        if (!result.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to read file {}, reason: {}", _file->filename(),
-                                                       result.status().detailed_message()));
+        // paimon-cpp treats a short Read as a hard error (e.g. StreamUtils::ReadFully reads a
+        // whole file with a single Read call), but read_at may legally return fewer bytes than
+        // requested (an HDFS pread stops at a block boundary), so loop until size bytes or EOF.
+        int64_t total_read = 0;
+        while (total_read < size) {
+            auto result = _file->read_at(_pos + total_read, buffer + total_read, size - total_read);
+            if (!result.ok()) {
+                _stats->record_app_read(PaimonFileSystemStats::ReadType::SEQUENTIAL, total_read,
+                                        MonotonicNanos() - start_ns);
+                return paimon::Status::IOError(fmt::format("Failed to read file {}, reason: {}", _file->filename(),
+                                                           result.status().detailed_message()));
+            }
+            if (result.value() == 0) {
+                break;
+            }
+            total_read += result.value();
         }
-        _pos += result.value();
-        return result.value();
+        _stats->record_app_read(PaimonFileSystemStats::ReadType::SEQUENTIAL, total_read, MonotonicNanos() - start_ns);
+        _pos += total_read;
+        return total_read;
     }
 
     paimon::Result<int64_t> Read(char* buffer, int64_t size, int64_t offset) override {
@@ -411,7 +422,8 @@ paimon::Result<std::unique_ptr<paimon::FileStatus>> PaimonFileSystem::GetFileSta
         return paimon::Status::IOError(fmt::format("Failed to get file modified time for {}, reason: {}", path,
                                                    modification_time_result.status().detailed_message()));
     }
-    return std::make_unique<PaimonFileStatus>(path, size_result.value(), modification_time_result.value(),
+    // StarRocks file systems report modification time in seconds, paimon::FileStatus wants ms.
+    return std::make_unique<PaimonFileStatus>(path, size_result.value(), modification_time_result.value() * 1000,
                                               directory_result.value());
 }
 
@@ -489,8 +501,9 @@ paimon::Status PaimonFileSystem::ListFileStatus(
     const Status status = _file_system->iterate_dir2(path, [&](const DirEntry& entry) {
         std::string full_path = join_path(path, entry.name);
         if (entry.size.has_value() && entry.mtime.has_value() && entry.is_dir.has_value()) {
+            // DirEntry.mtime is in seconds, paimon::FileStatus wants ms.
             file_status_list->emplace_back(std::make_unique<PaimonFileStatus>(
-                    std::move(full_path), entry.size.value(), entry.mtime.value(), entry.is_dir.value()));
+                    std::move(full_path), entry.size.value(), entry.mtime.value() * 1000, entry.is_dir.value()));
             return true;
         }
         // Not every filesystem fills all DirEntry fields; fall back to a full status lookup.

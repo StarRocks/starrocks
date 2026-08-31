@@ -217,7 +217,7 @@ Status PaimonScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) 
     // columns here: schema evolution is resolved inside paimon-cpp, and paimon partition
     // columns are materialized by the reader as regular data columns.
     RETURN_IF_ERROR(_scanner_ctx->format_scan_context.evaluate_on_conjunct_ctxs_by_slot(chunk, &_conjunct_filter));
-    _app_stats.rows_read += (*chunk)->num_rows();
+    // rows_read is accounted by HdfsScanner::get_next() after do_get_next() returns.
     return Status::OK();
 }
 

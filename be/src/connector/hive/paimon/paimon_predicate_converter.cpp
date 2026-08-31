@@ -105,12 +105,12 @@ std::shared_ptr<::paimon::Predicate> PaimonPredicateConverter::convert(starrocks
             }
             if (node_type == TExprNodeType::type::BINARY_PRED) {
                 Expr* lit = conjunct->get_child(1);
+                // `col <=> NULL` matches exactly the rows where col IS NULL, but paimon leaf
+                // functions are null-false, so Equal(null) would filter those rows out.
+                if (op_type == TExprOpcode::EQ_FOR_NULL && lit->node_type() == TExprNodeType::NULL_LITERAL) {
+                    return convert_null(i, fieldName, fieldType, neg);
+                }
                 if (_ok_to_paimon_literal(lit)) {
-                    // `col <=> NULL` matches exactly the rows where col IS NULL, but paimon leaf
-                    // functions are null-false, so Equal(null) would filter those rows out.
-                    if (op_type == TExprOpcode::EQ_FOR_NULL && lit->node_type() == TExprNodeType::NULL_LITERAL) {
-                        return convert_null(i, fieldName, fieldType, neg);
-                    }
                     ::paimon::Literal&& literal = translate_to_paimon_literal(lit);
                     switch (op_type) {
                     case TExprOpcode::EQ:
@@ -241,11 +241,14 @@ bool PaimonPredicateConverter::_ok_to_paimon_literal(starrocks::Expr* lit) {
     if (!lit->is_literal()) {
         return false;
     }
-    TExprNodeType::type node_type = lit->node_type();
-    LogicalType ltype = lit->type().type;
-    if (node_type == TExprNodeType::type::NULL_LITERAL) {
-        return true;
+    // paimon-cpp's PredicateValidator rejects predicates carrying null literals, so a NULL
+    // operand (e.g. `col IN (1, NULL)`) must skip pushdown instead of failing reader creation.
+    // The only supported null comparison, `col <=> NULL`, is rewritten to IS NULL before
+    // this check runs.
+    if (lit->node_type() == TExprNodeType::type::NULL_LITERAL) {
+        return false;
     }
+    LogicalType ltype = lit->type().type;
     switch (ltype) {
     case LogicalType::TYPE_BOOLEAN:
     case LogicalType::TYPE_TINYINT:

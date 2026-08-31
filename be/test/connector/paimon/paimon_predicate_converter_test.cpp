@@ -178,6 +178,24 @@ TEST(PaimonPredicateConverterTest, ConvertsNullSafeEqualNullToIsNull) {
     EXPECT_TRUE(leaf->Literals().empty());
 }
 
+TEST(PaimonPredicateConverterTest, SkipsInPredicateWithNullLiteral) {
+    SlotDescriptor tinyint_slot(8, "tinyint_col", TypeDescriptor(TYPE_TINYINT));
+    PaimonPredicateConverter converter({&tinyint_slot});
+
+    // paimon-cpp rejects null literals in predicates, so `col IN (1, NULL)` must skip
+    // pushdown instead of producing a predicate that fails reader creation.
+    TestExpr predicate(create_in_predicate_node(TPrimitiveType::TINYINT));
+    ColumnRef tinyint_ref(TypeDescriptor(TYPE_TINYINT), tinyint_slot.id());
+    VectorizedLiteral tinyint_literal(create_tinyint_literal_node(1));
+    VectorizedLiteral null_literal(create_null_literal_node());
+    predicate.add_child(&tinyint_ref);
+    predicate.add_child(&tinyint_literal);
+    predicate.add_child(&null_literal);
+
+    std::vector<Expr*> conjuncts{&predicate};
+    EXPECT_EQ(nullptr, converter.convert(&conjuncts));
+}
+
 TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonLiteralRightOperand) {
     SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
     PaimonPredicateConverter converter({&isolation});
