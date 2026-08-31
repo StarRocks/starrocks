@@ -42,7 +42,7 @@ std::string startup_jemalloc_conf(std::string_view config_value);
 // Most jemalloc options are frozen once the process is initialized, because their
 // `opt.*` mallctl nodes are read-only. So an update is accepted only when every
 // option that actually changed has a writable mallctl counterpart; otherwise it is
-// rejected and ConfigUpdateRegistry rolls the config value back.
+// rejected and UpdateConfigAction rolls the config value back.
 class JemallocConfUpdater {
 public:
     static JemallocConfUpdater& instance();

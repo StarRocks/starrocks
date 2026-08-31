@@ -23,13 +23,13 @@
 #include <optional>
 #include <vector>
 
-#include "base/string/trim.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/prof/heap_prof.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/prof/heap_prof.h"
+#include "util/trim.h"
 
 namespace starrocks {
 
@@ -242,7 +242,7 @@ void JemallocConfUpdater::init(std::string_view config_value) {
         // The config describes a set of options jemalloc never saw. Publish what is really in
         // effect instead, so that be_configs shows it and an update is diffed against the same
         // string the operator is looking at. set_config() is used rather than assigning the
-        // field, to keep the rollback bookkeeping of ConfigUpdateRegistry intact, and the
+        // field, to keep the rollback bookkeeping of the config framework intact, and the
         // update hook is deliberately not invoked: there is nothing to re-apply here.
         LOG(WARNING) << "jemalloc was started with '" << startup_conf << "' rather than the configured '"
                      << config_value << "', publishing the effective option string as " << kJemallocConfName;
