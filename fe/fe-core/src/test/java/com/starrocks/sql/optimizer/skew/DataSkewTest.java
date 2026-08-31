@@ -154,8 +154,8 @@ public class DataSkewTest {
 
         // THEN
         assertTrue(skewInfo.isSkewed());
-        assertTrue(skewInfo.nullSkewed());
-        assertFalse(skewInfo.maybeMcvs().isPresent());
+        assertTrue(skewInfo.hasNullSkew());
+        assertFalse(skewInfo.hasMcvSkew());
     }
 
     @Test
@@ -178,8 +178,8 @@ public class DataSkewTest {
 
         // THEN
         assertTrue(skewInfo.isSkewed());
-        assertFalse(skewInfo.nullSkewed());
-        assertTrue(skewInfo.maybeMcvs().isPresent());
+        assertFalse(skewInfo.hasNullSkew());
+        assertTrue(skewInfo.hasMcvSkew());
 
         final var expectedMcvs =
                 List.of(Pair.create("1", 50000L), Pair.create("2", 20000L), Pair.create("3", 10000L),
@@ -210,8 +210,8 @@ public class DataSkewTest {
 
         // THEN: neither kind of skew is dropped
         assertTrue(skewInfo.isSkewed());
-        assertTrue(skewInfo.nullSkewed());
-        assertTrue(skewInfo.maybeMcvs().isPresent());
+        assertTrue(skewInfo.hasNullSkew());
+        assertTrue(skewInfo.hasMcvSkew());
 
         final var expectedMcvs =
                 List.of(Pair.create("1", 50000L), Pair.create("2", 20000L), Pair.create("3", 10000L),
@@ -354,8 +354,8 @@ public class DataSkewTest {
         assertTrue(DataSkew.isColumnSkewed(stats, colStats));
 
         final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
-        assertFalse(skewInfo.nullSkewed());
-        assertTrue(skewInfo.maybeMcvs().isPresent());
+        assertFalse(skewInfo.hasNullSkew());
+        assertTrue(skewInfo.hasMcvSkew());
     }
 
     @Test
@@ -381,8 +381,8 @@ public class DataSkewTest {
         assertFalse(DataSkew.isColumnSkewed(stats, colStats));
 
         final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
-        assertFalse(skewInfo.nullSkewed());
-        assertFalse(skewInfo.maybeMcvs().isPresent());
+        assertFalse(skewInfo.hasNullSkew());
+        assertFalse(skewInfo.hasMcvSkew());
         assertEquals(DataSkew.AdditionalInfo.INACCURATE_ROW_COUNT, skewInfo.additionalInfo());
     }
 

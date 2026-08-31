@@ -399,9 +399,10 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             if (skewInfo.isSkewed()) {
 
                 List<SkewedInfo> results = Lists.newArrayList();
-                if (skewInfo.nullSkewed()) {
+                if (skewInfo.hasNullSkew()) {
                     results.add(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
                 }
+                // Add MCV-based skew values, if any
                 skewInfo.maybeMcvs().stream() //
                         .flatMap(Collection::stream) //
                         .map(mcv -> ConstantOperator.createVarchar(mcv.first).castTo(col.getType())) //

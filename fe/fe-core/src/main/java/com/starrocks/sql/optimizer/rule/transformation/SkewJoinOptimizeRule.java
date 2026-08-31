@@ -60,6 +60,7 @@ import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -193,20 +194,18 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             final var skewInfo = skewPredicate.skewInfo();
 
             List<ScalarOperator> skewValues = Lists.newArrayList();
-            if (skewInfo.nullSkewed()) {
+            if (skewInfo.hasNullSkew()) {
                 // Add a special NULL skew value for NULL-only skew cases
                 skewValues.add(ConstantOperator.createNull(skewJoinColumn.getType()));
-            } 
-            if (skewInfo.maybeMcvs().isPresent()) {
-                // Add MCV-based skew values on top, if present
-                skewInfo.maybeMcvs().get()
-                        .stream() //
-                        .map(mcv -> ConstantOperator.createVarchar(mcv.first) //
-                                .castTo(skewJoinColumn.getType())) //
-                        .filter(Optional::isPresent) //
-                        .map(Optional::get) //
-                        .forEach(skewValues::add);
             }
+            // Add MCV-based skew values, if any
+            skewInfo.maybeMcvs().stream()
+                    .flatMap(Collection::stream)
+                    .map(mcv -> ConstantOperator.createVarchar(mcv.first) //
+                            .castTo(skewJoinColumn.getType())) //
+                    .filter(Optional::isPresent) //
+                    .map(Optional::get) //
+                    .forEach(skewValues::add);
             if (skewValues.isEmpty()) {
                 continue;
             }
@@ -214,7 +213,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
             // Check how many rows on the other side would be affected by salting, as this can lead to a
             // cardinality blow up. We only check for MCVs since for NULLs this is not an issue as NULL does not join.
             final var skewInfoMcvs = skewInfo.getMcvs();
-            if (skewInfoMcvs.isPresent()) {
+            if (skewInfo.hasMcvSkew()) {
                 final var rightChildStats = input.inputAt(1).getStatistics();
                 if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(skewPredicate.otherColumn)) {
                     final var otherColumnStats = rightChildStats.getColumnStatistic(skewPredicate.otherColumn);
