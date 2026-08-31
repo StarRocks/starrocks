@@ -15,7 +15,6 @@
 #pragma once
 
 #include <memory>
-#include <shared_mutex>
 #include <string_view>
 #include <variant>
 
@@ -70,8 +69,10 @@ public:
 
     void cache_segment(std::string_view key, std::shared_ptr<Segment> segment);
 
-    // return the same `segment_addr_hint` if the key exists in cache, 0 otherwise
-    intptr_t cache_segment_if_present(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint);
+    // Update the cached memory footprint of an already cached segment in place, without
+    // rebuilding the cache entry. Does nothing and returns false when the key is absent
+    // or no longer maps to `segment`.
+    bool update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
     // cache the segment if the given key not exists in the cache, returns the segment shared_ptr stored in the cache.
     std::shared_ptr<Segment> cache_segment_if_absent(std::string_view key, const std::shared_ptr<Segment>& segment);
@@ -91,16 +92,16 @@ public:
     size_t capacity() const;
 
 private:
-    static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
-
-    std::shared_ptr<Segment> _lookup_segment_no_lock(std::string_view key);
-    void _cache_segment_no_lock(std::string_view key, size_t mem_cost, std::shared_ptr<Segment> segment);
+    static void cache_value_deleter(const CacheKey& key, void* value);
 
     void insert(std::string_view key, CacheValue* ptr, size_t size);
 
+    // No metacache-level lock: the compare-and-insert needed by cache_segment_if_absent()
+    // and the in-place charge update needed by update_segment_cache_size() are provided
+    // atomically by the underlying sharded cache. Keeping the cache lock as the only lock
+    // also keeps cached value destructors (notably ~Segment) off every lock, because
+    // LRUCache always runs deleters after releasing its shard mutex.
     std::unique_ptr<Cache> _cache;
-
-    std::shared_mutex _mutex;
 };
 
 } // namespace starrocks::lake
