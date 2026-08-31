@@ -956,13 +956,15 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
     @Test
     public void testViewsSystemViewUnderWholePhaseLock() throws Exception {
         starRocksAssert.withDatabase("test_views_lock_db").useDatabase("test_views_lock_db");
-        starRocksAssert.withTable("CREATE TABLE test_views_lock_db.`lock_tbl1` (\n" +
-                "  `k1` date COMMENT \"\",\n" +
-                "  `k2` varchar(20) COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`k1`)\n" +
-                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
-                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withTable("""
+                CREATE TABLE test_views_lock_db.`lock_tbl1` (
+                  `k1` date COMMENT "",
+                  `k2` varchar(20) COMMENT ""
+                ) ENGINE=OLAP
+                DUPLICATE KEY(`k1`)
+                DISTRIBUTED BY HASH(k1) BUCKETS 1
+                PROPERTIES ('replication_num' = '1');
+                """);
         starRocksAssert.withView("CREATE VIEW test_views_lock_db.lock_view1 AS " +
                 "SELECT k1, k2 FROM test_views_lock_db.lock_tbl1");
 
@@ -1003,6 +1005,23 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
         Assertions.assertEquals(1, result.getTables().size());
         Assertions.assertEquals("lock_view1", result.getTables().get(0).getName());
+
+        // The name and pattern filters run inside the per-table lock so that a concurrent rename
+        // cannot make the emitted row disagree with the filter that selected it. Guard that the
+        // reordering did not change what the filters actually accept.
+        params.setPattern("lock_view%");
+        result = ViewsSystemTable.query(params, connectContext);
+        Assertions.assertEquals(1, result.getTables().size());
+        Assertions.assertEquals("lock_view1", result.getTables().get(0).getName());
+
+        params.setPattern("no_such_view%");
+        Assertions.assertEquals(0, ViewsSystemTable.query(params, connectContext).getTables().size());
+
+        params.unsetPattern();
+        params.setTable_name("lock_view1");
+        Assertions.assertEquals(1, ViewsSystemTable.query(params, connectContext).getTables().size());
+        params.setTable_name("lock_view_missing");
+        Assertions.assertEquals(0, ViewsSystemTable.query(params, connectContext).getTables().size());
     }
 
     @Test

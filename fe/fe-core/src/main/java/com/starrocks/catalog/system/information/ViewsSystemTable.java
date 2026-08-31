@@ -278,6 +278,19 @@ public class ViewsSystemTable extends SystemTable {
     }
 
     /**
+     * Whether the table passes the TABLE_NAME and pattern filters of the request. Evaluated twice
+     * per table - once as a cheap pre-filter outside the table lock and once under it - so it is
+     * kept in one place to make sure the two never drift apart.
+     */
+    private static boolean matchesNameFilters(Table table, String paramTableName, String paramPattern,
+                                              PatternMatcher matcher, boolean caseSensitive) {
+        if (!PatternMatcher.matchPattern(paramPattern, table.getName(), matcher, caseSensitive)) {
+            return false;
+        }
+        return Strings.isNullOrEmpty(paramTableName) || table.getName().equalsIgnoreCase(paramTableName);
+    }
+
+    /**
      * if the limit is reached, false is returned, otherwise true will be returned.
      */
     private static boolean collectViewsInDb(ConnectContext context, Database db,
@@ -288,11 +301,6 @@ public class ViewsSystemTable extends SystemTable {
             return true;
         }
         String dbName = db.getFullName();
-        // Snapshot the table list without holding any lock: Database#getViews and
-        // LocalMetastore#getTables both copy out of the idToTable ConcurrentHashMap. Each table
-        // is then locked individually below with an intensive table lock (IS on the db + READ on
-        // the table), as InformationSchemaDataSource has done since #73936.
-        //
         // A DB-wide READ lock must not be used here, because this method runs in two very
         // different scopes: the thrift `listTableStatus` handler, which holds no meta lock, and
         // SchemaTableEvaluateRule during optimization, which runs inside PlannerMetaLocker and
@@ -300,80 +308,113 @@ public class ViewsSystemTable extends SystemTable {
         // query. Hierarchical locking forbids requesting a plain database READ lock inside an
         // intention scope - MultiUserLock#tryLock throws NotSupportLockException - which fails
         // the whole query, both for information_schema itself and for every user database the
-        // query touches. The intensive lock is reentrant in that scope, and it still conflicts
-        // with the table WRITE lock taken by ALTER VIEW, so the view definition read below is
-        // actually protected.
-        List<Table> tables = listingViews ? db.getViews() :
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-        OUTER:
-        for (Table table : tables) {
-            try {
-                Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
-            } catch (AccessDeniedException e) {
-                continue;
-            }
-
-            if (!PatternMatcher.matchPattern(paramPattern, table.getName(), matcher, caseSensitive)) {
-                continue;
-            }
-            if (!Strings.isNullOrEmpty(paramTableName) &&
-                    !table.getName().equalsIgnoreCase(paramTableName)) {
-                continue;
-            }
-
-            Locker locker = new Locker();
-            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
-            try {
-                // The list above was snapshotted unlocked; skip if a concurrent DROP removed
-                // the table before we acquired the lock.
-                if (GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), table.getId()) == null) {
+        // query touches.
+        //
+        // Instead this uses the split design fe/AGENTS.md prescribes for "snapshot a table list,
+        // then do per-table work": an outer database INTENTION_SHARED lock keeps the list stable,
+        // since IS conflicts with the DB WRITE that CREATE/DROP TABLE and DROP DATABASE take, and
+        // an inner per-table intensive READ lock protects each table's own state. Both are
+        // reentrant when PlannerMetaLocker already holds IS on this database, and both are
+        // acquired normally on the thrift path.
+        //
+        // Everything a reported row is built from - the authorization decision, the name and
+        // pattern match, and the row itself - is read under the per-table lock. (A cheap copy of
+        // the name filters also runs outside it, purely so that a selective request does not lock
+        // and authorize every table; the two call sites explain that.) Reading under the lock
+        // matters because ALTER TABLE ... RENAME takes IX on the database plus WRITE on the table
+        // (AlterJobExecutor#visitTableRenameClause), and IS does not conflict with IX, so the
+        // outer lock alone would still let a rename land between a name check and the row being
+        // built: the row would carry the new name while having been selected by the old one, and
+        // a name-based external authorizer would have decided on the pre-rename name. The table
+        // READ lock does conflict with that WRITE, so performing every per-table read under it
+        // keeps the emitted row self-consistent.
+        Locker dbLocker = new Locker();
+        dbLocker.lockDatabase(db.getId(), LockType.INTENTION_SHARED);
+        try {
+            List<Table> tables = listingViews ? db.getViews() :
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+            OUTER:
+            for (Table table : tables) {
+                // Cheap pre-filter, outside the lock: without it a request that names one table
+                // or a selective pattern would still take a table lock and run an authorization
+                // check for every table in the database, and with no TABLE_SCHEMA filter that is
+                // every table in the catalog. The name is read unsynchronized here, so a table
+                // renamed *into* the filter while the scan is running can be missed; that is
+                // acceptable for a concurrent metadata listing, and the evaluation under the lock
+                // below stays authoritative for everything that is reported.
+                if (!matchesNameFilters(table, paramTableName, paramPattern, matcher, caseSensitive)) {
                     continue;
                 }
 
-                TTableStatus status = new TTableStatus();
-                status.setName(table.getName());
-                status.setType(table.getMysqlType());
-                status.setEngine(table.getEngine());
-                status.setComment(table.getComment());
-                status.setCreate_time(table.getCreateTime());
-                status.setLast_check_time(table.getLastCheckTime());
-                if (listingViews) {
-                    View view = (View) table;
-                    String ddlSql = view.getDDLViewDef();
+                Locker locker = new Locker();
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                try {
+                    // Defensive: the outer IS lock already blocks DROP TABLE, but re-check so a
+                    // table removed through any other path is skipped rather than half-read.
+                    if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), table.getId()) == null) {
+                        continue;
+                    }
 
-                    ConnectContext connectContext = ConnectContext.buildInner();
-                    connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-                    connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
-                    connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+                    // Authoritative re-evaluation: the name is stable under the table lock, so a
+                    // rename that raced with the pre-filter cannot make the emitted row disagree
+                    // with the filter that selected it.
+                    if (!matchesNameFilters(table, paramTableName, paramPattern, matcher, caseSensitive)) {
+                        continue;
+                    }
 
                     try {
-                        List<TableName> allTables = view.getTableRefs();
-                        for (TableName tableName : allTables) {
-                            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTable(db.getFullName(), tableName.getTbl());
-                            if (tbl != null) {
-                                try {
-                                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
-                                } catch (AccessDeniedException e) {
-                                    continue OUTER;
+                        Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+                    } catch (AccessDeniedException e) {
+                        continue;
+                    }
+
+                    TTableStatus status = new TTableStatus();
+                    status.setName(table.getName());
+                    status.setType(table.getMysqlType());
+                    status.setEngine(table.getEngine());
+                    status.setComment(table.getComment());
+                    status.setCreate_time(table.getCreateTime());
+                    status.setLast_check_time(table.getLastCheckTime());
+                    if (listingViews) {
+                        View view = (View) table;
+                        String ddlSql = view.getDDLViewDef();
+
+                        ConnectContext connectContext = ConnectContext.buildInner();
+                        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+                        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+                        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+                        try {
+                            List<TableName> allTables = view.getTableRefs();
+                            for (TableName tableName : allTables) {
+                                Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getFullName(), tableName.getTbl());
+                                if (tbl != null) {
+                                    try {
+                                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
+                                    } catch (AccessDeniedException e) {
+                                        continue OUTER;
+                                    }
                                 }
                             }
+                        } catch (SemanticException e) {
+                            // ignore semantic exception because view maybe invalid
                         }
-                    } catch (SemanticException e) {
-                        // ignore semantic exception because view maybe invalid
+                        status.setDdl_sql(ddlSql);
                     }
-                    status.setDdl_sql(ddlSql);
-                }
 
-                result.add(new GetViewResult(dbName, status));
-                // if user set limit, then only return limit size result
-                if (limit > 0 && result.size() >= limit) {
-                    return false;
+                    result.add(new GetViewResult(dbName, status));
+                    // if user set limit, then only return limit size result
+                    if (limit > 0 && result.size() >= limit) {
+                        return false;
+                    }
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 }
-            } finally {
-                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
+        } finally {
+            dbLocker.unLockDatabase(db.getId(), LockType.INTENTION_SHARED);
         }
         return true;
     }
