@@ -253,6 +253,16 @@ public class StatisticExecutor {
         return executeDML(statsConnectCtx, sql);
     }
 
+    public boolean dropColumnHistogramStatistics(ConnectContext statsConnectCtx, long tableId,
+                                                 List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return true;
+        }
+        String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
+        LOG.debug("Drop column histogram statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public void dropTableMultiColumnStatistics(ConnectContext statsConnectCtx, Long tableIds) {
         String sql = StatisticSQLBuilder.buildDropMultipleStatisticsSQL(tableIds);
         LOG.debug("Expire statistic SQL: {}", sql);

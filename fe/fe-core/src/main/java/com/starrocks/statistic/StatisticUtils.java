@@ -657,23 +657,42 @@ public class StatisticUtils {
     private static void dropStatisticsAfterTypeChangeInternal(long dbId, Table table, List<String> columnList) {
         try {
             AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+            // snapshot what the affected columns currently carry before the cleanup wipes the meta:
+            // only previously analyzed columns are worth re-collecting, and histograms must be
+            // rebuilt with their original collection properties
             BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
             List<String> analyzedColumns = basicStatsMeta == null ? List.of() :
                     basicStatsMeta.getColumns().stream()
                             .filter(c -> columnList.stream().anyMatch(c::equalsIgnoreCase))
                             .collect(Collectors.toList());
+            List<HistogramStatsMeta> histogramMetas = analyzeMgr.getHistogramMetaByTable(table.getId()).stream()
+                    .filter(m -> columnList.stream().anyMatch(c -> c.equalsIgnoreCase(m.getColumn())))
+                    .collect(Collectors.toList());
 
             ConnectContext statsConnectCtx = buildConnectContext();
             statsConnectCtx.setStatisticsConnection(true);
-            if (!analyzeMgr.dropColumnStatsMetaAndData(statsConnectCtx, dbId, table.getId(), columnList)) {
+            if (analyzeMgr.dropColumnStatsMetaAndData(statsConnectCtx, dbId, table.getId(), columnList)) {
+                LOG.info("dropped stale statistics after column type change, table: {}, columns: {}",
+                        table.getId(), columnList);
+            } else {
                 LOG.warn("failed to drop stale statistics after type change, table: {}, columns: {}",
                         table.getId(), columnList);
                 return;
             }
-            LOG.info("dropped stale statistics after column type change, table: {}, columns: {}",
-                    table.getId(), columnList);
 
-            if (analyzedColumns.isEmpty()) {
+            // a stale histogram is worse than stale basic statistics: the optimizer prefers it over
+            // the (re-collected) min/max for selectivity, so it must be dropped and rebuilt as well
+            if (analyzeMgr.dropColumnHistogramMetaAndData(statsConnectCtx, dbId, table.getId(), columnList)) {
+                LOG.info("dropped stale histogram after column type change, table: {}, columns: {}",
+                        table.getId(), columnList);
+            } else {
+                LOG.warn("failed to drop stale histogram after type change, table: {}, columns: {}",
+                        table.getId(), columnList);
+                // don't rebuild on top of rows that could not be deleted
+                histogramMetas = List.of();
+            }
+
+            if (analyzedColumns.isEmpty() && histogramMetas.isEmpty()) {
                 return;
             }
             // Cheap staleness short-circuit, not a race-free guard
@@ -682,7 +701,18 @@ public class StatisticUtils {
                     || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, table.getId()) == null) {
                 return;
             }
-            StatisticsCollectionTrigger.triggerOnSchemaChange(db, table, analyzedColumns);
+            if (!analyzedColumns.isEmpty()) {
+                StatisticsCollectionTrigger.triggerOnSchemaChange(db, table, analyzedColumns);
+            }
+            for (HistogramStatsMeta histogramMeta : histogramMetas) {
+                Column column = table.getColumn(histogramMeta.getColumn());
+                if (column == null || isUnsupportedHistogramColumnType(column.getType())) {
+                    // the new type cannot carry a histogram: deletion alone is the correct end state
+                    continue;
+                }
+                StatisticsCollectionTrigger.triggerHistogramOnSchemaChange(db, table,
+                        List.of(histogramMeta.getColumn()), histogramMeta.getProperties());
+            }
         } catch (Throwable e) {
             LOG.warn("failed to clean up statistics after column type change, table: {}", table.getId(), e);
         }

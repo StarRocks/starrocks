@@ -885,6 +885,46 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
+    /**
+     * Histogram counterpart of {@link #dropColumnStatsMetaAndData}: drop the persisted histogram rows
+     * and the per-column histogram meta for the given columns of a table, then invalidate the
+     * histogram cache. Same contract: leader-only, outside any edit-log applier, data deleted before
+     * the meta is removed.
+     *
+     * @return true iff the persisted histogram rows were deleted (and the meta was removed accordingly)
+     */
+    public boolean dropColumnHistogramMetaAndData(ConnectContext statsConnectCtx, long dbId, long tableId,
+                                                  List<String> columns) {
+        if (columns == null || columns.isEmpty()) {
+            return true;
+        }
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        try (var guard = statsConnectCtx.bindScope()) {
+            if (!statisticExecutor.dropColumnHistogramStatistics(statsConnectCtx, tableId, columns)) {
+                return false;
+            }
+
+            List<Pair<Long, String>> keysToRemove = new ArrayList<>();
+            List<HistogramStatsMeta> metasToRemove = new ArrayList<>();
+            for (Map.Entry<Pair<Long, String>, HistogramStatsMeta> entry : histogramStatsMetaMap.entrySet()) {
+                if (entry.getKey().first == tableId
+                        && columns.stream().anyMatch(c -> c.equalsIgnoreCase(entry.getKey().second))) {
+                    keysToRemove.add(entry.getKey());
+                    metasToRemove.add(entry.getValue());
+                }
+            }
+            if (!metasToRemove.isEmpty()) {
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveHistogramStatsMetaBatch(metasToRemove, wal -> {
+                    for (Pair<Long, String> key : keysToRemove) {
+                        histogramStatsMetaMap.remove(key);
+                    }
+                });
+            }
+            GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(tableId, columns);
+            return true;
+        }
+    }
+
     public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
         if (tableIds == null || tableIds.isEmpty()) {
             return;

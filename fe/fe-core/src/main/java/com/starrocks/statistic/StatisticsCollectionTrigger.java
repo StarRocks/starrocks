@@ -125,7 +125,28 @@ public class StatisticsCollectionTrigger {
         if (!Config.enable_statistic_collect || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
             return trigger;
         }
-        trigger.executeCollect(null, columns);
+        trigger.executeCollect(null, columns, null);
+        return trigger;
+    }
+
+    /**
+     * Re-collect the histogram of the given columns after a schema change invalidated the previously
+     * collected one (histogram bucket bounds are stored as strings under the collection-time type
+     * ordering, exactly like the basic min/max), using the properties the original histogram was
+     * collected with.
+     */
+    public static StatisticsCollectionTrigger triggerHistogramOnSchemaChange(Database db, Table table,
+                                                                             List<String> columns,
+                                                                             Map<String, String> properties) {
+        StatisticsCollectionTrigger trigger = new StatisticsCollectionTrigger();
+        trigger.db = db;
+        trigger.table = table;
+        trigger.sync = false;
+        trigger.analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
+        if (!Config.enable_statistic_collect || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+            return trigger;
+        }
+        trigger.executeCollect(null, columns, properties);
         return trigger;
     }
 
@@ -184,7 +205,7 @@ public class StatisticsCollectionTrigger {
             executeOverWrite();
             waitFinish();
         } else if (analyzeType != null) {
-            executeCollect(new ArrayList<>(partitionIds), null);
+            executeCollect(new ArrayList<>(partitionIds), null, null);
             waitFinish();
         }
     }
@@ -226,11 +247,13 @@ public class StatisticsCollectionTrigger {
     }
 
     // partitionIdList == null: the job factory expands it to all data-bearing partitions;
-    // columnNames == null: all collectible columns
-    private void executeCollect(List<Long> partitionIdList, List<String> columnNames) {
-        Map<String, String> properties = Maps.newHashMap();
-        if (SAMPLE == analyzeType) {
-            properties = StatsConstants.buildInitStatsProp();
+    // columnNames == null: all collectible columns;
+    // extraProperties == null: default properties derived from the analyze type
+    private void executeCollect(List<Long> partitionIdList, List<String> columnNames,
+                                Map<String, String> extraProperties) {
+        Map<String, String> properties = extraProperties;
+        if (properties == null) {
+            properties = SAMPLE == analyzeType ? StatsConstants.buildInitStatsProp() : Maps.newHashMap();
         }
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), columnNames, analyzeType,
