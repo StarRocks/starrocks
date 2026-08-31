@@ -449,3 +449,75 @@ set enable_prune_column_after_index_filter = true;
 DROP TABLE t_gin_prune_pk_${uuid0};
 -- result:
 -- !result
+-- name: test_gin_prune_on_table_with_delete @native
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_del_prune_${uuid0}` (
+  `id` bigint NOT NULL,
+  `k`  bigint NOT NULL,
+  `v`  varchar(255) NOT NULL,
+  INDEX gin_v (`v`) USING GIN ("parser" = "none")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+-- result:
+-- !result
+insert into t_gin_del_prune_${uuid0} values (1, 7, "redx"), (2, 8, "redy"), (3, 7, "blue"), (4, 9, "redz"), (5, 7, "redx");
+-- result:
+-- !result
+delete from t_gin_del_prune_${uuid0} where k = 7;
+-- result:
+-- !result
+set enable_filter_unused_columns_in_scan_stage = true;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 7 order by id;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 8 order by id;
+-- result:
+2
+-- !result
+select id from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2
+4
+-- !result
+select id, k from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2	8
+4	9
+-- !result
+select count(*) from t_gin_del_prune_${uuid0};
+-- result:
+2
+-- !result
+set enable_filter_unused_columns_in_scan_stage = false;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 7 order by id;
+-- result:
+-- !result
+select id from t_gin_del_prune_${uuid0} where k = 8 order by id;
+-- result:
+2
+-- !result
+select id from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2
+4
+-- !result
+select id, k from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+-- result:
+2	8
+4	9
+-- !result
+select count(*) from t_gin_del_prune_${uuid0};
+-- result:
+2
+-- !result
+DROP TABLE t_gin_del_prune_${uuid0};
+-- result:
+-- !result
