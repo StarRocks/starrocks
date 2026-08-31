@@ -61,13 +61,25 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT;
@@ -460,6 +472,299 @@ public class StorageVolumeTest {
         azBlobFileStoreInfo = fileStore.getAzblobFsInfo();
         Assertions.assertEquals("endpoint", azBlobFileStoreInfo.getEndpoint());
         Assertions.assertEquals("sas_token", azBlobFileStoreInfo.getCredential().getSasToken());
+    }
+
+    @Test
+    public void testAzureBlobRejectsCredentialThatCannotBePersisted() {
+        // Managed identity is accepted by the shared credential factory (FILES() supports it),
+        // but an AZBLOB file store can only carry a shared key or a SAS token. Creating such a
+        // volume used to succeed and leave behind something that could never be read or dropped.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "azblob", Arrays.asList("azblob://aaa"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains("cannot be stored"), e.getMessage());
+    }
+
+    @Test
+    public void testAzureBlobAlterRejectsCredentialThatCannotBePersistedAndKeepsVolumeIntact() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
+        StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
+                storageParams, true, "");
+
+        Map<String, String> badParams = new HashMap<>();
+        badParams.put(AZURE_BLOB_SHARED_KEY, "");
+        badParams.put(AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        badParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+        Assertions.assertThrows(SemanticException.class, () -> sv.setCloudConfiguration(badParams));
+
+        // A rejected ALTER must not damage the volume it failed on.
+        Assertions.assertEquals(CloudType.AZURE, sv.getCloudConfiguration().getCloudType());
+        Assertions.assertEquals("shared_key",
+                sv.getCloudConfiguration().toFileStoreInfo().getAzblobFsInfo().getCredential().getSharedKey());
+    }
+
+    @Test
+    public void testStorageVolumeWithUnusableCredentialIsStillReadable() throws DdlException {
+        // A volume already stored with a credential that can no longer be rebuilt - the state this
+        // bug leaves behind. Reading it back must not throw, otherwise SHOW STORAGE VOLUMES fails
+        // for every volume and the broken one can never be dropped.
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+
+        StorageVolume sv = StorageVolume.fromFileStoreInfo(fsInfo);
+        Assertions.assertEquals("1", sv.getId());
+        Assertions.assertEquals("test", sv.getName());
+    }
+
+    @Test
+    public void testAdls2RejectsWorkloadIdentityBecauseTheTokenFileIsNotStored() {
+        // ADLS2CredentialInfo has no token file field, so the token lives only in the params of the
+        // FE that created the volume: a read-back turns it into a managed identity, and the file
+        // store is also the only credential a lake table's storage location carries. The English and
+        // Chinese pages were corrected together with this, so the form is refused outright.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_TOKEN_FILE, "/var/run/secrets/azure/token");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains(AZURE_ADLS2_OAUTH2_TOKEN_FILE), e.getMessage());
+    }
+
+    @Test
+    public void testAzblobSasVolumeSurvivesAlterAndReload() throws Exception {
+        // The container comes from the locations, and params never carries it, so any path that
+        // rebuilds the configuration from the raw params alone falls through to the HDFS provider and
+        // makes a usable SAS volume look broken. Two such paths are exercised here: an ALTER, which
+        // would have been refused outright, and a metadata reload, after which every guard would have
+        // rejected the volume on each FE restart.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SAS_TOKEN, "sas_token");
+        StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
+                storageParams, true, "");
+        Assertions.assertTrue(sv.isCredentialUsable());
+
+        Map<String, String> rotated = new HashMap<>();
+        rotated.put(AZURE_BLOB_SAS_TOKEN, "rotated_sas_token");
+        sv.setCloudConfiguration(rotated);
+        Assertions.assertTrue(sv.isCredentialUsable());
+        Assertions.assertEquals(FileStoreType.AZBLOB, sv.toFileStoreInfo().getFsType());
+        // The derived container must not leak into what gets stored.
+        Assertions.assertFalse(sv.getProperties().containsKey(AZURE_BLOB_CONTAINER));
+
+        // A reload rebuilds from the stored params; the volume has to come back usable.
+        sv.gsonPostProcess();
+        Assertions.assertTrue(sv.isCredentialUsable());
+    }
+
+    @Test
+    public void testCopyingAnAzblobSasVolumeKeepsItUsable() throws DdlException {
+        // The container comes from the locations, not from the params, so a copy that rebuilt the
+        // configuration from the raw params alone fell through to HDFS and made a usable SAS volume
+        // look broken - which then failed a comment-only ALTER on the type guard in toFileStoreInfo.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SAS_TOKEN, "sas_token");
+        StorageVolume sv = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
+                storageParams, true, "");
+        Assertions.assertTrue(sv.isCredentialUsable());
+
+        StorageVolume copied = new StorageVolume(sv);
+        Assertions.assertTrue(copied.isCredentialUsable());
+        // The copy must still serialise to its own type, which is what a write-back needs.
+        Assertions.assertEquals(FileStoreType.AZBLOB, copied.toFileStoreInfo().getFsType());
+    }
+
+    @Test
+    public void testAdls2ManagedIdentityAndSharedKeyRemainStorable() throws DdlException {
+        // The forms an ADLS2 file store does carry must keep working: a managed identity, and a
+        // shared key that spells out the managed identity flag it is not using.
+        Map<String, String> managedIdentity = new HashMap<>();
+        managedIdentity.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        managedIdentity.put(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        managedIdentity.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
+        managedIdentity.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
+        StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"), managedIdentity, true, "");
+
+        Map<String, String> sharedKey = new HashMap<>();
+        sharedKey.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        sharedKey.put(AZURE_ADLS2_SHARED_KEY, "shared_key");
+        sharedKey.put(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "false");
+        StorageVolume.createFileStoreInfo("test", "adls2", Arrays.asList("adls2://aaa"), sharedKey, true, "");
+    }
+
+    @Test
+    public void testRejectionDoesNotLeakOAuth2ClientSecret() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_OAUTH2_TENANT_ID, "tenant_id");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_SECRET, "should_never_be_echoed");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "azblob", Arrays.asList("azblob://aaa"),
+                        storageParams, true, ""));
+        Assertions.assertFalse(e.getMessage().contains("should_never_be_echoed"), e.getMessage());
+    }
+
+    @Test
+    public void testAddMaskForCredentialMasksOAuth2ClientSecrets() {
+        Map<String, String> params = new HashMap<>();
+        params.put(AZURE_BLOB_OAUTH2_CLIENT_SECRET, "blob_secret");
+        params.put(AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "adls2_secret");
+        StorageVolume.addMaskForCredential(params);
+        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, params.get(AZURE_BLOB_OAUTH2_CLIENT_SECRET));
+        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, params.get(AZURE_ADLS2_OAUTH2_CLIENT_SECRET));
+    }
+
+    @Test
+    public void testAlterRepairsUnusableCredentialAndMarksVolumeUsableAgain() throws DdlException {
+        // ALTER is how such a volume gets repaired, so the derived flag has to follow the new
+        // configuration. It used to stay false until the next metadata reload, which left the
+        // repaired volume rejected by every path that checks isCredentialUsable().
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        StorageVolume sv = StorageVolume.fromFileStoreInfo(fsInfo);
+        Assertions.assertFalse(sv.isCredentialUsable());
+
+        Map<String, String> repaired = new HashMap<>();
+        repaired.put(AZURE_BLOB_SHARED_KEY, "shared_key");
+        sv.setCloudConfiguration(repaired);
+
+        Assertions.assertTrue(sv.isCredentialUsable());
+        // The copy the managers cache must carry the repaired flag, not the stale one.
+        Assertions.assertTrue(new StorageVolume(sv).isCredentialUsable());
+    }
+
+    @Test
+    public void testS3RejectsTemporaryKeysBecauseTheSessionTokenIsNotStored() {
+        // AwsSimpleCredentialInfo stores the access key and its secret only, so the session token is
+        // dropped and the temporary keys that come back can no longer authenticate.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
+        storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
+        storageParams.put(AWS_S3_SESSION_TOKEN, "session_token");
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () ->
+                StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"),
+                        storageParams, true, ""));
+        Assertions.assertTrue(e.getMessage().contains(AWS_S3_SESSION_TOKEN), e.getMessage());
+    }
+
+    @Test
+    public void testS3AccessKeyWithoutSessionTokenRemainsStorable() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_ACCESS_KEY, "access_key");
+        storageParams.put(AWS_S3_SECRET_KEY, "secret_key");
+        StorageVolume.createFileStoreInfo("test", "s3", Arrays.asList("s3://bucket"), storageParams, true, "");
+    }
+
+    @Test
+    public void testUnusableVolumeRefusesToBeWrittenBackAsAnotherType() throws DdlException {
+        // The factory chain falls through the cloud providers to the HDFS one, which accepts any
+        // properties, so an AZBLOB volume whose credential cannot be rebuilt serialises to an HDFS
+        // file store with the azure properties as plain Hadoop configuration. Writing that back
+        // would quietly turn the volume into an HDFS one, which is worse than failing, so
+        // toFileStoreInfo refuses instead.
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        StorageVolume sv = StorageVolume.fromFileStoreInfo(fsInfo);
+        Assertions.assertFalse(sv.isCredentialUsable());
+        // The premise of the refusal: the configuration no longer serialises to an AZBLOB file store.
+        Assertions.assertNotEquals(FileStoreType.AZBLOB, sv.getCloudConfiguration().toFileStoreInfo().getFsType());
+
+        IllegalStateException e = Assertions.assertThrows(IllegalStateException.class, sv::toFileStoreInfo);
+        Assertions.assertTrue(e.getMessage().contains("must not be written back"), e.getMessage());
+    }
+
+    @Test
+    public void testStorageVolumeWithUnusableCredentialIsNotUsable() throws DdlException {
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("test")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build();
+        // Readable, so it can be shown and dropped, but not something data may be stored through.
+        Assertions.assertFalse(StorageVolume.fromFileStoreInfo(fsInfo).isCredentialUsable());
+
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_SHARED_KEY, "shared_key");
+        StorageVolume usable = new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"),
+                storageParams, true, "");
+        Assertions.assertTrue(usable.isCredentialUsable());
+    }
+
+    @Test
+    public void testAdls2ServicePrincipalStaysAServicePrincipal() throws DdlException {
+        // The file store records no OAuth2 flow, so the read-back path infers one. Inferring a
+        // managed identity from the tenant and the client alone turned a stored service principal
+        // into a managed identity, because the credential builder prefers a managed identity over
+        // the client secret - a silent change of who the volume authenticates as.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_ADLS2_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_ADLS2_OAUTH2_TENANT_ID, "tenant_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ID, "client_id");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client_secret");
+        storageParams.put(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "client_endpoint");
+
+        FileStoreInfo fsInfo = StorageVolume.createFileStoreInfo("test", "adls2",
+                Arrays.asList("adls2://aaa"), storageParams, true, "");
+
+        Map<String, String> restored = StorageVolume.getParamsFromFileStoreInfo(fsInfo);
+        Assertions.assertEquals("client_secret", restored.get(AZURE_ADLS2_OAUTH2_CLIENT_SECRET));
+        Assertions.assertEquals("client_endpoint", restored.get(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT));
+        Assertions.assertFalse(restored.containsKey(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY), restored.toString());
+    }
+
+    @Test
+    public void testConstructorRejectsCredentialThatCannotBePersisted() {
+        // Not every write goes through createFileStoreInfo: StorageVolumeMgr#replaceStorageVolume
+        // builds the replacement with this constructor when a restore changes the volume type and
+        // then hands its file store straight to the store, so the check has to sit here.
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AZURE_BLOB_ENDPOINT, "endpoint");
+        storageParams.put(AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY, "true");
+        storageParams.put(AZURE_BLOB_OAUTH2_CLIENT_ID, "client_id");
+
+        Assertions.assertThrows(SemanticException.class, () ->
+                new StorageVolume("1", "test", "azblob", Arrays.asList("azblob://aaa"), storageParams, true, ""));
     }
 
     @Test

@@ -6681,7 +6681,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
                 StorageVolumeMgr storageVolumeMgr = globalStateMgr.getStorageVolumeMgr();
                 StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(spillStorageVolume);
-                if (sv != null) {
+                // A volume kept readable only so that it can be dropped would hand the BE a
+                // credential it cannot use, so treat it like a volume that is not there and leave
+                // remote spilling off instead of enabling it against something unusable.
+                if (sv != null && sv.isCredentialUsable()) {
                     spillOptions.setEnable_spill_to_remote_storage(true);
                     TSpillToRemoteStorageOptions options = new TSpillToRemoteStorageOptions();
                     options.setRemote_storage_paths(sv.getLocations());

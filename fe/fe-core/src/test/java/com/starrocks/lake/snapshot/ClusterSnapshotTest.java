@@ -14,6 +14,9 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.staros.proto.AzBlobFileStoreInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -41,6 +44,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.ClusterSnapshotAnalyzer;
@@ -51,6 +55,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TBrokerFD;
 import mockit.Mock;
 import mockit.MockUp;
@@ -1227,4 +1232,53 @@ public class ClusterSnapshotTest {
         Assertions.assertFalse(scheduler.interruptOnStop());
     }
 
+    @Test
+    public void testAutomatedSnapshotRefusesAndSkipsVolumeWithUnusableCredential() throws Exception {
+        // A volume kept readable only so that it can be dropped would let every snapshot round do
+        // its local checkpoint work and then fail in HdfsUtil, so it is refused when the statement
+        // turns snapshots on, and skipped by the scheduler for a cluster that was already
+        // snapshotting when it upgraded and therefore never passed through the statement.
+        StorageVolume unusable = StorageVolume.fromFileStoreInfo(FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName(storageVolumeName)
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build());
+        Assertions.assertFalse(unusable.isCredentialUsable());
+
+        // The mocked manager has to be the one GlobalStateMgr hands out: it picks its subclass by
+        // run mode when it is built, which happens before this test switches RunMode over, so the
+        // instance the FE actually holds is the shared-nothing one.
+        SharedDataStorageVolumeMgr storageVolumeMgr = new SharedDataStorageVolumeMgr();
+        new MockUp<SharedDataStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolumeByName(String svName) {
+                return unusable;
+            }
+
+            @Mock
+            public boolean exists(String svName) {
+                return true;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StorageVolumeMgr getStorageVolumeMgr() {
+                return storageVolumeMgr;
+            }
+        };
+
+        // ADMIN SET AUTOMATED SNAPSHOT ON refuses it.
+        AdminSetAutomatedSnapshotOnStmt onStmt = new AdminSetAutomatedSnapshotOnStmt(storageVolumeName, null);
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> ClusterSnapshotAnalyzer.analyze(onStmt, AnalyzeTestUtil.getConnectContext()));
+        Assertions.assertTrue(e.getMessage().contains("credential that cannot be used"), e.getMessage());
+
+        // And the scheduler skips a round rather than creating a job that would fail.
+        setAutomatedSnapshotOn(false);
+        Assertions.assertFalse(clusterSnapshotMgr.canScheduleNextJob(0L));
+        setAutomatedSnapshotOff(false);
+    }
 }

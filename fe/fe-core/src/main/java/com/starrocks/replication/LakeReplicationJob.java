@@ -76,7 +76,7 @@ public class LakeReplicationJob extends ReplicationJob implements GsonPreProcess
         this.srcTableFilePathInfo = srcTableFilePathInfo;
     }
 
-    public LakeReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
+    public LakeReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException, DdlException {
         super(request);
         Preconditions.checkArgument(request.src_database_id > 0 && request.src_table_id > 0);
         this.srcDatabaseId = request.src_database_id;

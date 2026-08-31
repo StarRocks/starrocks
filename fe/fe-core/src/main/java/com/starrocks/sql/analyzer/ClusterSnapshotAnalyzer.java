@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.storagevolume.StorageVolume;
 
 public class ClusterSnapshotAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -47,6 +48,14 @@ public class ClusterSnapshotAnalyzer {
             try {
                 if (!storageVolumeMgr.exists(storageVolumeName)) {
                     throw new SemanticException("Unknown storage volume: %s", storageVolumeName);
+                }
+                // A volume kept readable only so that it can be dropped would let every automated
+                // snapshot job finish its local checkpoint work and then fail in HdfsUtil with the
+                // unusable properties, so refuse it while the statement can still fail cleanly.
+                StorageVolume storageVolume = storageVolumeMgr.getStorageVolumeByName(storageVolumeName);
+                if (storageVolume != null && !storageVolume.isCredentialUsable()) {
+                    throw new SemanticException(
+                            "Storage volume %s has a credential that cannot be used", storageVolumeName);
                 }
             } catch (DdlException e) {
                 throw new SemanticException("Failed to get storage volume", e);

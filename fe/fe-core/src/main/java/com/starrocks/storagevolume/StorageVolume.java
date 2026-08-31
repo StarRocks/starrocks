@@ -16,6 +16,7 @@ package com.starrocks.storagevolume;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
@@ -48,6 +49,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(StorageVolume.class);
@@ -76,6 +78,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     private List<String> locations;
 
     private CloudConfiguration cloudConfiguration;
+
+    /**
+     * Derived from {@link #cloudConfiguration} and never persisted: a volume that was stored with a
+     * credential which can no longer be turned into a usable configuration stays readable, so that
+     * it can be listed and dropped, but it must not be used to store data.
+     */
+    private boolean credentialUsable = true;
 
     @SerializedName("p")
     private Map<String, String> params;
@@ -106,6 +115,26 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public static String CREDENTIAL_MASK = "******";
 
+    /**
+     * The credential properties an Azure volume can be created with. Kept next to
+     * {@link #getParamsFromFileStoreInfo}, which is the read-back side of the same round trip.
+     */
+    private static final List<String> AZURE_CREDENTIAL_PROPERTIES = ImmutableList.of(
+            CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY,
+            CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN,
+            CloudConfigurationConstants.AZURE_BLOB_OAUTH2_USE_MANAGED_IDENTITY,
+            CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID,
+            CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET,
+            CloudConfigurationConstants.AZURE_BLOB_OAUTH2_TENANT_ID,
+            CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY,
+            CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN,
+            CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY,
+            CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TENANT_ID,
+            CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID,
+            CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET,
+            CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT,
+            CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE);
+
     private String dumpMaskedParams(Map<String, String> params) {
         Gson gson = new Gson();
         Map<String, String> maskedParams = new HashMap<>(params);
@@ -115,6 +144,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public StorageVolume(String id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws DdlException {
+        this(id, name, svt, locations, params, enabled, comment, true);
+    }
+
+    /**
+     * @param requireUsableCredential when false, a credential that can no longer be turned into
+     *                                a usable configuration is tolerated instead of rejected.
+     *                                Only the read-back path passes false: identity, locations
+     *                                and virtual-tablet bookkeeping are still intact there, and
+     *                                the operations that rely solely on those - listing, resolving
+     *                                the name for a privilege check, dropping - have to keep
+     *                                working, otherwise such a volume is stuck in the cluster
+     *                                with no way to remove it.
+     */
+    private StorageVolume(String id, String name, String svt, List<String> locations,
+                          Map<String, String> params, boolean enabled, String comment,
+                          boolean requireUsableCredential) throws DdlException {
         this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
@@ -125,8 +170,19 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         Map<String, String> configurationParams = new HashMap<>(params);
         preprocessAuthenticationIfNeeded(configurationParams);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
-        if (!isValidCloudConfiguration()) {
-            throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
+        this.credentialUsable = isValidCloudConfiguration(this.svt, this.cloudConfiguration);
+        if (!this.credentialUsable) {
+            if (requireUsableCredential) {
+                throw new SemanticException("Storage params is not valid " + dumpMaskedParams(params));
+            }
+            LOG.warn("Storage volume '{}' has an unusable credential. It can still be listed and " +
+                    "dropped, but not used: {}", name, dumpMaskedParams(params));
+        }
+        if (requireUsableCredential) {
+            // Every volume that is about to be written goes through here, including the one
+            // StorageVolumeMgr#replaceStorageVolume builds when a restore changes the volume type,
+            // which reaches the file store without passing createFileStoreInfo.
+            validateCredentialIsPersistable(this.cloudConfiguration, params);
         }
         validateStorageVolumeConstraints();
     }
@@ -140,7 +196,15 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.enabled = sv.enabled;
         this.vTabletId = sv.vTabletId;
         this.vTabletGroupId = sv.vTabletGroupId;
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
+        // Same derivation as the main constructor: an AZBLOB credential takes its container from the
+        // locations rather than from the properties, so rebuilding from the raw params alone would
+        // fall through the cloud providers to the HDFS one and make a perfectly usable volume look
+        // broken. Usability follows the rebuilt configuration for the same reason - a copied flag
+        // would disagree with the configuration this copy actually holds.
+        Map<String, String> configurationParams = new HashMap<>(sv.params);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
+        this.credentialUsable = isValidCloudConfiguration(this.svt, this.cloudConfiguration);
         this.params = new HashMap<>(sv.params);
         validateStorageVolumeConstraints();
     }
@@ -166,11 +230,35 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public void setCloudConfiguration(Map<String, String> params) {
         Map<String, String> newParams = new HashMap<>(this.params);
         newParams.putAll(params);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
-        if (!isValidCloudConfiguration()) {
+        // Build from a preprocessed copy, exactly as the constructors do: an AZBLOB credential takes
+        // its container from the locations, params deliberately never carries it, and building from
+        // the raw map would fall through to the HDFS provider and refuse an ALTER of a perfectly
+        // usable volume. The derived container stays out of what is stored.
+        Map<String, String> configurationParams = new HashMap<>(newParams);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        CloudConfiguration newConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
+        if (!isValidCloudConfiguration(svt, newConfiguration)) {
             throw new SemanticException("Storage params is not valid " + dumpMaskedParams(newParams));
         }
+        validateCredentialIsPersistable(newConfiguration, newParams);
+        // Assigned only once both checks pass, so a rejected ALTER leaves the volume untouched.
+        this.cloudConfiguration = newConfiguration;
         this.params = newParams;
+        // An ALTER is how a volume that was only readable - stored with a credential that can no
+        // longer be used - gets repaired, so this derived flag has to follow the new configuration
+        // rather than stay false until the next metadata reload. Both update paths set the type
+        // before calling this, so the predicate already sees the final type.
+        this.credentialUsable = isValidCloudConfiguration(svt, newConfiguration);
+    }
+
+    /**
+     * False when the stored credential can no longer be turned into a usable configuration. Such a
+     * volume is kept readable on purpose - see the tolerating constructor - so callers that are
+     * about to store data through it have to reject it explicitly.
+     */
+    public boolean isCredentialUsable() {
+        return credentialUsable;
     }
 
     public CloudConfiguration getCloudConfiguration() {
@@ -254,21 +342,104 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         }
     }
 
-    private boolean isValidCloudConfiguration() {
+    private static boolean isValidCloudConfiguration(StorageVolumeType svt, CloudConfiguration configuration) {
         switch (svt) {
             case S3:
-                return cloudConfiguration.getCloudType() == CloudType.AWS;
+                return configuration.getCloudType() == CloudType.AWS;
             case HDFS:
-                return cloudConfiguration.getCloudType() == CloudType.HDFS;
+                return configuration.getCloudType() == CloudType.HDFS;
             case AZBLOB:
-                return cloudConfiguration.getCloudType() == CloudType.AZURE;
+                return configuration.getCloudType() == CloudType.AZURE;
             case ADLS2:
-                return cloudConfiguration.getCloudType() == CloudType.AZURE;
+                return configuration.getCloudType() == CloudType.AZURE;
             case GS:
-                return cloudConfiguration.getCloudType() == CloudType.GCP;
+                return configuration.getCloudType() == CloudType.GCP;
             default:
                 return false;
         }
+    }
+
+    /**
+     * Not every credential the factory accepts can be stored: a credential's {@code toFileStoreInfo}
+     * only carries the fields the file store models, and anything else is dropped silently. A volume
+     * created from such a credential is written successfully and can never be rebuilt into a usable
+     * one afterwards, so reject it while the statement can still fail cleanly.
+     *
+     * <p>The first half of the check applies to every volume type and is deliberately generic: the
+     * configuration is round-tripped through {@link FileStoreInfo} and has to come back as a usable
+     * configuration of the same cloud, which also covers credential forms added later.
+     *
+     * <p>Staying the same cloud is not sufficient on Azure though, where the credential the factory
+     * accepts is richer than what the file store models, so a volume can stay valid while quietly
+     * authenticating as somebody else. The second half therefore requires, for Azure volumes, that
+     * the credential properties given and the ones read back are the same set. The comparison runs
+     * both ways on purpose: the file store records no OAuth2 flow, so the read-back path infers one,
+     * and a property it infers is as much of a mode change as a property it drops.
+     *
+     * <p>The ADLS2 workload identity is refused by this comparison. Its token file has no field in
+     * {@link ADLS2CredentialInfo}, so it lives only in the params of the FE that created the volume:
+     * a read-back turns it into a managed identity, and the file store is also the only credential a
+     * lake table's storage location carries, so nothing downstream ever sees the token. The English
+     * and Chinese CREATE STORAGE VOLUME pages used to offer it and were corrected together with this
+     * change. Supporting it needs a token file field in the file store, not a lenient check here.
+     *
+     * <p>The AWS web identity profile used to lose just as much, being stored as an assume role or a
+     * default credential, but #77638 has since given it a credential case of its own, so it now
+     * round-trips and needs nothing from this check. What stays lossy on S3 is the session token,
+     * refused above.
+     *
+     * <p>The restored parameters go through the same {@link #preprocessAuthenticationIfNeeded}
+     * derivation as the incoming ones, otherwise fields derived from the locations rather than the
+     * properties - the AZBLOB container - would look lost and reject perfectly storable credentials.
+     */
+    private void validateCredentialIsPersistable(CloudConfiguration configuration, Map<String, String> params) {
+        Map<String, String> restored = getParamsFromFileStoreInfo(configuration.toFileStoreInfo());
+        preprocessAuthenticationIfNeeded(restored);
+        CloudConfiguration restoredConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(restored, true);
+        if (!isValidCloudConfiguration(svt, restoredConfiguration)) {
+            Map<String, String> maskedParams = new HashMap<>(params);
+            addMaskForCredential(maskedParams);
+            throw new SemanticException(String.format(
+                    "Storage params contain a credential that cannot be stored for a %s storage volume: %s",
+                    svt, new Gson().toJson(maskedParams)));
+        }
+        if (svt == StorageVolumeType.S3
+                && isCredentialPropertySet(params, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN)) {
+            // AwsSimpleCredentialInfo carries the access key and its secret and nothing else - the
+            // credential's own toFileStoreInfo says as much with a TODO - so the session token is
+            // dropped and what reads back is a pair of temporary keys that can no longer
+            // authenticate. Unlike the ADLS2 workload identity this form is not documented for
+            // storage volumes, and temporary keys would expire during the volume's life anyway, so
+            // refuse it rather than warn.
+            throw new SemanticException(String.format(
+                    "Storage params contain a credential that cannot be stored for a %s storage volume, " +
+                            "storing it would drop %s", svt, CloudConfigurationConstants.AWS_S3_SESSION_TOKEN));
+        }
+        if (svt != StorageVolumeType.AZBLOB && svt != StorageVolumeType.ADLS2) {
+            return;
+        }
+        List<String> changedProperties = AZURE_CREDENTIAL_PROPERTIES.stream()
+                .filter(key -> isCredentialPropertySet(params, key) != isCredentialPropertySet(restored, key))
+                .sorted()
+                .collect(Collectors.toList());
+        if (!changedProperties.isEmpty()) {
+            // Names only: the values are the credential we are refusing to store.
+            throw new SemanticException(String.format(
+                    "Storage params contain a credential that cannot be stored for a %s storage volume, " +
+                            "storing it would change %s", svt, String.join(", ", changedProperties)));
+        }
+    }
+
+    /**
+     * A property explicitly turned off says as little about the credential as an absent one, and the
+     * read-back path only writes the flags that are on, so treat both the same way. Without this an
+     * {@code oauth2_use_managed_identity = false} spelled out next to a shared key would look like a
+     * property the file store had dropped.
+     */
+    private static boolean isCredentialPropertySet(Map<String, String> params, String key) {
+        String value = params.get(key);
+        return !Strings.isNullOrEmpty(value) && !value.equalsIgnoreCase("false");
     }
 
     public static void addMaskForCredential(Map<String, String> params) {
@@ -278,6 +449,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
                 (key, value) -> CREDENTIAL_MASK);
@@ -310,7 +483,21 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         if (vTabletGroupId != -1L) {
             properties.put(V_SHARD_GROUP_ID, String.valueOf(vTabletGroupId));
         }
-        FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
+        // What the configuration serialises to has to be a file store of this volume's own type.
+        // For a volume tolerated on read-back it is not: the factory chain falls through the cloud
+        // providers to the HDFS one, which accepts anything, so an AZBLOB volume whose credential
+        // cannot be rebuilt serialises to an HDFS file store carrying the azure properties as plain
+        // Hadoop configuration. Writing that back would silently change the volume's type in the
+        // file store rather than fail. The callers that write a volume back check
+        // isCredentialUsable() first, so reaching this means one was added without that check.
+        FileStoreInfo credentialInfo = cloudConfiguration.toFileStoreInfo();
+        if (credentialInfo == null || !credentialInfo.getFsType().name().equals(svt.name())) {
+            throw new IllegalStateException(String.format(
+                    "Storage volume '%s' of type %s has a credential that serialises to %s, " +
+                            "it must not be written back", name, svt,
+                    credentialInfo == null ? "nothing" : credentialInfo.getFsType()));
+        }
+        FileStoreInfo.Builder builder = credentialInfo.toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
                 .setComment(this.comment)
@@ -324,7 +511,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
         StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
-                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+                fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment(), false);
 
         Map<String, String> propertiesMap = fsInfo.getPropertiesMap();
         if (propertiesMap.containsKey(V_SHARD_ID)) {
@@ -451,12 +638,18 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 if (!Strings.isNullOrEmpty(clientId)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, clientId);
                 }
-                if (!Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId)) {
-                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
-                }
                 String clientSecret = adls2credentialInfo.getClientSecret();
                 if (!Strings.isNullOrEmpty(clientSecret)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, clientSecret);
+                }
+                // The file store has no field saying which OAuth2 flow was used, so it is inferred: a
+                // tenant and a client with no secret is a managed identity, the same three with a
+                // secret is a service principal. Inferring a managed identity from the tenant and the
+                // client alone made a stored service principal come back as a managed identity, since
+                // the credential builder prefers a managed identity over the client secret.
+                if (!Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId)
+                        && Strings.isNullOrEmpty(clientSecret)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
                 }
                 String clientEndpoint = adls2credentialInfo.getAuthorityHost();
                 if (!Strings.isNullOrEmpty(clientEndpoint)) {
@@ -498,6 +691,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        // Same derivation as the constructors, for the same reason: params does not carry the AZBLOB
+        // container, so rebuilding from the raw map would fall through to the HDFS provider and mark
+        // a usable volume unusable on every image or edit-log reload - which the guards would then
+        // act on after each FE restart.
+        Map<String, String> configurationParams = new HashMap<>(params);
+        preprocessAuthenticationIfNeeded(configurationParams);
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
+        credentialUsable = isValidCloudConfiguration(svt, cloudConfiguration);
     }
 }

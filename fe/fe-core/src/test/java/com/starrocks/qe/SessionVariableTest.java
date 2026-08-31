@@ -13,10 +13,21 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.staros.proto.AzBlobFileStoreInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.SharedDataStorageVolumeMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TBinaryEncodingFormat;
 import com.starrocks.thrift.TBinaryEncodingLevel;
 import com.starrocks.thrift.TQueryOptions;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -219,5 +230,45 @@ public class SessionVariableTest {
                 SessionVariable.SCAN_LAKE_PARTITION_NUM_LIMIT + "\": 4096, \"" +
                 SessionVariable.SCAN_HIVE_PARTITION_NUM_LIMIT + "\": 512}");
         Assertions.assertEquals(4096, sessionVariable.getScanLakePartitionNumLimit());
+    }
+
+    @Test
+    public void testRemoteSpillStaysOffForVolumeWithUnusableCredential() throws DdlException {
+        // A volume kept readable only so that it can be dropped carries a DEFAULT cloud
+        // configuration. Shipping that to the BE would fail once a query actually spills, and with
+        // disable_spill_to_local_disk there is nowhere else to go, so remote spilling has to stay
+        // off - the same thing that happens when the named volume does not exist.
+        StorageVolume unusable = StorageVolume.fromFileStoreInfo(FileStoreInfo.newBuilder()
+                .setFsKey("1")
+                .setFsName("sv")
+                .setFsType(FileStoreType.AZBLOB)
+                .setEnabled(true)
+                .addLocations("azblob://aaa")
+                .setAzblobFsInfo(AzBlobFileStoreInfo.newBuilder().setEndpoint("endpoint").build())
+                .build());
+        Assertions.assertFalse(unusable.isCredentialUsable());
+
+        SharedDataStorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        new MockUp<SharedDataStorageVolumeMgr>() {
+            @Mock
+            public StorageVolume getStorageVolumeByName(String svName) {
+                return unusable;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StorageVolumeMgr getStorageVolumeMgr() {
+                return svm;
+            }
+        };
+
+        SessionVariable sessionVariable = new SessionVariable();
+        sessionVariable.setEnableSpill(true);
+        Deencapsulation.setField(sessionVariable, "enableSpillToRemoteStorage", true);
+        Deencapsulation.setField(sessionVariable, "spillStorageVolume", "sv");
+
+        TQueryOptions queryOptions = sessionVariable.toThrift();
+        Assertions.assertFalse(queryOptions.getSpill_options().isEnable_spill_to_remote_storage());
+        Assertions.assertNull(queryOptions.getSpill_options().getSpill_to_remote_storage_options());
     }
 }
