@@ -2833,7 +2833,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
-    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
+    // Exercise the asynchronous flush branch. commit() must wait for it before finalising metadata.
+    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 2);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i <= config::cloud_native_pk_index_rebuild_files_threshold; i++) {

@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "base/debug/trace.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -264,30 +265,23 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     return Status::OK();
 }
 
-Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
-    // 1. flush inactive memtables
+Status LakePersistentIndex::sync_flush_inactive_memtables(int64_t wait_timeout_us) {
+    const int64_t deadline_us = MonotonicMicros() + wait_timeout_us;
     for (auto& memtable : _inactive_memtables) {
-        int64_t start_us = butil::gettimeofday_us();
-        bool wait_success = false;
-        while (butil::gettimeofday_us() - start_us < wait_timeout_us) {
-            RETURN_IF_ERROR(memtable->flush_status());
-            auto sstable = memtable->release_sstable();
-            if (sstable != nullptr) {
-                // try to merge to a existing fileset
-                RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
-                wait_success = true;
-                break;
-            } else {
-                usleep(1000000); // wait for flush finish, 1s
-            }
-        }
-        if (!wait_success) {
-            return Status::TimedOut(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
-        }
+        RETURN_IF_ERROR(memtable->wait_for_flush(std::max<int64_t>(0, deadline_us - MonotonicMicros())));
+        auto sstable = memtable->release_sstable();
+        DCHECK(sstable != nullptr);
+        // try to merge to a existing fileset
+        RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
     }
     _inactive_memtables.clear();
-    // 2. flush current memtable
+    return Status::OK();
+}
+
+Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
+    RETURN_IF_ERROR(sync_flush_inactive_memtables(wait_timeout_us));
+    // flush current memtable
     if (_memtable && !_memtable->empty()) {
         RETURN_IF_ERROR(_memtable->flush());
         auto sstable = _memtable->release_sstable();
@@ -1074,6 +1068,7 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
         // we need to do flush to reduce index rebuild cost later.
         RETURN_IF_ERROR(flush_memtable(true));
     }
+    RETURN_IF_ERROR(sync_flush_inactive_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
     PersistentIndexSstableMetaPB sstable_meta;
     int64_t last_max_rss_rowid = 0;
     for (auto& sstable_fileset : _sstable_filesets) {
