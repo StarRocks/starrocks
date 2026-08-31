@@ -373,6 +373,12 @@ description: "Alphabetical s"
 - Type: Instantaneous
 - Description: Indicates the end time of the last query or loading under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse.
 
+## `starrocks_fe_max_journal_replay_lag`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The largest number of metadata journals that any alive Follower or Observer FE still has to replay to catch up with the Leader. Reported only by the Leader FE (`is_leader="true"`), which is the only node that knows both its own journal write position and, through heartbeats, every other node's replayed journal ID. FE nodes that are not alive are excluded, because the journal ID they last reported is frozen at their final successful heartbeat; use the `Alive` column of `SHOW FRONTENDS` to detect those instead. It returns `0` when every other node has caught up, when no other FE node is alive, and on a single-FE cluster. A high or continuously growing value means metadata replay on at least one node is falling behind, which causes that node to serve stale metadata and, once `meta_delay_toleration_second` is exceeded, to forward its queries to the Leader.
+
 ## `starrocks_fe_memory_usage`
 
 - Unit: Bytes or Count

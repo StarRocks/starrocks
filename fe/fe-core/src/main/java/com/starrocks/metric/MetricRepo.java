@@ -38,6 +38,7 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -92,6 +93,7 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
@@ -468,6 +470,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
+    public static LeaderAwareGaugeMetricLong GAUGE_MAX_JOURNAL_REPLAY_LAG;
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
@@ -612,6 +615,19 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
+
+        // journal replay lag of the slowest follower/observer.
+        // Leader-only: it is the only node that knows both the write frontier and, via heartbeat,
+        // every other node's replayed journal id.
+        GAUGE_MAX_JOURNAL_REPLAY_LAG = new LeaderAwareGaugeMetricLong(
+                "max_journal_replay_lag", MetricUnit.NOUNIT,
+                "max number of journals any alive follower/observer is behind the leader") {
+            @Override
+            public Long getValueLeader() {
+                return getMaxJournalReplayLag();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_JOURNAL_REPLAY_LAG);
 
         GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
                 SPM_BASELINE_COUNT_METRIC_NAME,
@@ -1179,6 +1195,32 @@ public final class MetricRepo {
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
         }
+    }
+
+    /**
+     * Max number of journals that any alive follower/observer still has to replay to catch up
+     * with the leader.
+     *
+     * The leader's own journal id is the write frontier; every other node's replayed journal id
+     * arrives with its heartbeat (see Frontend#handleHbResponse). Dead nodes are skipped, because
+     * their reported id is frozen at the last successful heartbeat: counting them would pin this
+     * gauge at an ever growing value that says nothing about replay speed, and liveness is already
+     * reported separately through SHOW FRONTENDS.
+     *
+     * Returns 0 when no other node is alive, and never returns a negative value.
+     */
+    @VisibleForTesting
+    static long getMaxJournalReplayLag() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        long leaderJournalId = globalStateMgr.getMaxJournalId();
+        long maxLag = 0;
+        for (Frontend fe : globalStateMgr.getNodeMgr().getOtherFrontends()) {
+            if (!fe.isAlive()) {
+                continue;
+            }
+            maxLag = Math.max(maxLag, leaderJournalId - fe.getReplayedJournalId());
+        }
+        return maxLag;
     }
 
     private static void initStatisticsCacheMetrics() {
