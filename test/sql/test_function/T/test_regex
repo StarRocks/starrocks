@@ -161,3 +161,11 @@ ORDER BY column_value;
 
 -- Clean up
 DROP TABLE test_regexp_replace_multirow;
+
+-- Issue 76417 regression tests
+SELECT * FROM (
+    SELECT '-- --------------------------------------------------------------------------------\n-- @Time     : 2026-05-07 17:02\n    ,track_path                 ARRAY<STRING> COMMENT' AS a
+) t
+WHERE t.a LIKE '%track_path%';
+
+SELECT regexp('gk|abc_0.054523_psc2.8.225|cba_0.060057', 'abc_[0-9]+[.][0-9]+') AS aa;

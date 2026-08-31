@@ -1161,9 +1161,21 @@ build_hyperscan() {
     check_if_source_exist $HYPERSCAN_SOURCE
     cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
+
+    # FAT_RUNTIME bundles multiple ISA-specific code paths (SSE4.2, AVX2, AVX-512)
+    # with IFUNC-based runtime dispatch.  It defaults to ON for x86_64 Linux and
+    # must stay enabled there so that a single artifact runs correctly across
+    # different x86_64 micro-architectures.  Vectorscan on AArch64 does not
+    # benefit from this (ARM NEON is the baseline), and the option can cause
+    # build issues, so disable it only for aarch64.
+    local FAT_RUNTIME_FLAG=""
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        FAT_RUNTIME_FLAG="-DFAT_RUNTIME=OFF"
+    fi
+
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib \
-          -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF
+          -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF -DBUILD_BENCHMARKS=OFF ${FAT_RUNTIME_FLAG}
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
