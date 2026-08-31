@@ -30,12 +30,7 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
-<<<<<<< HEAD
-#include "storage/tablet_schema.h"
 #include "util/defer_op.h"
-=======
-#include "storage/storage_env.h"
->>>>>>> d00d14d ([BugFix] Conserve range split cross-publish statistics (#78269))
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
