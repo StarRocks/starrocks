@@ -1,3 +1,12 @@
+// This policy governs code loaded via UDFClassLoader (see UDFSecurityManager), i.e. Java UDFs
+// uploaded by users with CREATE FUNCTION privilege. It previously granted java.security.AllPermission,
+// which is equivalent to no sandbox at all: any UDF could read/write arbitrary files, open network
+// connections, execute system commands, and read in-process secrets via reflection.
+//
+// Grant only the minimum permissions required for ordinary UDF execution. If a specific UDF
+// legitimately needs more (e.g. reading a config file or calling an external endpoint), extend this
+// policy narrowly and explicitly for that resource rather than restoring AllPermission.
 grant {
-    permission java.security.AllPermission;
+    permission java.util.PropertyPermission "*", "read";
+    permission java.lang.RuntimePermission "accessDeclaredMembers";
 };
