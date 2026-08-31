@@ -38,6 +38,13 @@ public:
 
     static bool has_correct_min_max_stats(const FileMetaData* file_metadata,
                                           const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order);
+
+    // `null_count` is a summary the writer accumulates alongside the definition levels, not
+    // something derived from them, so a writer can get it wrong while the levels stay right. We
+    // already refuse min/max from writers known to compute statistics incorrectly; ask the same
+    // question about `null_count`, which used to bypass that judgement entirely and reach zone
+    // map, page index and bloom filter pruning unchecked.
+    static bool has_correct_null_count(const FileMetaData* file_metadata);
 };
 
 } // namespace starrocks::parquet
