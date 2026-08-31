@@ -20,6 +20,8 @@
 #include "base/utility/defer_op.h"
 #include "common/config_http_fwd.h"
 #include "common/process_exit.h"
+#include "common/status.h"
+#include "common/system/master_info.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/http/http_status.h"
@@ -29,6 +31,23 @@
 #endif
 
 namespace starrocks {
+
+namespace {
+// stop_be shuts the process down for any caller that can reach this HTTP endpoint.
+// config::enable_stop_be_action is only a feature toggle (default true), not a credential,
+// so gate it behind the same cluster-internal shared token already used for other
+// admin/internal BE HTTP endpoints (see DownloadAction::check_token).
+Status check_internal_token(HttpRequest* req) {
+    const std::string& token_str = req->param("token");
+    if (token_str.empty()) {
+        return Status::InternalError("token is not specified.");
+    }
+    if (token_str != get_master_token()) {
+        return Status::InternalError("invalid token.");
+    }
+    return Status::OK();
+}
+} // namespace
 
 std::string StopBeAction::construct_response_message(const std::string& msg) {
     std::stringstream ss;
@@ -48,6 +67,16 @@ void StopBeAction::handle(HttpRequest* req) {
         HttpChannel::send_reply(req, HttpStatus::FORBIDDEN,
                                 construct_response_message("stop_be action is disabled by config"));
         return;
+    }
+
+    if (config::enable_token_check) {
+        Status token_st = check_internal_token(req);
+        if (!token_st.ok()) {
+            LOG(WARNING) << "Rejected stop_be request: " << token_st;
+            HttpChannel::send_reply(req, HttpStatus::UNAUTHORIZED,
+                                    construct_response_message(std::string(token_st.message())));
+            return;
+        }
     }
 
     DeferOp defer([&]() {
