@@ -411,6 +411,15 @@ Google GCS を Paimon クラスターのストレージとして選択する場�
     | gcp.gcs.service_account_private_key    | ""          | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n" | メタサービスアカウントの作成時に生成された JSON ファイル内のプライベートキー。 |
     | gcp.gcs.impersonation_service_account  | ""          | "hello"                                              | インパーソネートしたいデータサービスアカウント。       |
 
+#### MetadataCacheParams（オプション）
+
+StarRocks は Paimon のメタデータをキャッシュし、バックグラウンドで更新します。以下のオプションのプロパティでそのキャッシュを調整できます。
+
+| パラメータ                                | デフォルト値 | 説明                                                         |
+| ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+| paimon_meta_cache_ttl_sec                | 86400        | キャッシュエントリの有効期間（秒）。 |
+| paimon_table_cache_refresh_interval_sec  | 60           | 同一テーブルに対してクエリが起点となる更新を 2 回行う間の最小間隔（秒）。クエリがより新しい Snapshot を読み取った場合に発生し、更新はバックグラウンドで実行されるためクエリは待機しません。`0` を設定すると、定期的なバックグラウンド更新のみになります。v4.2.0 以降でサポートされます。 |
+
 ### 例
 
 以下の例では、Paimon クラスターからデータをクエリするために、メタストアタイプ `paimon.catalog.type` が `filesystem` に設定された `paimon_catalog_fs` という名前の Paimon catalog を作成します。

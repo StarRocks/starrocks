@@ -14,7 +14,9 @@
 
 package com.starrocks.connector.paimon;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -43,6 +45,7 @@ import org.apache.paimon.privilege.PrivilegedCatalog;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
@@ -57,11 +60,19 @@ public class PaimonConnector implements Connector {
     // implicit for user, mirrors iceberg_meta_cache_ttl_sec
     public static final String PAIMON_META_CACHE_TTL = "paimon_meta_cache_ttl_sec";
     private static final long DEFAULT_META_CACHE_TTL_SEC = 24L * 60 * 60;
+    // mirrors iceberg_table_cache_refresh_interval_sec, which feeds Caffeine's refreshAfterWrite
+    public static final String PAIMON_TABLE_CACHE_REFRESH_INTERVAL =
+            "paimon_table_cache_refresh_interval_sec";
+    private static final long DEFAULT_TABLE_CACHE_REFRESH_INTERVAL_SEC = 60L;
     private static final long CACHE_PARTITION_MAX_NUM = 1000L;
+    // same sizing as the iceberg background pool
+    private static final int REFRESH_THREAD_NUM = Math.max(2, Runtime.getRuntime().availableProcessors() / 8);
     private static final MemorySize CACHE_MANIFEST_FILE_THRESHOLD = MemorySize.ofMebiBytes(10);
     private static final MemorySize CACHE_MANIFEST_MEMORY = MemorySize.ofMebiBytes(1024);
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
+    private final ExecutorService refreshExecutor;
+    private final long tableCacheRefreshIntervalSec;
     private final String catalogName;
     private final Options paimonOptions;
     private final ConnectorProperties connectorProperties;
@@ -108,6 +119,12 @@ public class PaimonConnector implements Connector {
         // With equal values expire-after-write binds, which is Iceberg's write-only TTL semantics.
         Duration metaCacheTtl = Duration.ofSeconds(
                 PropertyUtil.propertyAsLong(properties, PAIMON_META_CACHE_TTL, DEFAULT_META_CACHE_TTL_SEC));
+        this.tableCacheRefreshIntervalSec = PropertyUtil.propertyAsLong(properties, PAIMON_TABLE_CACHE_REFRESH_INTERVAL,
+                DEFAULT_TABLE_CACHE_REFRESH_INTERVAL_SEC);
+        // built here, not on the lazy catalog path: two concurrent first queries would otherwise
+        // each build a pool and only the last one stored could ever be shut down
+        this.refreshExecutor = ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(
+                REFRESH_THREAD_NUM, catalogName + "-paimon-refresh-pool", true);
         this.paimonOptions.set(CatalogOptions.CACHE_EXPIRE_AFTER_ACCESS, metaCacheTtl);
         this.paimonOptions.set(CatalogOptions.CACHE_EXPIRE_AFTER_WRITE, metaCacheTtl);
         // max num of cached partitions of a Paimon catalog
@@ -156,6 +173,11 @@ public class PaimonConnector implements Connector {
         }
     }
 
+    @VisibleForTesting
+    public long getTableCacheRefreshIntervalSec() {
+        return tableCacheRefreshIntervalSec;
+    }
+
     public Options getPaimonOptions() {
         return this.paimonOptions;
     }
@@ -174,8 +196,8 @@ public class PaimonConnector implements Connector {
                 this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(unwrapped, getPaimonOptions());
                 return paimonNativeCatalog;
             }
-            CachingPaimonCatalog cachingCatalog =
-                    new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions());
+            CachingPaimonCatalog cachingCatalog = new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions(),
+                    refreshExecutor, tableCacheRefreshIntervalSec);
             this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
             GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                     .registerPaimonCatalog(catalogName, cachingCatalog);
@@ -191,5 +213,6 @@ public class PaimonConnector implements Connector {
     @Override
     public void shutdown() {
         GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterPaimonCatalog(catalogName);
+        refreshExecutor.shutdown();
     }
 }
