@@ -468,9 +468,7 @@ enum TTableType {
     BENCHMARK_TABLE = 34,
     ICEBERG_PROPERTIES_TABLE = 35,
     LANCE_TABLE = 36,
-    FLUSS_TABLE = 37,
-    // Value 38 is taken by a downstream distribution.
-    PLACEHOLDER_38 = 38
+    FLUSS_TABLE = 37
 }
 
 enum TKeysType {

@@ -564,9 +564,7 @@ enum TTabletMetaType {
     BASE_COMPACTION_FORBIDDEN_TIME_RANGES = 12,
     FLAT_JSON_CONFIG = 13,
     ENABLE_FILE_BUNDLING = 14,
-    COMPACTION_STRATEGY = 15,
-    // Value 16 is taken by a downstream distribution.
-    PLACEHOLDER_16 = 16
+    COMPACTION_STRATEGY = 15
 }
 
 // Extension point for TTabletMetaInfo. DO NOT MODIFY: do not add fields here,

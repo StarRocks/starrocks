@@ -69,9 +69,7 @@ enum TDataSinkType {
     SPLIT_DATA_STREAM_SINK = 15,
     NOOP_SINK = 16,
     ICEBERG_DELETE_SINK = 17,
-    ICEBERG_ROW_DELTA_SINK = 18,
-    // Value 19 is taken by a downstream distribution.
-    PLACEHOLDER_19 = 19
+    ICEBERG_ROW_DELTA_SINK = 18
 }
 
 enum TResultSinkType {
