@@ -807,6 +807,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
 
+### `iceberg_hms_client_pool_size`
+
+- 默认值: `max(2, CPU 核数 * 3 / 4)`
+- 类型: Int
+- 单位: 计数
+- 是否可变: No
+- 描述: 使用 `"iceberg.catalog.type" = "hive"` 创建的 Iceberg Catalog 的 Hive metastore (HMS) 客户端连接池的默认大小。连接池大小限制了该 Catalog 能够并发发起的 HMS 调用数量。Iceberg 自身的默认值为 `2`，无论有多少线程在加载元数据，都会把该 metastore 上所有外部元数据加载的并发度限制在这个值，因此该配置项改为根据 FE 的 CPU 核数推导默认值。Catalog 属性 `clients` 的优先级高于该配置项，仅当 Catalog 自身没有设置 `clients` 时，该配置项才提供取值。Iceberg 在整个 FE 进程内按 metastore URI 缓存 HMS 客户端连接池，由此带来两个影响。其一，修改该配置项需要重启 FE 才能生效，因为已经创建的连接池不会因取值变化而重建，此时 `SHOW CREATE CATALOG` 可能显示新的取值，而实际生效的并发度仍然是旧值。其二，指向同一个 metastore URI 的所有 Catalog 共享同一个连接池，其容量由启动后第一个初始化该 URI 的 Catalog 决定，之后创建的 Catalog 自身携带的取值会被静默忽略。因此请为指向同一个 metastore URI 的所有 Catalog 设置相同的值。
+- 引入版本: v4.2.0
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - 默认值: 86400

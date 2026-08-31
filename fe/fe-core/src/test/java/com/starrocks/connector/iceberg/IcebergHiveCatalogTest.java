@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
@@ -38,7 +39,9 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -50,6 +53,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -122,6 +126,53 @@ public class IcebergHiveCatalogTest {
         icebergHiveCatalog.renameTable(connectContext, "db", "tb1", "tb2");
         boolean exists = icebergHiveCatalog.tableExists(connectContext, "db", "tbl2");
         Assertions.assertTrue(exists);
+    }
+
+    @Test
+    public void testClientPoolSizeFromCatalogProperty(@Mocked HiveCatalog hiveCatalog) {
+        int savedPoolSize = Config.iceberg_hms_client_pool_size;
+        Config.iceberg_hms_client_pool_size = 8;
+        try {
+            Map<String, String> icebergProperties = new HashMap<>();
+            icebergProperties.put(HIVE_METASTORE_URIS, "thrift://129.1.2.3:9876");
+            icebergProperties.put(CatalogProperties.CLIENT_POOL_SIZE, "64");
+            new IcebergHiveCatalog("hive_catalog_explicit_clients", new Configuration(), icebergProperties);
+
+            new Verifications() {
+                {
+                    List<Map<String, String>> loadedProperties = new ArrayList<>();
+                    hiveCatalog.initialize(anyString, withCapture(loadedProperties));
+                    Assertions.assertEquals(1, loadedProperties.size());
+                    // an explicit catalog property must win over the fe config default
+                    Assertions.assertEquals("64", loadedProperties.get(0).get(CatalogProperties.CLIENT_POOL_SIZE));
+                }
+            };
+        } finally {
+            Config.iceberg_hms_client_pool_size = savedPoolSize;
+        }
+    }
+
+    @Test
+    public void testClientPoolSizeDefaultsToFeConfig(@Mocked HiveCatalog hiveCatalog) {
+        int savedPoolSize = Config.iceberg_hms_client_pool_size;
+        Config.iceberg_hms_client_pool_size = 37;
+        try {
+            Map<String, String> icebergProperties = new HashMap<>();
+            icebergProperties.put(HIVE_METASTORE_URIS, "thrift://129.1.2.3:9876");
+            new IcebergHiveCatalog("hive_catalog_default_clients", new Configuration(), icebergProperties);
+
+            new Verifications() {
+                {
+                    List<Map<String, String>> loadedProperties = new ArrayList<>();
+                    hiveCatalog.initialize(anyString, withCapture(loadedProperties));
+                    Assertions.assertEquals(1, loadedProperties.size());
+                    // without an explicit catalog property, iceberg must see the fe config default, not its own 2
+                    Assertions.assertEquals("37", loadedProperties.get(0).get(CatalogProperties.CLIENT_POOL_SIZE));
+                }
+            };
+        } finally {
+            Config.iceberg_hms_client_pool_size = savedPoolSize;
+        }
     }
 
     @Test

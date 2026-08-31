@@ -95,8 +95,22 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         // it will request all Table Objects from Hive Metastore, when there are lots of tables under the
         // database, timeout may happen.
         copiedProperties.putIfAbsent(HiveCatalog.LIST_ALL_TABLES, "true");
+        // Iceberg defaults the hms client pool to 2 connections, which caps the concurrency of every metadata
+        // load on this metastore no matter how many threads are loading. Only fill in the fe-side default when
+        // the catalog does not carry the property itself.
+        copiedProperties.putIfAbsent(CatalogProperties.CLIENT_POOL_SIZE,
+                String.valueOf(Config.iceberg_hms_client_pool_size));
+        String clientPoolSize = copiedProperties.get(CatalogProperties.CLIENT_POOL_SIZE);
+        String clientPoolSizeSource = properties.containsKey(CatalogProperties.CLIENT_POOL_SIZE)
+                ? "catalog property " + CatalogProperties.CLIENT_POOL_SIZE
+                : "fe config iceberg_hms_client_pool_size";
 
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
+        LOG.info("Created iceberg hive catalog {}: metastore={}, hms client pool size={}, set by {}. "
+                        + "Iceberg caches one hms client pool per metastore uri for the whole fe process, so this "
+                        + "size is the real concurrency limit only when this is the first catalog created for that "
+                        + "uri; a later catalog on the same uri reuses the earlier pool and its own size is ignored.",
+                name, metastoreURI, clientPoolSize, clientPoolSizeSource);
     }
 
     @VisibleForTesting

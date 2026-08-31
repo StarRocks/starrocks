@@ -3254,6 +3254,20 @@ public class Config extends ConfigBase {
     public static int iceberg_table_refresh_threads = 128;
 
     /**
+     * Keep this in sync with ThreadPoolManager.cpuIntensiveThreadPoolSize(): the pool must not be smaller than
+     * the number of threads that load external metadata concurrently, and a pool larger than that buys nothing.
+     * ThreadPoolManager is not referenced directly here because its own static initializers read Config, so
+     * touching it from a Config static initializer would build the dict-collect thread pools before fe.conf
+     * has been applied.
+     */
+    @ConfField(comment = "Default client pool size ('clients') for Iceberg HMS catalogs when the catalog "
+            + "does not set it explicitly. Iceberg's own default is 2, which pins external metadata "
+            + "concurrency regardless of how many threads are loading. Not mutable at runtime: Iceberg "
+            + "caches the client pool per metastore URI in a static cache, so a changed value only takes "
+            + "effect after an FE restart.")
+    public static int iceberg_hms_client_pool_size = Integer.max(2, Runtime.getRuntime().availableProcessors() * 3 / 4);
+
+    /**
      * interval to remove cached table in iceberg refresh cache
      */
     @ConfField(mutable = true)
