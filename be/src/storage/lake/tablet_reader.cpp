@@ -1013,6 +1013,33 @@ Status TabletReader::init_predicates(const TabletReaderParams& params) {
     return Status::OK();
 }
 
+Status delete_predicate_column_ids(const TabletMetadataPB& metadata, const TabletSchema& schema,
+                                   std::set<ColumnId>* column_ids) {
+    auto keep = [&](const std::string& column_name) {
+        const size_t index = schema.field_index(column_name);
+        if (index < schema.num_columns()) {
+            column_ids->insert(index);
+        }
+    };
+    for (int index = 0, size = metadata.rowsets_size(); index < size; ++index) {
+        const auto& rowset_metadata = metadata.rowsets(index);
+        if (!rowset_metadata.has_delete_predicate()) {
+            continue;
+        }
+        const auto& pred_pb = rowset_metadata.delete_predicate();
+        for (int i = 0; i < pred_pb.binary_predicates_size(); ++i) {
+            keep(pred_pb.binary_predicates(i).column_name());
+        }
+        for (int i = 0; i < pred_pb.is_null_predicates_size(); ++i) {
+            keep(pred_pb.is_null_predicates(i).column_name());
+        }
+        for (int i = 0; i < pred_pb.in_predicates_size(); ++i) {
+            keep(pred_pb.in_predicates(i).column_name());
+        }
+    }
+    return Status::OK();
+}
+
 Status TabletReader::init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     if (UNLIKELY(_tablet_metadata == nullptr)) {
         return Status::InternalError("tablet metadata is null. forget or fail to call prepare()");

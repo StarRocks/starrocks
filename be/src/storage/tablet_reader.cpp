@@ -32,6 +32,7 @@
 #include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/delete_handler.h"
 #include "storage/delete_predicates.h"
 #include "storage/json_path_deriver.h"
 #include "storage/olap_common.h"
@@ -605,8 +606,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
                 return Status::InternalError("invalid delete condition string");
             }
-            if (_tablet_schema->field_index(cond.column_name) >= _tablet_schema->num_key_columns() &&
-                _tablet_schema->keys_type() != DUP_KEYS) {
+            if (!DeleteHandler::is_delete_condition_evaluated(*_tablet_schema, cond.column_name)) {
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }
