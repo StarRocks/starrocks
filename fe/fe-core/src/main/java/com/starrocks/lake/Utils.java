@@ -309,7 +309,14 @@ public class Utils {
             singleReq.setReshardingTabletInfos(publishTabletInfo.getReshardingTablets());
     
             ComputeNodePB computeNodePB = new ComputeNodePB();
-            computeNodePB.setHost(entry.getKey().getHost());
+            // Send the resolved IP, not the hostname: the aggregator turns each entry into a brpc
+            // stub via LakeServiceBrpcStubCache::get_stub(), whose cache key is the resolved
+            // EndPoint, so a hostname there costs one getaddrinfo per sub-request per publish with
+            // no caching on the BE side. FE resolves through the JVM DNS cache instead. Same
+            // convention as the query/load path (see ExecutionDAG#getBrpcIpAddress, PR #32062).
+            // getIP() falls back to the hostname when resolution fails, so this only ever degrades
+            // to the previous behavior.
+            computeNodePB.setHost(entry.getKey().getIP());
             computeNodePB.setBrpcPort(entry.getKey().getBrpcPort());
             // Record the node id so that the aggregator-selection step later can prefer
             // an aggregator that already owns at least one tablet in the batch. Without
