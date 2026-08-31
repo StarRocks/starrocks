@@ -153,7 +153,7 @@ PassThroughChannelPtr PassThroughChunkBuffer::get_or_create_channel(const Key& k
 }
 
 void PassThroughContext::init() {
-    if (_channel != nullptr || _chunk_buffer == nullptr) {
+    if (_channel != nullptr) {
         return;
     }
     _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
