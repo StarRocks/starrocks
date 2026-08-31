@@ -74,10 +74,13 @@ jobs:
         run: |
           set -euo pipefail
           OWNER=${GITHUB_REPOSITORY%/*}; REPO=${GITHUB_REPOSITORY#*/}
-          PR_ID=$(gh api graphql \
-            -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){id}}}' \
-            -F o="$OWNER" -F r="$REPO" -F n="$PR_NUMBER" --jq '.data.repository.pullRequest.id')
-          echo "PR #$PR_NUMBER node id: $PR_ID"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          pr=$(gh api graphql \
+            -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){id baseRefName}}}' \
+            -F o="$OWNER" -F r="$REPO" -F n="$PR_NUMBER" --jq '.data.repository.pullRequest')
+          PR_ID=$(echo "$pr" | jq -r .id)
+          BASE=$(echo "$pr" | jq -r .baseRefName)
+          echo "PR #$PR_NUMBER node id: $PR_ID  base: $BASE"
           set +e
           out=$(gh api graphql \
             -f query='mutation($id:ID!){updatePullRequestBranch(input:{pullRequestId:$id,updateMethod:REBASE}){pullRequest{number}}}' \
@@ -85,16 +88,19 @@ jobs:
           rc=$?
           set -e
           echo "$out"
-          if [ $rc -ne 0 ]; then
-            # "not behind / already up to date" is a no-op, not a failure. Anything else
-            # (typically a rebase conflict) is a real failure the author must resolve.
-            if echo "$out" | grep -qiE "not behind|already up[- ]?to[- ]?date|no new commits|up to date"; then
-              echo "Branch already up to date with base; nothing to rebase."
-            else
-              gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" \
-                -b "❌ Automatic rebase failed (likely a conflict). Please rebase manually.<details>$(echo "$out" | head -c 800)</details>" || true
-              exit 1
-            fi
+          # Always report the outcome back on the PR so the author knows whether it worked.
+          if [ $rc -eq 0 ]; then
+            gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" \
+              -b "✅ Rebased onto \`${BASE}\` ([details](${RUN_URL}))." || true
+          elif echo "$out" | grep -qiE "not behind|already up[- ]?to[- ]?date|no new commits|up to date"; then
+            # not behind base -> nothing to rebase; a success, just a no-op.
+            gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" \
+              -b "ℹ️ Already up to date with \`${BASE}\`; nothing to rebase." || true
+          else
+            # anything else is typically a rebase conflict the author must resolve.
+            gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" \
+              -b "❌ Automatic rebase failed (likely a conflict). Please rebase manually. ([details](${RUN_URL}))<details>$(echo "$out" | head -c 800)</details>" || true
+            exit 1
           fi
 
   backport:
