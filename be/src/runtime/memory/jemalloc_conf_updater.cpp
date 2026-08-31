@@ -23,13 +23,13 @@
 #include <optional>
 #include <vector>
 
-#include "base/string/trim.h"
 #include "common/configbase.h"
 #include "common/logging.h"
+#include "common/prof/heap_prof.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/prof/heap_prof.h"
+#include "util/trim.h"
 
 namespace starrocks {
 

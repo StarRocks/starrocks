@@ -21,11 +21,11 @@
 #include <cstdlib>
 #include <string>
 
-#include "base/testutil/assert.h"
-#include "common/config_memory_allocator_fwd.h"
+#include "common/config.h"
 #include "common/configbase.h"
 #include "fmt/format.h"
 #include "jemalloc/jemalloc.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
