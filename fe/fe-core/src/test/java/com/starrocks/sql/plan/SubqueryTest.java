@@ -2063,7 +2063,6 @@ public class SubqueryTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< Updated upstream
     public void testOneRowCTE1() throws Exception {
         String sql = "WITH from_dt AS (SELECT '20250209' AS dt) "
                 + "SELECT * FROM t0 WHERE v1 > (SELECT dt FROM from_dt);";
