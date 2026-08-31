@@ -114,6 +114,18 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testMaxJournalReplayLagMetricsExposure() {
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        // registered by MetricRepo.init(), and leader-aware so it always carries the is_leader label
+        Assertions.assertTrue(output.contains("max_journal_replay_lag"), output);
+        Assertions.assertTrue(output.contains("max_journal_replay_lag{is_leader="), output);
+    }
+
+    @Test
     public void testLeaderAwarenessMetric() {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
 
