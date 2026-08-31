@@ -36,9 +36,9 @@ StatusOr<DeletionBitmapPtr> PaimonDeleteFileBuilder::build(const TPaimonDeletion
                 "invalid paimon deletion vector offset, path: {}, offset: {}, length: {}", path, offset, length));
     }
 
-    RETURN_IF(length < MAGIC_NUMBER_LENGTH + MIN_SERIALIZED_BITMAP_LENGTH ||
-                      length > std::numeric_limits<int32_t>::max(),
-              Status::InvalidArgument("invalid paimon deletion vector length"));
+    RETURN_IF(
+            length < MAGIC_NUMBER_LENGTH + MIN_SERIALIZED_BITMAP_LENGTH || length > std::numeric_limits<int32_t>::max(),
+            Status::InvalidArgument("invalid paimon deletion vector length"));
 
     const int64_t read_length = length + BITMAP_SIZE_LENGTH;
     RETURN_IF(offset > std::numeric_limits<int64_t>::max() - read_length,
