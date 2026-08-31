@@ -2112,14 +2112,14 @@ public class ResourceGroupStmtTest {
                    ");";
            starRocksAssert.executeResourceGroupDdlSql(createSql);
            List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-           Assertions.assertEquals("rg1|null|null|20.0%|0|0|0|null|100%|80%|(weight=1.0, user=rg1_user1)|",
+           Assertions.assertEquals("rg1|10|0|20.0%|0|0|0|null|100%|80%|(weight=1.0, user=rg1_user1)",
                    rowsToString(rows));
    
            // Alter mem pct limit to 65%
            String alterSql = "alter resource group rg1 with ('mem_used_pct_limit' = '65%')";
            starRocksAssert.executeResourceGroupDdlSql(alterSql);
            rows = starRocksAssert.executeResourceGroupShowSql("show resource group rg1");
-           Assertions.assertEquals("rg1|null|null|20.0%|0|0|0|null|100%|65%|(weight=1.0, user=rg1_user1)|",
+           Assertions.assertEquals("rg1|10|0|20.0%|0|0|0|null|100%|65%|(weight=1.0, user=rg1_user1)",
                    rowsToString(rows));
    
            dropResourceGroup("rg1");
