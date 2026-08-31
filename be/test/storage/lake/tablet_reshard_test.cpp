@@ -10967,36 +10967,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_late_sst_fil
 
     for (const auto& conflict : conflicts) {
         SCOPED_TRACE(conflict.name);
-        const int64_t source_a_id = next_id();
-        const int64_t source_b_id = next_id();
-        const std::string segment = fmt::format("sst_preflight_{}.dat", next_id());
-        auto make_source = [&](int64_t tablet_id, int lower, int upper) {
-            auto source = make_preflight_sidecar_source(tablet_id, segment, /*shared_segment=*/true,
-                                                        /*common_rowset_uid=*/true);
-            set_int_primary_key_schema(source.get(), /*schema_id=*/4001);
-            source->set_enable_persistent_index(true);
-            source->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
-            source->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
-            source->mutable_range()->set_lower_bound_included(true);
-            source->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
-            source->mutable_range()->set_upper_bound_included(false);
-            source->mutable_rowsets(0)->mutable_range()->CopyFrom(source->range());
-            auto* sst = source->mutable_sstable_meta()->add_sstables();
+        auto sources = make_preflight_sst_sources(fmt::format("sst_preflight_{}", next_id()));
+        for (auto& source : sources) {
+            auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
             sst->set_filename("repeated_physical.sst");
-            sst->set_filesize(128);
             sst->set_encryption_meta(encryption_a.encryption_meta);
-            sst->set_shared(true);
-            sst->set_shared_rssid(1);
-            sst->set_shared_version(1);
-            sst->set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
-            sst->set_generation_version(1);
-            sst->mutable_range()->set_start_key(encode_int_primary_key(10));
-            sst->mutable_range()->set_end_key(encode_int_primary_key(90));
-            return source;
-        };
-        auto source_a = make_source(source_a_id, /*lower=*/0, /*upper=*/50);
-        auto source_b = make_source(source_b_id, /*lower=*/50, /*upper=*/100);
-        std::vector<std::shared_ptr<TabletMetadataPB>> sources = {source_a, source_b};
+        }
         conflict.apply(sources);
         std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
 
