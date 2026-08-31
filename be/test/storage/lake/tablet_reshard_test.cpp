@@ -12908,6 +12908,341 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
     EXPECT_EQ(0, totals[3].num_dels);
 }
 
+// A canonical rowset must reserve the rssid span it occupies AFTER update_canonical folds its
+// same-uid duplicates in, not just the span its own segment list needs.
+//
+// A multi-level split hands same-uid siblings DISJOINT pruned subsets of the ancestor's
+// segments, so the sibling can own a HIGHER segment_idx than the canonical does. Phase 2's
+// union_segments_by_idx folds those segments into the canonical, widening its
+// segment_idx range -- but Phase 1 reserved only get_rowset_id_step(canonical), because
+// projects_via_rssid_offset excludes the discarded duplicate. The next input's ids were then
+// lifted to just above the too-small reservation and landed INSIDE the canonical's real span,
+// so two rowsets in the merged metadata share an rssid.
+//
+// Both production symptoms follow from that collision, because meta_file.cpp keys
+// segment_id_to_rowset on rssid: the loser's segments stop being reachable, so publishing an
+// upsert whose index entry points at them fails with "unexpected segment id", and a later
+// PK-index rebuild reaches one key from two different physical segments under one rssid and
+// fails with "insert found duplicate key". Either one pins the reshard job forever.
+//
+// Layout: ctx[0] keeps ancestor segment_idx 0, ctx[1] keeps segment_idx 1 and 2 of the SAME
+// uid, and ctx[1] also owns a second, independent rowset that must not be lifted into the
+// canonical's [id .. id+2] span.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_reserves_canonical_post_union_rssid_span) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t sibling_a = next_id();
+    const int64_t sibling_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(sibling_a);
+    prepare_tablet_dirs(sibling_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    constexpr uint32_t kSharedRowsetId = 10;
+    const std::string kSharedSegmentPrefix = "ancestor_seg_";
+
+    // One ancestor segment of the shared rowset, kept by whichever child owns its key slice.
+    auto add_shared_segment = [&](RowsetMetadataPB* rowset, uint32_t segment_idx) {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(fmt::format("{}{}.dat", kSharedSegmentPrefix, segment_idx));
+        sm->set_size(128);
+        sm->set_segment_idx(segment_idx);
+        sm->set_shared(true);
+    };
+
+    // ctx[0]: retains ancestor segment_idx 0 only -> get_rowset_id_step() == 1.
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(sibling_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(kSharedRowsetId + 1);
+    set_primary_key_schema(meta_a.get(), 1001);
+    {
+        auto* rowset = meta_a->add_rowsets();
+        rowset->set_id(kSharedRowsetId);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(128);
+        rowset->set_overlapped(false);
+        add_shared_segment(rowset, 0);
+        // same uid across siblings => the merge dedups them onto one canonical
+        stamp_physical_identity_uid(rowset, kSharedSegmentPrefix);
+        (*meta_a->mutable_rowset_to_schema())[kSharedRowsetId] = 1001;
+    }
+
+    // ctx[1]: retains ancestor segment_idx 1 and 2 of the SAME uid, so the union widens the
+    // canonical to three rssids. Its own second rowset sits right above its shared copy.
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(sibling_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(kSharedRowsetId + 4);
+    set_primary_key_schema(meta_b.get(), 1001);
+    {
+        auto* rowset = meta_b->add_rowsets();
+        rowset->set_id(kSharedRowsetId);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(20);
+        rowset->set_data_size(256);
+        rowset->set_overlapped(false);
+        add_shared_segment(rowset, 1);
+        add_shared_segment(rowset, 2);
+        stamp_physical_identity_uid(rowset, kSharedSegmentPrefix);
+        (*meta_b->mutable_rowset_to_schema())[kSharedRowsetId] = 1001;
+    }
+    {
+        auto* rowset = meta_b->add_rowsets();
+        rowset->set_id(kSharedRowsetId + 3);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(5);
+        rowset->set_data_size(64);
+        rowset->set_overlapped(false);
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("sibling_b_local.dat");
+        sm->set_size(64);
+        lake::tablet_reshard_helper::set_rowset_uid(rowset); // distinct uid => never deduped
+        (*meta_b->mutable_rowset_to_schema())[kSharedRowsetId + 3] = 1001;
+    }
+
+    ASSERT_OK(put_tablet_metadata(meta_a));
+    ASSERT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(sibling_a);
+    merging_tablet.add_old_tablet_ids(sibling_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    // The two shared copies dedup into one canonical carrying all three ancestor segments.
+    const RowsetMetadataPB* canonical = nullptr;
+    for (const auto& rowset : merged->rowsets()) {
+        if (rowset.segment_metas_size() == 3) {
+            canonical = &rowset;
+            break;
+        }
+    }
+    ASSERT_TRUE(canonical != nullptr) << "the union must fold all three ancestor segments into one rowset";
+
+    // Every rssid in the merged metadata must be owned by exactly one rowset -- the invariant
+    // meta_file.cpp's segment_id_to_rowset and the PK index rebuild both rely on. Before the
+    // fix, sibling_b's local rowset was lifted onto kSharedRowsetId + 1, colliding with the
+    // canonical's ancestor segment_idx 1.
+    std::map<uint32_t, uint32_t> rssid_owner; // rssid -> owning rowset id
+    for (const auto& rowset : merged->rowsets()) {
+        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+            const uint32_t rssid = lake::get_rssid(rowset, i);
+            auto [iter, inserted] = rssid_owner.try_emplace(rssid, rowset.id());
+            EXPECT_TRUE(inserted) << "rssid " << rssid << " is claimed by rowset " << iter->second << " and by rowset "
+                                  << rowset.id();
+        }
+    }
+
+    // next_rowset_id must clear every occupied rssid so later writes never reuse one.
+    uint32_t max_occupied = 0;
+    for (const auto& [rssid, owner] : rssid_owner) {
+        max_occupied = std::max(max_occupied, rssid);
+    }
+    EXPECT_GT(merged->next_rowset_id(), max_occupied);
+}
+
+// The same-context half of the reservation problem (Codex review on #77994).
+//
+// A merge that retains only segment_idx 0 of an ancestor rowset used to let update_next_rowset_id
+// recompute the watermark from what the output still HOLDS -- id+1 -- losing the memory of the
+// ancestor's wider span. A local write on the merged tablet then took id+1, and a later merge that
+// reunited a same-uid sibling carrying segment_idx 1 and 2 expanded that rowset back over the local
+// one. Both then live in the SAME merge context, which shares one rssid_offset, so no ceiling
+// widening can separate them.
+//
+// Guarantee 1 (prevention): the merged watermark never regresses below what any contributing old
+// tablet already handed out, so the local write lands above the ancestor span in the first place.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_next_rowset_id_never_regresses) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t sibling_a = next_id();
+    const int64_t sibling_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(sibling_a);
+    prepare_tablet_dirs(sibling_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    constexpr uint32_t kAncestorRowsetId = 10;
+    // The ancestor rowset had 3 segments, so both children's next_rowset_id already cleared 13.
+    constexpr uint32_t kAncestorNextRowsetId = kAncestorRowsetId + 3;
+    const std::string kSharedSegmentPrefix = "ancestor_seg_";
+
+    auto build_child = [&](int64_t tablet_id, std::vector<uint32_t> retained_idx) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(kAncestorNextRowsetId);
+        set_primary_key_schema(meta.get(), 1001);
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(kAncestorRowsetId);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(128);
+        rowset->set_overlapped(false);
+        for (uint32_t idx : retained_idx) {
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(fmt::format("{}{}.dat", kSharedSegmentPrefix, idx));
+            sm->set_size(128);
+            sm->set_segment_idx(idx);
+            sm->set_shared(true);
+        }
+        stamp_physical_identity_uid(rowset, kSharedSegmentPrefix); // same uid => dedup
+        (*meta->mutable_rowset_to_schema())[kAncestorRowsetId] = 1001;
+        return meta;
+    };
+
+    // A partial merge: this pair only carries segment_idx 0, so the output holds one rssid.
+    auto meta_a = build_child(sibling_a, {0});
+    auto meta_b = build_child(sibling_b, {0});
+    ASSERT_OK(put_tablet_metadata(meta_a));
+    ASSERT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(sibling_a);
+    merging_tablet.add_old_tablet_ids(sibling_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto it = tablet_metadatas.find(merged_tablet);
+    ASSERT_TRUE(it != tablet_metadatas.end());
+    const auto& merged = it->second;
+
+    // Before the fix this was kAncestorRowsetId + 1 == 11: the ancestor's segment_idx 1 and 2 were
+    // no longer held by the output, so the watermark forgot them and the next local write would
+    // take id 11 -- inside the span a later re-merge re-expands.
+    EXPECT_GE(merged->next_rowset_id(), kAncestorNextRowsetId)
+            << "merged watermark regressed below what the inputs already consumed";
+}
+
+// Guarantee 2 (fail closed): metadata written before guarantee 1 existed can still arrive with a
+// local rowset inside an ancestor span that this merge's union re-expands. Publishing it would
+// corrupt the merged tablet silently, so the merge must refuse instead.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_same_context_rssid_overlap) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t sibling_a = next_id();
+    const int64_t sibling_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(sibling_a);
+    prepare_tablet_dirs(sibling_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    constexpr uint32_t kAncestorRowsetId = 10;
+    const std::string kSharedSegmentPrefix = "ancestor_seg_";
+    auto add_shared_segment = [&](RowsetMetadataPB* rowset, uint32_t segment_idx) {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename(fmt::format("{}{}.dat", kSharedSegmentPrefix, segment_idx));
+        sm->set_size(128);
+        sm->set_segment_idx(segment_idx);
+        sm->set_shared(true);
+    };
+
+    // ctx[0]: keeps ancestor segment_idx 0 AND -- the legacy state -- a local rowset that a
+    // regressed watermark handed id 11, right inside the ancestor's span.
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(sibling_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(kAncestorRowsetId + 2);
+    set_primary_key_schema(meta_a.get(), 1001);
+    {
+        auto* rowset = meta_a->add_rowsets();
+        rowset->set_id(kAncestorRowsetId);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(128);
+        rowset->set_overlapped(false);
+        add_shared_segment(rowset, 0);
+        stamp_physical_identity_uid(rowset, kSharedSegmentPrefix);
+        (*meta_a->mutable_rowset_to_schema())[kAncestorRowsetId] = 1001;
+
+        auto* local = meta_a->add_rowsets();
+        local->set_id(kAncestorRowsetId + 1); // collides once the union restores segment_idx 1
+        local->set_version(base_version);
+        local->set_num_rows(5);
+        local->set_data_size(64);
+        local->set_overlapped(false);
+        auto* sm = local->add_segment_metas();
+        sm->set_filename("sibling_a_local.dat");
+        sm->set_size(64);
+        lake::tablet_reshard_helper::set_rowset_uid(local); // distinct uid => never deduped
+        (*meta_a->mutable_rowset_to_schema())[kAncestorRowsetId + 1] = 1001;
+    }
+
+    // ctx[1]: the same-uid sibling holding ancestor segment_idx 1 and 2.
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(sibling_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(kAncestorRowsetId + 3);
+    set_primary_key_schema(meta_b.get(), 1001);
+    {
+        auto* rowset = meta_b->add_rowsets();
+        rowset->set_id(kAncestorRowsetId);
+        rowset->set_version(base_version);
+        rowset->set_num_rows(20);
+        rowset->set_data_size(256);
+        rowset->set_overlapped(false);
+        add_shared_segment(rowset, 1);
+        add_shared_segment(rowset, 2);
+        stamp_physical_identity_uid(rowset, kSharedSegmentPrefix);
+        (*meta_b->mutable_rowset_to_schema())[kAncestorRowsetId] = 1001;
+    }
+
+    ASSERT_OK(put_tablet_metadata(meta_a));
+    ASSERT_OK(put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(sibling_a);
+    merging_tablet.add_old_tablet_ids(sibling_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(2);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(2);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges);
+
+    // Before the fix this returned OK and emitted metadata where the canonical's folded
+    // segment_idx 1 and ctx[0]'s local rowset both claimed rssid 11.
+    ASSERT_FALSE(st.ok()) << "merge must refuse to publish a self-overlapping rssid space";
+    EXPECT_TRUE(st.message().find("overlapping rssid spans") != std::string::npos ||
+                st.message().find("same id") != std::string::npos)
+            << "unexpected error: " << st.to_string();
+}
+
 // =============================================================================
 // Reachability nets for the merge-path failpoints. Same shape as the reshard-path ones: ARMED first
 // (so the failure returns before any metadata is written and the disarmed run below still takes the
