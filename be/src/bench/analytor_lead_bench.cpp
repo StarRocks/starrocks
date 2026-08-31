@@ -12,19 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Benchmark: peak input-buffer retention of `lag(col, 1) IGNORE NULLS` in the Analytor operator,
-// comparing the legacy whole-partition materializing path against the streaming + watermark-eviction
-// path (config::pipeline_analytic_enable_ignore_nulls_streaming).
+// Benchmark: peak input-buffer retention of `lead(col, 1) IGNORE NULLS` in the Analytor operator,
+// comparing the legacy whole-partition materializing path against the streaming path
+// (config::pipeline_analytic_enable_ignore_nulls_streaming) which waits for enough future
+// non-nulls then evicts finished prefixes.
 //
 // The headline metric is the profile counter `PeakBufferedRows` (high-water-mark of rows retained in
 // Analytor::_input_chunks), reported as a custom benchmark counter. Wall-clock time is incidental.
 //
 // Data patterns (single partition, so the whole input is one partition):
-//   ALL_NULL        - column is entirely NULL.  Streaming: target never set -> evicts to ~chunk.
-//   DENSE           - every row non-null.        Streaming: target tracks current -> evicts to ~chunk.
-//   SPARSE          - one non-null every G rows.  Streaming: retains ~G rows (target lags one gap).
-//   HEAD_THEN_NULL  - row 0 non-null, rest NULL.  Streaming: target PINNED at 0 -> no eviction (the
-//                     documented caveat; only value-caching would fix this one).
+//   ALL_NULL        - column is entirely NULL.  Streaming cannot resolve row 0 until EOS
+//                     -> peak ≈ full partition (unlike LAG, which can evict).
+//   DENSE           - every row non-null.        Streaming: wait ~offset rows, then evict prefixes
+//                     -> peak ≈ chunk + offset.
+//   SPARSE          - one non-null every G rows. Streaming: must hold the gap until the next
+//                     non-null arrives -> peak ≈ G (times offset).
+//   TAIL_NONNULL    - only the last row is non-null. Streaming waits until that row
+//                     -> peak ≈ full partition, then prefix eviction after it resolves.
 // Legacy (materializing) always retains the whole partition regardless of pattern.
 //
 // NOTE: exercises the real Analytor with a hand-built analytic TPlanNode. Validated by construction;
@@ -58,22 +62,22 @@
 
 namespace starrocks {
 
-enum Pattern { ALL_NULL = 0, DENSE = 1, SPARSE = 2, HEAD_THEN_NULL = 3 };
+enum Pattern { ALL_NULL = 0, DENSE = 1, SPARSE = 2, TAIL_NONNULL = 3 };
 
 static constexpr int64_t kRows = 1 << 20; // ~1M rows total
 static constexpr int64_t kChunk = 4096;   // rows per chunk fed to the operator
 static constexpr int64_t kSparseGap = 64; // one non-null every kSparseGap rows for SPARSE
 
-static TPlanNode make_lag_plan_node(TupleId input_tuple_id, SlotId value_slot_id, int64_t offset) {
+static TPlanNode make_lead_plan_node(TupleId input_tuple_id, SlotId value_slot_id, int64_t offset) {
     const TTypeDesc int_type = bench::make_scalar_type(TPrimitiveType::INT);
-    TExpr lag = bench::make_builtin_aggregate_expr(
-            "lag", {int_type}, int_type,
+    TExpr lead = bench::make_builtin_aggregate_expr(
+            "lead", {int_type}, int_type,
             {bench::make_slot_ref_expr(input_tuple_id, value_slot_id, int_type),
              bench::make_bigint_literal_expr(offset), bench::make_null_literal_expr(int_type)},
             true);
     TAnalyticWindow window = bench::make_rows_window(
-            std::nullopt, bench::make_rows_offset_boundary(TAnalyticWindowBoundaryType::PRECEDING, offset));
-    return bench::make_analytic_plan_node({lag}, input_tuple_id, window);
+            std::nullopt, bench::make_rows_offset_boundary(TAnalyticWindowBoundaryType::FOLLOWING, offset));
+    return bench::make_analytic_plan_node({lead}, input_tuple_id, window);
 }
 
 // A nullable INT32 column for global rows [begin, begin+count) under the given pattern.
@@ -93,9 +97,9 @@ static ColumnPtr make_value_chunk_column(Pattern pattern, int64_t begin, int64_t
         case SPARSE:
             is_null = (g % kSparseGap != 0);
             break;
-        case HEAD_THEN_NULL:
+        case TAIL_NONNULL:
         default:
-            is_null = (g != 0);
+            is_null = (g != kRows - 1);
             break;
         }
         data->append(is_null ? 0 : static_cast<int32_t>(g));
@@ -118,7 +122,7 @@ static void init_env() {
     });
 }
 
-static void BM_LagIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool streaming) {
+static void BM_LeadIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool streaming) {
     init_env();
     for (auto _ : bstate) {
         bstate.PauseTiming();
@@ -134,7 +138,7 @@ static void BM_LagIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool st
             in_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("v").build());
             in_tuple.build(&dtb);
             TTupleDescriptorBuilder out_tuple;
-            out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("lag_v").build());
+            out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("lead_v").build());
             out_tuple.build(&dtb);
         }
         auto* state = pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
@@ -148,7 +152,7 @@ static void BM_LagIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool st
         const SlotId col_slot_id = desc_tbl->get_tuple_descriptor(in_tuple_id)->slots()[0]->id();
         TupleDescriptor* result_tuple = desc_tbl->get_tuple_descriptor(out_tuple_id);
 
-        TPlanNode tnode = make_lag_plan_node(in_tuple_id, col_slot_id, 1);
+        TPlanNode tnode = make_lead_plan_node(in_tuple_id, col_slot_id, 1);
         RuntimeProfile profile("Analytor");
 
         auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
@@ -191,15 +195,17 @@ static void BM_LagIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool st
     }
 }
 
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, all_null_legacy, ALL_NULL, false)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, dense_legacy, DENSE, false)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, sparse_legacy, SPARSE, false)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, head_then_null_legacy, HEAD_THEN_NULL, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, all_null_legacy, ALL_NULL, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, dense_legacy, DENSE, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, sparse_legacy, SPARSE, false)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, tail_nonnull_legacy, TAIL_NONNULL, false)->Unit(benchmark::kMillisecond);
 
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, all_null_streaming, ALL_NULL, true)->Unit(benchmark::kMillisecond)->Iterations(1);
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, dense_streaming, DENSE, true)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, sparse_streaming, SPARSE, true)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LagIgnoreNulls, head_then_null_streaming, HEAD_THEN_NULL, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, all_null_streaming, ALL_NULL, true)->Unit(benchmark::kMillisecond)->Iterations(1);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, dense_streaming, DENSE, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, sparse_streaming, SPARSE, true)->Unit(benchmark::kMillisecond);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, tail_nonnull_streaming, TAIL_NONNULL, true)
+        ->Unit(benchmark::kMillisecond)
+        ->Iterations(1);
 
 } // namespace starrocks
 

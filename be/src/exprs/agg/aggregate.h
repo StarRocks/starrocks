@@ -200,6 +200,15 @@ public:
         return std::nullopt;
     }
 
+    // For streaming window evaluation whose result can depend on data not yet in the physical frame
+    // (e.g. `lead ... IGNORE NULLS`). Return false to keep `_current_row_position` unmoved until more
+    // input arrives or the partition is known complete. Default true: the physical frame is enough.
+    virtual bool is_window_result_ready(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& columns,
+                                        int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                        int64_t frame_end, bool partition_is_complete) const {
+        return true;
+    }
+
     virtual std::string get_name() const = 0;
 
     // State management methods:

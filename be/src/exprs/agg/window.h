@@ -765,6 +765,44 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         }
     }
 
+    // `lead ... IGNORE NULLS` needs the offset-th non-null after the current row, which can lie
+    // beyond the physical N FOLLOWING frame. Wait while the partition may still grow and that
+    // non-null is not yet in [current+1, available_end). Once the partition is complete, the
+    // existing update path may emit the default.
+    bool is_window_result_ready(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& columns,
+                                int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                int64_t frame_end, bool partition_is_complete) const override {
+        if constexpr (!(ignoreNulls && !isLag)) {
+            return true;
+        }
+        if (partition_is_complete) {
+            return true;
+        }
+        const int64_t offset = this->data(state).offset;
+        DCHECK_GT(offset, 0);
+        // Same encoding as update_batch_single_state_with_frame: frame_end = current + offset + 1.
+        int64_t current_row = frame_end - 1 - offset;
+        if (current_row < partition_start) {
+            current_row = partition_start;
+        }
+        if (columns.empty() || columns[0] == nullptr) {
+            return false;
+        }
+        const Column* col = columns[0].get();
+        const int64_t search_end = std::min(available_end, static_cast<int64_t>(col->size()));
+        int64_t remaining = offset;
+        int64_t pos = current_row;
+        while (remaining > 0 && pos + 1 < search_end) {
+            const int64_t next = static_cast<int64_t>(ColumnHelper::find_nonnull(col, pos + 1, search_end));
+            if (next >= search_end) {
+                return false;
+            }
+            pos = next;
+            --remaining;
+        }
+        return remaining == 0;
+    }
+
     // `lag ... IGNORE NULLS` supports streaming eviction. Once at least one non-null value has
     // been seen, `target_not_null_index` is the oldest buffered row the function may still read.
     std::optional<int64_t> get_min_retained_position(FunctionContext* ctx,
@@ -779,8 +817,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     }
 
     // Shift the index after eviction so it stays in the operator's (post-eviction) local indices.
+    // Both lag and lead IGNORE NULLS store `target_not_null_index` in local column coordinates.
     void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
-        if constexpr (ignoreNulls && isLag) {
+        if constexpr (ignoreNulls) {
             if (this->data(state).target_not_null_index >= 0) {
                 this->data(state).target_not_null_index -= count;
                 DCHECK_GE(this->data(state).target_not_null_index, 0);

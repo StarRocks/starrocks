@@ -47,9 +47,9 @@
 
 namespace starrocks {
 
-class LagWindowTest : public testing::Test {
+class LeadLagWindowTest : public testing::Test {
 public:
-    LagWindowTest() = default;
+    LeadLagWindowTest() = default;
 
     void SetUp() override {
         utils = new FunctionUtils();
@@ -86,7 +86,7 @@ private:
     AggDataPtr _state;
 };
 
-static inline Columns build_lag_args(const ColumnPtr& value, int64_t offset, const ColumnPtr& default_val) {
+static inline Columns build_lead_lag_args(const ColumnPtr& value, int64_t offset, const ColumnPtr& default_val) {
     auto offset_col = ColumnHelper::create_const_column<TYPE_BIGINT>(offset, value->size());
     Columns cols;
     cols.emplace_back(value);       // arg0 : value column
@@ -104,7 +104,7 @@ static inline Columns build_args_with_custom_offset(const ColumnPtr& value, cons
     return cols;
 }
 
-TEST_F(LagWindowTest, test_basic_lag) {
+TEST_F(LeadLagWindowTest, test_basic_lag) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -121,7 +121,7 @@ TEST_F(LagWindowTest, test_basic_lag) {
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(0, value_col->size());
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -148,7 +148,7 @@ TEST_F(LagWindowTest, test_basic_lag) {
     }
 }
 
-TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
+TEST_F(LeadLagWindowTest, test_default_value_is_col_and_ignore_nulls) {
     // lag_in (ignoreNulls=true) with non-constant default column [1, 2, 3, 4]
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -173,7 +173,7 @@ TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
     ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -200,7 +200,7 @@ TEST_F(LagWindowTest, test_default_value_is_col_and_ignore_nulls) {
     }
 }
 
-TEST_F(LagWindowTest, test_lag_ignore_nulls) {
+TEST_F(LeadLagWindowTest, test_lag_ignore_nulls) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -217,7 +217,7 @@ TEST_F(LagWindowTest, test_lag_ignore_nulls) {
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, true);
@@ -243,7 +243,7 @@ TEST_F(LagWindowTest, test_lag_ignore_nulls) {
     }
 }
 
-TEST_F(LagWindowTest, test_default_value_is_col) {
+TEST_F(LeadLagWindowTest, test_default_value_is_col) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -269,7 +269,7 @@ TEST_F(LagWindowTest, test_default_value_is_col) {
 
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -295,7 +295,7 @@ TEST_F(LagWindowTest, test_default_value_is_col) {
     }
 }
 
-TEST_F(LagWindowTest, test_lag_large_binary) {
+TEST_F(LeadLagWindowTest, test_lag_large_binary) {
     auto data_col = LargeBinaryColumn::create();
     auto null_col = NullColumn::create();
 
@@ -310,7 +310,7 @@ TEST_F(LagWindowTest, test_lag_large_binary) {
     auto default_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("z"), value_col->size());
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_VARCHAR, TYPE_VARCHAR, true);
@@ -333,7 +333,7 @@ TEST_F(LagWindowTest, test_lag_large_binary) {
     }
 }
 
-TEST_F(LagWindowTest, test_default_value_is_null) {
+TEST_F(LeadLagWindowTest, test_default_value_is_null) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -360,7 +360,7 @@ TEST_F(LagWindowTest, test_default_value_is_null) {
     auto default_col = ConstColumn::create(std::move(col_ptr), size);
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -387,7 +387,7 @@ TEST_F(LagWindowTest, test_default_value_is_null) {
     }
 }
 
-TEST_F(LagWindowTest, test_default_value_is_null_ignore_nulls) {
+TEST_F(LeadLagWindowTest, test_default_value_is_null_ignore_nulls) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -414,7 +414,7 @@ TEST_F(LagWindowTest, test_default_value_is_null_ignore_nulls) {
     auto default_col = ConstColumn::create(std::move(col_ptr), size);
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -441,7 +441,7 @@ TEST_F(LagWindowTest, test_default_value_is_null_ignore_nulls) {
     }
 }
 
-TEST_F(LagWindowTest, test_default_col_is_null_ignore_nulls) {
+TEST_F(LeadLagWindowTest, test_default_col_is_null_ignore_nulls) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -466,7 +466,7 @@ TEST_F(LagWindowTest, test_default_col_is_null_ignore_nulls) {
     ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -493,7 +493,7 @@ TEST_F(LagWindowTest, test_default_col_is_null_ignore_nulls) {
     }
 }
 
-TEST_F(LagWindowTest, test_lead_default_col_is_null_ignore_nulls) {
+TEST_F(LeadLagWindowTest, test_lead_default_col_is_null_ignore_nulls) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
 
@@ -518,7 +518,7 @@ TEST_F(LagWindowTest, test_lead_default_col_is_null_ignore_nulls) {
     ColumnPtr default_col = NullableColumn::create(std::move(default_data_col), std::move(default_null_col));
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lead", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -547,7 +547,7 @@ TEST_F(LagWindowTest, test_lead_default_col_is_null_ignore_nulls) {
 
 // New tests to improve branch coverage for lead/lag implementation
 
-TEST_F(LagWindowTest, test_lag_offset_is_null_sets_zero) {
+TEST_F(LeadLagWindowTest, test_lag_offset_is_null_sets_zero) {
     // value column with mixed nulls
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -599,7 +599,7 @@ TEST_F(LagWindowTest, test_lag_offset_is_null_sets_zero) {
     }
 }
 
-TEST_F(LagWindowTest, test_lead_ignore_nulls_basic) {
+TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_basic) {
     // value column with mixed nulls
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -617,7 +617,7 @@ TEST_F(LagWindowTest, test_lead_ignore_nulls_basic) {
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(77, value_col->size());
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -644,7 +644,119 @@ TEST_F(LagWindowTest, test_lead_ignore_nulls_basic) {
     }
 }
 
-TEST_F(LagWindowTest, test_non_const_default_out_of_range_oob) {
+// `lead ... IGNORE NULLS` must not treat a missing future non-null as "use the default" while the
+// partition may still grow. `is_window_result_ready` is the contract Analytor will wait on.
+//
+// Frame encoding matches streaming N FOLLOWING: frame_end = current + offset + 1 (half-open).
+TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_waits_for_future_nonnull) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    data_col->append(0);
+    null_col->append(1);
+    data_col->append(0);
+    null_col->append(1);
+    data_col->append(10);
+    null_col->append(0);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    const int64_t offset = 1;
+    const int64_t current = 0;
+    const int64_t frame_start = current + offset;
+    const int64_t frame_end = frame_start + 1;
+
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
+    const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lead_func);
+    lead_func->reset(ctx, args, state->state());
+
+    // Only the first NULL is "buffered": no non-null after current.
+    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, /*partition_start=*/0,
+                                                   /*available_end=*/1, frame_start, frame_end,
+                                                   /*partition_is_complete=*/false));
+    // Second row is also NULL.
+    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 2, frame_start, frame_end, false));
+    // 10 is now in range (current, available_end) = (0, 3).
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 3, frame_start, frame_end, false));
+}
+
+TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_offset2_needs_two_nonnulls) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    data_col->append(0);
+    null_col->append(1); // 0
+    data_col->append(10);
+    null_col->append(0); // 1
+    data_col->append(0);
+    null_col->append(1); // 2
+    data_col->append(20);
+    null_col->append(0); // 3
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    const int64_t offset = 2;
+    const int64_t current = 0;
+    const int64_t frame_start = current + offset;
+    const int64_t frame_end = frame_start + 1;
+
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
+    const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lead_func);
+    lead_func->reset(ctx, args, state->state());
+
+    // Through index 2: only one non-null (10) after current.
+    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 3, frame_start, frame_end, false));
+    // 20 arrives: two non-nulls after current.
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 4, frame_start, frame_end, false));
+}
+
+TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_complete_partition_uses_default) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    data_col->append(0);
+    null_col->append(1);
+    data_col->append(0);
+    null_col->append(1);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    const int64_t offset = 1;
+    const int64_t current = 0;
+    const int64_t frame_start = current + offset;
+    const int64_t frame_end = frame_start + 1;
+    const int64_t n = static_cast<int64_t>(value_col->size());
+
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
+    const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lead_func);
+    lead_func->reset(ctx, args, state->state());
+
+    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, n, frame_start, frame_end, false));
+    // EOS: not enough non-nulls, but the default is now a valid result.
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, n, frame_start, frame_end, true));
+}
+
+TEST_F(LeadLagWindowTest, test_lag_ignore_nulls_readiness_always_true) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    data_col->append(10);
+    null_col->append(0);
+    data_col->append(0);
+    null_col->append(1);
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    const int64_t offset = 1;
+    const int64_t current = 0;
+    const int64_t frame_start = current - offset;
+    const int64_t frame_end = frame_start + 1;
+
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
+    const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lag_func);
+    lag_func->reset(ctx, args, state->state());
+
+    // LAG only reads history; the physical frame being present is enough.
+    ASSERT_TRUE(lag_func->is_window_result_ready(ctx, state->state(), args, 0, 1, frame_start, frame_end, false));
+}
+
+TEST_F(LeadLagWindowTest, test_non_const_default_out_of_range_oob) {
     // value column with mixed nulls
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -664,7 +776,7 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_oob) {
     ColumnPtr default_col = NullableColumn::create(std::move(def_data), std::move(def_null));
 
     const int64_t offset = 1;
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -680,7 +792,7 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_oob) {
     ASSERT_TRUE(lag_state->is_null) << "expected NULL due to default column OOB";
 }
 
-TEST_F(LagWindowTest, test_non_const_default_out_of_range_inbounds) {
+TEST_F(LeadLagWindowTest, test_non_const_default_out_of_range_inbounds) {
     // value column with mixed nulls
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -708,7 +820,7 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_inbounds) {
     ColumnPtr default_col = NullableColumn::create(std::move(def_data), std::move(def_null));
 
     const int64_t offset = 1;
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -726,7 +838,7 @@ TEST_F(LagWindowTest, test_non_const_default_out_of_range_inbounds) {
     ASSERT_EQ(100, lag_state->value) << "expect default_col[row=1] as fallback";
 }
 
-TEST_F(LagWindowTest, test_normal_window_null_value_no_default_applied) {
+TEST_F(LeadLagWindowTest, test_normal_window_null_value_no_default_applied) {
     // value column with a null at row=1; default constant should NOT apply in normal-window path
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -742,7 +854,7 @@ TEST_F(LagWindowTest, test_normal_window_null_value_no_default_applied) {
 
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(123, value_col->size());
     const int64_t offset = 1;
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_INT, TYPE_INT, /*is_nullable*/ true);
@@ -763,7 +875,7 @@ TEST_F(LagWindowTest, test_normal_window_null_value_no_default_applied) {
     }
 }
 
-TEST_F(LagWindowTest, test_lag_array_default_const_ignore_nulls_fallback) {
+TEST_F(LeadLagWindowTest, test_lag_array_default_const_ignore_nulls_fallback) {
     auto elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto offs = UInt32Column::create();
     auto arr = ArrayColumn::create(std::move(elem), std::move(offs));
@@ -781,7 +893,7 @@ TEST_F(LagWindowTest, test_lag_array_default_const_ignore_nulls_fallback) {
     ColumnPtr default_const = ConstColumn::create(std::move(def_arr), size);
 
     const int64_t offset = 2;
-    Columns args = build_lag_args(value_col, offset, default_const);
+    Columns args = build_lead_lag_args(value_col, offset, default_const);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* func = get_aggregate_function("lag_in", TYPE_ARRAY, TYPE_ARRAY, true);
@@ -804,7 +916,7 @@ TEST_F(LagWindowTest, test_lag_array_default_const_ignore_nulls_fallback) {
     ASSERT_EQ(res[1].get<int32_t>(), 100);
 }
 
-TEST_F(LagWindowTest, test_lead_array_default_const_non_ignore_outside_window) {
+TEST_F(LeadLagWindowTest, test_lead_array_default_const_non_ignore_outside_window) {
     auto elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto offs = UInt32Column::create();
     auto arr = ArrayColumn::create(std::move(elem), std::move(offs));
@@ -822,7 +934,7 @@ TEST_F(LagWindowTest, test_lead_array_default_const_non_ignore_outside_window) {
     ColumnPtr default_const = ConstColumn::create(std::move(def_arr), size);
 
     const int64_t offset = 1;
-    Columns args = build_lag_args(value_col, offset, default_const);
+    Columns args = build_lead_lag_args(value_col, offset, default_const);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* func = get_aggregate_function("lead", TYPE_ARRAY, TYPE_ARRAY, true);
@@ -843,7 +955,7 @@ TEST_F(LagWindowTest, test_lead_array_default_const_non_ignore_outside_window) {
     ASSERT_EQ(res[1].get<int32_t>(), 8);
 }
 
-TEST_F(LagWindowTest, test_array_non_const_default_out_of_range_sets_null_ignore_nulls) {
+TEST_F(LeadLagWindowTest, test_array_non_const_default_out_of_range_sets_null_ignore_nulls) {
     auto elem = NullableColumn::create(Int32Column::create(), NullColumn::create());
     auto offs = UInt32Column::create();
     auto arr = ArrayColumn::create(std::move(elem), std::move(offs));
@@ -862,7 +974,7 @@ TEST_F(LagWindowTest, test_array_non_const_default_out_of_range_sets_null_ignore
     ColumnPtr default_col = NullableColumn::create(std::move(def_arr), std::move(null_col));
 
     const int64_t offset = 1;
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* func = get_aggregate_function("lead_in", TYPE_ARRAY, TYPE_ARRAY, true);
@@ -879,7 +991,7 @@ TEST_F(LagWindowTest, test_array_non_const_default_out_of_range_sets_null_ignore
     ASSERT_TRUE(s->is_null);
 }
 
-TEST_F(LagWindowTest, test_lag_large_binary_non_const_default) {
+TEST_F(LeadLagWindowTest, test_lag_large_binary_non_const_default) {
     // LargeBinaryColumn as value, regular BinaryColumn as non-const default.
     // This tests the fix for wrong down_cast on columns[2] when columns[0] is LargeBinaryColumn.
     auto data_col = LargeBinaryColumn::create();
@@ -907,7 +1019,7 @@ TEST_F(LagWindowTest, test_lag_large_binary_non_const_default) {
 
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag", TYPE_VARCHAR, TYPE_VARCHAR, true);
@@ -933,7 +1045,7 @@ TEST_F(LagWindowTest, test_lag_large_binary_non_const_default) {
     }
 }
 
-TEST_F(LagWindowTest, test_lag_ignore_nulls_all_null_needs_no_retention) {
+TEST_F(LeadLagWindowTest, test_lag_ignore_nulls_all_null_needs_no_retention) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
     const int64_t N = 8;
@@ -945,7 +1057,7 @@ TEST_F(LagWindowTest, test_lag_ignore_nulls_all_null_needs_no_retention) {
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, true);
@@ -964,7 +1076,7 @@ TEST_F(LagWindowTest, test_lag_ignore_nulls_all_null_needs_no_retention) {
 // With regularly-occurring non-nulls the retained watermark tracks the most recent non-null (never
 // pinned to the partition start), and reset_state_for_contraction shifts it into the operator's
 // post-eviction coordinates.
-TEST_F(LagWindowTest, test_lag_ignore_nulls_watermark_tracks_recent_nonnull) {
+TEST_F(LeadLagWindowTest, test_lag_ignore_nulls_watermark_tracks_recent_nonnull) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
     const int64_t N = 8;
@@ -981,7 +1093,7 @@ TEST_F(LagWindowTest, test_lag_ignore_nulls_watermark_tracks_recent_nonnull) {
     auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
     const int64_t offset = 1;
 
-    Columns args = build_lag_args(value_col, offset, default_col);
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
     std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
 
     const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, true);
@@ -1112,6 +1224,58 @@ TPlanNode make_lag_tnode(TupleId in_tuple_id, SlotId col_slot_id, int64_t offset
     return tnode;
 }
 
+// lead(<slot>, offset, NULL) IGNORE NULLS, ROWS UNBOUNDED PRECEDING AND <offset> FOLLOWING,
+// single partition.
+TPlanNode make_lead_tnode(TupleId in_tuple_id, SlotId col_slot_id, int64_t offset) {
+    const TTypeDesc int_type = make_scalar_ttype(TPrimitiveType::INT);
+    TExpr fn_call;
+    TExprNode agg;
+    agg.__set_node_type(TExprNodeType::AGG_EXPR);
+    agg.__set_num_children(3);
+    agg.__set_type(int_type);
+    agg.__set_has_nullable_child(true);
+    agg.__set_is_nullable(true);
+    {
+        TAggregateExpr agg_expr;
+        agg_expr.__set_is_merge_agg(false);
+        agg.__set_agg_expr(agg_expr);
+        TFunction fn;
+        TFunctionName fn_name;
+        fn_name.__set_function_name("lead");
+        fn.__set_name(fn_name);
+        fn.__set_binary_type(TFunctionBinaryType::BUILTIN);
+        fn.__set_arg_types(std::vector<TTypeDesc>{int_type});
+        fn.__set_ret_type(int_type);
+        fn.__set_has_var_args(false);
+        fn.__set_ignore_nulls(true);
+        agg.__set_fn(fn);
+    }
+    fn_call.nodes.push_back(agg);
+    fn_call.nodes.push_back(make_slot_ref(in_tuple_id, col_slot_id, int_type));
+    fn_call.nodes.push_back(make_bigint_literal(offset));
+    fn_call.nodes.push_back(make_null_literal(int_type));
+
+    TAnalyticWindow window;
+    window.__set_type(TAnalyticWindowType::ROWS);
+    {
+        TAnalyticWindowBoundary end;
+        end.__set_type(TAnalyticWindowBoundaryType::FOLLOWING);
+        end.__set_rows_offset_value(offset);
+        window.__set_window_end(end); // window_start unset => UNBOUNDED PRECEDING
+    }
+    TAnalyticNode anode;
+    anode.__set_window(window);
+    anode.__set_buffered_tuple_id(in_tuple_id);
+    anode.analytic_functions.push_back(fn_call);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(0);
+    tnode.__set_node_type(TPlanNodeType::ANALYTIC_EVAL_NODE);
+    tnode.__set_limit(-1);
+    tnode.__set_analytic_node(anode);
+    return tnode;
+}
+
 // Reference: lag(x, offset) IGNORE NULLS with NULL default.
 std::vector<OptInt> ref_lag_ignore_nulls(const std::vector<OptInt>& in, int64_t offset) {
     std::vector<OptInt> out(in.size());
@@ -1124,6 +1288,21 @@ std::vector<OptInt> ref_lag_ignore_nulls(const std::vector<OptInt>& in, int64_t 
         }
         if (in[i].has_value()) {
             seen.push_back(*in[i]);
+        }
+    }
+    return out;
+}
+
+// Reference: lead(x, offset) IGNORE NULLS with NULL default.
+std::vector<OptInt> ref_lead_ignore_nulls(const std::vector<OptInt>& in, int64_t offset) {
+    std::vector<OptInt> out(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        int64_t remaining = offset;
+        for (size_t j = i + 1; j < in.size(); ++j) {
+            if (in[j].has_value() && --remaining == 0) {
+                out[i] = in[j];
+                break;
+            }
         }
     }
     return out;
@@ -1173,6 +1352,77 @@ std::vector<OptInt> run_analytor_lag(const std::vector<OptInt>& input, int64_t o
     RuntimeProfile profile("Analytor");
     auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
     CHECK(analytor->prepare(state, &pool, &profile).ok());
+    const auto process_mode = profile.get_info_string("ProcessMode");
+    CHECK(process_mode.has_value());
+    CHECK(streaming ? process_mode->find("Streaming/") == 0 : process_mode->find("Materializing/") == 0)
+            << "lag ProcessMode=" << *process_mode << " streaming=" << streaming;
+    CHECK(analytor->open(state).ok());
+
+    std::vector<OptInt> out;
+    auto collect = [&](const ChunkPtr& chunk) {
+        if (chunk == nullptr) return;
+        ColumnPtr res = chunk->get_column_by_slot_id(res_slot_id);
+        for (size_t i = 0; i < res->size(); ++i) {
+            if (res->is_null(i)) {
+                out.push_back(std::nullopt);
+            } else {
+                out.push_back(static_cast<int32_t>(res->get(i).get_int32()));
+            }
+        }
+    };
+
+    size_t fed = 0;
+    while (fed < input.size()) {
+        const size_t n = std::min<size_t>(chunk_rows, input.size() - fed);
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(build_nullable_int_column(input, fed, n), col_slot_id);
+        CHECK(analytor->process(state, chunk).ok());
+        fed += n;
+        while (ChunkPtr o = analytor->poll_chunk_buffer()) collect(o);
+    }
+    CHECK(analytor->finish_process(state).ok());
+    while (ChunkPtr o = analytor->poll_chunk_buffer()) collect(o);
+    analytor->close(state);
+    return out;
+}
+
+// Drive the real Analytor and return the lead output for each input row (in input order).
+std::vector<OptInt> run_analytor_lead(const std::vector<OptInt>& input, int64_t offset, bool streaming,
+                                      int64_t chunk_rows) {
+    config::pipeline_analytic_enable_ignore_nulls_streaming = streaming;
+    // Small eviction batch so the future streaming path actually evicts/contracts during these tests.
+    config::pipeline_analytic_removable_chunk_num = 2;
+
+    ObjectPool pool;
+    TDescriptorTableBuilder dtb;
+    {
+        TTupleDescriptorBuilder in_tuple;
+        in_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("v").build());
+        in_tuple.build(&dtb);
+        TTupleDescriptorBuilder out_tuple;
+        out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("lead_v").build());
+        out_tuple.build(&dtb);
+    }
+    auto* state = pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(state, &pool, dtb.desc_tbl(), &desc_tbl, config::vector_chunk_size).ok());
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+
+    const TupleId in_tuple_id = 0;
+    const TupleId out_tuple_id = 1;
+    const SlotId col_slot_id = desc_tbl->get_tuple_descriptor(in_tuple_id)->slots()[0]->id();
+    const SlotId res_slot_id = desc_tbl->get_tuple_descriptor(out_tuple_id)->slots()[0]->id();
+    TupleDescriptor* result_tuple = desc_tbl->get_tuple_descriptor(out_tuple_id);
+
+    TPlanNode tnode = make_lead_tnode(in_tuple_id, col_slot_id, offset);
+    RuntimeProfile profile("Analytor");
+    auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
+    CHECK(analytor->prepare(state, &pool, &profile).ok());
+    const auto process_mode = profile.get_info_string("ProcessMode");
+    CHECK(process_mode.has_value());
+    CHECK(streaming ? process_mode->find("Streaming/") == 0 : process_mode->find("Materializing/") == 0)
+            << "lead ProcessMode=" << *process_mode << " streaming=" << streaming;
     CHECK(analytor->open(state).ok());
 
     std::vector<OptInt> out;
@@ -1244,7 +1494,7 @@ void expect_equal(const std::vector<OptInt>& got, const std::vector<OptInt>& exp
 
 // Streaming output must equal both the legacy (materializing) output and the independent reference,
 // across data shapes, offsets, and chunk sizes (which shift partition/eviction boundaries).
-TEST_F(LagWindowTest, e2e_streaming_matches_reference_and_legacy) {
+TEST_F(LeadLagWindowTest, e2e_streaming_matches_reference_and_legacy) {
     const size_t n = 5000;
     const int patterns[] = {0, 1, 2, 3, 4};
     const int64_t offsets[] = {1, 2, 3};
@@ -1266,7 +1516,7 @@ TEST_F(LagWindowTest, e2e_streaming_matches_reference_and_legacy) {
 
 // The exact column discussed for offset 2: NULL,NULL,1,NULL,1,NULL,1,1 (values distinguished so we can
 // see which physical non-null is picked). Verifies streaming and legacy agree with the reference.
-TEST_F(LagWindowTest, e2e_offset2_sparse_explicit) {
+TEST_F(LeadLagWindowTest, e2e_offset2_sparse_explicit) {
     std::vector<OptInt> input{std::nullopt, std::nullopt, 10, std::nullopt, 20, std::nullopt, 30, 40};
     const int64_t offset = 2;
     const auto expected = ref_lag_ignore_nulls(input, offset);
@@ -1281,6 +1531,37 @@ TEST_F(LagWindowTest, e2e_offset2_sparse_explicit) {
     for (int64_t cs : {1, 3, 8}) {
         expect_equal(run_analytor_lag(input, offset, false, cs), expected, "legacy cs=" + std::to_string(cs));
         expect_equal(run_analytor_lag(input, offset, true, cs), expected, "streaming cs=" + std::to_string(cs));
+    }
+}
+
+TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_matches_reference_and_legacy) {
+    const std::vector<std::vector<OptInt>> inputs{
+            // A future non-null arrives two chunks after the current row when chunk_rows=1.
+            {std::nullopt, std::nullopt, 10},
+            // The last offset rows have no possible result and must use the NULL default.
+            {10, 20, 30, 40},
+            // LEAD cannot determine any result until it sees the real partition end.
+            {std::nullopt, std::nullopt, std::nullopt, std::nullopt},
+            // A long null gap exercises data-dependent look-ahead.
+            {10, std::nullopt, std::nullopt, 20, std::nullopt, std::nullopt, 30, 40},
+    };
+    const int64_t offsets[] = {1, 2};
+    const int64_t chunk_sizes[] = {1, 2, 3, 8};
+
+    for (size_t input_idx = 0; input_idx < inputs.size(); ++input_idx) {
+        const auto& input = inputs[input_idx];
+        for (int64_t offset : offsets) {
+            const auto expected = ref_lead_ignore_nulls(input, offset);
+            for (int64_t chunk_rows : chunk_sizes) {
+                const std::string tag = "input=" + std::to_string(input_idx) + " offset=" + std::to_string(offset) +
+                                        " chunk_rows=" + std::to_string(chunk_rows);
+                const auto legacy = run_analytor_lead(input, offset, /*streaming=*/false, chunk_rows);
+                const auto streaming = run_analytor_lead(input, offset, /*streaming=*/true, chunk_rows);
+                expect_equal(legacy, expected, "legacy " + tag);
+                expect_equal(streaming, expected, "streaming " + tag);
+                expect_equal(streaming, legacy, "streaming-vs-legacy " + tag);
+            }
+        }
     }
 }
 
