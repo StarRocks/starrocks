@@ -367,6 +367,15 @@ This topic introduces the following types of BE configurations:
 - Description: Timeout duration to establish socket connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
 - Introduced in: v3.0.9
 
+### enable_poco_client_for_aws_sdk
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use the Poco HTTP client for the AWS SDK. `true` replaces the AWS SDK's default curl HTTP client with Poco. `false` uses the default curl client.
+- Introduced in: -
+
 ### object_storage_request_timeout_ms
 
 - Default: -1
