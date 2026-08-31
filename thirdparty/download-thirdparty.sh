@@ -454,6 +454,10 @@ if [ ! -f $PATCHED_MARK.usable_size_minimal_tsd ] && [ $JEMALLOC_SOURCE = "jemal
     patch -p0 < $TP_PATCH_DIR/jemalloc_malloc_usable_size_minimal_tsd.patch
     touch $PATCHED_MARK.usable_size_minimal_tsd
 fi
+if [ ! -f $PATCHED_MARK.metadata_breakdown ] && [ $JEMALLOC_SOURCE = "jemalloc-5.3.0" ]; then
+    patch -p0 < $TP_PATCH_DIR/jemalloc_metadata_breakdown.patch
+    touch $PATCHED_MARK.metadata_breakdown
+fi
 cd -
 echo "Finished patching $JEMALLOC_SOURCE"
 
