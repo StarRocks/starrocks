@@ -27,8 +27,8 @@ Join the three tables on `(DB_ID, TABLE_ID, BOOKMARK_ID)`.
 | PHYSICAL_PARTITION_COUNT | BIGINT | Physical partition count captured. |
 | REFERENCE_COUNT | BIGINT | Current number of holders referencing this bookmark. |
 | LATEST_CHANGED_PHYSICAL_PARTITIONS | `ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>>` | Up to 3 physical partitions with the most recent `visible_version_time`, ordered descending by time. Ties broken by largest `physical_partition_id`. Empty array if the bookmark captured no partitions; shorter than 3 when fewer partitions exist. |
-| OLDEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | Holder with the oldest current acquire time. Ties broken by lexicographically smallest holder id. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
-| NEWEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | Holder with the most recent current acquire time. Same tie-break rule. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no TTL). |
+| OLDEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | Holder with the oldest current acquire time. Ties broken by lexicographically smallest holder id. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no per-reference limit; the cluster ceiling still applies). `time + ttl_ms` is not an expiry: a renewing holder stays alive past it — check `table_bookmark_references.LAST_RENEW_TIME`. |
+| NEWEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | Holder with the most recent current acquire time. Same tie-break rule. `ttl_ms` is that holder's per-reference TTL in ms (`<= 0` means no per-reference limit; the cluster ceiling still applies). |
 
 ## table_bookmark_partitions
 
@@ -52,8 +52,9 @@ Join the three tables on `(DB_ID, TABLE_ID, BOOKMARK_ID)`.
 |--------|------|-------------|
 | DB_ID, TABLE_ID, BOOKMARK_ID | (mirror summary) | Join keys. |
 | HOLDER_ID | VARCHAR | Holder identity. Materialized views encode as `mv:<dbId>-<mvId>`. |
-| CREATE_TIME | DATETIME | When this holder acquired the bookmark. |
-| TTL_MS | BIGINT | Per-reference time-to-live in ms set at acquire time. `<= 0` means no TTL; the background sweep never expires the reference on its own. The effective lifetime is the smaller of this and the cluster ceiling `bookmark_reference_max_ttl_ms`. |
+| CREATE_TIME | DATETIME | When this holder acquired the bookmark. Not moved by renewals. |
+| TTL_MS | BIGINT | Per-reference time-to-live in ms, set at acquire time and replaced by each `bookmark_renew`. The effective lease is the smaller of this and the cluster ceiling `bookmark_reference_max_ttl_ms`, where `<= 0` on either side means no limit -- so a reference with no TTL of its own still expires at the ceiling, and only a reference with neither never expires. Measured from `LAST_RENEW_TIME` when set, else from `CREATE_TIME`. |
+| LAST_RENEW_TIME | DATETIME | When the holder last renewed its lease via `bookmark_renew`; NULL if never renewed. A reference is being kept alive by renewals, not stuck in the sweep, when `CREATE_TIME + TTL_MS` is past but `LAST_RENEW_TIME + TTL_MS` is not -- with a cluster ceiling set, expiry can come earlier than that sum. |
 
 ## Query patterns
 

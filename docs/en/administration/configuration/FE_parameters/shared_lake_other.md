@@ -1644,7 +1644,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Cluster-wide ceiling on how long a bookmark reference may live before the cleanup sweep reclaims it, regardless of the reference's own TTL. `<= 0` disables the ceiling. The effective TTL of a reference is the smaller of this ceiling and the reference's own TTL.
+- Description: Cluster-wide ceiling on how long a bookmark reference's lease may run before the cleanup sweep reclaims it, regardless of the reference's own TTL. `<= 0` disables the ceiling. The effective lease of a reference is the smaller of this ceiling and the reference's own TTL, treating `<= 0` on either side as no limit, so this ceiling also bounds a reference that sets no TTL of its own. It runs from the reference's last `bookmark_renew` (or its acquire time when never renewed) — a holder that keeps renewing keeps its reference alive indefinitely. Because the sweep re-reads this value every pass, lowering it shortens leases that were already granted: a reference is reclaimed as soon as the time since its last renewal reaches the new ceiling, and a holder whose renewal interval is longer than that loses its bookmark before it renews again. The value `bookmark_renew` returns bounds a lease only as of that call.
 - Introduced in:
 
 ### `enable_bookmark_meta_functions`
@@ -1653,7 +1653,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether the bookmark metadata functions (`bookmark_create` / `bookmark_release`) are enabled. These are debug/test-only, OPERATE-privileged, leader-only functions and are gated off by default.
+- Description: Whether the bookmark metadata functions (`bookmark_create` / `bookmark_renew` / `bookmark_release`) are enabled. These are debug/test-only, OPERATE-privileged, leader-only functions and are gated off by default. Enable this only after every FE node is upgraded to a version that supports `bookmark_renew`: an older FE silently skips the renewal journal entry it cannot decode, and — since `checkpoint_only_on_leader` is false by default, so any FE may build the image — may then write a checkpoint image with that renewal missing. A reference whose renewal is lost that way is judged by its original acquire time and can be reclaimed while its holder still considers it live. Note also that the `holder` argument is a caller-supplied label, not an authenticated identity: anyone able to call these functions can release, or re-lease at a shorter TTL, a reference another holder created, and `HOLDER_ID` is readable from `information_schema.table_bookmark_references`.
 - Introduced in:
 
 ### `context_entity_history_max_rows`

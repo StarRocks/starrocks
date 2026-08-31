@@ -50,6 +50,7 @@ public abstract class BookmarkLogEntry implements Writable {
         return RuntimeTypeAdapterFactory.of(BookmarkLogEntry.class, "clazz")
                 .registerSubtype(AddBookmark.class, "ab")
                 .registerSubtype(AcquireReference.class, "ar")
+                .registerSubtype(RenewReference.class, "rn")
                 .registerSubtype(ReleaseReference.class, "rr");
     }
 
@@ -115,6 +116,43 @@ public abstract class BookmarkLogEntry implements Writable {
             Map<HolderId, Reference> map = new HashMap<>(1);
             map.put(holder.getHolderId(), new Reference(acquiredAtMs, holder.getHolderInfo(), ttlMs));
             return new AcquireReference(dbId, tableId, bookmarkId, map);
+        }
+    }
+
+    /** Refreshes references on one tracked bookmark. Not {@link AcquireReference}: that one
+     *  applies through putIfAbsent and would leave an existing reference untouched. */
+    public static final class RenewReference extends BookmarkLogEntry {
+        @SerializedName("b")
+        private long bookmarkId;
+        @SerializedName("rs")
+        private Map<HolderId, Reference> references;
+
+        public RenewReference() {
+        }
+
+        public RenewReference(long dbId, long tableId, long bookmarkId, Map<HolderId, Reference> references) {
+            super(dbId, tableId);
+            this.bookmarkId = bookmarkId;
+            this.references = references;
+        }
+
+        public long getBookmarkId() {
+            return bookmarkId;
+        }
+
+        public Map<HolderId, Reference> getReferences() {
+            return references == null ? Collections.emptyMap() : references;
+        }
+
+        /** {@code acquiredAtMs} and {@code holderInfo} belong to the reference being renewed and are
+         *  passed in rather than taken from {@code holder}: the SQL entry point only ever builds an
+         *  {@link HolderInfo.EmptyInfo} holder, which would erase an MV's sidecar. */
+        public static RenewReference of(long dbId, long tableId, long bookmarkId, BookmarkHolder holder,
+                                        HolderInfo holderInfo, long acquiredAtMs, long renewedAtMs,
+                                        long ttlMs) {
+            Map<HolderId, Reference> map = new HashMap<>(1);
+            map.put(holder.getHolderId(), new Reference(acquiredAtMs, holderInfo, ttlMs, renewedAtMs));
+            return new RenewReference(dbId, tableId, bookmarkId, map);
         }
     }
 

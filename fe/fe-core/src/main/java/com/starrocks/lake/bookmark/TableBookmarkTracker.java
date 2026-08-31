@@ -222,6 +222,42 @@ public class TableBookmarkTracker {
     }
 
     /**
+     * Replace the holder's existing reference with a fresh lease. The ttl replaces, so a smaller
+     * value shortens; expired-but-unswept references renew too. Locks like {@link #acquireReference},
+     * not {@link #create} -- renewal reads no partition meta.
+     *
+     * @throws BookmarkNotFoundException  if {@code bookmarkId} is not currently tracked
+     * @throws ReferenceNotFoundException if the holder does not reference it
+     */
+    public Bookmark renewReference(long bookmarkId, BookmarkHolder holder, long ttlMs)
+            throws BookmarkNotFoundException, ReferenceNotFoundException {
+        Objects.requireNonNull(holder, "holder");
+        rwLock.writeLock().lock();
+        try {
+            Bookmark b = activeBookmarks.get(bookmarkId);
+            if (b == null) {
+                LOG.debug("bookmark not found on renew: db={}, table={}, bookmarkId={}, holder={}",
+                        dbId, tableId, bookmarkId, holder.getHolderId());
+                throw new BookmarkNotFoundException(dbId, tableId, bookmarkId, holder.getHolderId());
+            }
+            // Acquisition time and holder sidecar come from the existing reference; only the lease moves.
+            ReferenceSet refSet = referencesByBookmark.get(bookmarkId);
+            Reference existing = refSet == null ? null : refSet.get(holder.getHolderId());
+            if (existing == null) {
+                LOG.debug("reference not found on renew: db={}, table={}, bookmarkId={}, holder={}",
+                        dbId, tableId, bookmarkId, holder.getHolderId());
+                throw new ReferenceNotFoundException(dbId, tableId, bookmarkId, holder.getHolderId());
+            }
+            long now = System.currentTimeMillis();
+            journalAndApply(BookmarkLogEntry.RenewReference.of(
+                    dbId, tableId, bookmarkId, holder, existing.getHolderInfo(), existing.getAcquiredAtMs(), now, ttlMs));
+            return b;
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    /**
      * Release the holder's reference on the given bookmark. The bookmark is
      * reclaimed once its last holder releases it.
      *
@@ -257,9 +293,9 @@ public class TableBookmarkTracker {
      * the live reference set, journalling one batched release. Returns the number
      * of references released (0 if the bookmark is already gone or nothing is
      * expired). Re-checking expiry here closes the release/re-acquire race: a
-     * reference re-acquired after the candidate scan has a newer acquisition time
-     * and is correctly skipped. The bookmark is reclaimed by the apply path when
-     * its reference set empties.
+     * reference re-acquired or renewed after the candidate scan has a newer lease
+     * start and is correctly skipped. The bookmark is reclaimed by the apply path
+     * when its reference set empties.
      */
     public int releaseExpiredReferences(long bookmarkId, long nowMs, long maxTtlMs) {
         rwLock.writeLock().lock();
@@ -411,7 +447,7 @@ public class TableBookmarkTracker {
         if (refSet != null) {
             for (Map.Entry<HolderId, Reference> r : refSet.entries().entrySet()) {
                 refs.add(new Reference.View(r.getKey().getId(), r.getValue().getAcquiredAtMs(),
-                        r.getValue().getTtlMs()));
+                        r.getValue().getTtlMs(), r.getValue().getRenewedAtMs()));
             }
         }
         return refs;
@@ -612,6 +648,8 @@ public class TableBookmarkTracker {
             applyAddBookmark((BookmarkLogEntry.AddBookmark) entry, isReplay);
         } else if (entry instanceof BookmarkLogEntry.AcquireReference) {
             applyAcquireReference((BookmarkLogEntry.AcquireReference) entry, isReplay);
+        } else if (entry instanceof BookmarkLogEntry.RenewReference) {
+            applyRenewReference((BookmarkLogEntry.RenewReference) entry, isReplay);
         } else if (entry instanceof BookmarkLogEntry.ReleaseReference) {
             applyReleaseReferences((BookmarkLogEntry.ReleaseReference) entry, isReplay);
         }
@@ -668,6 +706,27 @@ public class TableBookmarkTracker {
             }
             LOG.log(level, "bookmark reference added: db={}, table={}, bookmarkId={}, holder={}",
                     dbId, tableId, entry.getBookmarkId(), e.getKey());
+        }
+    }
+
+    private void applyRenewReference(BookmarkLogEntry.RenewReference entry, boolean isReplay) {
+        ReferenceSet refSet = referencesByBookmark.get(entry.getBookmarkId());
+        if (refSet == null) {
+            // Idempotent replay: the leader checks liveness under the same lock that journals, so
+            // only an entry re-applied over an image that already reflects the release reaches here.
+            return;
+        }
+        Level level = isReplay ? Level.DEBUG : Level.INFO;
+        for (Map.Entry<HolderId, Reference> e : entry.getReferences().entrySet()) {
+            // Only the insert leg adds a reference. A release decrements whenever it really removed
+            // one, so an uncounted insert becomes an unmatched decrement later.
+            boolean inserted = refSet.putOrReplace(e.getKey(), e.getValue()).isEmpty();
+            if (inserted) {
+                metrics.ifPresent(BookmarkMetrics::onReferenceAdded);
+            }
+            // The insert leg says "added" so an audit of how references came to exist still finds it.
+            LOG.log(level, "bookmark reference {}: db={}, table={}, bookmarkId={}, holder={}",
+                    inserted ? "added by renew" : "renewed", dbId, tableId, entry.getBookmarkId(), e.getKey());
         }
     }
 

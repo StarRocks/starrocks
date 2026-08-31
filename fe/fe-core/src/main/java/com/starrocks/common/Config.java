@@ -5348,16 +5348,24 @@ public class Config extends ConfigBase {
     public static int bookmark_table_lock_timeout_ms = 30 * 1000;
 
     @ConfField(mutable = true, comment =
-            "Cluster-wide ceiling (ms) on how long a bookmark reference may live before "
+            "Cluster-wide ceiling (ms) on how long a bookmark reference's lease may run before "
                     + "the cleanup sweep reclaims it, regardless of the reference's own TTL. "
-                    + "<= 0 disables the ceiling. The effective TTL of a reference is the smaller "
-                    + "of this ceiling and the reference's own TTL.")
+                    + "<= 0 disables the ceiling. The effective lease is the smaller of this ceiling "
+                    + "and the reference's own TTL, treating <= 0 on either side as no limit -- so the "
+                    + "ceiling also bounds a reference that sets no TTL of its own. It runs from the last "
+                    + "bookmark_renew (or the acquire time when never renewed).")
     public static long bookmark_reference_max_ttl_ms = -1;
 
     @ConfField(mutable = true, comment =
-            "Whether the bookmark metadata functions (bookmark_create / bookmark_release) are enabled. "
+            "Whether the bookmark metadata functions (bookmark_create / bookmark_renew / bookmark_release) are enabled. "
                     + "These are debug/test-only functions gated off by default; enabling them exposes a "
-                    + "narrow, OPERATE-privileged, leader-only bookmark create/release surface over SQL.")
+                    + "narrow, OPERATE-privileged, leader-only bookmark create/renew/release surface over SQL. "
+                    + "Enable this only after every FE node is upgraded to a version that supports "
+                    + "bookmark_renew: an older FE silently skips the renewal journal entry it cannot decode, "
+                    + "and may then write a checkpoint image with that renewal missing. The holder "
+                    + "argument of these functions is a caller-supplied label, not an authenticated "
+                    + "identity: anyone who can call them can release, or re-lease at a shorter TTL, a "
+                    + "reference another holder created.")
     public static boolean enable_bookmark_meta_functions = false;
 
     @ConfField(mutable = true, comment = "Default LIMIT applied to the semantic-context "

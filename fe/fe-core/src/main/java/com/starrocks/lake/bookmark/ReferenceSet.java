@@ -20,6 +20,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Holds every reference on one bookmark, keyed by {@link HolderId}. Not
@@ -52,6 +53,12 @@ public final class ReferenceSet {
      */
     public boolean put(HolderId holderId, Reference ref) {
         return references.putIfAbsent(holderId, ref) == null;
+    }
+
+    /** Unlike {@link #put}, an existing reference is overwritten -- the renewal path needs that.
+     *  Returns the replaced reference, or empty on insert. */
+    public Optional<Reference> putOrReplace(HolderId holderId, Reference ref) {
+        return Optional.ofNullable(references.put(holderId, ref));
     }
 
     public Reference get(HolderId holderId) {

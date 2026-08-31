@@ -104,6 +104,128 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         assertFalse(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
     }
 
+    /* ---------- Renewal ---------- */
+
+    private Reference.View referenceOf(BookmarkManager mgr, long tableId, long bid, String holderId) {
+        List<Bookmark.View> views = mgr.listAllBookmarks(
+                Optional.of(dbId), Optional.of(tableId), Optional.of(bid));
+        assertEquals(1, views.size());
+        return views.get(0).getReferences().stream()
+                .filter(r -> holderId.equals(r.getHolderId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no reference for holder " + holderId));
+    }
+
+    /** The same holder refreshes its own lease -- the one thing acquire and create both refuse. */
+    @Test
+    public void testRenewReferenceRefreshesExistingReference() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("rn_h1");
+
+        Bookmark b = mgr.create(dbId, tableId, h1, 1000L);
+        long bid = b.getBookmarkId();
+        Reference.View before = referenceOf(mgr, tableId, bid, h1.getHolderId().getId());
+        assertEquals(1000L, before.getTtlMs());
+
+        Bookmark renewed = mgr.renewReference(dbId, tableId, bid, h1, 600000L);
+        assertEquals(bid, renewed.getBookmarkId());
+
+        // Refreshed in place, not added: one reference, carrying the new lease.
+        assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
+        Reference.View after = referenceOf(mgr, tableId, bid, h1.getHolderId().getId());
+        assertEquals(600000L, after.getTtlMs());
+        assertTrue(after.getRenewedAtMs() > 0, "the live path must stamp renewedAtMs");
+
+        // Exactly one reference to give back.
+        mgr.releaseReference(dbId, tableId, bid, h1.getHolderId());
+        assertFalse(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
+    }
+
+    /** Live renewal requires an existing holder reference. */
+    @Test
+    public void testRenewReferenceThrowsWhenReferenceAbsent() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("rn_ins_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("rn_ins_h2");
+
+        Bookmark b = mgr.create(dbId, tableId, h1);
+        long bid = b.getBookmarkId();
+
+        assertThrows(ReferenceNotFoundException.class,
+                () -> mgr.renewReference(dbId, tableId, bid, h2, -1L));
+        assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
+        assertNotNull(referenceOf(mgr, tableId, bid, h1.getHolderId().getId()));
+    }
+
+    /** Renewal never creates the bookmark it was asked to renew. */
+    @Test
+    public void testRenewReferenceThrowsWhenBookmarkMissing() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("rn_miss_h1");
+
+        Bookmark b = mgr.create(dbId, tableId, h1);
+        long bid = b.getBookmarkId();
+
+        assertThrows(BookmarkNotFoundException.class,
+                () -> mgr.renewReference(dbId, tableId, bid + 9999, h1, -1L));
+
+        long untrackedTableId = createDefaultTable();
+        assertThrows(BookmarkNotFoundException.class,
+                () -> mgr.renewReference(dbId, untrackedTableId, bid, h1, -1L));
+    }
+
+    /** Replay lands the refresh without adding a second reference. */
+    @Test
+    public void testReplayRenewReferenceOverwrites() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("rn_replay_h1");
+
+        Bookmark b = mgr.create(dbId, tableId, h1, 1000L);
+        long bid = b.getBookmarkId();
+
+        mgr.replay(BookmarkLogEntry.RenewReference.of(
+                dbId, tableId, bid, h1, HolderInfo.EmptyInfo.INSTANCE, 1111L, 4242L, 900000L));
+
+        assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
+        Reference.View after = referenceOf(mgr, tableId, bid, h1.getHolderId().getId());
+        assertEquals(900000L, after.getTtlMs());
+        assertEquals(1111L, after.getAcquiredAtMs());
+        assertEquals(4242L, after.getRenewedAtMs()); // LAST_RENEW_TIME reads this
+    }
+
+    /**
+     * Renewal moves the lease, not the acquisition time. CREATE_TIME and the oldest/newest
+     * reference columns are fed from acquiredAtMs, so rewriting it would make a bookmark pinned for
+     * weeks read as freshly taken on every renewal -- and the oldest-reference column is what a
+     * leaked pin is found with.
+     */
+    @Test
+    public void testRenewKeepsTheAcquisitionTimeAndMovesOnlyTheLease() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("rn_at_h1");
+
+        Bookmark b = mgr.create(dbId, tableId, h1, 600000L);
+        long bid = b.getBookmarkId();
+
+        // Seed an acquisition time far from the wall clock: create and renew often land on the
+        // same millisecond, where "carried over" and "restamped" are indistinguishable.
+        mgr.replay(BookmarkLogEntry.RenewReference.of(
+                dbId, tableId, bid, h1, HolderInfo.EmptyInfo.INSTANCE, 1111L, 2222L, 600000L));
+        assertEquals(1111L, referenceOf(mgr, tableId, bid, h1.getHolderId().getId()).getAcquiredAtMs());
+
+        mgr.renewReference(dbId, tableId, bid, h1, 600000L);
+        Reference.View renewed = referenceOf(mgr, tableId, bid, h1.getHolderId().getId());
+        assertEquals(1111L, renewed.getAcquiredAtMs(),
+                "renewal must carry the acquisition time over, not restamp it");
+        // Stamping the lease with the acquisition time leaves the feature inert and still non-zero.
+        assertTrue(renewed.getRenewedAtMs() > 2222L, "renewal must move the lease to now");
+    }
+
     @Test
     public void testAcquireFailure() throws Exception {
         long tableId = createDefaultTable();
@@ -689,6 +811,41 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         assertEquals(0, mgr.activeBookmarkCount(dbId, tableId));
     }
 
+    /**
+     * The sweep judges by the lease, not the acquisition. Every other sweep test predates renewal
+     * and never renews, so deriving expiry from {@code getAcquiredAtMs} here would pass them all.
+     */
+    @Test
+    public void testSweepJudgesByTheLeaseNotTheAcquisition() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("sweep_renewed");
+
+        Bookmark b = mgr.create(dbId, tableId, h, 100L);
+        long bid = b.getBookmarkId();
+        long acq = b.getBookmarkTimeMs();
+
+        // Renewed once, 60ms in: the lease now runs from there, not from acq.
+        mgr.replay(BookmarkLogEntry.RenewReference.of(
+                dbId, tableId, bid, h, HolderInfo.EmptyInfo.INSTANCE, acq, acq + 60, 100L));
+
+        // A second, stale holder makes the bookmark a sweep candidate; the release phase then
+        // re-checks every reference, and judging that by acquisition would release the renewed one too.
+        BookmarkHolder stale = BookmarkHolder.forEmptyInfo("sweep_stale");
+        mgr.replay(BookmarkLogEntry.AcquireReference.of(dbId, tableId, bid, stale, acq, 100L));
+        assertEquals(2, mgr.referenceCount(dbId, tableId, bid));
+
+        // acq + 100 is past the acquisition-based deadline and short of the lease-based one.
+        sweep(mgr, acq + 100, -1L);
+        assertEquals(1, mgr.referenceCount(dbId, tableId, bid),
+                "the stale holder goes; the renewed one must outlive its original acquire+ttl");
+        assertTrue(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
+
+        sweep(mgr, acq + 160, -1L);
+        assertFalse(mgr.findBookmarkById(dbId, tableId, bid).isPresent(),
+                "and must still expire one lease after the renewal");
+    }
+
     @Test
     public void testSweepIgnoresDisabledTtl() throws Exception {
         long tableId = createDefaultTable();
@@ -768,6 +925,9 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         BookmarkHolder h = BookmarkHolder.forEmptyInfo("img_ttl");
 
         Bookmark b = src.create(dbId, tableId, h, 7_000L);
+        // Renew first: a renewedAtMs that does not serialize resets every lease on the next restart.
+        src.replay(BookmarkLogEntry.RenewReference.of(
+                dbId, tableId, b.getBookmarkId(), h, HolderInfo.EmptyInfo.INSTANCE, 1111L, 2222L, 7_000L));
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         src.save(image.getImageWriter());
@@ -784,5 +944,7 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         assertEquals(1, views.size());
         assertEquals(1, views.get(0).getReferences().size());
         assertEquals(7_000L, views.get(0).getReferences().get(0).getTtlMs());
+        assertEquals(2222L, views.get(0).getReferences().get(0).getRenewedAtMs(),
+                "the renewal has to survive the image, or every lease resets on restart");
     }
 }

@@ -35,6 +35,8 @@ import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.epack.warehouse.WarehouseSlotManager;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkHolder;
+import com.starrocks.lake.bookmark.BookmarkLogEntry;
+import com.starrocks.lake.bookmark.HolderInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
@@ -1106,6 +1108,16 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         Assertions.assertEquals(bookmarkId, row.getBookmark_id());
         Assertions.assertEquals("test-holder", row.getHolder_id());
         Assertions.assertEquals(12345L, row.getTtl());
+        Assertions.assertFalse(row.isSetLast_renew_time(), "a never-renewed reference reports NULL");
+
+        // Distinct seeds: wiring LAST_RENEW_TIME to acquiredAtMs survives any presence-only check.
+        GlobalStateMgr.getCurrentState().getBookmarkManager().replay(
+                BookmarkLogEntry.RenewReference.of(dbId, tableId, bookmarkId, holder,
+                        HolderInfo.EmptyInfo.INSTANCE, 1111L, 2222L, 12345L));
+        TTableBookmarkReferenceInfo renewed = TableBookmarkReferencesSystemTable.query(req)
+                .getTable_bookmark_reference_infos().get(0);
+        Assertions.assertEquals(1111L, renewed.getCreate_time());
+        Assertions.assertEquals(2222L, renewed.getLast_renew_time());
     }
 
     @Test

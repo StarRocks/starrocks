@@ -55,6 +55,7 @@ import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkNotFoundException;
 import com.starrocks.lake.bookmark.HolderId;
+import com.starrocks.lake.bookmark.Reference;
 import com.starrocks.lake.bookmark.ReferenceNotFoundException;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
@@ -886,7 +887,8 @@ public class MetaFunctions {
 
     /**
      * Create a bookmark on db.table pinned by holder, returning its id. ttl_ms is the per-reference
-     * expiry in milliseconds; a non-positive value creates a reference with no expiry. Debug/test-only:
+     * expiry in milliseconds; a non-positive value sets no per-reference limit, leaving only the cluster
+     * ceiling bookmark_reference_max_ttl_ms. Debug/test-only:
      * gated by Config.enable_bookmark_meta_functions, OPERATE-privileged, leader-only.
      */
     @ConstantFunction(name = "bookmark_create", argTypes = {VARCHAR, VARCHAR, VARCHAR, VARCHAR},
@@ -920,7 +922,8 @@ public class MetaFunctions {
         BookmarkManager bookmarkManager = GlobalStateMgr.getCurrentState().getBookmarkManager();
         BookmarkHolder bookmarkHolder = BookmarkHolder.forEmptyInfo(holder.getVarchar());
         try {
-            // A non-positive ttl_ms requests a reference with no expiry (BookmarkManager's no-TTL create).
+            // A non-positive ttl_ms requests no per-reference limit (BookmarkManager's no-TTL
+            // create); the cluster ceiling still applies.
             Bookmark bookmark = ttl > 0
                     ? bookmarkManager.create(database.getId(), table.getId(), bookmarkHolder, ttl)
                     : bookmarkManager.create(database.getId(), table.getId(), bookmarkHolder);
@@ -930,6 +933,67 @@ public class MetaFunctions {
         } catch (LockTimeoutException e) {
             throw new SemanticException("bookmark_create timed out acquiring the table lock: " + e.getMessage());
         }
+    }
+
+    /**
+     * Refresh holder's lease on an existing bookmark. The holder reference must already exist; renewal
+     * errors when the holder has no reference or the bookmark is gone. Returns the effective TTL in ms: the
+     * smaller of ttl_ms and bookmark_reference_max_ttl_ms, with {@code <= 0} on either side meaning
+     * no limit, so {@code -1} comes back only when neither sets one. Gates as bookmark_create.
+     *
+     * <p>The returned value bounds this lease as of this call; it is not a durable renewal interval.
+     * The sweep re-reads bookmark_reference_max_ttl_ms every pass and measures each reference from
+     * its last renewal, so lowering the ceiling shortens leases already granted and reclaims a
+     * reference once {@code now - lastRenew} reaches the new value. Pace off the returned value, but
+     * cap that pacing independently of it: the cap, not the grant, is what bounds a client's
+     * exposure to a ceiling change. {@code -1} means no ceiling is set right now, not that none will
+     * be -- a client that stops renewing on it loses the reference as soon as one is.
+     */
+    @ConstantFunction(name = "bookmark_renew", argTypes = {VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator bookmarkRenew(ConstantOperator dbName, ConstantOperator tableName,
+                                                 ConstantOperator bookmarkId, ConstantOperator holder,
+                                                 ConstantOperator ttlMs) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null && ctx.getExplainLevel() != null) {
+            return ConstantOperator.createVarchar("-1");
+        }
+        if (!Config.enable_bookmark_meta_functions) {
+            throw new SemanticException("bookmark meta functions are disabled; "
+                    + "set enable_bookmark_meta_functions=true to use bookmark_renew");
+        }
+        authOperatorPrivilege();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            throw new SemanticException("bookmark_renew must run on the FE leader");
+        }
+        long id;
+        try {
+            id = Long.parseLong(bookmarkId.getVarchar().trim());
+        } catch (NumberFormatException e) {
+            throw new SemanticException("bookmark_id must be an integer, got: " + bookmarkId.getVarchar());
+        }
+        long ttl;
+        try {
+            ttl = Long.parseLong(ttlMs.getVarchar().trim());
+        } catch (NumberFormatException e) {
+            throw new SemanticException("ttl_ms must be an integer number of milliseconds, got: " + ttlMs.getVarchar());
+        }
+        String db = dbName.getVarchar();
+        String tbl = tableName.getVarchar();
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(db)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(db, tbl)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tbl));
+        BookmarkHolder bookmarkHolder = BookmarkHolder.forEmptyInfo(holder.getVarchar());
+        long requested = ttl > 0 ? ttl : -1L;
+        try {
+            GlobalStateMgr.getCurrentState().getBookmarkManager().renewReference(
+                    database.getId(), table.getId(), id, bookmarkHolder, requested);
+        } catch (BookmarkNotFoundException | ReferenceNotFoundException e) {
+            throw new SemanticException(e.getMessage());
+        }
+        return ConstantOperator.createVarchar(
+                Long.toString(Reference.effectiveTtlMs(requested, Config.bookmark_reference_max_ttl_ms)));
     }
 
     /**

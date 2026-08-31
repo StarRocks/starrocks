@@ -130,6 +130,24 @@ public class BookmarkManager extends LeaderDaemon {
         }
     }
 
+    /** Unlike {@link #acquireReference}, an existing reference is required and then refreshed. */
+    public Bookmark renewReference(long dbId, long tableId, long bookmarkId, BookmarkHolder holder, long ttlMs)
+            throws BookmarkNotFoundException, ReferenceNotFoundException {
+        Preconditions.checkNotNull(holder);
+        trackerMapLock.readLock().lock();
+        try {
+            TableBookmarkTracker tr = getTrackerLocked(dbId, tableId, false)
+                    .orElseThrow(() -> {
+                        LOG.debug("bookmark not found on renew (no tracker): db={}, table={}, bookmarkId={}, holder={}",
+                                dbId, tableId, bookmarkId, holder.getHolderId());
+                        return new BookmarkNotFoundException(dbId, tableId, bookmarkId, holder.getHolderId());
+                    });
+            return tr.renewReference(bookmarkId, holder, ttlMs);
+        } finally {
+            trackerMapLock.readLock().unlock();
+        }
+    }
+
     public void releaseReference(long dbId, long tableId, long bookmarkId, HolderId holderId)
             throws BookmarkNotFoundException, ReferenceNotFoundException {
         Preconditions.checkNotNull(holderId);
@@ -359,6 +377,15 @@ public class BookmarkManager extends LeaderDaemon {
             trackerMapLock.readLock().lock();
             try {
                 getTrackerLocked(dbId, tableId, true).get().replayLogEntry(entry);
+            } finally {
+                trackerMapLock.readLock().unlock();
+            }
+        } else if (entry instanceof BookmarkLogEntry.RenewReference) {
+            // No tracker creation here: an empty tracker would never be reclaimed -- only the
+            // release path checks isEmpty.
+            trackerMapLock.readLock().lock();
+            try {
+                getTrackerLocked(dbId, tableId, false).ifPresent(tr -> tr.replayLogEntry(entry));
             } finally {
                 trackerMapLock.readLock().unlock();
             }

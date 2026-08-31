@@ -50,6 +50,7 @@ public class TableBookmarkReferencesSystemTable {
                         .column("HOLDER_ID", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .column("CREATE_TIME", DateType.DATETIME)
                         .column("TTL_MS", IntegerType.BIGINT)
+                        .column("LAST_RENEW_TIME", DateType.DATETIME)
                         .build(),
                 TSchemaTableType.SCH_TABLE_BOOKMARK_REFERENCES);
     }
@@ -81,6 +82,9 @@ public class TableBookmarkReferencesSystemTable {
                 info.setHolder_id(ref.getHolderId());
                 info.setCreate_time(ref.getAcquiredAtMs());
                 info.setTtl(ref.getTtlMs());
+                if (ref.getRenewedAtMs() > 0) {
+                    info.setLast_renew_time(ref.getRenewedAtMs());
+                }
                 out.add(info);
             }
         }

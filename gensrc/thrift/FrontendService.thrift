@@ -1817,6 +1817,8 @@ struct TTableBookmarkReferenceInfo {
     4: optional string holder_id
     5: optional i64 create_time
     6: optional i64 ttl
+    // Epoch millis of the last lease renewal; unset when never renewed.
+    7: optional i64 last_renew_time
 }
 
 struct TGetTableBookmarkReferencesRequest {

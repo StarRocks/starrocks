@@ -1644,7 +1644,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 毫秒
 - 是否可变: Yes
-- 描述: 集群级别的 bookmark reference 最大存活时间上限。无论 reference 自身的 TTL 如何，清理任务都会在超过该上限后回收 reference。`<= 0` 表示不启用该上限。reference 的实际 TTL 取该上限与其自身 TTL 中较小的一个。
+- 描述: 集群级别的 bookmark reference 单次租约时长上限。无论 reference 自身的 TTL 如何，清理任务都会在租约超过该上限后回收 reference。`<= 0` 表示不启用该上限。reference 的实际租约取该上限与其自身 TTL 中较小的一个，任一侧 `<= 0` 均按不限处理，因此自身不设 TTL 的 reference 同样受该上限约束。起算点为最近一次 `bookmark_renew`（从未续租则为 acquire 时间）——持续续租的持有者可以让 reference 一直存活。由于清理任务每轮都会重新读取该配置，调低它会缩短**已经授予**的租约：距上次续租的时长一旦达到新上限，reference 立即被回收，续租间隔长于该上限的持有者会在下次续租之前就丢掉 bookmark。`bookmark_renew` 的返回值只在该次调用的时刻成立。
 - 引入版本:
 
 ### `enable_bookmark_meta_functions`
@@ -1653,7 +1653,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否启用 bookmark 元数据函数(`bookmark_create` / `bookmark_release`)。这两个函数仅用于调试/测试，默认关闭，需要 OPERATE 权限且只能在 leader 节点上执行。
+- 描述: 是否启用 bookmark 元数据函数(`bookmark_create` / `bookmark_renew` / `bookmark_release`)。这些函数仅用于调试/测试，默认关闭，需要 OPERATE 权限且只能在 leader 节点上执行。请在所有 FE 节点都升级到支持 `bookmark_renew` 的版本之后再开启：旧版本 FE 会静默跳过它无法解码的续租日志条目，而 `checkpoint_only_on_leader` 默认为 false、任何 FE 都可能构建镜像，因此该续租可能被固化为「不存在」写进镜像。以这种方式丢失续租的引用会按其原始 acquire 时间判定过期，可能在持有者仍认为它存活时被回收。另需注意：`holder` 参数只是调用方自报的标签，并非经过鉴权的身份——任何能调用这些函数的人都可以释放、或以更短的 TTL 重新租用他人创建的引用，而 `HOLDER_ID` 可从 `information_schema.table_bookmark_references` 读到。
 - 引入版本:
 
 ### `context_entity_history_max_rows`

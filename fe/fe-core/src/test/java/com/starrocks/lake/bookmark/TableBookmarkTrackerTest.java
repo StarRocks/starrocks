@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.bookmark;
 
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -361,6 +362,43 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
         assertTrue(stats.maxReferenceAgeMs().isPresent());
         assertTrue(stats.maxBookmarkAgeMs().getAsLong() > 0L);
         assertTrue(stats.maxReferenceAgeMs().getAsLong() > 0L);
+    }
+
+    /**
+     * bookmark_renew can only build an EmptyInfo holder, so the sidecar has to come from the
+     * reference being renewed -- otherwise renewing an MV's reference durably erases its MvId.
+     */
+    @Test
+    public void testRenewKeepsTheHolderSidecar() throws Exception {
+        long tableId = createDefaultTable();
+        TableBookmarkTracker tracker = new TableBookmarkTracker(dbId, tableId, new BookmarkMetrics());
+        BookmarkHolder mvHolder = BookmarkHolder.forMv(new MvId(dbId, 987654L));
+
+        long bid = tracker.create(mvHolder, 600000L).getBookmarkId();
+        tracker.renewReference(bid, BookmarkHolder.forEmptyInfo(mvHolder.getHolderId().getId()), 600000L);
+
+        Reference stored = tracker.referencesByBookmark().get(bid).get(mvHolder.getHolderId());
+        assertTrue(stored.getHolderInfo() instanceof HolderInfo.MvInfo,
+                "renewal must not replace the MV sidecar with EmptyInfo");
+    }
+
+    /** A rejected live renewal must not change the reference metric. */
+    @Test
+    public void testRenewMissingReferenceDoesNotChangeMetric() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkMetrics metrics = new BookmarkMetrics();
+        TableBookmarkTracker tracker = new TableBookmarkTracker(dbId, tableId, metrics);
+        BookmarkHolder h1 = BookmarkHolder.forEmptyInfo("trk_rn_count_h1");
+        BookmarkHolder h2 = BookmarkHolder.forEmptyInfo("trk_rn_count_h2");
+
+        long bid = tracker.create(h1, 600000L).getBookmarkId();
+        long afterCreate = metrics.bookmarkReferenceCount.sum();
+
+        tracker.renewReference(bid, h1, 600000L);
+        assertEquals(afterCreate, metrics.bookmarkReferenceCount.sum(), "the replace leg adds nothing");
+
+        assertThrows(ReferenceNotFoundException.class, () -> tracker.renewReference(bid, h2, 600000L));
+        assertEquals(afterCreate, metrics.bookmarkReferenceCount.sum());
     }
 
     @Test

@@ -39,6 +39,25 @@ public class ReferenceTest {
         assertEquals(100L, new Reference(0L, HolderInfo.EmptyInfo.INSTANCE, -1L).effectiveTtlMs(100L));
         assertEquals(50L, new Reference(0L, HolderInfo.EmptyInfo.INSTANCE, 100L).effectiveTtlMs(50L));
         assertEquals(50L, new Reference(0L, HolderInfo.EmptyInfo.INSTANCE, 50L).effectiveTtlMs(100L));
+        // 0 is a no-limit value like -1: reading it as a bound makes the reference immortal, because
+        // isExpired gates on eff > 0. Only these two pairings tell "<= 0" from "< 0".
+        assertEquals(100L, new Reference(0L, HolderInfo.EmptyInfo.INSTANCE, 0L).effectiveTtlMs(100L));
+        assertEquals(100L, new Reference(0L, HolderInfo.EmptyInfo.INSTANCE, 100L).effectiveTtlMs(0L));
+    }
+
+    /** Expiry runs from the renewal; acquiredAtMs stays what the system tables report. */
+    @Test
+    public void testExpiryMeasuresFromTheRenewalNotTheAcquisition() {
+        Reference never = new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, 100L);
+        assertEquals(1_000L, never.leaseStartMs());
+
+        Reference renewed = new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, 100L, 5_000L);
+        assertEquals(1_000L, renewed.getAcquiredAtMs());
+        assertEquals(5_000L, renewed.leaseStartMs());
+        assertFalse(renewed.isExpired(1_100L, -1L),
+                "the old acquisition time must not expire a renewed lease");
+        assertFalse(renewed.isExpired(5_099L, -1L));
+        assertTrue(renewed.isExpired(5_100L, -1L));
     }
 
     @Test
@@ -68,5 +87,9 @@ public class ReferenceTest {
         assertEquals("h1", v.getHolderId());
         assertEquals(1_000L, v.getAcquiredAtMs());
         assertEquals(500L, v.getTtlMs());
+        assertEquals(0L, v.getRenewedAtMs());
+
+        Reference.View renewed = new Reference.View("h1", 1_000L, 500L, 9_000L);
+        assertEquals(9_000L, renewed.getRenewedAtMs());
     }
 }

@@ -57,4 +57,24 @@ public class ReferenceSetTest {
         assertTrue(rs.isEmpty());
         assertEquals(1000L, rs.getReferencedSinceMs());
     }
+
+    /** put is putIfAbsent; renewal needs the overwrite it cannot express. */
+    @Test
+    public void testPutOrReplaceOverwritesExistingReference() {
+        ReferenceSet rs = new ReferenceSet(1000L);
+        HolderId holder = new HolderId("kc:conn1");
+        Reference first = new Reference(1000L, HolderInfo.EmptyInfo.INSTANCE, 1L);
+        Reference second = new Reference(2000L, HolderInfo.EmptyInfo.INSTANCE, 600000L);
+
+        assertTrue(rs.put(holder, first));
+        assertFalse(rs.put(holder, second));
+        assertSame(first, rs.get(holder));
+
+        assertSame(first, rs.putOrReplace(holder, second).orElseThrow());
+        assertSame(second, rs.get(holder));
+        assertEquals(1, rs.size());
+
+        assertTrue(rs.putOrReplace(new HolderId("other"), first).isEmpty());
+        assertEquals(2, rs.size());
+    }
 }

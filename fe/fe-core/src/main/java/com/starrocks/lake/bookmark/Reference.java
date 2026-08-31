@@ -22,7 +22,10 @@ import java.util.Objects;
  * One holder's reference to a bookmark. Immutable. The holder identity is the
  * surrounding map key (a {@link HolderId}); this object carries the acquisition
  * time, the holder's type-specific sidecar {@link HolderInfo}, and a per-reference
- * time-to-live in ms ({@code <= 0} disables expiry).
+ * time-to-live in ms ({@code <= 0} drops only this limit, leaving the cluster ceiling).
+ *
+ * <p>Renewal moves {@code renewedAtMs} only; {@code acquiredAtMs} feeds CREATE_TIME and the
+ * oldest/newest system-table columns, and restamping it would hide long-held pins from them.
  */
 public final class Reference {
     @SerializedName("at")
@@ -31,15 +34,32 @@ public final class Reference {
     private final HolderInfo holderInfo;
     @SerializedName("ttl")
     private final long ttlMs;
+    /** 0 = never renewed; pre-renewal journals and images deserialize to this too. */
+    @SerializedName("rn")
+    private final long renewedAtMs;
 
     public Reference(long acquiredAtMs, HolderInfo holderInfo, long ttlMs) {
+        this(acquiredAtMs, holderInfo, ttlMs, 0L);
+    }
+
+    public Reference(long acquiredAtMs, HolderInfo holderInfo, long ttlMs, long renewedAtMs) {
         this.acquiredAtMs = acquiredAtMs;
         this.holderInfo = Objects.requireNonNull(holderInfo, "holderInfo");
         this.ttlMs = ttlMs;
+        this.renewedAtMs = renewedAtMs;
     }
 
     public long getAcquiredAtMs() {
         return acquiredAtMs;
+    }
+
+    public long getRenewedAtMs() {
+        return renewedAtMs;
+    }
+
+    /** Where the current lease starts: the last renewal, or the acquisition when never renewed. */
+    public long leaseStartMs() {
+        return renewedAtMs > 0 ? renewedAtMs : acquiredAtMs;
     }
 
     public HolderInfo getHolderInfo() {
@@ -56,6 +76,11 @@ public final class Reference {
      * if neither sets one the result is {@code -1} (no expiry).
      */
     public long effectiveTtlMs(long maxTtlMs) {
+        return effectiveTtlMs(ttlMs, maxTtlMs);
+    }
+
+    /** Same rule without a reference to hand; bookmark_renew reports this back to its caller. */
+    public static long effectiveTtlMs(long ttlMs, long maxTtlMs) {
         if (ttlMs <= 0 && maxTtlMs <= 0) {
             return -1;
         }
@@ -71,7 +96,7 @@ public final class Reference {
     /** True when this reference's effective lifetime has elapsed by {@code nowMs}. */
     public boolean isExpired(long nowMs, long maxTtlMs) {
         long eff = effectiveTtlMs(maxTtlMs);
-        return eff > 0 && acquiredAtMs + eff <= nowMs;
+        return eff > 0 && leaseStartMs() + eff <= nowMs;
     }
 
     /**
@@ -83,11 +108,17 @@ public final class Reference {
         private final String holderId;
         private final long acquiredAtMs;
         private final long ttlMs;
+        private final long renewedAtMs;
 
         public View(String holderId, long acquiredAtMs, long ttlMs) {
+            this(holderId, acquiredAtMs, ttlMs, 0L);
+        }
+
+        public View(String holderId, long acquiredAtMs, long ttlMs, long renewedAtMs) {
             this.holderId = holderId;
             this.acquiredAtMs = acquiredAtMs;
             this.ttlMs = ttlMs;
+            this.renewedAtMs = renewedAtMs;
         }
 
         public String getHolderId() {
@@ -100,6 +131,11 @@ public final class Reference {
 
         public long getTtlMs() {
             return ttlMs;
+        }
+
+        /** 0 when never renewed. */
+        public long getRenewedAtMs() {
+            return renewedAtMs;
         }
     }
 }

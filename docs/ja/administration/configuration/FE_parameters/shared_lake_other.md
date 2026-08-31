@@ -1603,7 +1603,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Milliseconds
 - 変更可能：Yes
-- 説明：bookmark reference が存続できる時間のクラスター全体の上限。reference 自身の TTL に関わらず、クリーンアップ処理がこの上限を超えた reference を回収します。`<= 0` の場合は上限を無効にします。reference の実際の TTL は、この上限と reference 自身の TTL のうち小さい方になります。
+- 説明：bookmark reference の 1 回のリースが継続できる時間のクラスター全体の上限。reference 自身の TTL に関わらず、リースがこの上限を超えた reference はクリーンアップ処理によって回収されます。`<= 0` の場合は上限を無効にします。reference の実際のリースは、この上限と reference 自身の TTL のうち小さい方ですが、どちらか一方が `<= 0` の場合はその側を制限なしとして扱うため、自身の TTL を設定しない reference もこの上限で制限されます。起点は最後の `bookmark_renew`（更新されたことがない場合は取得時刻）です。更新し続ける保持者は reference を無期限に維持できます。クリーンアップ処理は毎回この値を読み直すため、値を小さくすると**すでに付与済み**のリースも短くなります。最後の更新からの経過時間が新しい上限に達した時点で reference は回収され、更新間隔がその上限より長い保持者は次の更新を迎える前に bookmark を失います。`bookmark_renew` の戻り値は、その呼び出し時点でのみ有効な上限です。
 - 導入時期：
 
 ### `enable_bookmark_meta_functions`
@@ -1612,7 +1612,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：bookmark メタデータ関数(`bookmark_create` / `bookmark_release`)を有効にするかどうか。これらはデバッグ/テスト専用の関数で、デフォルトでは無効になっています。有効にするには OPERATE 権限が必要で、leader ノードでのみ実行できます。
+- 説明：bookmark メタデータ関数(`bookmark_create` / `bookmark_renew` / `bookmark_release`)を有効にするかどうか。これらはデバッグ/テスト専用の関数で、デフォルトでは無効になっています。実行には OPERATE 権限が必要で、FE leader ノードでのみ実行できます。すべての FE ノードが `bookmark_renew` をサポートするバージョンにアップグレードされてから有効にしてください。古いバージョンの FE はデコードできない更新ジャーナルエントリを警告なく読み飛ばし、`checkpoint_only_on_leader` はデフォルトで false でどの FE もイメージを作成しうるため、その更新が欠けたチェックポイントイメージが書き込まれる可能性があります。こうして更新を失った参照は元の取得時刻で期限を判定され、保持者がまだ有効とみなしている間に回収されることがあります。また `holder` 引数は呼び出し側が自称するラベルであり、認証された identity ではありません。これらの関数を呼べる利用者は、他の保持者が作成した参照を解放したり、より短い TTL で再取得したりできます。`HOLDER_ID` は `information_schema.table_bookmark_references` から読み取れます。
 - 導入時期：
 
 ### `context_entity_history_max_rows`

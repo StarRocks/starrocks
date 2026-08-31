@@ -1,0 +1,51 @@
+-- name: test_bookmark_renew @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE rn_t (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO rn_t VALUES (1, 10);
+-- result:
+-- !result
+[UC]b0=SELECT bookmark_create("${db[0]}", "rn_t", "rn", "1800000");
+INSERT INTO rn_t VALUES (2, 20);
+-- result:
+-- !result
+[UC]b1=SELECT bookmark_create("${db[0]}", "rn_t", "rn", "1800000");
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "1800000");
+-- result:
+1800000
+-- !result
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "0");
+-- result:
+-1
+-- !result
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "1800000");
+-- result:
+1800000
+-- !result
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn2", "1800000");
+-- result:
+[REGEX]E:.*holder rn2 does not reference bookmark [0-9]+ \(db=[0-9]+, table=[0-9]+\).*
+-- !result
+SELECT LAST_RENEW_TIME IS NOT NULL FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b0} AND HOLDER_ID = 'rn';
+-- result:
+1
+-- !result
+SELECT LAST_RENEW_TIME IS NOT NULL FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b1} AND HOLDER_ID = 'rn';
+-- result:
+0
+-- !result
+SELECT k, v, __CHANGE_TYPE__ FROM rn_t [_CHANGES_${b0}_${b1}_] ORDER BY k;
+-- result:
+2	20	0
+-- !result
+SELECT bookmark_renew("${db[0]}", "rn_t", "999999999", "rn", "1800000");
+-- result:
+[REGEX]E:.*bookmark not found \(db=[0-9]+, table=[0-9]+, bookmark=999999999, holder=rn\).*
+-- !result
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "rn_t", "${b0}", "rn");
+    SELECT bookmark_release("${db[0]}", "rn_t", "${b1}", "rn");
+} END CLEANUP

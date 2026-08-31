@@ -32,6 +32,7 @@ SchemaScanner::ColumnDesc SchemaTableBookmarkReferencesScanner::_s_columns_desc[
         {"HOLDER_ID", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
         {"TTL_MS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LAST_RENEW_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
 };
 
 SchemaTableBookmarkReferencesScanner::SchemaTableBookmarkReferencesScanner()
@@ -145,6 +146,18 @@ Status SchemaTableBookmarkReferencesScanner::_fill_chunk(ChunkPtr* chunk) {
             // -1 if an older FE did not set it, for version-skew safety.
             int64_t ttl = info.__isset.ttl ? info.ttl : -1;
             fill_column_with_slot<TYPE_BIGINT>(column, (void*)&ttl);
+            break;
+        }
+        case 7: {
+            // LAST_RENEW_TIME: epoch-millis like CREATE_TIME. NULL when the reference
+            // was never renewed, or when an older FE does not send the field.
+            if (info.__isset.last_renew_time && info.last_renew_time > 0) {
+                DateTimeValue ts;
+                ts.from_unixtime(info.last_renew_time / 1000, _ctz);
+                fill_column_with_slot<TYPE_DATETIME>(column, (void*)&ts);
+            } else {
+                fill_data_column_with_null(column);
+            }
             break;
         }
         default:

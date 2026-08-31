@@ -809,6 +809,129 @@ public class MetaFunctionsTest extends MVTestBase {
     }
 
     @Test
+    public void testBookmarkRenewDisabledByDefault() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = false;
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test"),
+                    ConstantOperator.createVarchar("1800000")));
+            Assertions.assertTrue(e.getMessage().contains("enable_bookmark_meta_functions"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkRenewRejectsNonLeader() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test"),
+                    ConstantOperator.createVarchar("1800000")));
+            Assertions.assertTrue(e.getMessage().contains("leader"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkRenewRejectsNonNumericBookmarkId() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("not_a_number"), ConstantOperator.createVarchar("sql_test"),
+                    ConstantOperator.createVarchar("1800000")));
+            Assertions.assertTrue(e.getMessage().contains("bookmark_id"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkRenewRejectsNonNumericTtl() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        try {
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test"),
+                    ConstantOperator.createVarchar("not_a_number")));
+            Assertions.assertTrue(e.getMessage().contains("ttl_ms"));
+        } finally {
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
+    public void testBookmarkRenewRejectsMissingHolderReference() {
+        connectContext.setThreadLocalInfo();
+        boolean saved = Config.enable_bookmark_meta_functions;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        String id = null;
+        try {
+            ConstantOperator created = MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("renew_existing_holder"), ConstantOperator.createVarchar("1800000"));
+            String bookmarkId = created.getVarchar();
+            id = bookmarkId;
+
+            Exception e = assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(bookmarkId), ConstantOperator.createVarchar("renew_missing_holder"),
+                    ConstantOperator.createVarchar("1800000")));
+            Assertions.assertTrue(e.getMessage().contains("does not reference bookmark"));
+        } finally {
+            if (id != null) {
+                try {
+                    MetaFunctions.bookmarkRelease(
+                            ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                            ConstantOperator.createVarchar(id), ConstantOperator.createVarchar("renew_missing_holder"));
+                } catch (SemanticException ignored) {
+                    // Expected after the rejected renewal; only needed to clean up the current upsert behavior in RED.
+                }
+                MetaFunctions.bookmarkRelease(
+                        ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                        ConstantOperator.createVarchar(id), ConstantOperator.createVarchar("renew_existing_holder"));
+            }
+            Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    @Test
     public void testBookmarkCreateRejectsUnknownDb() {
         connectContext.setThreadLocalInfo();
         boolean saved = Config.enable_bookmark_meta_functions;
@@ -874,6 +997,114 @@ public class MetaFunctionsTest extends MVTestBase {
             Assertions.assertTrue(e.getMessage().contains("bookmark_id"));
         } finally {
             Config.enable_bookmark_meta_functions = saved;
+        }
+    }
+
+    /**
+     * The returned TTL is the granted lease, capped by the cluster ceiling -- the value a client
+     * paces its renewals off. Returning the request instead reads identically under the default
+     * ceiling of -1, so the cap has to be set to tell the two apart.
+     */
+    @Test
+    public void testBookmarkRenewReturnsTheCeilingCappedTtl() {
+        connectContext.setThreadLocalInfo();
+        boolean savedGate = Config.enable_bookmark_meta_functions;
+        long savedCap = Config.bookmark_reference_max_ttl_ms;
+        Config.enable_bookmark_meta_functions = true;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+        };
+        String id = null;
+        try {
+            ConstantOperator created = MetaFunctions.bookmarkCreate(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("cap_holder"), ConstantOperator.createVarchar("1800000"));
+            id = created.getVarchar();
+
+            Config.bookmark_reference_max_ttl_ms = 3600000L;
+            ConstantOperator granted = MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(id), ConstantOperator.createVarchar("cap_holder"),
+                    ConstantOperator.createVarchar("604800000"));
+            Assertions.assertEquals("3600000", granted.getVarchar());
+
+            Config.bookmark_reference_max_ttl_ms = -1L;
+            ConstantOperator uncapped = MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(id), ConstantOperator.createVarchar("cap_holder"),
+                    ConstantOperator.createVarchar("604800000"));
+            Assertions.assertEquals("604800000", uncapped.getVarchar());
+
+            // The return value says nothing about where the renewal landed. Releasing the one holder
+            // must reclaim the bookmark; a renewal keyed by the wrong argument would leave it alive.
+            MetaFunctions.bookmarkRelease(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(id), ConstantOperator.createVarchar("cap_holder"));
+            String released = id;
+            id = null;
+            Assertions.assertThrows(SemanticException.class, () -> MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar(released), ConstantOperator.createVarchar("cap_holder"),
+                    ConstantOperator.createVarchar("1800000")),
+                    "the bookmark must be gone once its only holder released it");
+        } finally {
+            // Release before the gate flips back: a failed assertion must not leave a week-long pin.
+            if (id != null) {
+                try {
+                    MetaFunctions.bookmarkRelease(
+                            ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                            ConstantOperator.createVarchar(id), ConstantOperator.createVarchar("cap_holder"));
+                } catch (Exception cleanup) {
+                    // best-effort; never mask the assertion that got us here
+                }
+            }
+            Config.bookmark_reference_max_ttl_ms = savedCap;
+            Config.enable_bookmark_meta_functions = savedGate;
+        }
+    }
+
+    /**
+     * Without the privilege gate any user who can run a query could pin a version and stall vacuum.
+     */
+    @Test
+    public void testBookmarkRenewRequiresOperatePrivilege() {
+        boolean savedGate = Config.enable_bookmark_meta_functions;
+        UserIdentity savedUser = connectContext.getCurrentUserIdentity();
+        Set<Long> savedRoles = connectContext.getCurrentRoleIds();
+        Config.enable_bookmark_meta_functions = true;
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            // ErrorReportException specifically: without the check the call fails as SemanticException.
+            assertThrows(ErrorReportException.class, () -> MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("test"), ConstantOperator.createVarchar("tbl1"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("unprivileged"),
+                    ConstantOperator.createVarchar("1800000")));
+        } finally {
+            connectContext.setCurrentUserIdentity(savedUser);
+            connectContext.setCurrentRoleIds(savedRoles);
+            connectContext.setThreadLocalInfo();
+            Config.enable_bookmark_meta_functions = savedGate;
+        }
+    }
+
+    /** Matches the create/release explain guards: EXPLAIN must not perform a renewal. */
+    @Test
+    public void testBookmarkRenewSkippedUnderExplain() {
+        connectContext.setThreadLocalInfo();
+        connectContext.setExplainLevel(StatementBase.ExplainLevel.VERBOSE);
+        try {
+            ConstantOperator r = MetaFunctions.bookmarkRenew(
+                    ConstantOperator.createVarchar("no_such_db"), ConstantOperator.createVarchar("t"),
+                    ConstantOperator.createVarchar("1"), ConstantOperator.createVarchar("sql_test"),
+                    ConstantOperator.createVarchar("1000"));
+            Assertions.assertEquals("-1", r.getVarchar());
+        } finally {
+            connectContext.setExplainLevel(null);
         }
     }
 

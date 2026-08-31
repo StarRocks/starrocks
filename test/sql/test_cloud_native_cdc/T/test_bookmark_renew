@@ -1,0 +1,40 @@
+-- name: test_bookmark_renew @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- bookmark_create returns the same id on an unchanged table without refreshing its lease;
+-- bookmark_renew is the only way to move that clock.
+CREATE TABLE rn_t (k int NOT NULL, v int)
+PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO rn_t VALUES (1, 10);
+[UC]b0=SELECT bookmark_create("${db[0]}", "rn_t", "rn", "1800000");
+INSERT INTO rn_t VALUES (2, 20);
+[UC]b1=SELECT bookmark_create("${db[0]}", "rn_t", "rn", "1800000");
+
+-- Same holder renews its own reference; answers the effective TTL, not "true".
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "1800000");
+
+-- Non-positive ttl_ms drops the per-reference limit, as in bookmark_create; the answer is the
+-- cluster ceiling, -1 here because bookmark_reference_max_ttl_ms is at its default.
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "0");
+
+-- Restore a bounded lease. The holder reference must already exist; renewal never creates one.
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "1800000");
+SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn2", "1800000");
+
+-- LAST_RENEW_TIME: set for the renewed reference, NULL for one never renewed.
+SELECT LAST_RENEW_TIME IS NOT NULL FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b0} AND HOLDER_ID = 'rn';
+SELECT LAST_RENEW_TIME IS NOT NULL FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b1} AND HOLDER_ID = 'rn';
+
+-- Renewal leaves the pinned state alone: the window from the renewed bookmark still reads.
+SELECT k, v, __CHANGE_TYPE__ FROM rn_t [_CHANGES_${b0}_${b1}_] ORDER BY k;
+
+-- An unknown id errors; renewal never creates.
+SELECT bookmark_renew("${db[0]}", "rn_t", "999999999", "rn", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "rn_t", "${b0}", "rn");
+    SELECT bookmark_release("${db[0]}", "rn_t", "${b1}", "rn");
+} END CLEANUP
