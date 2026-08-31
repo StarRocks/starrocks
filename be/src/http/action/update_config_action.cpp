@@ -40,8 +40,10 @@
 
 #include <string>
 
+#include "common/config_http_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/logging.h"
+#include "common/system/master_info.h"
 #include "gutil/strings/substitute.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
@@ -52,18 +54,53 @@ namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 
+namespace {
+// Mutating BE runtime config via this endpoint had no caller authentication at all: any
+// request that reached the BE HTTP port could rewrite arbitrary config. Gate it behind the
+// same cluster-internal shared token used by other BE-internal HTTP admin endpoints.
+Status check_internal_token(HttpRequest* req) {
+    const std::string& token_str = req->param("token");
+    if (token_str.empty()) {
+        return Status::InternalError("token is not specified.");
+    }
+    if (token_str != get_master_token()) {
+        return Status::InternalError("invalid token.");
+    }
+    return Status::OK();
+}
+} // namespace
+
 void UpdateConfigAction::handle(HttpRequest* req) {
     LOG(INFO) << req->debug_string();
 
+    if (config::enable_token_check) {
+        Status token_st = check_internal_token(req);
+        if (!token_st.ok()) {
+            LOG(WARNING) << "Rejected update_config request: " << token_st;
+            HttpChannel::send_reply(req, HttpStatus::UNAUTHORIZED, std::string(token_st.message()));
+            return;
+        }
+    }
+
     Status s;
     std::string msg;
-    if (req->params()->size() != 1) {
+    auto* params = req->params();
+    // 'token' is an auth parameter consumed above, not a config to set; exclude it when
+    // checking that exactly one config_name=new_value pair was supplied.
+    size_t config_param_count = params->count("token") > 0 ? params->size() - 1 : params->size();
+    if (config_param_count != 1) {
         s = Status::InvalidArgument("");
         msg = "Now only support to set a single config once, via 'config_name=new_value'";
     } else {
-        DCHECK(req->params()->size() == 1);
-        const std::string& config = req->params()->begin()->first;
-        const std::string& new_value = req->params()->begin()->second;
+        std::string config;
+        std::string new_value;
+        for (auto& [key, value] : *params) {
+            if (key != "token") {
+                config = key;
+                new_value = value;
+                break;
+            }
+        }
         s = ConfigUpdateRegistry::instance()->update_config(config, new_value);
         if (!s.ok()) {
             LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
