@@ -93,6 +93,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.LogCleaner;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -1408,10 +1409,11 @@ public class GlobalStateMgr {
             if (!haProtocol.fencing()) {
                 throw new Exception("fencing failed. will exit");
             }
-            long maxJournalId = journal.getMaxJournalId();
+            Pair<Long, Long> journalIdRange = journal.getJournalIdRange();
+            long maxJournalId = journalIdRange.second;
             replayJournal(maxJournalId);
             nodeMgr.checkCurrentNodeExist();
-            journalWriter.init(maxJournalId);
+            journalWriter.init(journalIdRange.first, maxJournalId);
         } catch (Exception e) {
             // A failed activation is not rolled back: a half-done activation (lease published, WAL gate
             // open, daemons started, journal writer initialized) cannot be un-done reliably, so fail fast
