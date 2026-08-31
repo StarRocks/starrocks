@@ -216,4 +216,11 @@ bool StatisticsHelper::has_correct_min_max_stats(const FileMetaData* file_metada
     return file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
+bool StatisticsHelper::has_correct_null_count(const FileMetaData* file_metadata) {
+    if (file_metadata == nullptr) {
+        return false;
+    }
+    return file_metadata->writer_version().HasCorrectNullCount();
+}
+
 } // namespace starrocks::parquet

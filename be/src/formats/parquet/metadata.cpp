@@ -392,12 +392,16 @@ bool ApplicationVersion::VersionEq(const ApplicationVersion& other_version) cons
            version.minor == other_version.version.minor && version.patch == other_version.version.patch;
 }
 
-bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& column_meta,
-                                              const SortOrder& sort_order) const {
+bool ApplicationVersion::HasFixedStatsVersion() const {
     // parquet-cpp version 1.3.0 and parquet-mr 1.10.0 onwards stats are computed
     // correctly for all types
-    if (VersionLt(ApplicationVersion::PARQUET_MR_FIXED_STATS_VERSION()) ||
-        VersionLt(ApplicationVersion::PARQUET_CPP_FIXED_STATS_VERSION())) {
+    return !VersionLt(ApplicationVersion::PARQUET_MR_FIXED_STATS_VERSION()) &&
+           !VersionLt(ApplicationVersion::PARQUET_CPP_FIXED_STATS_VERSION());
+}
+
+bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& column_meta,
+                                              const SortOrder& sort_order) const {
+    if (!HasFixedStatsVersion()) {
         // Only SIGNED are valid unless max and min are the same
         // (in which case the sort order does not matter)
         auto min_equals_max = (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
@@ -431,6 +435,10 @@ bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& co
     }
 
     return true;
+}
+
+bool ApplicationVersion::HasCorrectNullCount() const {
+    return HasFixedStatsVersion();
 }
 
 bool ApplicationVersion::IsAlwaysCompressed() const {
