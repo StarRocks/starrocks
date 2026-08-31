@@ -20,6 +20,8 @@ endif()
 set(EXPR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     agg/aggregate_factory_core_test.cpp
+    ai/ai_function_call_expr_test.cpp
+    ai/ai_provider_options_builder_test.cpp
     ai_functions_test.cpp
     arithmetic_expr_test.cpp
     arithmetic_operation_test.cpp

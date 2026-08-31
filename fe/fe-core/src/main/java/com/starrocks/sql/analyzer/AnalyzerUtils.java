@@ -2053,6 +2053,27 @@ public class AnalyzerUtils {
                     throw new SemanticException("Materialized view query statement select item " +
                             ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
                 }
+                return super.visitFunctionCall(expr, context);
+            }
+
+            @Override
+            public Void visitSetOp(SetOperationRelation node, Void context) {
+                super.visitSetOp(node, context);
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitValues(ValuesRelation node, Void context) {
+                if (node.hasWithClause()) {
+                    node.getCteRelations().forEach(cte -> visit(cte, context));
+                }
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                node.getRows().forEach(row -> row.forEach(expr -> visit(expr, context)));
                 return null;
             }
         }.visit(node);
