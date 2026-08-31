@@ -164,11 +164,6 @@ let
       md5 = "c5ac53ca70cc667189ec824c6048914a";
       sha256 = "1d38yknmvvym19s8hia14pkrccqr7lq5iclm9j9hqvpyx0h0ww0l";
     };
-    "hyperscan-5.3.0.aarch64.tar.gz" = {
-      url = "https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz";
-      md5 = "ef337257bde6583242a739fab6fb161f";
-      sha256 = "1cawqr9yx7b02kk8ihvf41ps7wv4qzi7gi4jw53x13rnnfyva170";
-    };
     "hyperscan-5.4.0.tar.gz" = {
       url = "https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz";
       md5 = "65e08385038c24470a248f6ff2fa379b";
@@ -569,7 +564,7 @@ let
       "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
       "hadoop-3.4.3-src.tar.gz"
       "ragel-6.10.tar.gz"
-      "hyperscan-5.3.0.aarch64.tar.gz"
+      "vectorscan-5.4.12.tar.gz"
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
