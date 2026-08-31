@@ -83,6 +83,7 @@ set(RUNTIME_FILES
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
+<<<<<<< HEAD
     memory/column_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
@@ -108,6 +109,15 @@ set(RUNTIME_FILES
     type_pack.cpp
     customized_result_writer.cpp
     int128_to_double.cpp
+=======
+    memory/memory_allocator.cpp
+    memory/memory_lock.cpp
+    memory/jemalloc_conf_updater.cpp
+    exception_stack.cpp
+    prof/heap_prof.cpp
+    serde/chunk_encode_context.cpp
+    serde/protobuf_chunk_serde.cpp
+>>>>>>> 3e9ee8e ([Enhancement] Apply the mutable jemalloc options of jemalloc_conf at runtime (#78333))
     diagnose_daemon.cpp
 )
 
