@@ -52,18 +52,18 @@ static const Poco::Timespan& poco_default_timeout() {
 void apply_request_timeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts) {
     // Sessions are pooled per endpoint, not per client, and clients that share an endpoint do not
     // share a timeout: a RENAME_FILE client carries object_storage_rename_file_request_timeout_ms
-    // (30 s by default) while an ordinary read carries object_storage_request_timeout_ms (unset by
-    // default). So this has to leave the session in the state THIS request asked for, never in
-    // whatever state the previous borrower left behind -- skipping the call when a request has no
-    // timeout would let it inherit another client's.
+    // while an ordinary request carries object_storage_request_timeout_ms, which can also be
+    // changed to unset at runtime. So this has to leave the session in the state THIS request asked
+    // for, never in whatever state the previous borrower left behind -- skipping the call when a
+    // request has no timeout would let it inherit another client's.
     //
-    // A non-positive value means "unset": object_storage_request_timeout_ms defaults to -1, which
-    // arrives as a negative Timespan, and Poco gives no defined meaning to that. Unset restores
-    // Poco's default instead of passing the value through.
-    const bool has_timeout =
-            timeouts.send_timeout.totalMicroseconds() > 0 && timeouts.receive_timeout.totalMicroseconds() > 0;
-    const Poco::Timespan& send = has_timeout ? timeouts.send_timeout : poco_default_timeout();
-    const Poco::Timespan& receive = has_timeout ? timeouts.receive_timeout : poco_default_timeout();
+    // A negative value means "unset" and Poco gives no defined meaning to a negative Timespan, so
+    // restore Poco's default in that case. Zero is meaningful: it disables the timeout and must be
+    // passed through just like it is on the Curl path.
+    const Poco::Timespan& send =
+            timeouts.send_timeout.totalMicroseconds() >= 0 ? timeouts.send_timeout : poco_default_timeout();
+    const Poco::Timespan& receive =
+            timeouts.receive_timeout.totalMicroseconds() >= 0 ? timeouts.receive_timeout : poco_default_timeout();
     session.setTimeout(timeouts.connection_timeout, send, receive);
 
     // Keep-alive is deliberately not touched: ConnectionTimeouts default-initializes

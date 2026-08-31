@@ -256,10 +256,9 @@ TEST(PocoSessionTimeoutTest, SendAndReceiveTimeoutsReachTheSession) {
 
 // A request with no timeout must not inherit the previous borrower's. Sessions are pooled per
 // endpoint rather than per client, and clients sharing an endpoint do not share a timeout: a
-// RENAME_FILE client carries object_storage_rename_file_request_timeout_ms (30 s by default)
-// while an ordinary read carries object_storage_request_timeout_ms (unset by default). Checking
-// out a session must therefore put it in the state this request asked for, not leave it in the
-// state the last one did.
+// RENAME_FILE client carries object_storage_rename_file_request_timeout_ms while an ordinary read
+// carries the runtime-mutable object_storage_request_timeout_ms. Checking out a session must
+// therefore put it in the state this request asked for, not leave it in the state the last one did.
 TEST(PocoSessionTimeoutTest, UnsetTimeoutDoesNotInheritThePreviousRequests) {
     Poco::Net::HTTPClientSession session("127.0.0.1", 1);
     const Poco::Timespan pristine = session.getReceiveTimeout();
@@ -275,6 +274,22 @@ TEST(PocoSessionTimeoutTest, UnsetTimeoutDoesNotInheritThePreviousRequests) {
 
     EXPECT_EQ(pristine.totalMicroseconds(), session.getReceiveTimeout().totalMicroseconds());
     EXPECT_EQ(pristine.totalMicroseconds(), session.getSendTimeout().totalMicroseconds());
+}
+
+// Zero explicitly disables the request timeout. It must not be confused with an unset (negative)
+// timeout and restored to Poco's default, especially after a pooled session carried a positive
+// timeout for its previous borrower.
+TEST(PocoSessionTimeoutTest, ZeroTimeoutDisablesThePreviousRequestsTimeout) {
+    Poco::Net::HTTPClientSession session("127.0.0.1", 1);
+    const Poco::Timespan thirty(30 * 1000000);
+    apply_request_timeouts(session, ConnectionTimeouts(Poco::Timespan(1 * 1000000), thirty, thirty));
+    ASSERT_EQ(thirty.totalMicroseconds(), session.getReceiveTimeout().totalMicroseconds());
+
+    const Poco::Timespan zero(0);
+    apply_request_timeouts(session, ConnectionTimeouts(Poco::Timespan(1 * 1000000), zero, zero));
+
+    EXPECT_EQ(0, session.getReceiveTimeout().totalMicroseconds());
+    EXPECT_EQ(0, session.getSendTimeout().totalMicroseconds());
 }
 
 // Keep-alive belongs to the pool, not to a single request: ConnectionTimeouts default-initializes
