@@ -1097,9 +1097,9 @@ Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t 
 // by lake formats such as Paimon, into a VariantColumn. Wired up directly by
 // build_arrow_column_convert_plan instead of the [arrow type, logical type] converter table
 // because the match is on the struct layout, not on the Arrow type id alone.
-Status variant_converter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                         size_t column_start_idx, uint8_t* null_data, [[maybe_unused]] Filter* chunk_filter,
-                         ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
+static Status variant_converter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                                size_t column_start_idx, uint8_t* null_data, [[maybe_unused]] Filter* chunk_filter,
+                                ArrowConvertContext* ctx, [[maybe_unused]] ConvertFuncTree* conv_func) {
     if (null_data == nullptr) {
         return Status::InvalidArgument(
                 fmt::format("The variant column ({}) must be nullable", current_column_name_or_null(ctx)));
