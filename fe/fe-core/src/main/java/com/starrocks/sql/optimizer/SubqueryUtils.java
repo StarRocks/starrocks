@@ -123,7 +123,7 @@ public class SubqueryUtils {
     /**
      * ApplyNode doesn't need to check the number of subquery's return rows
      * when the correlation predicate meets these requirements:
-     * 1. All predicate is Binary.EQ
+     * 1. All predicate is Binary.EQ or Binary.EQ_FOR_NULL
      */
     public static boolean checkAllIsBinaryEQ(List<ScalarOperator> correlationPredicate) {
         for (ScalarOperator predicate : correlationPredicate) {
@@ -132,7 +132,7 @@ public class SubqueryUtils {
             }
 
             BinaryPredicateOperator bpo = ((BinaryPredicateOperator) predicate);
-            if (!BinaryType.EQ.equals(bpo.getBinaryType())) {
+            if (!bpo.getBinaryType().isEquivalence()) {
                 return false;
             }
         }
@@ -149,7 +149,7 @@ public class SubqueryUtils {
         }
 
         BinaryPredicateOperator bpo = ((BinaryPredicateOperator) correlationPredicate);
-        if (!BinaryType.EQ.equals(bpo.getBinaryType())) {
+        if (!bpo.getBinaryType().isEquivalence()) {
             return false;
         }
 

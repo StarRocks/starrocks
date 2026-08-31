@@ -2063,6 +2063,7 @@ public class SubqueryTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< Updated upstream
     public void testOneRowCTE1() throws Exception {
         String sql = "WITH from_dt AS (SELECT '20250209' AS dt) "
                 + "SELECT * FROM t0 WHERE v1 > (SELECT dt FROM from_dt);";
@@ -2096,5 +2097,62 @@ public class SubqueryTest extends PlanTestBase {
                 + " left join t1 xx1 on x1.v5 = xx1.v5 and xx1.v6 = (select v8 from t2 where v9 = 1 order by v8 limit 1) ";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "ASSERT NUMBER OF ROWS");
+    }
+    
+    @Test
+    public void testNotExistSafeEqualsPushDown() throws Exception {
+        String sql = "select * from join1 where join1.dt > 1 " +
+                        "and NOT EXISTS (select * from join1 as a where a.id <=> join1.id);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN\n"
+                + "  |  join op: LEFT ANTI JOIN (BROADCAST)\n"
+                + "  |  colocate: false, reason: \n"
+                + "  |  equal join conjunct: 2: id <=> 5: id");
+    }
+
+    @Test
+    public void testExistSafeEqualsPushDown() throws Exception {
+        String sql = "select * from join1 where join1.dt > 1 " +
+                "and EXISTS (select * from join1 as a where a.id <=> join1.id);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN\n"
+                + "  |  join op: LEFT SEMI JOIN (BROADCAST)\n"
+                + "  |  colocate: false, reason: \n"
+                + "  |  equal join conjunct: 2: id <=> 5: id");
+    }
+
+    @Test
+    public void testInSafeEqualsPushDown() throws Exception {
+        String sql = "select * from join1 where join1.dt > 1 " +
+                "and join1.dt in (select a.dt from join1 as a where a.id <=> join1.id);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN\n"
+                + "  |  join op: LEFT SEMI JOIN (BROADCAST)\n"
+                + "  |  colocate: false, reason: \n"
+                + "  |  equal join conjunct: 1: dt = 4: dt\n"
+                + "  |  equal join conjunct: 2: id <=> 5: id");
+    }
+
+    @Test
+    public void testNotInSafeEqualsPushDown() throws Exception {
+        String sql = "select * from join1 where join1.dt > 1 " +
+                "and join1.dt not in (select a.dt from join1 as a where a.id <=> join1.id);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN\n"
+                + "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n"
+                + "  |  colocate: false, reason: \n"
+                + "  |  equal join conjunct: 1: dt = 4: dt\n"
+                + "  |  other join predicates: 5: id <=> 2: id");
+    }
+
+    @Test
+    public void testScalarSafeEqualsPushDown() throws Exception {
+        String sql = "select * from join1 where join1.dt > 1 " +
+                "and join1.dt = (select a.dt from join1 as a where a.id <=> join1.id);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "HASH JOIN\n"
+                + "  |  join op: LEFT OUTER JOIN (BROADCAST)\n"
+                + "  |  colocate: false, reason: \n"
+                + "  |  equal join conjunct: 2: id <=> 5: id");
     }
 }
