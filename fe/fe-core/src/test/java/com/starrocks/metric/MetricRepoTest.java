@@ -14,6 +14,7 @@
 
 package com.starrocks.metric;
 
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -23,10 +24,16 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TNetworkAddress;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -113,6 +120,103 @@ public class MetricRepoTest extends PlanTestBase {
         MetricVisitor coreVisitor = new SimpleCoreMetricVisitor("starrocks_fe");
         coreVisitor.visit(metric);
         Assertions.assertTrue(coreVisitor.build().contains("starrocks_fe_cluster_core_seconds"));
+    }
+
+    @Test
+    public void testSharedDataCompactionMetricsRefreshBeforeEachScrape() {
+        MetricRepo.init();
+        List<Metric> metrics = MetricRepo.getMetricsByName(
+                "lake_compaction_partition_max_consecutive_abnormal_count");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        Assertions.assertEquals(Metric.MetricType.GAUGE, metric.getType());
+        Assertions.assertEquals(Metric.MetricUnit.NOUNIT, metric.getUnit());
+        Assertions.assertEquals(
+                "Maximum number of consecutive abnormal compaction attempts "
+                        + "for any physical partition on the current FE leader.",
+                metric.getDescription());
+
+        CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
+        PartitionIdentifier abnormalPartition = new PartitionIdentifier(10, 20, 30);
+        PartitionIdentifier scorePartition = new PartitionIdentifier(10, 20, 31);
+        compactionMgr.clearPartitions();
+        MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0);
+        MetricRepo.GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT.setValue(0);
+        new MockUp<RunMode>() {
+            @Mock
+            public static boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        try {
+            compactionMgr.handleCompactionFinished(abnormalPartition, 1, System.currentTimeMillis(), null, 1L, true);
+            compactionMgr.handleCompactionFinished(abnormalPartition, 2, System.currentTimeMillis(), null, 2L, true);
+            compactionMgr.handleLoadingFinished(scorePartition, 1, System.currentTimeMillis(),
+                    Quantiles.compute(Lists.newArrayList(8d)));
+
+            String firstScrape = scrapeMetrics();
+            assertMetricSample(firstScrape, "max_tablet_compaction_score", 8);
+            assertMetricSample(firstScrape, "lake_compaction_partition_max_consecutive_abnormal_count", 2);
+
+            compactionMgr.handleCompactionFinished(abnormalPartition, 3, System.currentTimeMillis(), null, 3L, true);
+            compactionMgr.handleLoadingFinished(scorePartition, 2, System.currentTimeMillis(),
+                    Quantiles.compute(Lists.newArrayList(13d)));
+
+            String secondScrape = scrapeMetrics();
+            assertMetricSample(secondScrape, "max_tablet_compaction_score", 13);
+            assertMetricSample(secondScrape, "lake_compaction_partition_max_consecutive_abnormal_count", 3);
+        } finally {
+            compactionMgr.clearPartitions();
+            MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0);
+            MetricRepo.GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT.setValue(0);
+        }
+    }
+
+    @Test
+    public void testSharedNothingRefreshUpdatesOnlyBackendCompactionScore() {
+        MetricRepo.init();
+        StarRocksMetricRegistry registry = Deencapsulation.getField(MetricRepo.class, StarRocksMetricRegistry.class);
+        Metric<Long> backendScore = new LeaderAwareGaugeMetricLong(MetricRepo.TABLET_MAX_COMPACTION_SCORE,
+                Metric.MetricUnit.NOUNIT, "test backend compaction score") {
+            @Override
+            public Long getValueLeader() {
+                return 11L;
+            }
+        };
+        MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0);
+        MetricRepo.GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT.setValue(23);
+        new MockUp<RunMode>() {
+            @Mock
+            public static boolean isSharedDataMode() {
+                return false;
+            }
+        };
+        registry.addMetric(backendScore);
+        try {
+            String scrape = scrapeMetrics();
+            assertMetricSample(scrape, "max_tablet_compaction_score", 11);
+            Assertions.assertEquals(11L, MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.getValue());
+            Assertions.assertEquals(23L,
+                    MetricRepo.GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT.getValue());
+        } finally {
+            registry.removeMetric(backendScore);
+            MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0);
+            MetricRepo.GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT.setValue(0);
+        }
+    }
+
+    private static String scrapeMetrics() {
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricRepo.getMetric(visitor, new MetricsAction.RequestParams(true, true, true, true, true));
+        return visitor.build();
+    }
+
+    private static void assertMetricSample(String output, String metricName, long expectedValue) {
+        String expectedSuffix = " " + expectedValue;
+        Assertions.assertTrue(output.lines().anyMatch(line -> line.startsWith("_" + metricName + "{")
+                        && line.endsWith(expectedSuffix)),
+                () -> "missing " + metricName + "=" + expectedValue + " in:\n" + output);
     }
 
     @Test

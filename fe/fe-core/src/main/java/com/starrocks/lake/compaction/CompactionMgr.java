@@ -181,6 +181,11 @@ public class CompactionMgr implements MemoryTrackable {
             v.setCurrentVersion(compactionVersion);
             v.setCompactionVersion(compactionVersion);
             v.setCompactionScoreAndAdjustPunishFactor(compactionScore, isPartialSuccess);
+            if (isPartialSuccess) {
+                v.incrementConsecutiveAbnormalCount();
+            } else {
+                v.resetConsecutiveAbnormalCount();
+            }
             return v;
         });
         if (compactionScheduler != null) {
@@ -342,5 +347,26 @@ public class CompactionMgr implements MemoryTrackable {
     @Override
     public long estimateSize() {
         return Estimator.estimate(partitionStatisticsHashMap);
+    }
+
+    public record CompactionMetrics(double maxCompactionScore, long maxConsecutiveAbnormalCount) {
+    }
+
+    public CompactionMetrics collectCompactionMetrics() {
+        double maxCompactionScore = 0;
+        long maxConsecutiveAbnormalCount = 0;
+        boolean hasCompactionScore = false;
+        for (PartitionStatistics statistics : partitionStatisticsHashMap.values()) {
+            Quantiles compactionScoreQuantiles = statistics.getCompactionScore();
+            if (compactionScoreQuantiles != null) {
+                double compactionScore = compactionScoreQuantiles.getMax();
+                maxCompactionScore = hasCompactionScore
+                        ? Math.max(maxCompactionScore, compactionScore) : compactionScore;
+                hasCompactionScore = true;
+            }
+            maxConsecutiveAbnormalCount = Math.max(
+                    maxConsecutiveAbnormalCount, statistics.getConsecutiveAbnormalCount());
+        }
+        return new CompactionMetrics(maxCompactionScore, maxConsecutiveAbnormalCount);
     }
 }

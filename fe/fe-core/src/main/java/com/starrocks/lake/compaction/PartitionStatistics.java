@@ -36,6 +36,9 @@ public class PartitionStatistics {
     private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
     // not persist on purpose, used to control the interval of continuous partial success compaction
     private int punishFactor = 1;
+    // Runtime-only sequence of scheduler-tracked jobs reaching errorMsg != null or visible partial successes;
+    // visible full successes reset it. This state is not persisted.
+    private volatile int consecutiveAbnormalCount;
 
     public enum CompactionPriority {
         DEFAULT(0),
@@ -98,6 +101,20 @@ public class PartitionStatistics {
 
     public int getPunishFactor() {
         return punishFactor;
+    }
+
+    public int getConsecutiveAbnormalCount() {
+        return consecutiveAbnormalCount;
+    }
+
+    void incrementConsecutiveAbnormalCount() {
+        if (consecutiveAbnormalCount < Integer.MAX_VALUE) {
+            consecutiveAbnormalCount++;
+        }
+    }
+
+    void resetConsecutiveAbnormalCount() {
+        consecutiveAbnormalCount = 0;
     }
 
     private void adjustPunishFactor(Quantiles newCompactionScore, boolean isPartialSuccess) {

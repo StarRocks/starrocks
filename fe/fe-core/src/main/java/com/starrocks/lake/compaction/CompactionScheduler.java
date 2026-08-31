@@ -181,6 +181,9 @@ public class CompactionScheduler extends Daemon {
                 }
 
                 if (errorMsg != null) {
+                    if (statistics != null) {
+                        statistics.incrementConsecutiveAbnormalCount();
+                    }
                     iterator.remove();
                     job.finish();
                     history.offer(CompactionRecord.build(job, errorMsg));

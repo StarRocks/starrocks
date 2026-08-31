@@ -264,6 +264,19 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - 説明: 部分的に成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
 
+## `lake_compaction_partition_max_consecutive_abnormal_count`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: 現在の Leader 上にあるすべての Lake 物理パーティションについて、異常なコンパクションが連続した回数の最大値を示します。各パーティションでは、実行されたコンパクションが失敗または部分的に成功した場合にカウントが `1` 増え、完全に成功すると `0` にリセットされます。Follower は `0` を返します。この値は FE メモリにのみ保持されるため、FE の再起動や Leader のフェイルオーバーをまたいだ連続性は保証されません。
+- 推奨する単一クラスターのアラート:
+
+  ```promql
+  max(starrocks_fe_lake_compaction_partition_max_consecutive_abnormal_count) >= 3
+  ```
+
+  このアラートを `is_leader` でフィルタしないでください。集中管理された Prometheus では、たとえば `max by (cluster) (...)` のように、デプロイメントラベルを保持する必要があります。
+
 ## `lake_compaction_running`
 
 - 単位: 件数

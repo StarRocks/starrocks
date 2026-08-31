@@ -27,6 +27,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
@@ -48,6 +49,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -70,6 +73,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CompactionSchedulerTest {
     // Config.enable_metric_calculator is JVM-global; MetricRepo.init() schedules a fixed-rate timer
@@ -108,6 +113,123 @@ public class CompactionSchedulerTest {
     @Mocked
     private Warehouse warehouse;
 
+    private static class ResultTask extends CompactionTask {
+        private final TaskResult[] results;
+        private int nextResult;
+
+        ResultTask(TaskResult... results) {
+            super(1L);
+            this.results = results;
+        }
+
+        @Override
+        public TaskResult getResult() {
+            TaskResult result = results[Math.min(nextResult, results.length - 1)];
+            nextResult++;
+            return result;
+        }
+
+        @Override
+        public String getFailMessage() {
+            return "test task failed";
+        }
+
+        @Override
+        public boolean abort() {
+            return true;
+        }
+
+        @Override
+        public int tabletCount() {
+            return 1;
+        }
+
+        @Override
+        public List<com.starrocks.transaction.TabletCommitInfo> buildTabletCommitInfo() {
+            return Lists.newArrayList();
+        }
+    }
+
+    private static void seedAbnormalCount(CompactionMgr compactionManager, PartitionIdentifier partition,
+                                          int count) {
+        compactionManager.handleLoadingFinished(partition, 1L, System.currentTimeMillis(), null);
+        PartitionStatistics statistics = compactionManager.getStatistics(partition);
+        for (int i = 0; i < count; i++) {
+            statistics.incrementConsecutiveAbnormalCount();
+        }
+    }
+
+    private static CompactionJob newJob(long txnId, boolean allowPartialSuccess, ResultTask task) {
+        Database db = new Database(1L, "test_db");
+        LakeTable table = new LakeTable();
+        PhysicalPartition partition = new PhysicalPartition(3L, 3L, new MaterializedIndex());
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, allowPartialSuccess,
+                WarehouseManager.DEFAULT_RESOURCE, "test_wh", null);
+        job.setTasks(Lists.newArrayList(task));
+        return job;
+    }
+
+    private static void markVisible(CompactionJob job) {
+        VisibleStateWaiter waiter = Mockito.mock(VisibleStateWaiter.class);
+        Mockito.when(waiter.await(Mockito.anyLong(), Mockito.any())).thenReturn(true);
+        job.setVisibleStateWaiter(waiter);
+    }
+
+    private AtomicInteger mockCommitTransaction(CompactionJob job, VisibleStateWaiter waiter) {
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        LockManager lockManager = Mockito.mock(LockManager.class);
+        AtomicInteger commitCalls = new AtomicInteger();
+        TransactionState transactionState = new TransactionState(1L, Lists.newArrayList(2L),
+                job.getTxnId(), "COMPACTION_test", null,
+                TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                0L, 60_000L);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return localMetastore;
+            }
+
+            @Mock
+            public GlobalTransactionMgr getGlobalTransactionMgr() {
+                return globalTransactionMgr;
+            }
+
+            @Mock
+            public LockManager getLockManager() {
+                return lockManager;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return job.getDb();
+            }
+        };
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long txnId) {
+                return transactionState;
+            }
+
+            @Mock
+            public VisibleStateWaiter commitTransaction(long dbId, long txnId,
+                    List<com.starrocks.transaction.TabletCommitInfo> tabletCommitInfos,
+                    List<com.starrocks.transaction.TabletFailInfo> tabletFailInfos,
+                    TxnCommitAttachment attachment) {
+                commitCalls.incrementAndGet();
+                return waiter;
+            }
+        };
+        return commitCalls;
+    }
+
+    private static void scheduleNewCompaction(CompactionScheduler scheduler) throws Exception {
+        Method method = CompactionScheduler.class.getDeclaredMethod("scheduleNewCompaction");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+    }
+
     @Test
     public void testDisableCompaction() {
         Config.lake_compaction_disable_ids = "23456";
@@ -141,6 +263,7 @@ public class CompactionSchedulerTest {
         Quantiles q = new Quantiles(1.0, 2.0, 3.0);
         statistics.setCompactionScore(q);
         PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(statistics);
+        seedAbnormalCount(compactionManager, partition, 2);
         CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
                 globalStateMgr, "");
         new MockUp<GlobalStateMgr>() {
@@ -168,8 +291,10 @@ public class CompactionSchedulerTest {
         CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
         table.setState(OlapTable.OlapTableState.NORMAL);
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
+        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
     }
 
     @Test
@@ -182,6 +307,7 @@ public class CompactionSchedulerTest {
         PartitionStatistics statistics = new PartitionStatistics(partition);
         statistics.setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
         PartitionStatisticsSnapshot snapshot = new PartitionStatisticsSnapshot(statistics);
+        seedAbnormalCount(compactionManager, partition, 2);
         CompactionScheduler compactionScheduler = new CompactionScheduler(compactionManager, null, globalTransactionMgr,
                 globalStateMgr, "");
         new MockUp<GlobalStateMgr>() {
@@ -219,6 +345,7 @@ public class CompactionSchedulerTest {
         partitionAccessed[0] = false;
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
         Assertions.assertFalse(partitionAccessed[0], "range-distribution rollup compaction must be suppressed");
+        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
 
         // A hash-distribution rollup is a traditional (eager) rollup with no vlog dependency, so this guard must
         // NOT suppress it: execution proceeds past the guard to the partition lookup.
@@ -226,6 +353,8 @@ public class CompactionSchedulerTest {
         partitionAccessed[0] = false;
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
         Assertions.assertTrue(partitionAccessed[0], "hash-distribution rollup must not be suppressed by this guard");
+        Assertions.assertNull(compactionManager.getStatistics(partition),
+                "the existing missing-partition cleanup must still remove its statistics entry");
     }
 
     @Test
@@ -330,6 +459,205 @@ public class CompactionSchedulerTest {
     }
 
     @Test
+    public void testBeginTransactionExceptionDoesNotChangeAbnormalCount() {
+        LakeTable table = new LakeTable();
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+        PhysicalPartition physicalPartition = new PhysicalPartition(3L, 3L, new MaterializedIndex());
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 2);
+        compactionManager.getStatistics(partition).setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = compactionManager.getStatistics(partition).getSnapshot();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(1L, "test_db");
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                return physicalPartition;
+            }
+        };
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, systemInfoService, globalTransactionMgr, globalStateMgr, "") {
+            @Override
+            protected Map<Long, List<Long>> collectPartitionTablets(
+                    PhysicalPartition ignored, ComputeResource computeResource) {
+                Map<Long, List<Long>> tablets = new HashMap<>();
+                tablets.put(1L, Lists.newArrayList(10L));
+                return tablets;
+            }
+
+            @Override
+            protected long beginTransaction(PartitionIdentifier ignored, PhysicalPartition physical,
+                                            ComputeResource computeResource) throws com.starrocks.common.AnalysisException {
+                throw new com.starrocks.common.AnalysisException("begin failed");
+            }
+        };
+
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo(
+                "test_wh", WarehouseManager.DEFAULT_RESOURCE, 1, 0);
+        Assertions.assertNull(scheduler.startCompaction(snapshot, info));
+        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+    }
+
+    @Test
+    public void testTaskCreationExceptionAfterJobConstructionDoesNotChangeAbnormalCount() throws Exception {
+        LakeTable table = new LakeTable();
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+        PhysicalPartition physicalPartition = new PhysicalPartition(3L, 3L, new MaterializedIndex());
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 2);
+        compactionManager.getStatistics(partition).setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = compactionManager.getStatistics(partition).getSnapshot();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(1L, "test_db");
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                return physicalPartition;
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return null;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, systemInfoService, globalTransactionMgr, globalStateMgr, "") {
+            @Override
+            protected Map<Long, List<Long>> collectPartitionTablets(
+                    PhysicalPartition ignored, ComputeResource computeResource) {
+                Map<Long, List<Long>> tablets = new HashMap<>();
+                tablets.put(999L, Lists.newArrayList(10L));
+                return tablets;
+            }
+
+            @Override
+            protected long beginTransaction(PartitionIdentifier ignored, PhysicalPartition physical,
+                                            ComputeResource computeResource) {
+                return 109L;
+            }
+        };
+
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo(
+                "test_wh", WarehouseManager.DEFAULT_RESOURCE, 1, 0);
+        Assertions.assertNull(scheduler.startCompaction(snapshot, info));
+
+        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+        Assertions.assertEquals(1, scheduler.getHistory().size());
+    }
+
+    @Test
+    public void testDispatchRpcExceptionAfterJobConstructionDoesNotChangeAbnormalCount() throws Exception {
+        LakeTable table = new LakeTable();
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+        PhysicalPartition physicalPartition = new PhysicalPartition(3L, 3L, new MaterializedIndex());
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 2);
+        compactionManager.getStatistics(partition).setCompactionScore(new Quantiles(1.0, 2.0, 3.0));
+        PartitionStatisticsSnapshot snapshot = compactionManager.getStatistics(partition).getSnapshot();
+        ComputeNode node = new ComputeNode(999L, "127.0.0.1", 9050);
+        node.setBrpcPort(9050);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return new LocalMetastore(globalStateMgr, null, null);
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return new Database(1L, "test_db");
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return table;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
+                return physicalPartition;
+            }
+        };
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(999L);
+                result = node;
+                lakeService.compact((CompactRequest) any);
+                result = new RuntimeException("dispatch failed");
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, systemInfoService, globalTransactionMgr, globalStateMgr, "") {
+            @Override
+            protected Map<Long, List<Long>> collectPartitionTablets(
+                    PhysicalPartition ignored, ComputeResource computeResource) {
+                Map<Long, List<Long>> tablets = new HashMap<>();
+                tablets.put(999L, Lists.newArrayList(10L));
+                return tablets;
+            }
+
+            @Override
+            protected long beginTransaction(PartitionIdentifier ignored, PhysicalPartition physical,
+                                            ComputeResource computeResource) {
+                return 110L;
+            }
+        };
+
+        CompactionWarehouseInfo info = new CompactionWarehouseInfo(
+                "test_wh", WarehouseManager.DEFAULT_RESOURCE, 1, 0);
+        Assertions.assertNull(scheduler.startCompaction(snapshot, info));
+
+        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+        Assertions.assertEquals(1, scheduler.getHistory().size());
+    }
+
+    @Test
     public void testGetHistory() {
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
@@ -425,6 +753,8 @@ public class CompactionSchedulerTest {
                                                 Quantiles.compute(Lists.newArrayList(10d)));
         compactionManager.handleLoadingFinished(partition2, 10, System.currentTimeMillis(),
                                                 Quantiles.compute(Lists.newArrayList(10d)));
+        compactionManager.getStatistics(partition1).incrementConsecutiveAbnormalCount();
+        compactionManager.getStatistics(partition2).incrementConsecutiveAbnormalCount();
 
         ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
         ComputeNode c2 = new ComputeNode(10002L, "192.168.0.3", 9050);
@@ -469,6 +799,10 @@ public class CompactionSchedulerTest {
         };
         compactionScheduler.runOneCycle();
         Assertions.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+        Assertions.assertEquals(1,
+                compactionManager.getStatistics(partition1).getConsecutiveAbnormalCount());
+        Assertions.assertEquals(1,
+                compactionManager.getStatistics(partition2).getConsecutiveAbnormalCount());
 
         new MockUp<WarehouseManagerEPack>() {
             @Mock
@@ -1075,6 +1409,241 @@ public class CompactionSchedulerTest {
 
         Assertions.assertEquals(3L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING.getValueLeader());
         Assertions.assertEquals(6L, (long) MetricRepo.GAUGE_LAKE_COMPACTION_RUNNING_TASKS.getValueLeader());
+    }
+
+    @Test
+    public void testVisibleCleanupDoesNotResetCount() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 2);
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+
+        CompactionJob job = newJob(100L, false, new ResultTask(CompactionTask.TaskResult.ALL_SUCCESS));
+        Assertions.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, job.getResult());
+        markVisible(job);
+        scheduler.getRunningCompactions().put(partition, job);
+
+        scheduleNewCompaction(scheduler);
+
+        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+        Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+    }
+
+    @Test
+    public void testVisibleAllSuccessFromZeroKeepsCountAtZero() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 0);
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+
+        CompactionJob job = newJob(101L, false, new ResultTask(CompactionTask.TaskResult.ALL_SUCCESS));
+        Assertions.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, job.getResult());
+        markVisible(job);
+        scheduler.getRunningCompactions().put(partition, job);
+
+        scheduleNewCompaction(scheduler);
+
+        Assertions.assertEquals(0, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+    }
+
+    @Test
+    public void testAllowedPartialSuccessWaitsForVisibleTransition() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 0);
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+
+        CompactionJob job = newJob(102L, true, new ResultTask(CompactionTask.TaskResult.PARTIAL_SUCCESS));
+        VisibleStateWaiter waiter = Mockito.mock(VisibleStateWaiter.class);
+        Mockito.when(waiter.await(Mockito.anyLong(), Mockito.any())).thenReturn(false, true);
+        mockCommitTransaction(job, waiter);
+        scheduler.getRunningCompactions().put(partition, job);
+
+        boolean previousAllowPartialSuccess = Config.lake_compaction_allow_partial_success;
+        Config.lake_compaction_allow_partial_success = true;
+        try {
+            scheduleNewCompaction(scheduler);
+
+            Assertions.assertEquals(0, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+            Assertions.assertTrue(scheduler.getRunningCompactions().containsKey(partition));
+
+            scheduleNewCompaction(scheduler);
+            compactionManager.handleCompactionFinished(partition,
+                    2L, System.currentTimeMillis(), null, 102L, true);
+        } finally {
+            Config.lake_compaction_allow_partial_success = previousAllowPartialSuccess;
+        }
+
+        Assertions.assertEquals(1, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+        Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+    }
+
+    @Test
+    public void testTerminalTaskFailuresIncrementExactlyOnce() throws Exception {
+        for (CompactionTask.TaskResult result : Lists.newArrayList(
+                CompactionTask.TaskResult.PARTIAL_SUCCESS, CompactionTask.TaskResult.NONE_SUCCESS)) {
+            CompactionMgr compactionManager = new CompactionMgr();
+            PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+            seedAbnormalCount(compactionManager, partition, 0);
+            CompactionScheduler scheduler = new CompactionScheduler(
+                    compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+            long txnId = result == CompactionTask.TaskResult.PARTIAL_SUCCESS ? 105L : 104L;
+            CompactionJob job = newJob(txnId, false, new ResultTask(result));
+            scheduler.getRunningCompactions().put(partition, job);
+
+            scheduleNewCompaction(scheduler);
+
+            Assertions.assertEquals(1, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount(),
+                    "terminal result " + result + " must increment exactly once");
+            Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+        }
+    }
+
+    @Test
+    public void testCommitExceptionIncrementsCount() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 2);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public LocalMetastore getLocalMetastore() {
+                return localMetastore;
+            }
+        };
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(long dbId) {
+                return null;
+            }
+        };
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+        CompactionJob job = newJob(106L, false, new ResultTask(CompactionTask.TaskResult.ALL_SUCCESS));
+        scheduler.getRunningCompactions().put(partition, job);
+
+        scheduleNewCompaction(scheduler);
+
+        Assertions.assertEquals(3, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+        Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+    }
+
+    @Test
+    public void testCommitWithoutVisibleWaiterIncrementsCount() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 2);
+        CompactionJob job = newJob(120L, false, new ResultTask(CompactionTask.TaskResult.ALL_SUCCESS));
+        mockCommitTransaction(job, null);
+
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+        scheduler.getRunningCompactions().put(partition, job);
+
+        scheduleNewCompaction(scheduler);
+
+        Assertions.assertEquals(3, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+        Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+    }
+
+    @Test
+    public void testRepeatedNotFinishedPollsDoNotChangeCountButCancellationDoes() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        seedAbnormalCount(compactionManager, partition, 2);
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+        CompactionJob job = newJob(107L, false, new ResultTask(CompactionTask.TaskResult.NOT_FINISHED));
+        scheduler.getRunningCompactions().put(partition, job);
+
+        {
+            scheduleNewCompaction(scheduler);
+            scheduleNewCompaction(scheduler);
+            job.abort();
+            scheduleNewCompaction(scheduler);
+        }
+
+        Assertions.assertEquals(3, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+        Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+    }
+
+    @Test
+    public void testMissingStatisticsDoesNotRecreateEntry() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+        CompactionJob job = newJob(108L, false, new ResultTask(CompactionTask.TaskResult.NONE_SUCCESS));
+        scheduler.getRunningCompactions().put(partition, job);
+
+        scheduleNewCompaction(scheduler);
+
+        Assertions.assertNull(compactionManager.getStatistics(partition));
+        Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+        Assertions.assertEquals(1, scheduler.getHistory().size());
+    }
+
+    @Test
+    public void testVisibleAllSuccessWithMissingStatisticsDoesNotRecreateEntry() throws Exception {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+        CompactionScheduler scheduler = new CompactionScheduler(
+                compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+        CompactionJob job = newJob(121L, false, new ResultTask(CompactionTask.TaskResult.ALL_SUCCESS));
+        Assertions.assertEquals(CompactionTask.TaskResult.ALL_SUCCESS, job.getResult());
+        markVisible(job);
+        scheduler.getRunningCompactions().put(partition, job);
+
+        scheduleNewCompaction(scheduler);
+
+        Assertions.assertNull(compactionManager.getStatistics(partition));
+        Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+        Assertions.assertEquals(1, scheduler.getHistory().size());
+    }
+
+    @Test
+    public void testTerminalResultWinningCancellationRereadIsConsumedNormally() throws Exception {
+        for (CompactionTask.TaskResult terminalResult : Lists.newArrayList(
+                CompactionTask.TaskResult.ALL_SUCCESS,
+                CompactionTask.TaskResult.PARTIAL_SUCCESS,
+                CompactionTask.TaskResult.NONE_SUCCESS)) {
+            CompactionMgr compactionManager = new CompactionMgr();
+            PartitionIdentifier partition = new PartitionIdentifier(1L, 2L, 3L);
+            seedAbnormalCount(compactionManager, partition, 2);
+            CompactionScheduler scheduler = new CompactionScheduler(
+                    compactionManager, null, globalTransactionMgr, globalStateMgr, "");
+            ResultTask task = new ResultTask(
+                    CompactionTask.TaskResult.NOT_FINISHED, terminalResult, terminalResult);
+            CompactionJob job = newJob(110L + terminalResult.ordinal(), false, task);
+            job.abort();
+            scheduler.getRunningCompactions().put(partition, job);
+
+            scheduleNewCompaction(scheduler);
+            Assertions.assertTrue(scheduler.getRunningCompactions().containsKey(partition),
+                    "terminal re-read must win over cancellation for " + terminalResult);
+            Assertions.assertEquals(2,
+                    compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+            AtomicInteger commitCalls = null;
+            VisibleStateWaiter waiter = null;
+            if (terminalResult == CompactionTask.TaskResult.ALL_SUCCESS) {
+                waiter = Mockito.mock(VisibleStateWaiter.class);
+                Mockito.when(waiter.await(Mockito.anyLong(), Mockito.any())).thenReturn(true);
+                commitCalls = mockCommitTransaction(job, waiter);
+            }
+            scheduleNewCompaction(scheduler);
+
+            int expected = terminalResult == CompactionTask.TaskResult.ALL_SUCCESS ? 2 : 3;
+            Assertions.assertEquals(expected,
+                    compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
+            Assertions.assertFalse(scheduler.getRunningCompactions().containsKey(partition));
+            if (terminalResult == CompactionTask.TaskResult.ALL_SUCCESS) {
+                Assertions.assertEquals(1, commitCalls.get(), "ALL_SUCCESS must commit through the scheduler");
+                Mockito.verify(waiter).await(50L, TimeUnit.MILLISECONDS);
+            }
+        }
     }
 
     @Test

@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.Test;
 
@@ -67,5 +68,24 @@ public class PartitionStatisticsTest {
     public void testGetCompactionVersion() {
         PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
         assertEquals(0, statistics.getCompactionVersion().getVersion());
+    }
+
+    @Test
+    public void testConsecutiveAbnormalCount() {
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(100, 200, 300));
+
+        assertEquals(0, statistics.getConsecutiveAbnormalCount());
+        statistics.incrementConsecutiveAbnormalCount();
+        assertEquals(1, statistics.getConsecutiveAbnormalCount());
+        statistics.incrementConsecutiveAbnormalCount();
+        assertEquals(2, statistics.getConsecutiveAbnormalCount());
+        statistics.resetConsecutiveAbnormalCount();
+        assertEquals(0, statistics.getConsecutiveAbnormalCount());
+        statistics.incrementConsecutiveAbnormalCount();
+        assertEquals(1, statistics.getConsecutiveAbnormalCount());
+
+        Deencapsulation.setField(statistics, "consecutiveAbnormalCount", Integer.MAX_VALUE);
+        statistics.incrementConsecutiveAbnormalCount();
+        assertEquals(Integer.MAX_VALUE, statistics.getConsecutiveAbnormalCount());
     }
 }

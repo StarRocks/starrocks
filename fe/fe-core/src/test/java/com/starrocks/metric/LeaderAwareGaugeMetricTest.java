@@ -110,4 +110,40 @@ public class LeaderAwareGaugeMetricTest {
             Assertions.assertTrue(output.contains("_metricDouble{is_leader=\"false\"} -1.5"), output);
         }
     }
+
+    @Test
+    public void testSettableLeaderAwareGaugeReturnsStoredValueOnLeader(@Mocked GlobalStateMgr globalStateMgr) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = true;
+            }
+        };
+
+        SettableLeaderAwareGaugeMetricLong metric = new SettableLeaderAwareGaugeMetricLong(
+                "settableMetric", Metric.MetricUnit.NOUNIT, "settable metric");
+        metric.setValue(17L);
+
+        Assertions.assertEquals(17L, metric.getValue());
+    }
+
+    @Test
+    public void testSettableLeaderAwareGaugeReturnsZeroOnFollower(@Mocked GlobalStateMgr globalStateMgr) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = false;
+            }
+        };
+
+        SettableLeaderAwareGaugeMetricLong metric = new SettableLeaderAwareGaugeMetricLong(
+                "settableMetric", Metric.MetricUnit.NOUNIT, "settable metric");
+        metric.setValue(17L);
+
+        Assertions.assertEquals(0L, metric.getValue());
+    }
 }

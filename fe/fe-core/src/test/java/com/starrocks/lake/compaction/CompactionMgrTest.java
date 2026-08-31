@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -37,6 +38,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -44,6 +46,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 
 public class CompactionMgrTest {
     @Mocked
@@ -189,6 +194,164 @@ public class CompactionMgrTest {
         compactionMgr.removePartition(partition2);
         Assertions.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
     }
+
+    @Test
+    public void testVisiblePartialSuccessIncrementsCount() {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionMgr.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)));
+
+        compactionMgr.handleCompactionFinished(partition,
+                2, System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)), 100L, true);
+
+        Assertions.assertEquals(1, compactionMgr.getStatistics(partition).getConsecutiveAbnormalCount());
+    }
+
+    @Test
+    public void testVisibleFullSuccessResetsNonZeroCount() {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionMgr.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)));
+        compactionMgr.getStatistics(partition).incrementConsecutiveAbnormalCount();
+        compactionMgr.getStatistics(partition).incrementConsecutiveAbnormalCount();
+
+        compactionMgr.handleCompactionFinished(partition,
+                2, System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)), 101L, false);
+
+        Assertions.assertEquals(0, compactionMgr.getStatistics(partition).getConsecutiveAbnormalCount());
+    }
+
+    @Test
+    public void testVisibleFullSuccessKeepsZeroCount() {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionMgr.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)));
+
+        compactionMgr.handleCompactionFinished(partition,
+                2, System.currentTimeMillis(), Quantiles.compute(Lists.newArrayList(1d)), 102L, false);
+
+        Assertions.assertEquals(0, compactionMgr.getStatistics(partition).getConsecutiveAbnormalCount());
+    }
+
+    @Test
+    public void testVisibleFullSuccessCannotResetBeforeEarlierPartialCountIsApplied() throws Exception {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        BlockingCountPartitionStatistics statistics = new BlockingCountPartitionStatistics(partition);
+        FullComputeAttemptSignalingMap statisticsMap = new FullComputeAttemptSignalingMap("visible-full-success");
+        statisticsMap.put(partition, statistics);
+        Deencapsulation.setField(compactionMgr, "partitionStatisticsHashMap", statisticsMap);
+
+        Thread partial = new Thread(() -> compactionMgr.handleCompactionFinished(partition, 1, 1,
+                Quantiles.compute(Lists.newArrayList(1d)), 100L, true));
+        Thread full = new Thread(() -> compactionMgr.handleCompactionFinished(partition, 2, 2,
+                Quantiles.compute(Lists.newArrayList(1d)), 101L, false), "visible-full-success");
+
+        try {
+            partial.start();
+            Assertions.assertTrue(statistics.incrementEntered.await(5, TimeUnit.SECONDS));
+
+            full.start();
+            Assertions.assertTrue(statisticsMap.fullComputeAttempted.await(5, TimeUnit.SECONDS),
+                    "the full worker must attempt the statistics-map operation before reset is checked");
+            Assertions.assertFalse(statistics.resetEntered.await(200, TimeUnit.MILLISECONDS),
+                    "a visible full success must wait for the earlier partial count to be applied");
+        } finally {
+            statistics.releaseIncrement.countDown();
+            partial.join(5_000);
+            full.join(5_000);
+        }
+
+        Assertions.assertFalse(partial.isAlive());
+        Assertions.assertFalse(full.isAlive());
+        Assertions.assertEquals(0, compactionMgr.getStatistics(partition).getConsecutiveAbnormalCount());
+    }
+
+    @Test
+    public void testVisiblePartialSuccessCreatesMissingStatisticsThroughCompute() {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+
+        compactionMgr.handleCompactionFinished(partition, 2, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)), 103L, true);
+
+        Assertions.assertNotNull(compactionMgr.getStatistics(partition));
+        Assertions.assertEquals(1, compactionMgr.getStatistics(partition).getConsecutiveAbnormalCount());
+    }
+
+    @Test
+    public void testCollectCompactionMetricsReturnsBothMaximaAfterOneMapTraversal() {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier partition3 = new PartitionIdentifier(1, 2, 5);
+        Assertions.assertEquals(new CompactionMgr.CompactionMetrics(0, 0),
+                compactionMgr.collectCompactionMetrics());
+
+        compactionMgr.handleCompactionFinished(partition1, 1, System.currentTimeMillis(), null, 1L, true);
+        compactionMgr.handleLoadingFinished(partition2, 1, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(2d)));
+        compactionMgr.handleLoadingFinished(partition3, 1, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(9d)));
+        compactionMgr.getStatistics(partition2).incrementConsecutiveAbnormalCount();
+        compactionMgr.getStatistics(partition2).incrementConsecutiveAbnormalCount();
+        for (int i = 1; i < 5; i++) {
+            compactionMgr.getStatistics(partition1).incrementConsecutiveAbnormalCount();
+        }
+
+        CountingValuesMap statisticsMap = new CountingValuesMap();
+        statisticsMap.put(partition1, compactionMgr.getStatistics(partition1));
+        statisticsMap.put(partition2, compactionMgr.getStatistics(partition2));
+        statisticsMap.put(partition3, compactionMgr.getStatistics(partition3));
+        Deencapsulation.setField(compactionMgr, "partitionStatisticsHashMap", statisticsMap);
+
+        Assertions.assertEquals(new CompactionMgr.CompactionMetrics(9, 5),
+                compactionMgr.collectCompactionMetrics());
+        Assertions.assertEquals(1, statisticsMap.valuesCallCount);
+    }
+
+    @Test
+    public void testConsecutiveAbnormalCountIsNotPersisted() throws IOException, SRMetaBlockException,
+            SRMetaBlockEOFException {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionMgr.handleLoadingFinished(partition, 2, 1234L, Quantiles.compute(Lists.newArrayList(1d)));
+        compactionMgr.enableCompactionAfter(partition, 1000L);
+        compactionMgr.triggerManualCompaction(partition);
+        compactionMgr.getStatistics(partition).incrementConsecutiveAbnormalCount();
+        compactionMgr.getStatistics(partition).incrementConsecutiveAbnormalCount();
+        PartitionStatistics beforeSave = compactionMgr.getStatistics(partition);
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+                return true;
+            }
+        };
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        compactionMgr.save(image.getImageWriter());
+        CompactionMgr loadedMgr = new CompactionMgr();
+        loadedMgr.load(new SRMetaBlockReaderV2(image.getJsonReader()));
+        PartitionStatistics loaded = loadedMgr.getStatistics(partition);
+
+        Assertions.assertNotNull(loaded);
+        Assertions.assertEquals(beforeSave.getCurrentVersion().getVersion(), loaded.getCurrentVersion().getVersion());
+        Assertions.assertEquals(beforeSave.getCurrentVersion().getCreateTime(), loaded.getCurrentVersion().getCreateTime());
+        Assertions.assertEquals(beforeSave.getCompactionVersion().getVersion(), loaded.getCompactionVersion().getVersion());
+        Assertions.assertEquals(beforeSave.getCompactionVersion().getCreateTime(),
+                loaded.getCompactionVersion().getCreateTime());
+        Assertions.assertEquals(beforeSave.getNextCompactionTime(), loaded.getNextCompactionTime());
+        Assertions.assertEquals(beforeSave.getCompactionScore().getAvg(), loaded.getCompactionScore().getAvg());
+        Assertions.assertEquals(beforeSave.getCompactionScore().getP50(), loaded.getCompactionScore().getP50());
+        Assertions.assertEquals(beforeSave.getCompactionScore().getMax(), loaded.getCompactionScore().getMax());
+        Assertions.assertEquals(beforeSave.getPriority(), loaded.getPriority());
+        Assertions.assertEquals(0, loaded.getConsecutiveAbnormalCount());
+    }
+
 
     @Test
     public void testTriggerManualCompaction() {
@@ -358,5 +521,63 @@ public class CompactionMgrTest {
         // Unknown partitions are a no-op rather than an error: the scheduler may drop a request for a
         // partition the manager has already forgotten.
         compactionMgr.resetPriority(new PartitionIdentifier(9, 9, 9));
+    }
+
+    private static class BlockingCountPartitionStatistics extends PartitionStatistics {
+        private final CountDownLatch incrementEntered = new CountDownLatch(1);
+        private final CountDownLatch releaseIncrement = new CountDownLatch(1);
+        private final CountDownLatch resetEntered = new CountDownLatch(1);
+
+        BlockingCountPartitionStatistics(PartitionIdentifier partition) {
+            super(partition);
+        }
+
+        @Override
+        void incrementConsecutiveAbnormalCount() {
+            incrementEntered.countDown();
+            try {
+                releaseIncrement.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+            super.incrementConsecutiveAbnormalCount();
+        }
+
+        @Override
+        void resetConsecutiveAbnormalCount() {
+            resetEntered.countDown();
+            super.resetConsecutiveAbnormalCount();
+        }
+    }
+
+    private static class FullComputeAttemptSignalingMap
+            extends ConcurrentHashMap<PartitionIdentifier, PartitionStatistics> {
+        private final CountDownLatch fullComputeAttempted = new CountDownLatch(1);
+        private final String fullThreadName;
+
+        FullComputeAttemptSignalingMap(String fullThreadName) {
+            this.fullThreadName = fullThreadName;
+        }
+
+        @Override
+        public PartitionStatistics compute(PartitionIdentifier key,
+                                           BiFunction<? super PartitionIdentifier, ? super PartitionStatistics,
+                                                   ? extends PartitionStatistics> remappingFunction) {
+            if (Thread.currentThread().getName().equals(fullThreadName)) {
+                fullComputeAttempted.countDown();
+            }
+            return super.compute(key, remappingFunction);
+        }
+    }
+
+    private static class CountingValuesMap extends ConcurrentHashMap<PartitionIdentifier, PartitionStatistics> {
+        private int valuesCallCount;
+
+        @Override
+        public Collection<PartitionStatistics> values() {
+            valuesCallCount++;
+            return super.values();
+        }
     }
 }

@@ -67,6 +67,7 @@ import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.bookmark.BookmarkManager;
+import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
@@ -357,6 +358,8 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING_TASKS;
+    public static SettableLeaderAwareGaugeMetricLong
+            GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -499,7 +502,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
     public static LeaderAwareGaugeMetricLong GAUGE_MAX_JOURNAL_REPLAY_LAG;
-    public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
+    public static SettableLeaderAwareGaugeMetricLong GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
     public static GaugeMetric<Long> GAUGE_LICENSE_EXPIRE_DAYS;
     public static GaugeMetric<Long> GAUGE_CLUSTER_CORE_SECONDS;
@@ -814,25 +817,9 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_TIMEOUT_RATE);
 
         // max tablet compaction score of all backends
-        GAUGE_MAX_TABLET_COMPACTION_SCORE = new LeaderAwareGaugeMetricLong("max_tablet_compaction_score", MetricUnit.NOUNIT,
-                "max tablet compaction score of all backends") {
-            @Override
-            public Long getValueLeader() {
-                if (RunMode.isSharedDataMode()) {
-                    return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getMaxCompactionScore();
-                } else {
-                    long maxCompactionScore = 0;
-                    List<Metric> compactionScoreMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_MAX_COMPACTION_SCORE);
-                    for (Metric metric : compactionScoreMetrics) {
-                        long compactionScore = ((LeaderAwareGaugeMetric<Long>) metric).getValue();
-                        if (compactionScore > maxCompactionScore) {
-                            maxCompactionScore = compactionScore;
-                        }
-                    }
-                    return maxCompactionScore;
-                }
-            }
-        };
+        GAUGE_MAX_TABLET_COMPACTION_SCORE = new SettableLeaderAwareGaugeMetricLong(
+                "max_tablet_compaction_score", MetricUnit.NOUNIT,
+                "max tablet compaction score of all backends");
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_TABLET_COMPACTION_SCORE);
 
         GAUGE_STACKED_JOURNAL_NUM = new GaugeMetricImpl<>(
@@ -1090,6 +1077,14 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
+        GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT =
+                new SettableLeaderAwareGaugeMetricLong(
+                        "lake_compaction_partition_max_consecutive_abnormal_count",
+                        MetricUnit.NOUNIT,
+                        "Maximum number of consecutive abnormal compaction attempts "
+                                + "for any physical partition on the current FE leader.");
+        STARROCKS_METRIC_REGISTER.addMetric(
+                GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");
@@ -1710,6 +1705,7 @@ public final class MetricRepo {
 
         // update the metrics first
         updateMetrics();
+        updateCompactionMetrics();
 
         // jvm
         JvmStatCollector jvmStatCollector = new JvmStatCollector();
@@ -1801,6 +1797,32 @@ public final class MetricRepo {
     // update some metrics to make a ready to be visited
     private static void updateMetrics() {
         SYSTEM_METRICS.update();
+    }
+
+    private static void updateCompactionMetrics() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (!globalStateMgr.isLeader()) {
+            return;
+        }
+
+        if (RunMode.isSharedDataMode()) {
+            CompactionMgr.CompactionMetrics compactionMetrics =
+                    globalStateMgr.getCompactionMgr().collectCompactionMetrics();
+            GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue((long) compactionMetrics.maxCompactionScore());
+            GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT.setValue(
+                    compactionMetrics.maxConsecutiveAbnormalCount());
+            return;
+        }
+
+        long maxCompactionScore = 0;
+        List<Metric> compactionScoreMetrics = getMetricsByName(TABLET_MAX_COMPACTION_SCORE);
+        for (Metric metric : compactionScoreMetrics) {
+            long compactionScore = ((LeaderAwareGaugeMetric<Long>) metric).getValue();
+            if (compactionScore > maxCompactionScore) {
+                maxCompactionScore = compactionScore;
+            }
+        }
+        GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(maxCompactionScore);
     }
 
     // collect table-level metrics

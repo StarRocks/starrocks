@@ -264,6 +264,19 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：部分成功的存算分离（lake）压缩任务计数。
 
+## `lake_compaction_partition_max_consecutive_abnormal_count`
+
+- 单位：计数
+- 类型：Gauge
+- 描述：当前 Leader 上所有 Lake 物理分区中，连续异常 Compaction 次数的最大值。对于单个分区，正在运行的 Compaction 失败或仅部分成功时，计数加 `1`；完全成功后，计数重置为 `0`。Follower 返回 `0`。该值仅保存在 FE 内存中，因此无法保证其在 FE 重启或 Leader 故障切换前后的连续性。
+- 推荐的单集群告警：
+
+  ```promql
+  max(starrocks_fe_lake_compaction_partition_max_consecutive_abnormal_count) >= 3
+  ```
+
+  请勿按 `is_leader` 过滤此告警。集中式 Prometheus 必须保留部署标签，例如：`max by (cluster) (...)`。
+
 ## `lake_compaction_running`
 
 - 单位：计数

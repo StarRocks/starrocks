@@ -264,6 +264,19 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of partially successful lake compaction jobs.
 
+## `lake_compaction_partition_max_consecutive_abnormal_count`
+
+- Unit: Count
+- Type: Gauge
+- Description: Reports the highest number of consecutive abnormal compactions among all Lake physical partitions on the current Leader. For each partition, the count increases when a running compaction fails or partially succeeds, and resets to `0` after a fully successful compaction. Followers return `0`. The value is kept in FE memory, so continuity across FE restarts or Leader failovers is not guaranteed.
+- Recommended single-cluster alert:
+
+  ```promql
+  max(starrocks_fe_lake_compaction_partition_max_consecutive_abnormal_count) >= 3
+  ```
+
+  Do not filter this alert on `is_leader`. A centralized Prometheus must retain its deployment label, for example: `max by (cluster) (...)`.
+
 ## `lake_compaction_running`
 
 - Unit: Count
