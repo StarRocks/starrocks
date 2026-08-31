@@ -904,7 +904,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderDoesNotFilterWhenPredicateInStatRange) {
     EXPECT_FALSE(result.value()); // row group should NOT be filtered
 }
 
-TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
+TEST(VariantZoneMapTest, ZoneMapReaderDelegatesPredicatesWhenTypesMatch) {
     auto file_meta = make_minimal_file_meta();
     ASSERT_NE(file_meta, nullptr);
 
@@ -919,11 +919,11 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
     ObjectPool pool;
-    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
-    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(100))));
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(100))));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
@@ -940,7 +940,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
     EXPECT_FALSE(bloom_result.value());
 }
 
-TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
+TEST(VariantZoneMapTest, ZoneMapReaderDelegatesDecimalPredicatesWhenLayoutsMatch) {
     auto file_meta = make_minimal_file_meta();
     ASSERT_NE(file_meta, nullptr);
 
@@ -955,13 +955,13 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("price"));
     ASSERT_OK(path);
-    auto virtual_slot_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2);
+    auto virtual_slot_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
     VariantVirtualZoneMapReader zm_reader(vr, *path, virtual_slot_type);
 
     ObjectPool pool;
     TypeInfoPtr ti = get_type_info(virtual_slot_type);
     ASSERT_NE(ti, nullptr);
-    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(2000))));
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(2000))));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
@@ -972,6 +972,38 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
     ASSERT_OK(page_result);
     EXPECT_FALSE(page_result.value());
     EXPECT_TRUE(row_ranges.empty());
+}
+
+TEST(VariantZoneMapTest, ZoneMapReaderSkipsDecimalToBigintPredicateDelegation) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ParquetField root_field;
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_decimal_variant_reader(rg, opts, root_field, /*stats_on_leaf_chunk=*/true,
+                                                         /*leaf_value_all_null=*/true, /*include_leaf_value=*/true));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("price"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
+    auto* pred = pool.add(new_column_eq_predicate_from_datum(ti, 0, Datum(int64_t(10))));
+
+    const ColumnReader* leaf_reader = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    EXPECT_FALSE(zm_reader._prepare_delegate_predicates({pred}, &pool, 5, &leaf_reader, &rewritten_predicates));
+    EXPECT_NE(leaf_reader, nullptr);
+    EXPECT_TRUE(rewritten_predicates.empty());
+
+    auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(row_group_result);
+    EXPECT_FALSE(row_group_result.value());
 }
 
 TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
@@ -989,9 +1021,9 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
-    FailingConvertPredicate pred(get_type_info(LogicalType::TYPE_BIGINT));
+    FailingConvertPredicate pred(get_type_info(LogicalType::TYPE_INT));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({&pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
@@ -1022,11 +1054,11 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsWhenFallbackValueMayContainNonNullRow
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
     ObjectPool pool;
-    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_BIGINT);
-    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(100))));
+    TypeInfoPtr ti = get_type_info(LogicalType::TYPE_INT);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int32_t(100))));
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
