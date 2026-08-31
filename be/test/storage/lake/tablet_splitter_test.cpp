@@ -597,10 +597,7 @@ TEST(TabletSplitterTest, tablet_range_total_invariant_across_split_counts) {
 }
 
 // Helper unit tests for `allocate_proportionally` and `cap_and_redistribute_dels`
-// live in `tablet_reshard_helper_test.cpp` — those helpers were moved to the
-// `tablet_reshard_helper` namespace as part of the per-rowset anchor change so
-// they can be reused by the planned cross-publish (P2) refactor without
-// re-introducing a private split-only header.
+// live in `tablet_reshard_helper_test.cpp`.
 
 // Helpers below serve two test groups: colocate-aware data-driven splitter
 // tests (TabletSplitterTest.colocate_*) and external boundaries external-boundaries tests

@@ -594,106 +594,15 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
     return Status::OK();
 }
 
-RangeOverlap classify_rowset_range_overlap(const RowsetMetadataPB& rowset, const TabletRangePB& range_pb) {
-    if (rowset.segment_metas_size() == 0) {
-        return RangeOverlap::kUnknown;
-    }
-    TabletRange range;
-    if (!range.from_proto(range_pb).ok()) {
-        return RangeOverlap::kUnknown;
-    }
-    if (range.is_all()) {
-        // (-inf, +inf) contains every key.
-        return RangeOverlap::kYes;
-    }
-
-    VariantTuple envelope_min;
-    VariantTuple envelope_max;
-    for (const auto& segment_meta : rowset.segment_metas()) {
-        if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
-            return RangeOverlap::kUnknown;
-        }
-        VariantTuple segment_min;
-        VariantTuple segment_max;
-        if (!segment_min.from_proto(segment_meta.sort_key_min()).ok() ||
-            !segment_max.from_proto(segment_meta.sort_key_max()).ok()) {
-            return RangeOverlap::kUnknown;
-        }
-        if (segment_min.empty() || segment_max.empty()) {
-            return RangeOverlap::kUnknown;
-        }
-        if (envelope_min.empty() || segment_min.compare(envelope_min) < 0) {
-            envelope_min = segment_min;
-        }
-        if (envelope_max.empty() || segment_max.compare(envelope_max) > 0) {
-            envelope_max = segment_max;
-        }
-    }
-
-    // Only trust an exact arity match. VariantTuple::compare orders a shorter prefix-equal tuple
-    // BELOW its longer form, so comparing a bound written at one sort-key arity against a range at
-    // another can flip the boundary case -- e.g. envelope (100) vs lower bound (100, MIN) would
-    // read as "range entirely above the envelope" even though key 100 is exactly the range's first
-    // key. Degrading to kUnknown keeps that case on the legacy path instead of proving a false kNo.
-    const size_t range_arity =
-            !range.is_minimum() ? range.lower_bound().size() : (!range.is_maximum() ? range.upper_bound().size() : 0);
-    if (range_arity == 0 || envelope_min.size() != range_arity || envelope_max.size() != range_arity) {
-        return RangeOverlap::kUnknown;
-    }
-
-    // [envelope_min, envelope_max] is a superset of the rowset's keys, so "the range sits entirely
-    // outside the envelope" proves the sibling owns none of them.
-    if (range.less_than(envelope_min) || range.greater_than(envelope_max)) {
-        return RangeOverlap::kNo;
-    }
-    return RangeOverlap::kYes;
-}
-
-void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index,
-                              RangeOverlap overlap) {
+void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index) {
     if (split_count <= 1) return;
-
-    if (overlap == RangeOverlap::kNo) {
-        // Proven to own none of the rowset's keys, so drop its segments outright rather than hand
-        // this sibling data it can never read. Presence is decided by what the op carries, so this
-        // has to be an explicit removal -- zeroing the counters no longer takes the rowset with it.
-        //
-        // Only the segments go. A del file must still be replayed against this sibling's own index
-        // (that is why the splitter keeps a del-file-carrying rowset whatever its range says), and
-        // dels_meta/del_ssts live on the op_write, not here.
-        rowset->clear_segment_metas();
-        // The legacy arrays are dual-written for rollback, so they have to go with segment_metas or
-        // a pre-feature reader would still see the segments (lake_proto_normalizer back-fills from
-        // them).
-        rowset->clear_deprecated_segments();
-        rowset->clear_deprecated_segment_size();
-        rowset->clear_deprecated_segment_encryption_metas();
-        rowset->clear_deprecated_shared_segments();
-        rowset->clear_deprecated_bundle_file_offsets();
-        rowset->set_overlapped(false);
-        if (rowset->has_num_rows()) rowset->set_num_rows(0);
-        if (rowset->has_data_size()) rowset->set_data_size(0);
-        if (rowset->has_num_dels()) rowset->set_num_dels(0);
-        return;
-    }
-
-    // kYes / kUnknown: spread the source's counters over the siblings. These are statistics only --
-    // the appliers decide a rowset's presence from its segments, so a zero here costs accuracy in
-    // compaction scoring and `SHOW`, never data.
     auto apportion = [split_count, split_index](int64_t value) {
         return value / split_count + (split_index < value % split_count ? 1 : 0);
     };
-
-    if (rowset->has_num_rows()) {
-        rowset->set_num_rows(apportion(rowset->num_rows()));
-    }
-    if (rowset->has_data_size()) {
-        rowset->set_data_size(apportion(rowset->data_size()));
-    }
+    if (rowset->has_num_rows()) rowset->set_num_rows(apportion(rowset->num_rows()));
+    if (rowset->has_data_size()) rowset->set_data_size(apportion(rowset->data_size()));
     if (rowset->has_num_dels()) {
-        int64_t num_dels = rowset->num_dels();
-        int64_t scaled_num_dels = num_dels / split_count + (split_index < num_dels % split_count ? 1 : 0);
-        rowset->set_num_dels(std::min<int64_t>(scaled_num_dels, rowset->num_rows()));
+        rowset->set_num_dels(std::min<int64_t>(apportion(rowset->num_dels()), rowset->num_rows()));
     }
 }
 
@@ -808,39 +717,29 @@ std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log
     return output_paths;
 }
 
-void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index,
-                               const TabletRangePB* sibling_range) {
-    // Classify each rowset against the sibling's range; nullptr keeps the legacy apportionment.
-    auto overlap_of = [sibling_range](const RowsetMetadataPB& rowset) {
-        return sibling_range == nullptr ? RangeOverlap::kUnknown
-                                        : classify_rowset_range_overlap(rowset, *sibling_range);
-    };
+void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index) {
     if (txn_log->has_op_write() && txn_log->mutable_op_write()->has_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index,
-                                 overlap_of(txn_log->op_write().rowset()));
+        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index);
     }
     if (txn_log->has_op_compaction() && txn_log->mutable_op_compaction()->has_output_rowset()) {
-        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index,
-                                 overlap_of(txn_log->op_compaction().output_rowset()));
+        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index);
     }
     if (txn_log->has_op_schema_change()) {
         for (auto& rowset : *txn_log->mutable_op_schema_change()->mutable_rowsets()) {
-            update_rowset_data_stats(&rowset, split_count, split_index, overlap_of(rowset));
+            update_rowset_data_stats(&rowset, split_count, split_index);
         }
     }
     if (txn_log->has_op_replication()) {
         for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
             if (op_write.has_rowset()) {
-                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index,
-                                         overlap_of(op_write.rowset()));
+                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index);
             }
         }
     }
     if (txn_log->has_op_parallel_compaction()) {
         for (auto& subtask : *txn_log->mutable_op_parallel_compaction()->mutable_subtask_compactions()) {
             if (subtask.has_output_rowset()) {
-                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index,
-                                         overlap_of(subtask.output_rowset()));
+                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index);
             }
         }
     }

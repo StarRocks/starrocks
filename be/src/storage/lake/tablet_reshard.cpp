@@ -30,8 +30,12 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+<<<<<<< HEAD
 #include "storage/tablet_schema.h"
 #include "util/defer_op.h"
+=======
+#include "storage/storage_env.h"
+>>>>>>> d00d14d ([BugFix] Conserve range split cross-publish statistics (#78269))
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
@@ -421,22 +425,8 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
     }
     tablet_reshard_helper::set_all_data_files_shared(txn_log);
     RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
-    // Pass this sibling's range so the stat apportionment can tell a sibling that provably owns
-    // none of the rowset's keys (a true 0, so the siblings' stats sum to the source) from one that
-    // may own them (the plain share).
-    //
-    // The classifier compares a rowset's sort_key_min/sort_key_max envelope against the range, which
-    // is sound only while the sort key IS the range key. A primary-key tablet with a separate ORDER
-    // BY has the two at the same arity in different key spaces, and the classifier's arity check
-    // cannot tell them apart -- it would compare, say, a varchar envelope against a bigint bound and
-    // could prove kNo for a sibling that does own rows. Withhold the range there: every rowset then
-    // classifies kUnknown and keeps the plain apportionment.
-    const auto base_schema = TabletSchema::create(base_tablet_metadata->schema());
-    const bool envelope_shares_the_range_key =
-            !(base_schema->keys_type() == KeysType::PRIMARY_KEYS && base_schema->has_separate_sort_key());
-    tablet_reshard_helper::update_txn_log_data_stats(
-            txn_log, publish_tablet_info.get_split_count(), publish_tablet_info.get_split_index(),
-            envelope_shares_the_range_key ? &base_tablet_metadata->range() : nullptr);
+    tablet_reshard_helper::update_txn_log_data_stats(txn_log, publish_tablet_info.get_split_count(),
+                                                     publish_tablet_info.get_split_index());
     return Status::OK();
 }
 
