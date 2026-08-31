@@ -1070,8 +1070,8 @@ Release Date: June 13, 2025
 ### Data Lake Analytics
 
 - **[Beta]** Supports creating Iceberg views in the Iceberg Catalog with Hive Metastore integration. And supports adding or modifying the dialect of the Iceberg view using the ALTER VIEW statement for better syntax compatibility with external systems. [#56120](https://github.com/StarRocks/starrocks/pull/56120)
-- Supports nested namespace for [Iceberg REST Catalog](https://docs.starrocks.io/docs/data_source/catalog/iceberg/iceberg_catalog/#rest). [#58016](https://github.com/StarRocks/starrocks/pull/58016)
-- Supports using `IcebergAwsClientFactory` to create AWS clients in [Iceberg REST Catalog](https://docs.starrocks.io/docs/data_source/catalog/iceberg/iceberg_catalog/#rest) to offer vended credentials. [#58296](https://github.com/StarRocks/starrocks/pull/58296)
+- Supports nested namespace for Iceberg REST Catalog. [#58016](https://github.com/StarRocks/starrocks/pull/58016)
+- Supports using `IcebergAwsClientFactory` to create AWS clients in Iceberg REST Catalog to offer vended credentials. [#58296](https://github.com/StarRocks/starrocks/pull/58296)
 - Parquet Reader supports filtering data with Bloom Filter. [#56445](https://github.com/StarRocks/starrocks/pull/56445)
 - Supports automatically creating global dictionaries for low-cardinality columns in Parquet-formatted Hive/Iceberg tables during queries. [#55167](https://github.com/StarRocks/starrocks/pull/55167) 
 
