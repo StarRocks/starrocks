@@ -31,6 +31,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/crash_watchdog_test.cpp
         ./common/process_exit_test.cpp
+        ./common/prof/heap_prof_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
