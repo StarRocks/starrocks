@@ -436,17 +436,10 @@ bool ApplicationVersion::HasCorrectStatistics(const tparquet::ColumnMetaData& co
     return true;
 }
 
-<<<<<<< HEAD
-=======
 bool ApplicationVersion::HasCorrectNullCount() const {
     return HasFixedStatsVersion();
 }
 
-bool ApplicationVersion::IsAlwaysCompressed() const {
-    return VersionLt(PARQUET_CPP_10353_FIXED_VERSION());
-}
-
->>>>>>> f1f6893 ([BugFix] Stop trusting an under-reported parquet null_count (#78329))
 StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     // return from split_context directly
     if (_scanner_ctx->split_context != nullptr) {
