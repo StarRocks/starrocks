@@ -936,14 +936,14 @@ TEST_F(LikeTest, issue76417LikeMultiline) {
         columns.emplace_back(std::move(pattern));
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         auto result = LikePredicate::like(context, columns).value();
         ASSERT_TRUE(result->is_numeric());
         auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
         ASSERT_TRUE(v->immutable_data()[0]);
         ASSERT_FALSE(v->immutable_data()[1]);
 
-        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
     }
 
     // Test with ConstColumn
@@ -955,12 +955,12 @@ TEST_F(LikeTest, issue76417LikeMultiline) {
         columns.emplace_back(std::move(pattern));
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         auto result = LikePredicate::like(context, columns).value();
         ASSERT_TRUE(result->is_constant());
         ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
     }
 }
 
@@ -982,14 +982,14 @@ TEST_F(LikeTest, issue76417RegexpAlternation) {
         columns.emplace_back(std::move(pattern));
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         auto result = LikePredicate::regex(context, columns).value();
         ASSERT_TRUE(result->is_numeric());
         auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
         ASSERT_TRUE(v->immutable_data()[0]);
         ASSERT_FALSE(v->immutable_data()[1]);
 
-        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
     }
 
     // Test with ConstColumn
@@ -1001,12 +1001,12 @@ TEST_F(LikeTest, issue76417RegexpAlternation) {
         columns.emplace_back(std::move(pattern));
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         auto result = LikePredicate::regex(context, columns).value();
         ASSERT_TRUE(result->is_constant());
         ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
-        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
     }
 }
 } // namespace starrocks
