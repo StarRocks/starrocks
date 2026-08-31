@@ -10799,6 +10799,37 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_late_dcg_dec
     EXPECT_TRUE(status.message().contains("DCG shape")) << status;
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_dcg_message_unknown_fields_before_materialize) {
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(reverse_sources ? "unknown-field source first" : "canonical source first");
+        const std::string segment = fmt::format("dcg_unknown_field_{}.dat", next_id());
+        auto canonical = make_preflight_sidecar_source(next_id(), segment, /*shared_segment=*/true,
+                                                       /*common_rowset_uid=*/true);
+        auto with_unknown = make_preflight_sidecar_source(next_id(), segment, /*shared_segment=*/true,
+                                                          /*common_rowset_uid=*/true);
+        for (auto* source : {canonical.get(), with_unknown.get()}) {
+            add_dcg_with_columns(source, /*segment_id=*/1, "unknown_field.cols", {5}, /*version=*/1);
+        }
+        auto& unknown_dcg = with_unknown->mutable_dcg_meta()->mutable_dcgs()->at(1);
+        unknown_dcg.GetReflection()->MutableUnknownFields(&unknown_dcg)->AddVarint(1000, 1);
+
+        ASSERT_OK(put_tablet_metadata(canonical));
+        ASSERT_OK(put_tablet_metadata(with_unknown));
+        ASSIGN_OR_ABORT(auto persisted_canonical,
+                        _tablet_manager->get_tablet_metadata(canonical->id(), canonical->version()));
+        ASSIGN_OR_ABORT(auto persisted_with_unknown,
+                        _tablet_manager->get_tablet_metadata(with_unknown->id(), with_unknown->version()));
+        const auto& persisted_dcg = persisted_with_unknown->dcg_meta().dcgs().at(1);
+        ASSERT_EQ(1, persisted_dcg.GetReflection()->GetUnknownFields(persisted_dcg).field_count());
+
+        std::vector<TabletMetadataPtr> sources = {persisted_canonical, persisted_with_unknown};
+        if (reverse_sources) std::swap(sources[0], sources[1]);
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains("DCG message has unknown fields")) << status;
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_sst_invalid_form_or_range_before_io) {
     struct InvalidDeclaration {
         const char* name;

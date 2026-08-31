@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_merger.h"
 
 #include <bvar/bvar.h>
+#include <google/protobuf/unknown_field_set.h>
 
 #include <algorithm>
 #include <limits>
@@ -897,6 +898,9 @@ Status materialize_planned_rowsets(const TabletMergeAllocationPlan& plan, Tablet
 }
 
 Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
+    if (dcg.GetReflection()->GetUnknownFields(dcg).field_count() != 0) {
+        return Status::Corruption("DCG message has unknown fields that cannot be attributed to an entry");
+    }
     // Required fields must be equal length
     if (dcg.unique_column_ids_size() != dcg.column_files_size() || dcg.versions_size() != dcg.column_files_size()) {
         return Status::Corruption("DCG shape invalid: column_files/unique_column_ids/versions size mismatch");
