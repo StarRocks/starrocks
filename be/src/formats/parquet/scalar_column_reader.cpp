@@ -214,8 +214,13 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
     bool is_all_null = false;
 
     if (get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
-        has_null = get_chunk_metadata()->meta_data.statistics.null_count > 0;
-        is_all_null = get_chunk_metadata()->meta_data.statistics.null_count == rg_num_rows;
+        if (StatisticsHelper::has_correct_null_count(_opts.file_meta_data)) {
+            has_null = get_chunk_metadata()->meta_data.statistics.null_count > 0;
+            is_all_null = get_chunk_metadata()->meta_data.statistics.null_count == rg_num_rows;
+        }
+        // Otherwise keep the conservative has_null = true / is_all_null = false: an
+        // under-reported `null_count` would otherwise prune away the very rows `IS NULL` asks
+        // for, and unlike a decode failure that loss is silent. min/max pruning still applies.
     } else {
         return filtered;
     }
@@ -309,14 +314,17 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     DCHECK_EQ(page_num, max_column->size());
 
     // fill ZoneMapDetail
+    const bool null_counts_trusted = StatisticsHelper::has_correct_null_count(_opts.file_meta_data);
     std::vector<ZoneMapDetail> zone_map_details{};
     for (size_t i = 0; i < page_num; i++) {
         if (null_pages[i]) {
             // all null
             zone_map_details.emplace_back(Datum{}, Datum{}, true);
         } else {
-            // null_counts is optional in parquet - if unavailable, conservatively assume nulls exist
-            bool has_null = i >= column_index.null_counts.size() || column_index.null_counts[i] > 0;
+            // null_counts is optional in parquet - if unavailable, conservatively assume nulls
+            // exist. Same when the writer is one whose statistics we do not trust.
+            bool has_null =
+                    !null_counts_trusted || i >= column_index.null_counts.size() || column_index.null_counts[i] > 0;
             zone_map_details.emplace_back(min_column->get(i), max_column->get(i), has_null);
         }
     }
@@ -368,7 +376,8 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
                 _opts.file->read_at_fully(offset + header_len, bloom_filter_data.data() + header_len, header.numBytes));
     }
     if (get_chunk_metadata()->meta_data.__isset.statistics &&
-        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
+        get_chunk_metadata()->meta_data.statistics.__isset.null_count &&
+        StatisticsHelper::has_correct_null_count(_opts.file_meta_data)) {
         if (get_chunk_metadata()->meta_data.statistics.null_count > 0) {
             bloom_filter_data.back() = 1;
         } else {
