@@ -1038,9 +1038,11 @@ vectorized_functions = [
     [120005, "ST_AsWKT", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_as_wkt"],
     [120006, "ST_GeometryFromText", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_from_wkt",
      "GeoFunctions::st_from_wkt_prepare", "GeoFunctions::st_from_wkt_close"],
-    # Native OGC WKB-backed GEOMETRY. Keep ST_GeometryFromText above as the
-    # legacy VARCHAR constructor while the public compatibility path is reviewed.
-    [120007, "ST_GeomFromText", False, False, "GEOMETRY", ["VARCHAR"], "GeoFunctions::st_geom_from_text"],
+    # Keep the legacy function ID available to old FEs during rolling upgrades,
+    # but hide its internal name from the generated FE function registry. Upgrade
+    # BEs before FEs; for rollback, restore the old FE before downgrading BEs.
+    [120007, "st_geom_from_text_legacy", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_from_wkt",
+     "GeoFunctions::st_from_wkt_prepare", "GeoFunctions::st_from_wkt_close"],
     [120008, "ST_LineFromText", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_line",
      "GeoFunctions::st_line_prepare", "GeoFunctions::st_from_wkt_close"],
     [120009, "ST_LineStringFromText", False, False, "VARCHAR", ["VARCHAR"], "GeoFunctions::st_line",
@@ -1061,6 +1063,7 @@ vectorized_functions = [
     [120018, "ST_AsWKT", False, False, "VARCHAR", ["GEOMETRY"], "GeoFunctions::st_geometry_as_text"],
     [120019, "ST_AsBinary", False, False, "VARBINARY", ["GEOMETRY"], "GeoFunctions::st_geometry_as_wkb"],
     [120020, "ST_AsWKB", False, False, "VARBINARY", ["GEOMETRY"], "GeoFunctions::st_geometry_as_wkb"],
+    [120021, "ST_GeomFromText", False, False, "GEOMETRY", ["VARCHAR"], "GeoFunctions::st_geom_from_text"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],

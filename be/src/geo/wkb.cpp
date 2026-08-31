@@ -494,6 +494,10 @@ private:
             output->empty = true;
             return Status::OK();
         }
+        constexpr size_t kMinimumChildWkbSize = sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);
+        if (count > (_size - _position) / kMinimumChildWkbSize) {
+            return invalid_wkb("geometry count exceeds input size");
+        }
         output->children.reserve(count);
         for (uint32_t i = 0; i < count; ++i) {
             WkbGeometry child;

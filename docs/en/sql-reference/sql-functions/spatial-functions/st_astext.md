@@ -14,6 +14,8 @@ Converts a native `GEOMETRY` value or a legacy geography value to Well-Known Tex
 ```Haskell
 VARCHAR ST_AsText(GEOMETRY geo)
 VARCHAR ST_AsWKT(GEOMETRY geo)
+VARCHAR ST_AsText(VARCHAR legacy_geo)
+VARCHAR ST_AsWKT(VARCHAR legacy_geo)
 ```
 
 ## Examples

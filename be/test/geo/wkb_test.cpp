@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -163,6 +164,7 @@ TEST(WkbCodecTest, RejectsMalformedWkb) {
             from_hex("0101000000000000000000f03f"),                   // truncated POINT
             from_hex("0101000020"),                                   // EWKB SRID flag
             from_hex("010200000041420f00"),                           // element count exceeds safety limit
+            from_hex("010700000040420f00"),                           // collection count exceeds input size
             from_hex("010400000001000000010200000000000000"),         // MULTIPOINT containing LINESTRING EMPTY
             from_hex("0101000000000000000000f03f000000000000004000"), // trailing byte
     };
@@ -185,6 +187,31 @@ TEST(WkbCodecTest, RejectsExcessiveCollectionNesting) {
 
     WkbGeometry geometry;
     EXPECT_FALSE(WkbCodec::parse_wkt(input, &geometry).ok());
+}
+
+TEST(WkbCodecTest, DeterministicMalformedInputFuzz) {
+    std::mt19937_64 random(20260831);
+    for (size_t iteration = 0; iteration < 5000; ++iteration) {
+        std::string input(random() % 128, '\0');
+        for (char& byte : input) {
+            byte = static_cast<char>(random());
+        }
+
+        WkbGeometry geometry;
+        if (!WkbCodec::parse_wkb(Slice(input), &geometry).ok()) {
+            continue;
+        }
+
+        std::string canonical_wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(geometry, &canonical_wkb).ok());
+        WkbGeometry reparsed;
+        ASSERT_TRUE(WkbCodec::parse_wkb(Slice(canonical_wkb), &reparsed).ok());
+        std::string original_wkt;
+        std::string reparsed_wkt;
+        ASSERT_TRUE(WkbCodec::to_wkt(geometry, &original_wkt).ok());
+        ASSERT_TRUE(WkbCodec::to_wkt(reparsed, &reparsed_wkt).ok());
+        EXPECT_EQ(original_wkt, reparsed_wkt);
+    }
 }
 
 } // namespace
