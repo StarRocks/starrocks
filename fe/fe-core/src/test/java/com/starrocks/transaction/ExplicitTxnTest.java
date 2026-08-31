@@ -21,6 +21,7 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -33,9 +34,11 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.QueryWarning;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -75,6 +78,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.Mockito.mock;
@@ -918,6 +922,61 @@ public class ExplicitTxnTest {
         Assertions.assertEquals(runningBeforeCleanup - 1, GlobalStateMgr.getCurrentState()
                 .getGlobalTransactionMgr().getRunningTxnNums(),
                 "cleanup() must roll back the explicit transaction so runningTxnNums decreases");
+    }
+
+    @Test
+    public void testCleanupForwardsRollbackToLeaderOnFollower() throws Exception {
+        // A follower has no local ExplicitTxnState for a transaction started via forwarded
+        // BEGIN (the state lives only on the leader), so cleanup() must forward a ROLLBACK to
+        // the leader. The forwarded request must carry a seeded query id: cleanup() runs after
+        // finalizeCommand() has cleared ctx.getQueryId(), and LeaderOpExecutor's request builder
+        // NPEs on a null query id — which cleanup() would silently swallow, leaving the leader's
+        // PREPARE transaction to block a later graceful-exit drain.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        // LeaderOpExecutor's constructor resolves the leader RPC endpoint; in this unit-test
+        // environment the cluster is not ready, so stub a synthetic endpoint to let it construct.
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Pair<String, Integer> getLeaderIpAndRpcPort() {
+                return new Pair<>("127.0.0.1", 9020);
+            }
+        };
+
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        // Simulate a connection whose explicit transaction lives only on the leader: txnId is set,
+        // but the local explicitTxnStateMap has no entry for it.
+        context.setTxnId(424242L);
+        // finalizeCommand() has already cleared the query id before cleanup() runs.
+        context.setQueryId(null);
+        Assertions.assertTrue(context.inActiveExplicitTransaction(),
+                "an explicit transaction id is active before cleanup()");
+
+        AtomicBoolean forwarded = new AtomicBoolean(false);
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                forwarded.set(true);
+                Assertions.assertNotNull(context.getQueryId(),
+                        "the forwarded rollback must carry a seeded query id, not NPE in the request builder");
+            }
+        };
+
+        context.cleanup();
+
+        Assertions.assertTrue(forwarded.get(), "follower cleanup must forward the rollback to the leader");
+        Assertions.assertEquals(0, context.getTxnId());
+        Assertions.assertFalse(context.inActiveExplicitTransaction(),
+                "no explicit transaction is active after cleanup()");
+        Assertions.assertNull(context.getQueryId(),
+                "the seeded query id must be cleared after forwarding, keeping the finalizeCommand() "
+                        + "contract that no active statement is pending");
     }
 
     @Test

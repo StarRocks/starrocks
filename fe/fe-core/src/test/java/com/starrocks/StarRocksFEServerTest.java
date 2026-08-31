@@ -210,6 +210,41 @@ public class StarRocksFEServerTest {
 
     @Test
     @Timeout(10)
+    public void testWaitForDrainingLogsRunningTxnDrain(
+            @Mocked ExecuteEnv executeEnv,
+            @Mocked ConnectScheduler connectScheduler,
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr,
+            @Mocked GracefulExitFlag gracefulExitFlag) throws Exception {
+        // Leader with running transactions but no connections: the drain loop must hit the
+        // "waiting for N running transactions to drain" log branch before the txn count drops.
+        new Expectations() {
+            {
+                ExecuteEnv.getInstance();
+                result = executeEnv;
+                executeEnv.getScheduler();
+                result = connectScheduler;
+                connectScheduler.getTotalConnCount();
+                result = 0;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = true;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getRunningTxnNums();
+                result = 3;
+                result = 0;
+                GracefulExitFlag.shouldAcceptNewRequest();
+                result = false;
+            }
+        };
+
+        Deencapsulation.invoke(StarRocksFEServer.class, "waitForDraining");
+    }
+
+    @Test
+    @Timeout(10)
     public void testWaitForDrainingLogsDrainedBeforeMinWindowElapses(
             @Mocked ExecuteEnv executeEnv,
             @Mocked ConnectScheduler connectScheduler,

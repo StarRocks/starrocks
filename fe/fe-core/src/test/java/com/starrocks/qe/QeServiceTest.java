@@ -49,4 +49,18 @@ public class QeServiceTest {
         QeService qeService = new QeService(0, connectScheduler);
         Assertions.assertFalse(qeService.tryStart());
     }
+    @Test
+    public void testStopAcceptClosesTheMysqlServer(@Mocked MysqlServer mysqlServer,
+                                                   @Mocked ConnectScheduler connectScheduler) throws Exception {
+        // During graceful exit, waitForDraining() calls stopAccept() so the MySQL listen socket
+        // closes and an L4 Load Balancer stops routing new connections.
+        new Expectations() {
+            {
+                mysqlServer.stop();
+            }
+        };
+
+        QeService qeService = new QeService(0, connectScheduler);
+        qeService.stopAccept();
+    }
 }

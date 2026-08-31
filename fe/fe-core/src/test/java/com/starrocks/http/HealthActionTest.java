@@ -71,6 +71,7 @@ public class HealthActionTest extends HttpServerTestUtils {
             throws Exception {
         // While graceful exit is in progress, a health probe must be answered with 500 so the
         // upstream Load Balancer stops routing new connections (and logs a probe sample).
+        resetGracefulCounters();
         new Expectations() {
             {
                 GracefulExitFlag.isGracefulExit();
@@ -90,6 +91,10 @@ public class HealthActionTest extends HttpServerTestUtils {
         when(request.getContext()).thenReturn(context);
 
         HealthAction action = new HealthAction(new ActionController());
+        // First probe: seeds the log timestamp via CAS and logs. Second probe: first != 0, so the
+        // sampling branch (last != 0 && now - last >= interval) is evaluated; now-last < 60s makes
+        // it false, so it must NOT log again, but the sampling condition line is still exercised.
+        Deencapsulation.invoke(action, "executeWithoutPassword", request, new BaseResponse());
         Deencapsulation.invoke(action, "executeWithoutPassword", request, new BaseResponse());
     }
 

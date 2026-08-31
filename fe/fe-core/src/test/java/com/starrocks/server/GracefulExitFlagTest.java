@@ -103,6 +103,24 @@ public class GracefulExitFlagTest {
         beginNano().set(System.nanoTime() - windowNanos - 1L);
         Assertions.assertFalse(GracefulExitFlag.shouldAcceptNewRequest());
     }
+    @Test
+    public void testShouldAcceptNewRequestWhenMarkedButBeginNanoZero() throws Exception {
+        // GRACEFUL_EXIT is set but BEGIN_NANO is still 0 (a marker set without a begin timestamp,
+        // e.g. restored state): the accept-new window is treated as not yet started, so the request
+        // is accepted.
+        gracefulExitFlag().set(true);
+        beginNano().set(0L);
+        Assertions.assertTrue(GracefulExitFlag.shouldAcceptNewRequest());
+    }
+
+    @Test
+    public void testDrainWindowNotElapsedWhenMarkedButBeginNanoZero() throws Exception {
+        // Same marker-without-timestamp state: the drain window cannot be considered elapsed when
+        // there is no begin timestamp to measure from.
+        gracefulExitFlag().set(true);
+        beginNano().set(0L);
+        Assertions.assertFalse(GracefulExitFlag.isDrainWindowElapsed());
+    }
 
     @Test
     public void testDrainWindowNotElapsedBeforeGracefulExit() {

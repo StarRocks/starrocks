@@ -1016,9 +1016,20 @@ public class ConnectContext {
     }
 
     private void forwardRollbackToLeader() throws Exception {
-        LeaderOpExecutor executor = new LeaderOpExecutor(
-                new OriginStatement("ROLLBACK", 0), this, RedirectStatus.FORWARD_WITH_SYNC);
-        executor.execute();
+        // This is invoked from cleanup(), after finalizeCommand() has already cleared the query id,
+        // but LeaderOpExecutor's request builder unconditionally converts ctx.getQueryId() to a
+        // TUniqueId. Seed one so the rollback RPC is actually built and forwarded; otherwise the
+        // NPE is silently swallowed by cleanup() and the leader's PREPARE transaction is left to
+        // time out, blocking a later graceful-exit drain. Restore the null query id afterwards to
+        // keep the finalizeCommand() contract (no active statement) intact.
+        setQueryId(UUIDUtil.genUUID());
+        try {
+            LeaderOpExecutor executor = new LeaderOpExecutor(
+                    new OriginStatement("ROLLBACK", 0), this, RedirectStatus.FORWARD_WITH_SYNC);
+            executor.execute();
+        } finally {
+            setQueryId(null);
+        }
     }
 
     public boolean isKilled() {
