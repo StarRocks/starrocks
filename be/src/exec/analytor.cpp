@@ -302,11 +302,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
-                // `lag ... IGNORE NULLS` only looks backward, so it can run in streaming mode instead of
-                // materializing the whole partition.
-                // `lead ... IGNORE NULLS` and `first_value`/`last_value` IGNORE NULLS still require the full materialized data.
-                const bool is_lag_ignore_nulls = (fname == "lag");
-                if (!(is_lag_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
+                // `lag`/`lead ... IGNORE NULLS` can stream: lag only looks backward; lead waits for
+                // enough future non-nulls (see `is_window_result_ready`) then evicts finished prefixes.
+                // `first_value`/`last_value` IGNORE NULLS still materialize the whole partition.
+                const bool is_streamable_ignore_nulls = (fname == "lag" || fname == "lead");
+                if (!(is_streamable_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
                     _need_partition_materializing = true;
                 }
             }
@@ -1096,6 +1096,14 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
                 return Status::OK();
             }
 
+            // Data-dependent wait (e.g. `lead ... IGNORE NULLS`): the physical N FOLLOWING frame may
+            // already be buffered, but a function can still need more non-nulls ahead. Check every
+            // function before mutating any state; if one is not ready, leave `_current_row_position`
+            // unchanged so the next chunk resumes this row.
+            if (!_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end)) {
+                return Status::OK();
+            }
+
             // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
             // extra update is needed for the first row.
             if (is_n_following_frame && _current_row_position == _partition.start) {
@@ -1389,6 +1397,24 @@ void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* stat
         _get_window_function_result(start, end);
         _update_current_row_position(end - start);
     }
+}
+
+bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                         int64_t frame_end) const {
+    for (size_t i = 0; i < _agg_functions.size(); i++) {
+        auto current_frame_start = frame_start;
+        auto current_frame_end = frame_end;
+        if (!_is_lead_lag_functions[i]) {
+            current_frame_start = std::max<int64_t>(current_frame_start, _partition.start);
+            current_frame_end = std::min<int64_t>(current_frame_end, _partition.end);
+        }
+        if (!_agg_functions[i]->is_window_result_ready(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i], _agg_intput_columns[i],
+                    partition_start, available_end, current_frame_start, current_frame_end, _partition.is_real)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,

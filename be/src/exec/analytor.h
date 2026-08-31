@@ -226,6 +226,8 @@ private:
     // buffered partition [partition_start, partition_end). Positions are local to the analytor's buffered columns.
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
     void _update_window_batch_removable_cumulatively();
+    bool _are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                   int64_t frame_end) const;
 
     Status _output_result_chunk(ChunkPtr* chunk);
 
