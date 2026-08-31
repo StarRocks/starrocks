@@ -919,6 +919,8 @@ public class ExplicitTxnTest {
                 .getGlobalTransactionMgr().getRunningTxnNums(),
                 "cleanup() must roll back the explicit transaction so runningTxnNums decreases");
     }
+
+    @Test
     public void testAbortTimeoutTxnsCleanupExplicitTxnState() {
         // Test that abortTimeoutTxns() cleans up timed-out explicit transaction states
         ConnectContext context = new ConnectContext();

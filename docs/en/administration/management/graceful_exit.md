@@ -58,7 +58,7 @@ Upon receiving the signal:
 
 #### Timeout Control
 
-If a query runs for too long, FE forcibly exits after **60 seconds** (configurable via the `--timeout` option).
+If a query runs for too long, FE forcibly exits after **120 seconds** (configurable via the `--timeout` option).
 
 ### BE/CN Graceful Exit Mechanism
 
@@ -101,7 +101,7 @@ From v3.4 onwards, FE no longer marks BE/CN as `DEAD` based on heartbeat failure
 #### `stop_fe.sh -g --timeout`
 
 - Description: Maximum waiting time before FE is force-killed.
-- Default: 60 (seconds)
+- Default: 120 (seconds)
 - How to apply: Specify it in the script command. It must exceed the full graceful-exit duration: the accept-new window (`graceful_exit_accept_new_window_ms`) plus the post-window minimum (`min_graceful_exit_time_second`), e.g. `--timeout 120` for the default 60000 ms + 15 s. A smaller value force-kills the FE before the drain completes.
 
 #### *Minimum LB detection time*

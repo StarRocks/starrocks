@@ -58,7 +58,7 @@ stop_fe.sh -g
 
 #### 超时控制
 
-如果查询运行时间过长，FE 在 **60 秒** 后强制退出（可通过 `--timeout` 选项配置）。
+如果查询运行时间过长，FE 在 **120 秒** 后强制退出（可通过 `--timeout` 选项配置）。
 
 ### BE/CN 优雅退出机制
 
@@ -101,7 +101,7 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 #### `stop_fe.sh -g --timeout`
 
 - 描述：FE 被强制终止前的最大等待时间。
-- 默认值：60（秒）
+- 默认值：120（秒）
 - 如何应用：在脚本命令中指定。该值必须超过完整的优雅退出时长：接受新连接窗口（`graceful_exit_accept_new_window_ms`）加上窗口后的最短等待时间（`min_graceful_exit_time_second`）。例如默认设置（60000 毫秒 + 15 秒）下应使用 `--timeout 120`。如果设置过小，FE 会在排空完成前被强制终止。
 
 #### *最小 LB 检测时间*
