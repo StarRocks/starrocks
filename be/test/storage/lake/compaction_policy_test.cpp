@@ -911,4 +911,15 @@ TEST_F(OrdinaryCompactionSharedWindowTest, test_does_not_block_when_the_sort_key
     EXPECT_EQ(2, pick(metadata).size()) << "the guard is only for the shape whose range has no rowid interval";
 }
 
+// The FE schedules UNSHARE only for ORDER BY != PK splits. Enforce the same contract at the BE policy
+// boundary so UnshareCompactionPolicy can treat a rowset's own range as sufficient evidence that the
+// rowset needs rewriting: on this shape the range cannot already be applied as a segment seek range.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_unshare_requires_a_separate_sort_key) {
+    auto metadata = make_metadata(/*separate_sort_key=*/false, /*shared_segment=*/true);
+    auto policy = CompactionPolicy::create(_tablet_mgr.get(), metadata, /*force_base_compaction=*/false,
+                                           /*is_unshare=*/true);
+    ASSERT_FALSE(policy.ok());
+    EXPECT_TRUE(policy.status().is_invalid_argument()) << policy.status();
+}
+
 } // namespace starrocks::lake

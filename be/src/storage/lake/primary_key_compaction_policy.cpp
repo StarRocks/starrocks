@@ -154,28 +154,21 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
 //    hold a sibling's rows is the rowset's own range, which convert_txn_log_for_splitting stamped on
 //    the cross-published op_write and apply_opwrite copied into the metadata.
 //
-// On a sort-key == PK tablet that range is enough on its own: Rowset::set_segment_tablet_range turns
-// it into a rowid interval and every read clips the rewrite output. Here it is not -- the range
-// describes no rowid interval in sort-key space and set_segment_tablet_range withholds it -- so
-// nothing removes the siblings' rows until this compaction does, and skipping the rowset leaves them
-// permanently visible to the wrong child (duplicate primary keys on any unpruned read).
-static bool needs_unshare(const RowsetMetadataPB& rowset, bool range_is_the_only_restriction) {
+// UNSHARE is accepted only for a tablet whose sort key differs from its primary key. The rowset range
+// therefore describes no rowid interval in sort-key space and Rowset::set_segment_tablet_range
+// withholds it, so nothing removes the siblings' rows until this compaction does. Skipping the rowset
+// would leave them permanently visible to the wrong child (duplicate primary keys on any unpruned
+// read).
+static bool needs_unshare(const RowsetMetadataPB& rowset) {
     const bool contains_shared_segment = std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
                                                      [](const SegmentMetadataPB& segment) { return segment.shared(); });
-    return contains_shared_segment || (range_is_the_only_restriction && rowset.has_range());
+    return contains_shared_segment || rowset.has_range();
 }
 
 StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
-    // Only claim a rowset that has no shared segment where the row-level PrimaryKeyRangeFilter will
-    // actually run: Horizontal/VerticalCompactionTask build it for `is_unshare &&
-    // has_separate_sort_key()` only. Without the filter the rewrite would copy the siblings' rows
-    // into an output that carries neither a range nor a shared segment -- strictly worse than
-    // leaving the rowset alone, since the range is what clips it at read time there.
-    const bool range_is_the_only_restriction =
-            TabletSchema::create(_tablet_metadata->schema())->has_separate_sort_key();
     std::vector<RowsetPtr> input_rowsets;
     for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
-        if (needs_unshare(_tablet_metadata->rowsets(i), range_is_the_only_restriction)) {
+        if (needs_unshare(_tablet_metadata->rowsets(i))) {
             input_rowsets.emplace_back(
                     std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
         }
@@ -555,11 +548,8 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     // in this state, and both of those are schema properties. The rowset walk below is
     // O(rowsets x segments), so it must not run for every ordinary ranged tablet.
     if (tablet_metadata->has_range() && TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
-        const bool awaiting_unshare =
-                std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
-                            [](const RowsetMetadataPB& rowset) {
-                                return needs_unshare(rowset, /*range_is_the_only_restriction=*/true);
-                            });
+        const bool awaiting_unshare = std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
+                                                  [](const RowsetMetadataPB& rowset) { return needs_unshare(rowset); });
         if (awaiting_unshare) {
             VLOG(2) << "skip ordinary compaction while a split's shared segments await UNSHARE, tablet="
                     << tablet_metadata->id() << " version=" << tablet_metadata->version();
