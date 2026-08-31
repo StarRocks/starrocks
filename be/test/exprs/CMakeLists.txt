@@ -48,6 +48,7 @@ set(EXPR_TEST_FILES
     in_const_predicate_test.cpp
     in_predicate_test.cpp
     is_null_predicate_test.cpp
+    array_sort_lambda_expr_test.cpp
     lambda_array_expr_test.cpp
     lambda_map_expr_test.cpp
     binary_predicate_core_test.cpp
