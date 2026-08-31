@@ -40,6 +40,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
+#include "formats/parquet/parquet_test_util/handmade_file.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
@@ -4528,6 +4529,232 @@ TEST_F(FileReaderTest, test_read_variant) {
     }
 
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
+}
+
+// A Parquet `null_count` statistic is a hint, not a fact: files written by old parquet-mr
+// under-report it, and StarRocks used to take it at face value. When the statistic claims
+// "no NULLs" but the definition levels disagree, the reader asked the value decoder for one
+// physical value per row while the page only stores the non-NULL ones, and the read walked
+// off the end of the page:
+//   going to read out-of-bounds data, offset=1050424,count=187,size=1050424
+// The definition levels have already been decoded by the time the decoder is picked, so the
+// true NULL count is available for free and must win over the statistic.
+class HandmadeNullCountTest : public FileReaderTest {
+protected:
+    // Writes `values` into a scratch file whose statistics are whatever `options` says.
+    std::string _write_handmade_file(const std::vector<std::optional<std::string>>& values,
+                                     const HandmadeParquetFile::Options& options, const std::string& tag) {
+        std::string content = HandmadeParquetFile::build(values, options);
+        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
+        auto file = *FileSystem::Default()->new_writable_file(path);
+        CHECK_OK(file->append(Slice(content)));
+        CHECK_OK(file->close());
+        _scratch_files.emplace_back(path);
+        return path;
+    }
+
+    // Reads the single "c0" column out in one chunk.
+    StatusOr<ColumnPtr> _read_c0(const std::string& path, size_t expected_rows) {
+        auto file_reader = _create_file_reader(path);
+        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {""}};
+        auto* ctx = _create_scan_context(slot_descs, path);
+        RETURN_IF_ERROR(file_reader->init(ctx));
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+        RETURN_IF_ERROR(file_reader->get_next(&chunk));
+        EXPECT_EQ(expected_rows, chunk->num_rows());
+        return chunk->get_column_by_index(0);
+    }
+
+    void TearDown() override {
+        for (const auto& path : _scratch_files) {
+            std::filesystem::remove(path);
+        }
+        _scratch_files.clear();
+        FileReaderTest::TearDown();
+    }
+
+    // "a", NULL, "bbb", NULL, "c" — three physical values behind five rows.
+    static std::vector<std::optional<std::string>> _values_with_nulls() {
+        return {std::string("a"), std::nullopt, std::string("bbb"), std::nullopt, std::string("c")};
+    }
+
+    static void _expect_values_with_nulls(const ColumnPtr& column) {
+        ASSERT_EQ("['a', NULL, 'bbb', NULL, 'c']", column->debug_string());
+    }
+
+private:
+    std::vector<std::string> _scratch_files;
+};
+
+// The shape seen in the field: the row group counts its NULLs correctly, but the page header
+// claims the page has none. Only the page statistic lies. Before the fix this failed with
+// "going to read out-of-bounds data".
+TEST_F(HandmadeNullCountTest, reads_a_page_that_under_reports_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 2;
+    options.page_null_count = 0;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "page_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// The same lie one level up: the row group claims no NULLs and the page carries no statistics.
+TEST_F(HandmadeNullCountTest, reads_a_row_group_that_under_reports_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = std::nullopt;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "row_group_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// Both statistics lie at once.
+TEST_F(HandmadeNullCountTest, reads_when_both_statistics_lie) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = 0;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "both_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// The control group: files whose statistics are honest, or that carry none. These read correctly
+// both before and after the fix -- that is what proves the hand-built files above are valid
+// parquet rather than mis-assembled bytes.
+TEST_F(HandmadeNullCountTest, honest_statistics_without_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = 0;
+    std::vector<std::optional<std::string>> values = {std::string("a"), std::string("bb"), std::string("ccc")};
+
+    auto path = _write_handmade_file(values, options, "honest_no_null");
+    auto column = _read_c0(path, 3);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    ASSERT_EQ("['a', 'bb', 'ccc']", column.value()->debug_string());
+}
+
+TEST_F(HandmadeNullCountTest, honest_statistics_with_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 2;
+    options.page_null_count = 2;
+
+    auto path = _write_handmade_file(_values_with_nulls(), options, "honest_with_null");
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+TEST_F(HandmadeNullCountTest, no_statistics_at_all) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = std::nullopt;
+    options.page_null_count = std::nullopt;
+
+    auto path = _write_handmade_file(_values_with_nulls(), options, "no_stat");
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// `null_count` also drives pruning, where -- unlike decoding -- there are no definition levels to
+// cross-check against, so an under-reported count silently drops the rows `IS NULL` asks for.
+// StarRocks already refuses min/max from writers known to compute statistics incorrectly
+// (`ApplicationVersion::HasCorrectStatistics`, PARQUET-251); the fix asks the same writer-version
+// question about `null_count`.
+//
+// The column is INT32 on purpose. For BYTE_ARRAY from a legacy writer the min/max gate already
+// drops the statistics, so no zone map is built and the bug cannot be reached; for INT32 the gate
+// lets min/max through (`col_type != BYTE_ARRAY` returns early) and the bug is reachable.
+class LegacyNullCountPruningTest : public HandmadeNullCountTest {
+protected:
+    static constexpr const char* kLegacyWriter = "parquet-mr version 1.9.0-cdh6.3.2 (build handmade)";
+    static constexpr const char* kModernWriter = "parquet-mr version 1.13.1 (build handmade)";
+
+    // Statistics claim no NULLs. `with_nulls` decides whether that claim is a lie.
+    std::string _write_int_file(const std::string& created_by, bool with_nulls, const std::string& tag) {
+        HandmadeParquetFile::Options options;
+        options.row_group_null_count = 0;
+        options.page_null_count = 0;
+        options.row_group_min = HandmadeParquetFile::plain_int32(1);
+        options.row_group_max = HandmadeParquetFile::plain_int32(3);
+        options.created_by = created_by;
+
+        std::vector<std::optional<int32_t>> values = {1, 2, 3};
+        if (with_nulls) {
+            values = {1, std::nullopt, 3};
+        }
+        std::string content = HandmadeParquetFile::build_int32(values, options);
+        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
+        auto file = *FileSystem::Default()->new_writable_file(path);
+        CHECK_OK(file->append(Slice(content)));
+        CHECK_OK(file->close());
+        _int_scratch_files.emplace_back(path);
+        return path;
+    }
+
+    // Returns how many row groups survived `WHERE c0 IS NULL`. 0 means the group was pruned.
+    StatusOr<size_t> _row_groups_surviving_is_null(const std::string& path) {
+        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {""}};
+        std::vector<TExpr> t_conjuncts;
+        ParquetUTBase::is_null_pred(0, true, &t_conjuncts);
+        std::vector<ExprContext*> expr_ctxs;
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+
+        auto* ctx = _create_scan_context(slot_descs, path);
+        ctx->conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], nullptr, tuple_desc, _runtime_state, ctx);
+
+        auto file_reader = _create_file_reader(path);
+        RETURN_IF_ERROR(file_reader->init(ctx));
+        return file_reader->row_group_size();
+    }
+
+    void TearDown() override {
+        for (const auto& path : _int_scratch_files) {
+            std::filesystem::remove(path);
+        }
+        _int_scratch_files.clear();
+        HandmadeNullCountTest::TearDown();
+    }
+
+private:
+    std::vector<std::string> _int_scratch_files;
+};
+
+// CONTROL. A modern writer's statistics are still trusted, so an honest file with no NULLs is
+// still pruned away by `IS NULL`. This is also what proves the hand-built file reaches the zone
+// map at all -- without it the cases below would pass for the wrong reason.
+TEST_F(LegacyNullCountPruningTest, still_prunes_a_modern_writer) {
+    auto path = _write_int_file(kModernWriter, /*with_nulls=*/false, "modern_honest");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(0, surviving.value()) << "zone-map pruning never ran, so the cases below are inconclusive";
+}
+
+// A legacy writer under-reporting its `null_count` no longer drops the rows `IS NULL` asks for.
+TEST_F(LegacyNullCountPruningTest, stops_trusting_a_legacy_writer) {
+    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/true, "legacy_lying");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(1, surviving.value()) << "row group pruned away although the file does contain NULLs";
+}
+
+// A legacy writer with an honest file: no longer pruned. That is a lost optimisation, not a
+// wrong answer -- the predicate still rejects the rows downstream. Stated so the trade-off is
+// visible rather than discovered later in a benchmark.
+TEST_F(LegacyNullCountPruningTest, gives_up_pruning_on_honest_legacy_files) {
+    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/false, "legacy_honest_kept");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(1, surviving.value());
 }
 
 } // namespace starrocks::parquet
