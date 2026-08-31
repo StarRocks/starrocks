@@ -5111,4 +5111,13 @@ public class Config extends ConfigBase {
             "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
+    public static String ai_default_chat_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    public static String ai_default_chat_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    public static String ai_default_chat_provider = "";
 }

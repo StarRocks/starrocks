@@ -98,7 +98,8 @@ enum TPlanNodeType {
   LOOKUP_NODE = 41,
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
-  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
+  AI_PROJECT_NODE = 45
 }
 
 // phases of an execution node
@@ -1598,6 +1599,22 @@ struct TLookUpNode {
   1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
 }
 
+struct TAIEndpointConfig {
+  1: optional string endpoint
+  2: optional string model
+  3: optional string provider
+}
+
+struct TAIModelConfiguration {
+  1: optional TAIEndpointConfig chat
+}
+
+struct TAIProjectNode {
+  1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
+  2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+  3: optional map<string, TAIModelConfiguration> ai_model_configs
+}
+
 // Extension point for TPlanNode. DO NOT MODIFY: do not add fields here, and do
 // not rename, renumber or remove it. The field numbers inside are allocated
 // separately, so anything added here collides with them, and renaming or
@@ -1693,6 +1710,7 @@ struct TPlanNode {
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
   87: optional TPlanNodeExt ext
+  88: optional TAIProjectNode ai_project_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

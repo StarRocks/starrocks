@@ -60,6 +60,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.planner.AIProjectNode;
 import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -171,6 +172,7 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -504,7 +506,8 @@ public class PlanFragmentBuilder {
         }
 
         private OptExpression getOptExpressionFromPlanNode(ExecPlan context, PlanNode node) {
-            if (context.getOptExpression(node.getId().asInt()) == null && node instanceof ProjectNode) {
+            if (context.getOptExpression(node.getId().asInt()) == null
+                    && node instanceof ProjectNode && !(node instanceof AIProjectNode)) {
                 node = node.getChild(0);
             }
             return context.getOptExpression(node.getId().asInt());
@@ -561,7 +564,9 @@ public class PlanFragmentBuilder {
                 fragment = buildProjectNode(optExpression, projection, fragment, context);
             }
             PlanNode planRoot = fragment.getPlanRoot();
-            if (!(optExpression.getOp() instanceof PhysicalProjectOperator) && planRoot instanceof ProjectNode) {
+            boolean isProjectOperator = optExpression.getOp() instanceof PhysicalProjectOperator
+                    || optExpression.getOp() instanceof PhysicalAIProjectOperator;
+            if (!isProjectOperator && planRoot instanceof ProjectNode) {
                 // This projectNode comes from another node's projection field
                 planRoot = planRoot.getChild(0);
             }
@@ -720,19 +725,34 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalProject(OptExpression optExpr, ExecPlan context) {
             PhysicalProjectOperator node = (PhysicalProjectOperator) optExpr.getOp();
+            return buildPhysicalProject(optExpr, context, node.getColumnRefMap(),
+                    node.getCommonSubOperatorMap(), false);
+        }
+
+        @Override
+        public PlanFragment visitPhysicalAIProject(OptExpression optExpr, ExecPlan context) {
+            PhysicalAIProjectOperator node = (PhysicalAIProjectOperator) optExpr.getOp();
+            return buildPhysicalProject(optExpr, context, node.getColumnRefMap(),
+                    node.getCommonSubOperatorMap(), true);
+        }
+
+        private PlanFragment buildPhysicalProject(OptExpression optExpr, ExecPlan context,
+                                                  Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                                                  Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap,
+                                                  boolean aiProject) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
 
-            Preconditions.checkState(!node.getColumnRefMap().isEmpty());
+            Preconditions.checkState(!columnRefMap.isEmpty());
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
-            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getCommonSubOperatorMap().entrySet()) {
+            Map<SlotId, Expr> commonExprMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperatorMap.entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
-                                node.getCommonSubOperatorMap()));
+                                commonSubOperatorMap));
 
-                commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
+                commonExprMap.put(new SlotId(entry.getKey().getId()), expr);
 
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
@@ -743,9 +763,9 @@ public class PlanFragmentBuilder {
             }
 
             Map<SlotId, Expr> projectMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), node.getColumnRefMap()));
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), columnRefMap));
 
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
 
@@ -758,12 +778,15 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
-            ProjectNode projectNode =
-                    new ProjectNode(context.getNextNodeId(),
-                            tupleDescriptor,
-                            inputFragment.getPlanRoot(),
-                            projectMap,
-                            commonSubOperatorMap);
+            ProjectNode projectNode;
+            if (aiProject) {
+                projectNode = new AIProjectNode(context.getNextNodeId(), tupleDescriptor,
+                        inputFragment.getPlanRoot(), projectMap, commonExprMap,
+                        context.getOrCreateSystemChatConfig());
+            } else {
+                projectNode = new ProjectNode(context.getNextNodeId(), tupleDescriptor,
+                        inputFragment.getPlanRoot(), projectMap, commonExprMap);
+            }
 
             projectNode.setHasNullableGenerateChild();
             projectNode.computeStatistics(optExpr.getStatistics());

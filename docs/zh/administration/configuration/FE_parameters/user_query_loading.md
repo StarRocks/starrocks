@@ -83,6 +83,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 查询引擎
 
+### `ai_default_chat_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_complete` 调用使用的完整 HTTPS POST URL。URL 必须包含主机，且不能包含用户信息、片段或控制字符。未显式指定端口时使用 HTTPS 默认端口；显式指定的端口必须在 1 至 65535 范围内。该值为空时，必须先配置 endpoint，SYSTEM `ai_complete` 才能通过分析。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。API key 不属于 FE 配置项；每个 BE 在本地读取 `AI_FUNCTION_MODEL_API_KEY`，FE 不会通过查询计划下发该密钥。所有执行 AI 查询的 BE 都必须将 `AI_FUNCTION_MODEL_ENDPOINT` 设置为与此处完全相同的 URL，以便 BE 将本地凭证绑定到管理员批准的 endpoint。因此，修改 FE endpoint 后，还必须更新该环境变量并重启相关 BE，之后才能在这些 BE 上运行新的 AI 查询。
+- 引入版本: -
+
+### `ai_default_chat_model`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_complete` 仅传入 prompt 的调用形式所使用的默认模型。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 引入版本: -
+
+### `ai_default_chat_provider`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 有效值: `openai_compatible`
+- 是否可变: Yes
+- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 引入版本: -
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - 默认值: 60000

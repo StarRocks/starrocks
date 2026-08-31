@@ -92,10 +92,14 @@ public class SelectAnalyzer {
 
         List<Expr> groupByExpressions = new ArrayList<>(
                 analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+        groupByExpressions.forEach(expression -> AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expression, AIFunctionUsageAnalyzer.PlacementContext.GROUP_BY));
         widenGroupingKeyNullability(groupByClause, outputScope, outputExpressions, groupByExpressions);
 
         boolean distinctWithoutGroupBy = selectList.isDistinct() && groupByExpressions.isEmpty();
         if (selectList.isDistinct()) {
+            outputExpressions.forEach(expression -> AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expression, AIFunctionUsageAnalyzer.PlacementContext.SELECT_DISTINCT));
             if (!groupByExpressions.isEmpty()) {
                 new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
                         .verify(outputExpressions);
@@ -115,6 +119,8 @@ public class SelectAnalyzer {
         List<Expr> orderByExpressions =
                 orderByElements.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
 
+        AIFunctionUsageAnalyzer.verifyNoCorrelatedAIFunctionsInQueryBlock(analyzeState);
+
         analyzeGroupingOperations(analyzeState, groupByClause, outputExpressions);
 
         List<Expr> sourceExpressions = new ArrayList<>(outputExpressions);
@@ -124,6 +130,9 @@ public class SelectAnalyzer {
 
         List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
+        aggregates.forEach(aggregate -> aggregate.getChildren().forEach(argument ->
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        argument, AIFunctionUsageAnalyzer.PlacementContext.AGGREGATE_ARGUMENTS)));
         boolean isGroupByAll = groupByClause != null
                 && groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL);
         boolean isAggregationQuery = AnalyzerUtils.isAggregate(aggregates, groupByExpressions) ||
@@ -462,6 +471,9 @@ public class SelectAnalyzer {
             outputWindowFunctions.addAll(window);
         }
         analyzeState.setOutputAnalytic(outputWindowFunctions);
+        outputWindowFunctions.forEach(expression ->
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expression, AIFunctionUsageAnalyzer.PlacementContext.WINDOW_FUNCTION));
 
         List<AnalyticExpr> orderByWindowFunctions = new ArrayList<>();
         for (Expr expression : orderByExpressions) {
@@ -474,6 +486,9 @@ public class SelectAnalyzer {
             orderByWindowFunctions.addAll(window);
         }
         analyzeState.setOrderByAnalytic(orderByWindowFunctions);
+        orderByWindowFunctions.forEach(expression ->
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expression, AIFunctionUsageAnalyzer.PlacementContext.WINDOW_FUNCTION));
     }
 
     private void analyzeWhere(Expr whereClause, AnalyzeState analyzeState, Scope scope) {

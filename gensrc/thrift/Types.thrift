@@ -302,7 +302,14 @@ enum TFunctionBinaryType {
   SRJAR,
   
   // 
-  PYTHON
+  PYTHON,
+
+  // AI functions executed by the asynchronous AI runtime.
+  AI
+}
+
+enum TAIModelSource {
+  SYSTEM
 }
 
 // Represents a fully qualified function name.
@@ -406,6 +413,7 @@ struct TFunction {
   // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects
   // to this external worker instead of spawning a local one (see CREATE FUNCTION "service_url").
   38: optional string service_url
+  39: optional TAIModelSource ai_model_source
 }
 
 enum TLoadJobState {

@@ -72,6 +72,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalBenchmarkScanOperator;
@@ -113,6 +114,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
@@ -1149,15 +1151,27 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalProject(LogicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap());
+        return computeProjectNode(context, Collections.emptyMap(), node.getColumnRefMap());
+    }
+
+    @Override
+    public Void visitLogicalAIProject(LogicalAIProjectOperator node, ExpressionContext context) {
+        return computeProjectNode(context, node.getCommonSubOperatorMap(), node.getColumnRefMap());
     }
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        return computeProjectNode(context, node.getColumnRefMap());
+        return computeProjectNode(context, Collections.emptyMap(), node.getColumnRefMap());
     }
 
-    private Void computeProjectNode(ExpressionContext context, Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+    @Override
+    public Void visitPhysicalAIProject(PhysicalAIProjectOperator node, ExpressionContext context) {
+        return computeProjectNode(context, node.getCommonSubOperatorMap(), node.getColumnRefMap());
+    }
+
+    private Void computeProjectNode(ExpressionContext context,
+                                    Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap,
+                                    Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         Preconditions.checkState(context.arity() == 1);
 
         Statistics.Builder builder = Statistics.builder();
@@ -1167,6 +1181,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics.Builder allBuilder = Statistics.builder();
         allBuilder.setOutputRowCount(inputStatistics.getOutputRowCount());
         allBuilder.addColumnStatistics(inputStatistics.getColumnStatistics());
+
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperatorMap.entrySet()) {
+            ColumnStatistic commonStatistic =
+                    ExpressionStatisticCalculator.calculate(entry.getValue(), allBuilder.build());
+            allBuilder.addColumnStatistic(entry.getKey(), commonStatistic);
+        }
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);

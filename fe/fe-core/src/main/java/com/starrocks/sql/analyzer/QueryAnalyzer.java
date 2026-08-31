@@ -432,6 +432,7 @@ public class QueryAnalyzer {
         // session (see viewExpansionStack()) so it survives the fresh QueryAnalyzer that each
         // scalar/IN/EXISTS subquery spawns.
         private final Set<String> localViewExpansionStack = new HashSet<>();
+        private final Deque<AnalyzeState> queryBlockAnalyzeStates = new ArrayDeque<>();
 
         public Visitor() {
         }
@@ -600,6 +601,16 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
+            queryBlockAnalyzeStates.push(analyzeState);
+            try {
+                return analyzeSelectRelation(selectRelation, scope, analyzeState);
+            } finally {
+                queryBlockAnalyzeStates.pop();
+            }
+        }
+
+        private Scope analyzeSelectRelation(SelectRelation selectRelation, Scope scope,
+                                            AnalyzeState analyzeState) {
             //Record aliases at this level to prevent alias conflicts
             Set<TableName> aliasSet = new HashSet<>();
             Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
@@ -1215,8 +1226,23 @@ public class QueryAnalyzer {
                 Scope joinScope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
                 joinScope.setParent(parentScope);
-                analyzeExpression(joinEqual, new AnalyzeState(), joinScope);
+                AnalyzeState joinAnalyzeState = new AnalyzeState();
+                analyzeExpression(joinEqual, joinAnalyzeState, joinScope);
 
+                if (!join.getJoinOp().isInnerJoin() && !join.getJoinOp().isCrossJoin()) {
+                    try {
+                        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                                joinEqual, AIFunctionUsageAnalyzer.PlacementContext.JOIN_ON_CLAUSE);
+                    } catch (SemanticException exception) {
+                        throw new SemanticException(exception.getDetailMsg()
+                                + "; AI functions are supported only for INNER/CROSS joins", joinEqual.getPos());
+                    }
+                }
+                if (!queryBlockAnalyzeStates.isEmpty()) {
+                    AnalyzeState queryBlockAnalyzeState = queryBlockAnalyzeStates.peek();
+                    queryBlockAnalyzeState.mergeOuterColumnReference(joinAnalyzeState.hasOuterColumnReference());
+                    queryBlockAnalyzeState.addJoinOnPredicate(joinEqual);
+                }
                 AnalyzerUtils.verifyNoAggregateFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoGroupingFunctions(joinEqual, "JOIN");
@@ -1892,6 +1918,8 @@ public class QueryAnalyzer {
             Type[] argTypes = new Type[args.size()];
             for (int i = 0; i < args.size(); ++i) {
                 analyzeExpression(args.get(i), analyzeState, scope);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        args.get(i), AIFunctionUsageAnalyzer.PlacementContext.TABLE_FUNCTION_ARGUMENT);
                 argTypes[i] = args.get(i).getType();
 
                 AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "Table Function");
