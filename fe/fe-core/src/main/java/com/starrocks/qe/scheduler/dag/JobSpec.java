@@ -522,7 +522,8 @@ public class JobSpec {
 
             instance.enableQueue = isEnableQueue(context);
             instance.needQueued = needCheckQueue();
-            instance.enableGroupLevelQueue = instance.enableQueue && GlobalVariable.isEnableGroupLevelQueryQueue();
+            instance.enableGroupLevelQueue = instance.enableQueue && instance.needQueued &&
+                    GlobalVariable.isEnableGroupLevelQueryQueue();
 
             return this;
         }
