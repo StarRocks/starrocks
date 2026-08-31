@@ -404,6 +404,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：心跳线程数。
 - 引入版本：-
 
+### jemalloc_conf
+
+- 默认值：`percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
+- 类型：string
+- 单位：-
+- 是否动态：是（仅部分选项）
+- 描述：BE 以普通模式启动时，由 `bin/start_backend.sh` 导出为 `JEMALLOC_CONF` 环境变量的 jemalloc 运行时选项。如果环境中已经设置了 `JEMALLOC_CONF`，或者 BE 以 `--jemalloc_debug`、`--check_mem_leak` 方式启动（这两种模式会强制使用各自的选项），则该配置项不生效。由于 jemalloc 在 BE 解析配置之前就已经读取了 `JEMALLOC_CONF`，运行时修改该配置项只会重新应用 jemalloc 本身允许在初始化之后修改的选项，即 `dirty_decay_ms`、`muzzy_decay_ms` 和 `prof_active`。新增、删除或修改其他任何选项都会报错并回滚配置值，这些选项只能通过重启 BE 生效。只有 BE 启动时带 `prof:true` 才能修改 `prof_active`。将 `dirty_decay_ms` 或 `muzzy_decay_ms` 设置为 `0` 会同步清理所有未使用的页面，本次修改可能因此耗时较长；设置为 `-1` 表示禁用清理。
+- 引入版本：v4.0.15, v4.1.3
+
 ### local_library_dir
 
 - 默认值：`${UDF_RUNTIME_DIR}`
