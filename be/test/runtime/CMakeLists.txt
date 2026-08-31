@@ -51,6 +51,7 @@ set(RUNTIME_TEST_FILES
     memory/counting_allocator_test.cpp
     memory/memory_allocator_test.cpp
     memory/memory_lock_test.cpp
+    memory/jemalloc_conf_updater_test.cpp
     prof/heap_prof_test.cpp
 )
 

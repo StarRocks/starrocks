@@ -35,6 +35,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_llm_fwd.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "common/config_merge_commit_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_runtime_fwd.h"
@@ -55,6 +56,7 @@
 #include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "runtime/runtime_env.h"
 #include "service/core_dump_resource_releaser.h"
 #include "storage/compaction_manager.h"
@@ -153,6 +155,14 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
         refresh_core_dump_resource_releaser_config();
         return Status::OK();
+    });
+
+    // jemalloc has already read JEMALLOC_CONF by the time we get here. init() takes the
+    // option string that actually took effect as the baseline, and republishes it as
+    // `jemalloc_conf` when the config claims something else.
+    JemallocConfUpdater::instance().init(config::jemalloc_conf.value());
+    registry->register_callback("jemalloc_conf", []() -> Status {
+        return JemallocConfUpdater::instance().update(config::jemalloc_conf.value());
     });
 
     registry->register_callback("scanner_thread_pool_thread_num", [=]() -> Status {

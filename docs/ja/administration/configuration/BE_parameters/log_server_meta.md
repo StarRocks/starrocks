@@ -327,6 +327,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BE ハートビートサービスのスレッド数。
 - 導入バージョン: -
 
+### jemalloc_conf
+
+- デフォルト: `percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
+- タイプ: string
+- 単位: -
+- 変更可能: はい (一部のオプションのみ)
+- 説明: BE が通常モードで起動する際に `bin/start_backend.sh` が `JEMALLOC_CONF` 環境変数としてエクスポートする jemalloc のランタイムオプションです。環境変数 `JEMALLOC_CONF` が既に設定されている場合、および BE が `--jemalloc_debug` または `--check_mem_leak` で起動された場合 (これらのモードは独自のオプションを強制します) は、この項目は無視されます。jemalloc は BE が設定を解析する前に `JEMALLOC_CONF` を読み込むため、この項目を実行時に変更しても、jemalloc 自身が初期化後の変更を許可しているオプション、すなわち `dirty_decay_ms`、`muzzy_decay_ms`、`prof_active` のみが再適用されます。それ以外のオプションの追加、削除、変更はエラーになり設定値はロールバックされるため、それらのオプションを変更するには BE の再起動が必要です。`prof_active` は BE が `prof:true` で起動されている場合にのみ変更できます。`dirty_decay_ms` または `muzzy_decay_ms` に `0` を設定すると未使用のページがすべて同期的にパージされるため変更に時間がかかることがあり、`-1` を設定するとパージが無効になります。
+- 導入バージョン: v4.0.15, v4.1.3
+
 ### local_library_dir
 
 - デフォルト: `${UDF_RUNTIME_DIR}`
