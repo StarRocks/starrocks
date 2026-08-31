@@ -15,7 +15,11 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalType;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
@@ -170,6 +174,23 @@ public class CheckpointControllerTest {
         // where an interrupt can invalidate the environment - it must opt out of the default
         // interrupt-based stop and rely on cooperative isStopRequested()/onStopRequested().
         Assertions.assertFalse(controller.interruptOnStop());
+    }
+
+    @Test
+    public void testPartialCleanupUpdatesRetainedMetrics() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getServingState();
+        Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(new NodeMgr());
+
+        Journal journal = Mockito.mock(Journal.class);
+        Mockito.when(journal.deleteJournalsAndGetMinJournalId(36L)).thenReturn(21L);
+        CheckpointController cleanupController = new CheckpointController("cleanup", journal, "");
+
+        MetricRepo.initializeEditLogRetained(JournalType.FE_META, 1L, 35L);
+        MetricRepo.recordEditLogBatch(JournalType.FE_META, 35L, 1L, 100L);
+        Deencapsulation.invoke(cleanupController, "deleteOldJournals", 35L);
+
+        Assertions.assertEquals(15L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(1500L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
     }
 
     @Test
