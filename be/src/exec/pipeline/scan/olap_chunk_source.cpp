@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <set>
+#include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
 
@@ -56,6 +58,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/delete_handler.h"
 #include "storage/extends_column_utils.h"
 #include "storage/flat_json_metrics.h"
 #include "storage/metadata_util.h"
@@ -353,6 +356,20 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
 
     for (auto& id : _non_pushdown_pred_tree.column_ids()) {
         _unused_output_column_ids.erase(id);
+    }
+
+    // The delete filter evaluates these on the outgoing chunk, so they must survive into the output schema.
+    // An empty unused set makes every erase a no-op, so skip the header lock and the condition parsing entirely.
+    if (!_unused_output_column_ids.empty()) {
+        std::set<ColumnId> delete_pred_cids;
+        {
+            std::shared_lock header_lock(_tablet->get_header_lock());
+            RETURN_IF_ERROR(DeleteHandler::delete_predicate_column_ids(_tablet->delete_predicates(), *_tablet_schema,
+                                                                       _version, &delete_pred_cids));
+        }
+        for (ColumnId cid : delete_pred_cids) {
+            _unused_output_column_ids.erase(cid);
+        }
     }
 
     std::vector<ExprContext*> not_pushdown_conjuncts;

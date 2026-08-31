@@ -15,8 +15,10 @@
 #pragma once
 
 #include <optional>
+#include <set>
 #include <vector>
 
+#include "common/column_id.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
@@ -51,6 +53,12 @@ class TabletManager;
 // prepared-split refine path to compute the REFINED coverage (pruned - already-allocated-coarse).
 // Declared here so it can be unit-tested directly (the definition lives in tablet_reader.cpp).
 SparseRange<> subtract_sparse_ranges(const SparseRange<>& lhs, const SparseRange<>& rhs);
+
+// Column ids the tablet's delete predicates evaluate; mirrors TabletReader::init_delete_predicates, which
+// filters neither by version nor by key column, so a caller keeping them out of the unused-output set cannot
+// disagree with what the reader reads.
+Status delete_predicate_column_ids(const TabletMetadataPB& metadata, const TabletSchema& schema,
+                                   std::set<ColumnId>* column_ids);
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;

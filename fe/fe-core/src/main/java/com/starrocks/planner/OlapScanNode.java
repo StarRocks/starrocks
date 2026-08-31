@@ -1224,9 +1224,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
             msg.lake_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
-            if (!olapTable.hasDelete()) {
-                msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
-            }
+            // The BE reads delete-predicate columns even when pruned from output, so deleted tables stay prunable.
+            msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
 
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(ExprToThrift.treesToThrift(bucketExprs));
@@ -1296,9 +1295,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
-            if (!olapTable.hasDelete()) {
-                msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
-            }
+            // The BE reads delete-predicate columns even when pruned from output, so deleted tables stay prunable.
+            msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
 
             if (!scanTabletIds.isEmpty()) {
                 msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
