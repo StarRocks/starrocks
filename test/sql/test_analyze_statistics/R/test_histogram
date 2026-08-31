@@ -681,16 +681,19 @@ PROPERTIES ('replication_num' = '1');
 -- !result
 INSERT INTO t_histogram_all_columns VALUES
     (1, 'a', '2020-01-01'),
+    (1, 'a', '2020-01-01'),
+    (1, 'a', '2020-01-01'),
     (2, 'b', '2020-01-02'),
-    (3, 'b', '2020-01-03'),
+    (2, 'b', '2020-01-02'),
+    (3, 'c', '2020-01-03'),
     (NULL, NULL, NULL);
 -- result:
 -- !result
-[UC] ANALYZE TABLE t_histogram_all_columns UPDATE HISTOGRAM ON ALL COLUMNS;
+[UC] ANALYZE TABLE t_histogram_all_columns UPDATE HISTOGRAM ON ALL COLUMNS PROPERTIES('histogram_sample_ratio' = '1.0');
 -- result:
 analyze_test_2e4abb11b7ab470b9ba904f3afeb9ed4.t_histogram_all_columns	histogram	status	OK
 -- !result
-function: assert_explain_costs_contains('select * from t_histogram_all_columns', 'MCV: [[1:10][2:10][3:10]]', 'MCV: [[b:20][a:10]] ESTIMATE', 'MCV: [[2020-01-01:10][2020-01-02:10][2020-01-03:10]]')
+function: assert_explain_costs_contains('select * from t_histogram_all_columns', 'MCV: [[1:3][2:2][3:1]]', 'MCV: [[a:3][b:2][c:1]] ESTIMATE', 'MCV: [[2020-01-01:3][2020-01-02:2][2020-01-03:1]]')
 -- result:
 None
 -- !result
