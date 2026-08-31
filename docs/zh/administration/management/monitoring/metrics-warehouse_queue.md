@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "用于管理 Warehouse 和监控各 Warehouse 查询队列的指标。"
 ---
 
 # Warehouse 监控指标
@@ -70,17 +71,19 @@ ALTER WAREHOUSE <warehouse_name> SET("enable_query_queue" = "true");
 
 ### 监控 Warehouse 查询队列的状态
 
-您可以使用这些指标来监控 Warehouse  的健康状况和性能：
+您可以使用这些指标来监控 Warehouse 的健康状况和性能。
+
+在 FE HTTP 端口的 Prometheus 端点上，该指标暴露的名称是 `starrocks_fe_warehouse_query_queue`。不带前缀的 `warehouse_query_queue` 是内部指标名，仅出现在 [指标示例](#指标示例) 中的 JSON 输出里。
 
 ```promql
-# 检查所有Warehouse中等待的查询
-warehouse_query_queue{field="query_pending_length"}
+# 检查所有 Warehouse 中等待的查询
+starrocks_fe_warehouse_query_queue{field="query_pending_length"}
 
-# 检查所有Warehouse中正在运行的查询
-warehouse_query_queue{field="query_running_length"}
+# 检查所有 Warehouse 中正在运行的查询
+starrocks_fe_warehouse_query_queue{field="query_running_length"}
 
 # 监控 Slot 利用率
-warehouse_query_queue{field="remain_slots"} / warehouse_query_queue{field="max_slots"}
+starrocks_fe_warehouse_query_queue{field="remain_slots"} / starrocks_fe_warehouse_query_queue{field="max_slots"}
 ```
 
 ## 指标标签

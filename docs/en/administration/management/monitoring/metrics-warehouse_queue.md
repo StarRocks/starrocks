@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Metrics for managing warehouses and monitoring the query queue of each warehouse."
 ---
 
 # Monitoring Metrics for Warehouses
@@ -70,17 +71,19 @@ ALTER WAREHOUSE <warehouse_name> SET("enable_query_queue" = "true");
 
 ### Monitor the status of the warehouse's query queue
 
-You can use these metrics to monitor the health and performance of your warehouses:
+You can use these metrics to monitor the health and performance of your warehouses.
+
+On the Prometheus endpoint of the FE HTTP port, the metric is exposed as `starrocks_fe_warehouse_query_queue`. The bare name `warehouse_query_queue` is the internal metric name and appears only in the JSON output shown under [Metrics examples](#metrics-examples).
 
 ```promql
 # Check pending queries in all warehouses
-warehouse_query_queue{field="query_pending_length"}
+starrocks_fe_warehouse_query_queue{field="query_pending_length"}
 
 # Check running queries in all warehouses
-warehouse_query_queue{field="query_running_length"}
+starrocks_fe_warehouse_query_queue{field="query_running_length"}
 
 # Monitor slot utilization
-warehouse_query_queue{field="remain_slots"} / warehouse_query_queue{field="max_slots"}
+starrocks_fe_warehouse_query_queue{field="remain_slots"} / starrocks_fe_warehouse_query_queue{field="max_slots"}
 ```
 
 ## Metric labels

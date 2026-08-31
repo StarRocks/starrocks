@@ -60,6 +60,12 @@ To enable the resource group-level query queues, you also need to set `enable_gr
 SET GLOBAL enable_group_level_query_queue = true;
 ```
 
+:::note
+
+In shared-data clusters, these global session variables do not enable query queues. Query queues are enabled for each warehouse separately, and `enable_group_level_query_queue` takes effect only after the warehouse property `enable_query_queue` is set to `true`. See [Query Queue v2 in shared-data clusters](#query-queue-v2-in-shared-data-clusters).
+
+:::
+
 ### Specify resource thresholds
 
 #### Specify resource thresholds for global query queues
@@ -132,11 +138,17 @@ From v3.3 onwards, StarRocks supports Query Queue v2. In Query Queue v2, query q
 
 ### Configure Query Queue v2
 
-Query Queue v2 is enabled and tuned through FE configuration items. Changes to `enable_query_queue_v2` require restarting FE nodes to take effect.
+In shared-nothing clusters, Query Queue v2 is enabled and tuned through FE configuration items. Changes to `enable_query_queue_v2` require restarting FE nodes to take effect.
+
+:::note
+
+In shared-data clusters, `enable_query_queue_v2` is not used. Query Queue v2 is enabled and tuned for each warehouse separately. See [Query Queue v2 in shared-data clusters](#query-queue-v2-in-shared-data-clusters).
+
+:::
 
 | Configuration item | Default | Description |
 | ------------------ | ------- | ----------- |
-| `enable_query_queue_v2` | `false` (v3.3 to v4.0)<br />`true` (from v4.1 onwards) | Whether to enable Query Queue v2. When this item is set to `true`, StarRocks uses the v2 slot-based query scheduling mechanism. |
+| `enable_query_queue_v2` | `false` (v3.3 to v4.0)<br />`true` (from v4.1 onwards) | Whether to enable Query Queue v2. When this item is set to `true`, StarRocks uses the v2 slot-based query scheduling mechanism. This item applies to shared-nothing clusters only. |
 | `query_queue_v2_concurrency_level` | `4` | The logical concurrency level used by Query Queue v2 to calculate the total number of cluster slots. A larger value allows the system to admit more queries. This is a relative tuning parameter. |
 | `query_queue_slots_estimator_strategy` | `PBE` | The slot estimation strategy used for queue-based queries. Valid values: `PBE` (parallelism-based, the default), `MBE` (memory-cost-based), and `CBE` (CPU-cost-based). PBE estimates a query's slots from scan parallelism, capped by the worker count: for OLAP tables it uses the number of scan ranges left after pruning, so only very small queries fall below the worker count; a connector/external scan is treated as a full-parallelism scan (the worker count) rather than a single-slot query. MBE estimates slots from the query's memory cost divided by `query_queue_v2_mem_bytes_per_slot`. CBE estimates slots from the plan CPU cost divided by `query_queue_v2_cpu_costs_per_slot`. MBE and CBE per-query slots are additionally capped by `number_of_workers * max(1, pipeline_dop / 2)`. The legacy values `MAX` and `MIN` are still accepted for forward compatibility and are treated as the default estimator; any other value is rejected by configuration validation. |
 | `query_queue_v2_schedule_strategy` | `SWRR` | The scheduling policy used by Query Queue V2 to order pending queries. Supported values (case-insensitive) are `SWRR` (Smooth Weighted Round Robin) — the default, suitable for mixed/hybrid workloads that need fair weighted sharing — and `SJF` (Short Job First + Aging) — prioritizes short jobs while using aging to avoid starvation. The value is parsed with case-insensitive enum lookup; an unrecognized value is logged as an error and the default policy is used. This configuration only affects behavior when Query Queue V2 is enabled and interacts with V2 sizing settings such as `query_queue_v2_concurrency_level`. |
@@ -267,6 +279,105 @@ ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 
 Use `query_queue_v2_concurrency_level` to tune resource capacity first. Use `query_queue_concurrency_limit` only when you need to explicitly limit the number of queries run at the same time.
 
+## Query Queue v2 in shared-data clusters
+
+In shared-data clusters, compute resources are organized into warehouses, and each warehouse maintains its own query queue. Query Queue v2 is therefore enabled and tuned for each warehouse, not through FE configuration items.
+
+:::warning
+
+Query queues stay off for a warehouse until its `enable_query_queue` property is set to `true`. While the property is `false` (the default), queries in that warehouse are never queued, and queries that exceed the `concurrency_limit` of a resource group are rejected with `Exceed concurrency limit` instead of waiting in the queue.
+
+:::
+
+### Enable query queues for a warehouse
+
+Query queues are disabled for a warehouse by default. Enable them by setting the warehouse property `enable_query_queue`:
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue" = "true");
+```
+
+The change takes effect immediately. Restarting FE nodes is not required.
+
+SELECT queries are queued as soon as `enable_query_queue` is `true`. There is no separate property for them. To also queue loading tasks and statistics queries, set the corresponding properties:
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue_load" = "true");
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue_statistic" = "true");
+```
+
+To queue queries per resource group in addition to per warehouse, set the global session variable `enable_group_level_query_queue`. It takes effect only after `enable_query_queue` is `true`:
+
+```SQL
+SET GLOBAL enable_group_level_query_queue = true;
+```
+
+### Warehouse properties for query queues
+
+| Property | Default | Description |
+| -------- | ------- | ----------- |
+| `enable_query_queue` | `false` | Whether to enable query queues for this warehouse. This is the master switch. When it is `false`, no query in this warehouse is queued. |
+| `enable_query_queue_load` | `false` | Whether to queue loading tasks in this warehouse. It takes effect only when `enable_query_queue` is `true`. |
+| `enable_query_queue_statistic` | `false` | Whether to queue statistics queries in this warehouse. It takes effect only when `enable_query_queue` is `true`. |
+| `query_queue_concurrency_limit` | `-1` | The upper limit of concurrently running queries in this warehouse. It takes effect only when it is set greater than `0`. A non-positive value indicates no limit is imposed. |
+| `query_queue_max_queued_queries` | `1024` | The maximum number of queries that can wait in this warehouse's queue. Queries arriving after this number is reached are rejected instead of queued. |
+| `query_queue_pending_timeout_second` | `600` | The maximum time, in seconds, that a query can wait in this warehouse's queue before it times out. |
+| `query_queue_slots_estimator_strategy` | Follows the FE configuration item of the same name | Supported from v4.1 onwards. The slot estimation strategy for this warehouse. Valid values: `PBE`, `MBE`, and `CBE`. See [Choose an estimation strategy](#choose-an-estimation-strategy). |
+| `query_queue_v2_concurrency_level` | Follows the FE configuration item of the same name | Supported from v4.1 onwards. The logical concurrency level used to calculate the total number of slots of this warehouse. See [Tune concurrency capacity](#tune-concurrency-capacity). |
+| `query_queue_v2_mem_bytes_per_slot` | Follows the FE configuration item of the same name | Supported from v4.1 onwards. The per-slot memory target used by the MBE estimator for this warehouse. |
+| `query_queue_v2_cpu_costs_per_slot` | Follows the FE configuration item of the same name | Supported from v4.1 onwards. The per-slot CPU cost threshold used by the CBE estimator for this warehouse. |
+| `query_queue_v2_schedule_strategy` | Follows the FE configuration item of the same name | Supported from v4.1 onwards. The scheduling policy used to order the pending queries of this warehouse. Valid values: `SWRR` and `SJF`. |
+
+The last five properties override the FE configuration items of the same name for this warehouse only. When such a property is not set, the FE-level value is used. The two string properties cannot be returned to the unset state once written, so to undo an override, set the property explicitly back to the FE-level value.
+
+You can set multiple properties in one statement:
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET (
+    "enable_query_queue" = "true",
+    "query_queue_v2_concurrency_level" = "8",
+    "query_queue_v2_schedule_strategy" = "SJF"
+);
+```
+
+### Verify that query queues are working
+
+After enabling query queues for a warehouse, you can confirm that queries are queued using the following methods:
+
+- Run [SHOW RUNNING QUERIES](#show-running-queries). Queued queries are in the `PENDING` state, and the `Slots` column shows the number of slots each query is estimated to need.
+- Run [SHOW PROCESSLIST](#show-processlist). The `IsPending` column is `true` for queued queries.
+- Run `SHOW WAREHOUSES`. The `Property` column lists the effective query queue properties of the warehouse. Its `RunningSql` and `QueuedSql` columns are not populated yet and always report `0`, so read the current load from `warehouse_metrics` below.
+- Query the [warehouse_metrics](../../../sql-reference/information_schema/warehouse_metrics.md) view in `information_schema`. `QUEUE_PENDING_LENGTH` is the number of queries currently waiting, and `REMAIN_SLOTS` and `MAX_SLOTS` are the remaining and total slots of the warehouse. A warehouse appears in this view only while its query queue is enabled, so an empty result is itself a sign that `enable_query_queue` is still `false`:
+
+  ```SQL
+  SELECT WAREHOUSE_NAME, QUEUE_PENDING_LENGTH, QUEUE_RUNNING_LENGTH, REMAIN_SLOTS, MAX_SLOTS
+  FROM information_schema.warehouse_metrics;
+  ```
+
+- Check the `PendingTimeMs` field in **fe.audit.log**. A value greater than `0` means the query waited in the queue.
+- Monitor the `starrocks_fe_warehouse_query_queue` metric exposed on the FE HTTP port, for example `starrocks_fe_warehouse_query_queue{field="query_pending_length"}`. See [Monitoring Metrics for Warehouses](../monitoring/metrics-warehouse_queue.md).
+
+If no query is ever queued, check that `enable_query_queue` is set to `true` for the warehouse in which the queries run, and make sure the test queries actually scan a table. A query with no scan node never enters the queue, so it neither waits nor consumes slots. `SELECT sleep(10)`, `SELECT 1`, and queries that only read `information_schema` all fall into this category and are not suitable for verifying that query queues work.
+
+### Tune a warehouse
+
+The guidance in [Choose an estimation strategy](#choose-an-estimation-strategy) and [Tune concurrency capacity](#tune-concurrency-capacity) also applies to shared-data clusters. Use `ALTER WAREHOUSE` instead of `ADMIN SET FRONTEND CONFIG` so that the change applies to one warehouse rather than the whole cluster.
+
+For example, to raise the slot capacity of one warehouse:
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("query_queue_v2_concurrency_level" = "8");
+```
+
+To switch one warehouse to the memory cost-based estimator and allocate 2 GB of memory to each slot:
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET (
+    "query_queue_slots_estimator_strategy" = "MBE",
+    "query_queue_v2_mem_bytes_per_slot" = "2147483648"
+);
+```
+
 ## Monitor query queues
 
 You can view information related to query queues using the following methods.
@@ -286,15 +397,15 @@ mysql> SHOW PROC '/backends'\G
 
 ### SHOW PROCESSLIST
 
-You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md):
+You can check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md). In a shared-data cluster, the `Warehouse` column shows which warehouse the query runs in:
 
 ```Plain
 mysql> SHOW PROCESSLIST;
-+------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
-| Id   | User | Host                | Db    | Command | ConnectionStartTime | Time | State | Info              | IsPending |
-+------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
-|    2 | root | xxx.xx.xxx.xx:xxxxx |       | Query   | 2022-11-24 18:08:29 |    0 | OK    | SHOW PROCESSLIST  | false     |
-+------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
++---------------------------------+----------+------+---------------------+------+---------+---------------------+------+-------+------------------+-----------+-------------------+---------------------+-----------------+--------------------------------------+
+| ServerName                      | Id       | User | Host                | Db   | Command | ConnectionStartTime | Time | State | Info             | IsPending | Warehouse         | CNGroup             | Catalog         | QueryId                              |
++---------------------------------+----------+------+---------------------+------+---------+---------------------+------+-------+------------------+-----------+-------------------+---------------------+-----------------+--------------------------------------+
+| 127.00.00.01_9010_1787542926940 | 33554554 | root | xxx.xx.xxx.xx:xxxxx |      | Query   | 2026-08-24 15:08:08 |    0 | OK    | SHOW PROCESSLIST | false     | default_warehouse | _builtin_cngroup_0_ | default_catalog | 01a03299-1521-77ee-ab7e-ec1387a3beb6 |
++---------------------------------+----------+------+---------------------+------+---------+---------------------+------+-------+------------------+-----------+-------------------+---------------------+-----------------+--------------------------------------+
 ```
 
 ### FE audit log
@@ -319,12 +430,15 @@ You can obtain metrics of query queues in StarRocks using the [Monitor and Alert
 From v3.1.4 onwards, StarRocks supports the SQL statement `SHOW RUNNING QUERIES`, which is used to display queue information for each query. The meanings of each field are as follows:
 
 - `QueryId`: The ID of the query.
+- `WarehouseId`: The ID of the warehouse in which the query runs. It is displayed as "-" for the default warehouse.
 - `ResourceGroupId`: The ID of the resource group that the query hit. When there is no hit on a user-defined resource group, it will be displayed as "-".
 - `StartTime`: The start time of the query.
 - `PendingTimeout`: The time when the PENDING query will time out in the queue.
 - `QueryTimeout`: The time when the query times out.
 - `State`: The queue state of the query, where "PENDING" indicates it is in the queue, and "RUNNING" indicates it is currently executing.
 - `Slots`: The logical resource quantity requested by the query. In Query Queue v1, this value is usually `1`. In Query Queue v2, this value is the estimated number of slots for the query.
+- `Fragments`: The number of fragments in the execution plan of the query.
+- `DOP`: The query concurrency (`pipeline_dop`) of the query. `0` means the concurrency is adaptive and is decided at execution time.
 - `Frontend`: The FE node that initiated the query.
 - `FeStartTime`: The start time of the FE node that initiated the query.
 
@@ -332,11 +446,11 @@ Example:
 
 ```Plain
 MySQL [(none)]> SHOW RUNNING QUERIES;
-+--------------------------------------+-----------------+---------------------+---------------------+---------------------+-----------+-------+---------------------------------+---------------------+
-| QueryId                              | ResourceGroupId | StartTime           | PendingTimeout      | QueryTimeout        |   State   | Slots | Frontend                        | FeStartTime         |
-+--------------------------------------+-----------------+---------------------+---------------------+---------------------+-----------+-------+---------------------------------+---------------------+
-| a46f68c6-3b49-11ee-8b43-00163e10863a | -               | 2023-08-15 16:56:37 | 2023-08-15 17:01:37 | 2023-08-15 17:01:37 |  RUNNING  | 1     | 127.00.00.01_9010_1692069711535 | 2023-08-15 16:37:03 |
-| a6935989-3b49-11ee-935a-00163e13bca3 | 12003           | 2023-08-15 16:56:40 | 2023-08-15 17:01:40 | 2023-08-15 17:01:40 |  RUNNING  | 1     | 127.00.00.02_9010_1692069658426 | 2023-08-15 16:37:03 |
-| a7b5e137-3b49-11ee-8b43-00163e10863a | 12003           | 2023-08-15 16:56:42 | 2023-08-15 17:01:42 | 2023-08-15 17:01:42 |  PENDING  | 1     | 127.00.00.03_9010_1692069711535 | 2023-08-15 16:37:03 |
-+--------------------------------------+-----------------+---------------------+---------------------+---------------------+-----------+-------+---------------------------------+---------------------+
++--------------------------------------+-------------+-----------------+---------------------+---------------------+---------------------+---------+-------+-----------+------+---------------------------------+---------------------+
+| QueryId                              | WarehouseId | ResourceGroupId | StartTime           | PendingTimeout      | QueryTimeout        | State   | Slots | Fragments | DOP  | Frontend                        | FeStartTime         |
++--------------------------------------+-------------+-----------------+---------------------+---------------------+---------------------+---------+-------+-----------+------+---------------------------------+---------------------+
+| a46f68c6-3b49-11ee-8b43-00163e10863a | -           | 12003           | 2023-08-15 16:56:37 | 2023-08-15 17:01:37 | 2023-08-15 17:01:37 | RUNNING | 3     | 2         | 0    | 127.00.00.01_9010_1692069711535 | 2023-08-15 16:37:03 |
+| a6935989-3b49-11ee-935a-00163e13bca3 | -           | 12003           | 2023-08-15 16:56:40 | 2023-08-15 17:01:40 | 2023-08-15 17:01:40 | PENDING | 3     | 2         | 0    | 127.00.00.02_9010_1692069658426 | 2023-08-15 16:37:03 |
+| a7b5e137-3b49-11ee-8b43-00163e10863a | -           | 12003           | 2023-08-15 16:56:42 | 2023-08-15 17:01:42 | 2023-08-15 17:01:42 | PENDING | 3     | 2         | 0    | 127.00.00.03_9010_1692069711535 | 2023-08-15 16:37:03 |
++--------------------------------------+-------------+-----------------+---------------------+---------------------+---------------------+---------+-------+-----------+------+---------------------------------+---------------------+
 ```

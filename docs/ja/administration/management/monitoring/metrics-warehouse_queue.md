@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ウェアハウスの管理と各ウェアハウスのクエリキューのモニタリングに使用するメトリクス。"
 ---
 
 # ウェアハウスのモニタリングメトリクス
@@ -72,15 +73,17 @@ ALTER WAREHOUSE <warehouse_name> SET("enable_query_queue" = "true");
 
 これらのメトリクスを使用して、ウェアハウスの健康状態とパフォーマンスをモニタリングできます。
 
+FE の HTTP ポートの Prometheus エンドポイントでは、このメトリクスは `starrocks_fe_warehouse_query_queue` という名前で公開されます。接頭辞のない `warehouse_query_queue` は内部メトリクス名であり、[メトリクス例](#メトリクス例) に示す JSON 出力にのみ現れます。
+
 ```promql
 # すべてのウェアハウスで保留中のクエリを確認
-warehouse_query_queue{field="query_pending_length"}
+starrocks_fe_warehouse_query_queue{field="query_pending_length"}
 
 # すべてのウェアハウスで実行中のクエリを確認
-warehouse_query_queue{field="query_running_length"}
+starrocks_fe_warehouse_query_queue{field="query_running_length"}
 
 # スロットの利用状況をモニタリング
-warehouse_query_queue{field="remain_slots"} / warehouse_query_queue{field="max_slots"}
+starrocks_fe_warehouse_query_queue{field="remain_slots"} / starrocks_fe_warehouse_query_queue{field="max_slots"}
 ```
 
 ## メトリクスラベル

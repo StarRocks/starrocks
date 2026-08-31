@@ -61,6 +61,12 @@ SET GLOBAL enable_query_queue_statistic = true;
 SET GLOBAL enable_group_level_query_queue = true;
 ```
 
+:::note
+
+在存算分离集群中，上述全局会话变量无法启用查询队列。查询队列需要按 Warehouse 分别启用，且只有在 Warehouse 属性 `enable_query_queue` 设置为 `true` 之后，`enable_group_level_query_queue` 才会生效。详细信息，参见 [存算分离集群中的 Query Queue v2](#存算分离集群中的-query-queue-v2)。
+
+:::
+
 ### 指定资源阈值
 
 #### 全局粒度的资源阈值
@@ -133,11 +139,17 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 ### 配置 Query Queue v2
 
-Query Queue v2 通过 FE 配置项启用和调整。其中，修改 `enable_query_queue_v2` 后，需要重启 FE 节点才能生效。
+在存算一体集群中，Query Queue v2 通过 FE 配置项启用和调整。其中，修改 `enable_query_queue_v2` 后，需要重启 FE 节点才能生效。
+
+:::note
+
+在存算分离集群中，`enable_query_queue_v2` 不生效。Query Queue v2 需要按 Warehouse 分别启用和调整。详细信息，参见 [存算分离集群中的 Query Queue v2](#存算分离集群中的-query-queue-v2)。
+
+:::
 
 | 配置项 | 默认值 | 含义 |
 | ------ | ------ | ---- |
-| `enable_query_queue_v2` | `false`（v3.3 至 v4.0）<br />`true`（自 v4.1 起） | 是否启用 Query Queue v2。设置为 `true` 后，StarRocks 使用 v2 基于 slot 的查询调度机制。 |
+| `enable_query_queue_v2` | `false`（v3.3 至 v4.0）<br />`true`（自 v4.1 起） | 是否启用 Query Queue v2。设置为 `true` 后，StarRocks 使用 v2 基于 slot 的查询调度机制。该配置项仅适用于存算一体集群。 |
 | `query_queue_v2_concurrency_level` | `4` | Query Queue v2 计算集群总 slot 数量时使用的逻辑并发层数。值越大，系统可放行的 Query 越多，是一个相对调节参数。 |
 | `query_queue_slots_estimator_strategy` | `PBE` | 队列查询使用的 Slot 估算策略。支持的取值包括：`PBE`（基于并行度，默认值）、`MBE`（基于内存成本）和 `CBE`（基于 CPU 成本）。PBE 根据扫描并行度估算查询所需的 Slot 数，并以 Worker 数量为上限。对于 OLAP 表，它使用裁剪（Pruning）后剩余的 Scan Range 数量进行估算，因此只有极小型查询的 Slot 数才会低于 Worker 数量。对于 Connector 或外部表扫描，则会按全并行扫描处理（即 Worker 数量），而不是作为单 Slot 查询。MBE 根据查询的内存成本除以 `query_queue_v2_mem_bytes_per_slot` 来估算 Slot 数。CBE 根据执行计划的 CPU 成本除以 `query_queue_v2_cpu_costs_per_slot` 来估算 Slot 数。MBE 和 CBE 计算出的每个查询的 Slot 数还会受到 `number_of_workers * max(1, pipeline_dop / 2)` 的限制。为了保证向前兼容，历史取值 `MAX` 和 `MIN` 仍然可以使用，但都会被视为默认估算策略；其他任何取值都会在配置校验时被拒绝。 |
 | `query_queue_v2_schedule_strategy` | `SWRR` | Query Queue V2 对等待中的查询进行排序时使用的调度策略。支持的取值（不区分大小写）包括：`SWRR`（Smooth Weighted Round Robin，默认值），适用于需要公平加权调度的混合工作负载；以及 `SJF`（Short Job First + Aging），优先调度短任务，同时通过 Aging 机制避免任务饥饿。该配置项通过大小写不敏感的枚举解析；如果指定了无法识别的值，系统会记录错误日志并回退到默认调度策略。该配置仅在启用 Query Queue V2 时生效，并与 `query_queue_v2_concurrency_level` 等 V2 容量配置共同影响调度行为。 |
@@ -268,6 +280,105 @@ ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 
 建议优先使用 `query_queue_v2_concurrency_level` 调整资源容量。只有在需要显式限制同时运行的查询数量时，才使用 `query_queue_concurrency_limit`。
 
+## 存算分离集群中的 Query Queue v2
+
+在存算分离集群中，计算资源以 Warehouse 的形式组织，每个 Warehouse 拥有独立的查询队列。因此，Query Queue v2 需要按 Warehouse 分别启用和调整，而不是通过 FE 配置项。
+
+:::warning
+
+Warehouse 的查询队列在其 `enable_query_queue` 属性设置为 `true` 之前始终关闭。该属性为 `false`（默认值）时，该 Warehouse 中的查询不会排队；此时超出资源组 `concurrency_limit` 的查询会直接以 `Exceed concurrency limit` 报错被拒绝，而不会进入队列等待。
+
+:::
+
+### 为 Warehouse 启用查询队列
+
+Warehouse 的查询队列默认关闭。您可以通过设置 Warehouse 属性 `enable_query_queue` 启用：
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue" = "true");
+```
+
+该修改立即生效，无需重启 FE 节点。
+
+只要 `enable_query_queue` 为 `true`，SELECT 查询就会排队，没有单独的属性控制。如需同时为导入任务和统计信息查询启用队列，请设置对应的属性：
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue_load" = "true");
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue_statistic" = "true");
+```
+
+如需在 Warehouse 粒度之外，再按资源组粒度排队，请设置全局会话变量 `enable_group_level_query_queue`。该变量只有在 `enable_query_queue` 为 `true` 之后才起作用：
+
+```SQL
+SET GLOBAL enable_group_level_query_queue = true;
+```
+
+### 查询队列相关的 Warehouse 属性
+
+| 属性 | 默认值 | 含义 |
+| ---- | ------ | ---- |
+| `enable_query_queue` | `false` | 是否为该 Warehouse 启用查询队列。该属性是总开关，为 `false` 时，该 Warehouse 中的任何查询都不会排队。 |
+| `enable_query_queue_load` | `false` | 是否为该 Warehouse 中的导入任务启用队列。仅当 `enable_query_queue` 为 `true` 时生效。 |
+| `enable_query_queue_statistic` | `false` | 是否为该 Warehouse 中的统计信息查询启用队列。仅当 `enable_query_queue` 为 `true` 时生效。 |
+| `query_queue_concurrency_limit` | `-1` | 该 Warehouse 中允许同时运行的查询数上限。仅当该值大于 `0` 时才生效。小于等于 `0` 表示不限制。 |
+| `query_queue_max_queued_queries` | `1024` | 该 Warehouse 队列中允许等待的查询数上限。超出该数量后到达的查询会被直接拒绝，而不是进入队列。 |
+| `query_queue_pending_timeout_second` | `600` | 查询在该 Warehouse 队列中等待的最长时间，单位为秒。超时后查询失败。 |
+| `query_queue_slots_estimator_strategy` | 跟随同名 FE 配置项 | 自 v4.1 起支持。该 Warehouse 使用的 Slot 估算策略。有效值：`PBE`、`MBE` 和 `CBE`。详细信息，参见 [选择估算策略](#选择估算策略)。 |
+| `query_queue_v2_concurrency_level` | 跟随同名 FE 配置项 | 自 v4.1 起支持。计算该 Warehouse 总 Slot 数量时使用的逻辑并发层数。详细信息，参见 [调整并发容量](#调整并发容量)。 |
+| `query_queue_v2_mem_bytes_per_slot` | 跟随同名 FE 配置项 | 自 v4.1 起支持。该 Warehouse 中 MBE 估算策略使用的每 Slot 内存目标值。 |
+| `query_queue_v2_cpu_costs_per_slot` | 跟随同名 FE 配置项 | 自 v4.1 起支持。该 Warehouse 中 CBE 估算策略使用的每 Slot CPU 成本阈值。 |
+| `query_queue_v2_schedule_strategy` | 跟随同名 FE 配置项 | 自 v4.1 起支持。该 Warehouse 对等待中的查询进行排序时使用的调度策略。有效值：`SWRR` 和 `SJF`。 |
+
+最后五个属性仅对当前 Warehouse 覆盖同名 FE 配置项。未设置时，使用 FE 级别的取值。其中两个字符串类型的属性一旦设置便无法恢复为未设置状态，如需取消覆盖，请将其显式设置回 FE 级别的取值。
+
+您可以在一条语句中设置多个属性：
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET (
+    "enable_query_queue" = "true",
+    "query_queue_v2_concurrency_level" = "8",
+    "query_queue_v2_schedule_strategy" = "SJF"
+);
+```
+
+### 确认查询队列已生效
+
+为 Warehouse 启用查询队列后，您可以通过以下方式确认查询确实进入了队列：
+
+- 执行 [SHOW RUNNING QUERIES](#show-running-queries)。排队中的查询状态为 `PENDING`，`Slots` 列显示每个查询预计需要的 Slot 数量。
+- 执行 [SHOW PROCESSLIST](#show-processlist)。排队中的查询 `IsPending` 列为 `true`。
+- 执行 `SHOW WAREHOUSES`。`Property` 列展示该 Warehouse 当前生效的查询队列属性。其 `RunningSql` 和 `QueuedSql` 列尚未实现，始终返回 `0`，请通过下面的 `warehouse_metrics` 查看当前负载。
+- 查询 `information_schema.warehouse_metrics`。`QUEUE_PENDING_LENGTH` 为当前等待中的查询数，`REMAIN_SLOTS` 和 `MAX_SLOTS` 分别为该 Warehouse 的剩余 Slot 数和总 Slot 数。只有查询队列处于启用状态的 Warehouse 才会出现在该视图中，因此查询结果为空本身就说明 `enable_query_queue` 仍为 `false`：
+
+  ```SQL
+  SELECT WAREHOUSE_NAME, QUEUE_PENDING_LENGTH, QUEUE_RUNNING_LENGTH, REMAIN_SLOTS, MAX_SLOTS
+  FROM information_schema.warehouse_metrics;
+  ```
+
+- 查看 **fe.audit.log** 中的 `PendingTimeMs` 字段。该值大于 `0` 表示查询曾在队列中等待。
+- 监控 FE HTTP 端口暴露的 `starrocks_fe_warehouse_query_queue` 指标，例如 `starrocks_fe_warehouse_query_queue{field="query_pending_length"}`。详细信息，参见 [Warehouse 监控指标](../monitoring/metrics-warehouse_queue.md)。
+
+如果查询始终不排队，请确认查询所在的 Warehouse 已将 `enable_query_queue` 设置为 `true`，并确认测试查询确实扫描了表。不含 Scan 节点的查询不会进入队列，既不会等待，也不会占用 Slot。`SELECT sleep(10)`、`SELECT 1` 以及只读取 `information_schema` 的查询都属于这一类，不适合用来验证查询队列是否生效。
+
+### 调整单个 Warehouse
+
+[选择估算策略](#选择估算策略) 和 [调整并发容量](#调整并发容量) 中的调优建议同样适用于存算分离集群。区别在于，需要使用 `ALTER WAREHOUSE` 而不是 `ADMIN SET FRONTEND CONFIG`，使改动只作用于单个 Warehouse，而不是整个集群。
+
+例如，提升单个 Warehouse 的 Slot 容量：
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("query_queue_v2_concurrency_level" = "8");
+```
+
+将单个 Warehouse 切换为基于内存成本的估算策略，并为每个 Slot 分配 2 GB 内存：
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET (
+    "query_queue_slots_estimator_strategy" = "MBE",
+    "query_queue_v2_mem_bytes_per_slot" = "2147483648"
+);
+```
+
 ## 观测查询队列
 
 您可以通过以下方式查看查询队列相关的信息。
@@ -287,15 +398,15 @@ mysql> SHOW PROC '/backends'\G
 
 ### SHOW PROCESSLIST
 
-通过 [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）：
+通过 [SHOW PROCESSLIST](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROCESSLIST.md) 查看查询是否在队列中（即 `IsPending` 为 `true` 时）。在存算分离集群中，`Warehouse` 列展示该查询所在的 Warehouse：
 
 ```Plain
 MySQL [(none)]> SHOW PROCESSLIST;
-+------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
-| Id   | User | Host                | Db    | Command | ConnectionStartTime | Time | State | Info              | IsPending |
-+------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
-|    2 | root | xxx.xx.xxx.xx:xxxxx |       | Query   | 2022-11-24 18:08:29 |    0 | OK    | SHOW PROCESSLIST  | false     |
-+------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
++---------------------------------+----------+------+---------------------+------+---------+---------------------+------+-------+------------------+-----------+-------------------+---------------------+-----------------+--------------------------------------+
+| ServerName                      | Id       | User | Host                | Db   | Command | ConnectionStartTime | Time | State | Info             | IsPending | Warehouse         | CNGroup             | Catalog         | QueryId                              |
++---------------------------------+----------+------+---------------------+------+---------+---------------------+------+-------+------------------+-----------+-------------------+---------------------+-----------------+--------------------------------------+
+| 127.00.00.01_9010_1787542926940 | 33554554 | root | xxx.xx.xxx.xx:xxxxx |      | Query   | 2026-08-24 15:08:08 |    0 | OK    | SHOW PROCESSLIST | false     | default_warehouse | _builtin_cngroup_0_ | default_catalog | 01a03299-1521-77ee-ab7e-ec1387a3beb6 |
++---------------------------------+----------+------+---------------------+------+---------+---------------------+------+-------+------------------+-----------+-------------------+---------------------+-----------------+--------------------------------------+
 ```
 
 ### FE 审计日志
@@ -320,12 +431,15 @@ MySQL [(none)]> SHOW PROCESSLIST;
 从 v3.1.4 版本开始，StarRocks 支持 SQL 语句 SHOW RUNNING QUERIES，用于展示每个查询的队列信息。各字段的含义如下：
 
 - `QueryId`：该查询的 Query ID。
+- `WarehouseId`：该查询所在 Warehouse 的 ID。默认 Warehouse 显示为 “-”。
 - `ResourceGroupId`：该查询命中的资源组 ID。当没有命中用户定义的资源组时，会显示为 “-”。
 - `StartTime`：该查询开始时间。
 - `PendingTimeout`：PENDING 状态下查询在队列中超时的时间。
 - `QueryTimeout`：该查询超时的时间。
 - `State`：该查询的排队状态。其中，PENDING 表示在队列中；RUNNING 表示正在执行。
 - `Slots`：该查询申请的逻辑资源数量。在 Query Queue v1 中通常为 `1`；在 Query Queue v2 中为该查询估算出的 slot 数量。
+- `Fragments`：该查询执行计划中的 Fragment 数量。
+- `DOP`：该查询的并发度（`pipeline_dop`）。为 `0` 表示并发度自适应，在执行时确定。
 - `Frontend`：发起该查询的 FE 节点。
 - `FeStartTime`：发起该查询的 FE 节点的启动时间。
 
@@ -333,11 +447,11 @@ MySQL [(none)]> SHOW PROCESSLIST;
 
 ```Plain
 MySQL [(none)]> SHOW RUNNING QUERIES;
-+--------------------------------------+-----------------+---------------------+---------------------+---------------------+-----------+-------+---------------------------------+---------------------+
-| QueryId                              | ResourceGroupId | StartTime           | PendingTimeout      | QueryTimeout        |   State   | Slots | Frontend                        | FeStartTime         |
-+--------------------------------------+-----------------+---------------------+---------------------+---------------------+-----------+-------+---------------------------------+---------------------+
-| a46f68c6-3b49-11ee-8b43-00163e10863a | -               | 2023-08-15 16:56:37 | 2023-08-15 17:01:37 | 2023-08-15 17:01:37 |  RUNNING  | 1     | 127.00.00.01_9010_1692069711535 | 2023-08-15 16:37:03 |
-| a6935989-3b49-11ee-935a-00163e13bca3 | 12003           | 2023-08-15 16:56:40 | 2023-08-15 17:01:40 | 2023-08-15 17:01:40 |  RUNNING  | 1     | 127.00.00.02_9010_1692069658426 | 2023-08-15 16:37:03 |
-| a7b5e137-3b49-11ee-8b43-00163e10863a | 12003           | 2023-08-15 16:56:42 | 2023-08-15 17:01:42 | 2023-08-15 17:01:42 |  PENDING  | 1     | 127.00.00.03_9010_1692069711535 | 2023-08-15 16:37:03 |
-+--------------------------------------+-----------------+---------------------+---------------------+---------------------+-----------+-------+---------------------------------+---------------------+
++--------------------------------------+-------------+-----------------+---------------------+---------------------+---------------------+---------+-------+-----------+------+---------------------------------+---------------------+
+| QueryId                              | WarehouseId | ResourceGroupId | StartTime           | PendingTimeout      | QueryTimeout        | State   | Slots | Fragments | DOP  | Frontend                        | FeStartTime         |
++--------------------------------------+-------------+-----------------+---------------------+---------------------+---------------------+---------+-------+-----------+------+---------------------------------+---------------------+
+| a46f68c6-3b49-11ee-8b43-00163e10863a | -           | 12003           | 2023-08-15 16:56:37 | 2023-08-15 17:01:37 | 2023-08-15 17:01:37 | RUNNING | 3     | 2         | 0    | 127.00.00.01_9010_1692069711535 | 2023-08-15 16:37:03 |
+| a6935989-3b49-11ee-935a-00163e13bca3 | -           | 12003           | 2023-08-15 16:56:40 | 2023-08-15 17:01:40 | 2023-08-15 17:01:40 | PENDING | 3     | 2         | 0    | 127.00.00.02_9010_1692069658426 | 2023-08-15 16:37:03 |
+| a7b5e137-3b49-11ee-8b43-00163e10863a | -           | 12003           | 2023-08-15 16:56:42 | 2023-08-15 17:01:42 | 2023-08-15 17:01:42 | PENDING | 3     | 2         | 0    | 127.00.00.03_9010_1692069711535 | 2023-08-15 16:37:03 |
++--------------------------------------+-------------+-----------------+---------------------+---------------------+---------------------+---------+-------+-----------+------+---------------------------------+---------------------+
 ```
