@@ -39,6 +39,7 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -563,8 +564,11 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
 
+        // Declared before the runner so it outlives the join in ~ParallelTaskRunner: the tasks lock
+        // it, and reverse declaration order would otherwise destroy it first.
+        // Guards the shared dcg_* result maps only; the status is the runner's business now.
         std::mutex result_mutex;
-        Status shared_status;
+        ParallelTaskRunner runner(token.get());
 
         for (const auto& each : rss_upt_id_to_rowid_pairs) {
             uint32_t rssid = each.first;
@@ -576,16 +580,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
                          upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids,
-                         &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex,
-                         &shared_status]() {
+                         &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex]() -> Status {
                 // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
-                auto writer_or = _prepare_delta_column_group_writer(params, partial_tschema);
-                if (!writer_or.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(writer_or.status());
-                    return;
-                }
-                auto delta_column_group_writer = std::move(writer_or.value());
+                ASSIGN_OR_RETURN(auto delta_column_group_writer,
+                                 _prepare_delta_column_group_writer(params, partial_tschema));
                 auto st = _read_from_source_segment_and_update(
                         params, partial_schema, rssid, [&](StreamChunkContainer container) {
                             const size_t source_chunk_size = container.chunk_ptr->memory_usage();
@@ -604,45 +602,31 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*container.chunk_ptr));
                             return Status::OK();
                         });
-                if (!st.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(st);
-                    return;
-                }
+                RETURN_IF_ERROR(st);
 
                 uint64_t segment_file_size = 0;
                 uint64_t index_size = 0;
                 uint64_t footer_position = 0;
-                st = delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position);
+                RETURN_IF_ERROR(delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position));
 
                 // 3.6 collect results under lock
                 std::lock_guard<std::mutex> l(result_mutex);
-                shared_status.update(st);
-                if (shared_status.ok()) {
-                    dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
-                    dcg_column_file_with_encryption_metas[rssid].emplace_back(
-                            file_name(delta_column_group_writer->segment_path()),
-                            delta_column_group_writer->encryption_meta());
-                    dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
-                }
+                dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
+                dcg_column_file_with_encryption_metas[rssid].emplace_back(
+                        file_name(delta_column_group_writer->segment_path()),
+                        delta_column_group_writer->encryption_meta());
+                dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
                 TRACE_COUNTER_INCREMENT("pcu_handle_cnt", 1);
+                return Status::OK();
             };
 
-            if (token) {
-                auto submit_st = token->submit_func(func);
-                std::lock_guard<std::mutex> l(result_mutex);
-                shared_status.update(submit_st);
-            } else {
-                func();
-                RETURN_IF_ERROR(shared_status);
-            }
+            runner.run(func);
         }
 
-        if (token) {
+        {
             TRACE_COUNTER_SCOPE_LATENCY_US("pcu_parallel_dcg_wait_us");
-            token->wait();
+            RETURN_IF_ERROR(runner.join());
         }
-        RETURN_IF_ERROR(shared_status);
     }
     // 4 generate delta columngroup
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
