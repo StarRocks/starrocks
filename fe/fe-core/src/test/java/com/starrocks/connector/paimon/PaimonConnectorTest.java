@@ -102,6 +102,20 @@ public class PaimonConnectorTest {
     }
 
     @Test
+    public void testTableCacheRefreshIntervalProperty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        // mirrors iceberg_table_cache_refresh_interval_sec
+        Assertions.assertEquals(60L, connector.getTableCacheRefreshIntervalSec());
+
+        properties.put(PaimonConnector.PAIMON_TABLE_CACHE_REFRESH_INTERVAL, "0");
+        PaimonConnector off = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Assertions.assertEquals(0L, off.getTableCacheRefreshIntervalSec());
+    }
+
+    @Test
     public void testCacheCanBeDisabled() throws Exception {
         Map<String, String> properties = new HashMap<>();
         properties.put("paimon.catalog.type", "filesystem");
