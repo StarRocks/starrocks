@@ -114,26 +114,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-
-    public void testSPMMetricsExposure() {
-        MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
-        MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);
-
-        MetricVisitor visitor = new PrometheusMetricVisitor("");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
-        MetricRepo.getMetric(visitor, params);
-        String output = visitor.build();
-
-        Assertions.assertTrue(output.contains("spm_baseline_count"));
-        Assertions.assertTrue(output.contains("spm_rewrite_total"));
-        Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
-        Assertions.assertTrue(output.contains("result=\"hit\""));
-        Assertions.assertTrue(output.contains("result=\"captured\""));
-    }
-
-    @Test
     public void testMaxJournalReplayLagMetricsExposure() {
         MetricVisitor visitor = new PrometheusMetricVisitor("");
         MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
@@ -146,42 +126,6 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-    public void testAlterColumnMetricsExposure() {
-        // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
-        // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
-        AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
-        registry.updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
-        registry.updateAlterDuration(AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
-
-        MetricVisitor visitor = new PrometheusMetricVisitor("");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
-        MetricRepo.getMetric(visitor, params);
-        String output = visitor.build();
-
-        Assertions.assertTrue(output.contains("alter_operation_total{"), output);
-        Assertions.assertTrue(output.contains("alter_duration_ms"), output);
-        Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
-    }
-  
-    public void testPlanAdvisorMetricsExposure() {
-        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
-        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
-        MetricRepo.COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL.increase(3L);
-
-        MetricVisitor visitor = new PrometheusMetricVisitor("");
-        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
-        MetricRepo.getMetric(visitor, params);
-        String output = visitor.build();
-
-        Assertions.assertTrue(output.contains("plan_advisor_guide_generated_total"));
-        Assertions.assertTrue(output.contains("plan_advisor_guide_applied_total"));
-        Assertions.assertTrue(output.contains("plan_advisor_optimization_duration_ms_total"));
-        Assertions.assertTrue(output.contains("operator_type=\"join\""));
-        Assertions.assertTrue(output.contains("operator_type=\"agg\""));
-    }
-
-    @Test
->>>>>>> 56b6449 ([Enhancement] Add max_journal_replay_lag gauge on the leader FE (#78382))
     public void testLeaderAwarenessMetric() {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
 

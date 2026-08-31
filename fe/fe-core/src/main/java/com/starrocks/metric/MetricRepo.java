@@ -37,11 +37,7 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
-<<<<<<< HEAD
-=======
-import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
->>>>>>> 56b6449 ([Enhancement] Add max_journal_replay_lag gauge on the leader FE (#78382))
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -278,11 +274,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P95;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
-<<<<<<< HEAD
-=======
-    public static LeaderAwareGaugeMetricLong GAUGE_SPM_BASELINE_COUNT;
     public static LeaderAwareGaugeMetricLong GAUGE_MAX_JOURNAL_REPLAY_LAG;
->>>>>>> 56b6449 ([Enhancement] Add max_journal_replay_lag gauge on the leader FE (#78382))
     public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
@@ -391,8 +383,6 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
 
-<<<<<<< HEAD
-=======
         // journal replay lag of the slowest follower/observer.
         // Leader-only: it is the only node that knows both the write frontier and, via heartbeat,
         // every other node's replayed journal id.
@@ -406,18 +396,6 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_JOURNAL_REPLAY_LAG);
 
-        GAUGE_SPM_BASELINE_COUNT = new LeaderAwareGaugeMetricLong(
-                SPM_BASELINE_COUNT_METRIC_NAME,
-                MetricUnit.NOUNIT,
-                "current number of global SPM baselines") {
-            @Override
-            public Long getValueLeader() {
-                return GlobalStateMgr.getCurrentState().getSqlPlanStorage().getBaselineCount();
-            }
-        };
-        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_SPM_BASELINE_COUNT);
-
->>>>>>> 56b6449 ([Enhancement] Add max_journal_replay_lag gauge on the leader FE (#78382))
         // meta log total count
         GaugeMetric<Long> metaLogCount = new GaugeMetric<Long>(
                 "meta_log_count", MetricUnit.NOUNIT, "meta log total count") {
@@ -832,8 +810,6 @@ public final class MetricRepo {
         }
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Max number of journals that any alive follower/observer still has to replay to catch up
      * with the leader.
@@ -860,63 +836,6 @@ public final class MetricRepo {
         return maxLag;
     }
 
-    private static void initStatisticsCacheMetrics() {
-        final var storage = GlobalStateMgr.getCurrentState().getStatisticStorage();
-        if (storage instanceof CachedStatisticStorage cachedStatisticStorage) {
-            for (var nameCachePair : cachedStatisticStorage.getNamedCacheMap().entrySet()) {
-                final var cacheName = nameCachePair.getKey();
-                final var cache = nameCachePair.getValue();
-                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_hit_count",
-                        "Cumulative number of statistics cache hits", c -> c.stats().hitCount());
-                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_miss_count",
-                        "Cumulative number of statistics cache misses", c -> c.stats().missCount());
-                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_eviction_count",
-                        "Cumulative number of statistics cache evictions", c -> c.stats().evictionCount());
-                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_success_count",
-                        "Cumulative number of successful statistics cache loads",
-                        c -> c.stats().loadSuccessCount());
-                addStatisticsCacheCounter(cacheName, cache, "statistics_cache_load_failure_count",
-                        "Cumulative number of failed statistics cache loads",
-                        c -> c.stats().loadFailureCount());
-                // Current cache occupancy — a point-in-time value, so it stays a GAUGE.
-                addStatisticsCacheGauge(cacheName, cache, "statistics_cache_entries",
-                        "Number of entries currently held in the statistics cache",
-                        LoadingCache::estimatedSize);
-            }
-        }
-
-    }
-
-    private static void addStatisticsCacheGauge(String cacheName, LoadingCache<?, ?> cache, String metricName, String description,
-                                                Function<LoadingCache<?, ?>, Long> cacheMetricFun) {
-        final var gauge = new GaugeMetric<>(metricName, MetricUnit.NOUNIT, description) {
-            @Override
-            public Long getValue() {
-                return cache == null ? 0L : cacheMetricFun.apply(cache);
-            }
-        };
-        gauge.addLabel(new MetricLabel("cache", cacheName));
-        STARROCKS_METRIC_REGISTER.addMetric(gauge);
-    }
-
-    private static void addStatisticsCacheCounter(String cacheName, LoadingCache<?, ?> cache, String metricName,
-                                                  String description, Function<LoadingCache<?, ?>, Long> cacheMetricFun) {
-        final var counter = new CounterMetric<Long>(metricName, MetricUnit.NOUNIT, description) {
-            @Override
-            public void increase(Long delta) {
-                // No-op: the value is pulled on demand from Caffeine's cumulative stats
-            }
-
-            @Override
-            public Long getValue() {
-                return cache == null ? 0L : cacheMetricFun.apply(cache);
-            }
-        };
-        counter.addLabel(new MetricLabel("cache", cacheName));
-        STARROCKS_METRIC_REGISTER.addMetric(counter);
-    }
-
->>>>>>> 56b6449 ([Enhancement] Add max_journal_replay_lag gauge on the leader FE (#78382))
     private static void initSystemMetrics() {
         // TCP retransSegs
         GaugeMetric<Long> tcpRetransSegs = (GaugeMetric<Long>) new GaugeMetric<Long>(

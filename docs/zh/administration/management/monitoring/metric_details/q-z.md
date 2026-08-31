@@ -409,6 +409,12 @@ description: "Alphabetical q - z"
 - 类型：瞬时
 - 描述：表示特定仓库下最后一次查询或加载的结束时间。对于无共享集群，此项仅监控默认仓库。
 
+## `starrocks_fe_max_journal_replay_lag`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：所有存活的 Follower 或 Observer FE 中，为追上 Leader 仍需回放的元数据日志的最大条数。仅由 Leader FE 上报（`is_leader="true"`），因为只有 Leader 同时知道自身的日志写入位置以及通过心跳获取的其他各节点已回放的日志 ID。非存活的 FE 节点会被排除，因为它们最后上报的日志 ID 停留在最后一次成功心跳时的值；此类节点请通过 `SHOW FRONTENDS` 的 `Alive` 列来发现。当其他节点均已追上、没有其他存活的 FE 节点，以及单 FE 集群时，该值为 `0`。该值较高或持续增长，说明至少有一个节点的元数据回放已落后，将导致该节点提供陈旧的元数据，并在超过 `meta_delay_toleration_second` 后把查询转发给 Leader。
+
 ## `starrocks_fe_memory_usage`
 
 - 单位：字节或计数
