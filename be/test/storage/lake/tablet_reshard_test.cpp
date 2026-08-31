@@ -6493,6 +6493,54 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_adjusts_data_stats_for_splitt
     EXPECT_TRUE(converted0->op_write().rowset().segment_metas(0).shared());
 }
 
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_shares_disjoint_sibling_and_conserves_stats) {
+    const int64_t old_tablet_id = next_id();
+    auto txn_log = std::make_shared<TxnLogPB>();
+    txn_log->set_tablet_id(old_tablet_id);
+    txn_log->set_txn_id(1000);
+
+    auto* rowset = txn_log->mutable_op_write()->mutable_rowset();
+    rowset->set_num_rows(1000);
+    rowset->set_data_size(10000);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("right_child_segment.dat");
+    segment->set_size(10000);
+    segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(70));
+    segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(80));
+
+    auto make_child_metadata = [&](int lower, int upper) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(next_id());
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(1);
+        metadata->mutable_schema()->set_keys_type(DUP_KEYS);
+        auto* range = metadata->mutable_range();
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        range->set_upper_bound_included(false);
+        return metadata;
+    };
+    auto left_metadata = make_child_metadata(0, 50);
+    auto right_metadata = make_child_metadata(50, 100);
+
+    lake::PublishTabletInfo left_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet_id, left_metadata->id(), 2,
+                                      0);
+    lake::PublishTabletInfo right_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet_id, right_metadata->id(),
+                                       2, 1);
+    ASSIGN_OR_ABORT(auto converted_left, lake::convert_txn_log(txn_log, left_metadata, left_info));
+    ASSIGN_OR_ABORT(auto converted_right, lake::convert_txn_log(txn_log, right_metadata, right_info));
+
+    ASSERT_EQ(1, converted_left->op_write().rowset().segment_metas_size());
+    ASSERT_EQ(1, converted_right->op_write().rowset().segment_metas_size());
+    EXPECT_TRUE(converted_left->op_write().rowset().segment_metas(0).shared());
+    EXPECT_TRUE(converted_right->op_write().rowset().segment_metas(0).shared());
+    EXPECT_EQ(500, converted_left->op_write().rowset().num_rows());
+    EXPECT_EQ(500, converted_right->op_write().rowset().num_rows());
+    EXPECT_EQ(5000, converted_left->op_write().rowset().data_size());
+    EXPECT_EQ(5000, converted_right->op_write().rowset().data_size());
+}
+
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_normal_publish_no_stats_change) {
     auto base_metadata = std::make_shared<TabletMetadataPB>();
     base_metadata->set_id(next_id());
