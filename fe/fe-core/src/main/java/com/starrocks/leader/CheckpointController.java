@@ -45,6 +45,7 @@ import com.starrocks.http.meta.MetaService;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalType;
 import com.starrocks.lake.snapshot.ClusterSnapshotInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageFormatVersion;
@@ -93,6 +94,7 @@ public class CheckpointController extends FrontendDaemon {
     // subDir comes after base imageDir, to distinguish different module's image dir
     private final String subDir;
     private final boolean belongToGlobalStateMgr;
+    private final JournalType journalType;
 
     private final Set<String> nodesToPushImage;
     private final Map<String, Long> lastFailedTime = new HashMap<>();
@@ -110,6 +112,7 @@ public class CheckpointController extends FrontendDaemon {
         this.journal = journal;
         this.subDir = subDir;
         this.belongToGlobalStateMgr = Strings.isNullOrEmpty(subDir);
+        this.journalType = belongToGlobalStateMgr ? JournalType.FE_META : JournalType.STAR_MGR;
         nodesToPushImage = new HashSet<>();
         this.clusterSnapshotInfo = null;
     }
@@ -386,7 +389,8 @@ public class CheckpointController extends FrontendDaemon {
         // deleteVersion should be the minimum value of imageVersion and replayedJournalId.
         long minReplayedJournalId = getMinReplayedJournalId();
         long deleteVersion = Math.min(imageVersion, minReplayedJournalId);
-        journal.deleteJournals(deleteVersion + 1);
+        long minJournalId = journal.deleteJournalsAndGetMinJournalId(deleteVersion + 1);
+        MetricRepo.updateEditLogRetainedMinJournalId(journalType, minJournalId);
         LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
                 deleteVersion, journal.getPrefix(), imageVersion, minReplayedJournalId);
 

@@ -139,24 +139,28 @@ public class BDBJEJournal implements Journal {
 
     @Override
     public long getMaxJournalId() {
-        long ret = -1;
+        return getJournalIdRange().second;
+    }
+
+    @Override
+    public Pair<Long, Long> getJournalIdRange() {
         if (bdbEnvironment == null) {
-            return ret;
+            return Pair.create(-1L, -1L);
         }
         List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
         if (dbNames == null || dbNames.isEmpty()) {
-            return ret;
+            return Pair.create(-1L, -1L);
         }
 
+        long minJournalId = dbNames.get(0);
         int index = dbNames.size() - 1;
         String dbName = getFullDatabaseName(dbNames.get(index));
         long dbNumberName = dbNames.get(index);
         // open database temporarily and close after count
         try (Database database = bdbEnvironment.openDatabase(dbName).getDb()) {
-            ret = dbNumberName + database.count() - 1;
+            long maxJournalId = dbNumberName + database.count() - 1;
+            return Pair.create(minJournalId, maxJournalId);
         }
-
-        return ret;
     }
 
     @Override
@@ -233,10 +237,15 @@ public class BDBJEJournal implements Journal {
      */
     @Override
     public void deleteJournals(long deleteToJournalId) {
+        deleteJournalsAndGetMinJournalId(deleteToJournalId);
+    }
+
+    @Override
+    public long deleteJournalsAndGetMinJournalId(long deleteToJournalId) {
         List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
-        if (dbNames == null) {
+        if (dbNames == null || dbNames.isEmpty()) {
             LOG.info("delete database names is null.");
-            return;
+            return -1L;
         }
 
         StringBuilder msg = new StringBuilder("existing database names: ");
@@ -246,18 +255,21 @@ public class BDBJEJournal implements Journal {
         msg.append(", deleteToJournalId is ").append(deleteToJournalId);
         LOG.info(msg.toString());
 
+        int firstRetainedIndex = 0;
         for (int i = 1; i < dbNames.size(); i++) {
             if (deleteToJournalId >= dbNames.get(i)) {
                 long name = dbNames.get(i - 1);
                 String dbName = getFullDatabaseName(name);
                 LOG.info("delete database name {}", dbName);
                 bdbEnvironment.removeDatabase(dbName);
+                firstRetainedIndex = i;
             } else {
                 LOG.info("database name {} is larger than deleteToJournalId {}, not delete",
                         dbNames.get(i), deleteToJournalId);
                 break;
             }
         }
+        return dbNames.get(firstRetainedIndex);
     }
 
     @Override

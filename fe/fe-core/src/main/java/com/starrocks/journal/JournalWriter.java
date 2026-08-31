@@ -37,6 +37,7 @@ public class JournalWriter {
     // other threads can put log to this queue by calling Editlog.logEdit()
     private final BlockingQueue<JournalTask> journalQueue;
     private final Journal journal;
+    private final JournalType journalType;
 
     // used for checking if edit log need to roll
     protected long rollJournalCounter = 0;
@@ -53,6 +54,7 @@ public class JournalWriter {
     private long startTimeNano;
     // batch size in bytes
     private long uncommittedEstimatedBytes;
+    private long currentBatchBytes;
 
     /**
      * If this flag is set true, we will roll journal,
@@ -69,12 +71,20 @@ public class JournalWriter {
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
+        this.journalType = journal == null ? null : JournalType.fromPrefix(journal.getPrefix());
     }
 
     /**
      * reset journal id & roll journal as a start
      */
     public void init(long maxJournalId) throws JournalException {
+        init(-1L, maxJournalId);
+    }
+
+    public void init(long minJournalId, long maxJournalId) throws JournalException {
+        if (journalType != null) {
+            MetricRepo.initializeEditLogRetained(journalType, minJournalId, maxJournalId);
+        }
         this.nextVisibleJournalId = maxJournalId + 1;
         this.journal.rollJournal(this.nextVisibleJournalId);
     }
@@ -112,6 +122,7 @@ public class JournalWriter {
             while (true) {
                 journal.batchWriteAppend(nextJournalId, currentJournal.getBuffer());
                 currentBatchTasks.add(currentJournal);
+                currentBatchBytes += currentJournal.estimatedSizeByte();
                 nextJournalId += 1;
 
                 if (shouldCommitNow()) {
@@ -130,6 +141,10 @@ public class JournalWriter {
                 journal.batchWriteCommit();
                 LOG.debug("batch write commit success, from {} - {}", nextVisibleJournalId, nextJournalId);
                 nextVisibleJournalId = nextJournalId;
+                if (journalType != null) {
+                    MetricRepo.recordEditLogBatch(
+                            journalType, nextJournalId - 1, currentBatchTasks.size(), currentBatchBytes);
+                }
                 markCurrentBatchSucceed();
             } catch (JournalException e) {
                 // abort
@@ -152,6 +167,7 @@ public class JournalWriter {
     private void initBatch() {
         startTimeNano = System.nanoTime();
         uncommittedEstimatedBytes = 0;
+        currentBatchBytes = 0L;
         currentBatchTasks.clear();
     }
 
