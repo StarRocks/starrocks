@@ -455,6 +455,10 @@ public class ConnectContext {
         this.preparedStmtCtxs.remove(stmtName);
     }
 
+    public void clearPreparedStmts() {
+        this.preparedStmtCtxs.clear();
+    }
+
     public long getStmtId() {
         return stmtId;
     }

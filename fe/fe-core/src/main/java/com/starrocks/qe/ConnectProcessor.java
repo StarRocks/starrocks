@@ -40,6 +40,7 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -81,13 +82,11 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
@@ -214,6 +213,9 @@ public class ConnectProcessor {
         // reconstruct serializer
         ctx.getSerializer().reset();
         ctx.getSerializer().setCapability(ctx.getCapability());
+        // COM_RESET_CONNECTION and COM_CHANGE_USER start a new logical session. Prepared
+        // statements must not carry analyzed metadata, cached plans, or policy state across it.
+        ctx.clearPreparedStmts();
         // reset session variable
         ctx.resetSessionVariable();
         // drop the previous logical session's diagnostics: COM_CHANGE_USER re-authenticates a
@@ -637,14 +639,8 @@ public class ConnectProcessor {
             executor = new StmtExecutor(ctx, parsedStmt);
             ctx.setExecutor(executor);
 
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(parsedStmt);
+            // Build view SQL without policy rewrite.
+            SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
 
             if (ctx.getQueryDetail() == null) {
                 executor.addRunningQueryDetail(parsedStmt);
@@ -944,6 +940,7 @@ public class ConnectProcessor {
         boolean enableAudit = false;
         String originStmt = null;
         ExecuteStmt executeStmt = null;
+        PrepareStmt preparedExecutionStmt = null;
         boolean needAddFinishQueryDetail = false;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
@@ -985,15 +982,19 @@ public class ConnectProcessor {
                 PrepareStmtContext prepareStmtContext = ctx.getPreparedStmt(executeStmt.getStmtName());
                 if (prepareStmtContext != null) {
                     if (prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement) {
-                        PrepareStmt prepareStmt = prepareStmtContext.getStmt();
-                        StatementBase deparameterizedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
-                        originStmt = AstToSQLBuilder.toSQL(deparameterizedStmt);
+                        if (prepareStmtContext.isCached()) {
+                            originStmt = prepareStmtContext.getBoundSqlForAudit(executeStmt.getParamsExpr());
+                        } else {
+                            preparedExecutionStmt = prepareStmtContext.instantiate(executeStmt.getParamsExpr());
+                            originStmt = AstToSQLBuilder.toSQL(preparedExecutionStmt.getInnerStmt());
+                        }
                         executeStmt.setOrigStmt(new OriginStatement(originStmt, 0));
                     }
                 }
             }
 
             executor = new StmtExecutor(ctx, executeStmt);
+            executor.setPreparedExecutionStmt(preparedExecutionStmt);
             ctx.setExecutor(executor);
             if (enableAudit) {
                 resetAuditEventBuilder();
@@ -1365,14 +1366,8 @@ public class ConnectProcessor {
             List<StatementBase> stmts = SqlParser.parse(request.getSql(), ctx.getSessionVariable());
             ctx.setMultiStmt(stmts.size() > 1);
             StatementBase statement = stmts.get(idx);
-            //Build View SQL without Policy Rewrite
-            new AstTraverser<Void, Void>() {
-                @Override
-                public Void visitRelation(Relation relation, Void context) {
-                    relation.setNeedRewrittenByPolicy(true);
-                    return null;
-                }
-            }.visit(statement);
+            // Build view SQL without policy rewrite.
+            SecurityPolicyRewriteRule.markRelationsForRewrite(statement);
             statement.setOrigStmt(new OriginStatement(request.getSql(), idx));
 
             executor = doProxyExecute(result, request, statement, requestFE);

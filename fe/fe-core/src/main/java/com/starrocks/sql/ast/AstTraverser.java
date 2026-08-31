@@ -40,27 +40,73 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
     @Override
     public R visitUpdateStatement(UpdateStmt statement, C context) {
-        //Update Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
+        // After analysis the synthesized query owns all executable expressions. Before analysis,
+        // source reads still live only in the parser-owned DML fields.
         if (statement.getQueryStatement() != null) {
             visit(statement.getQueryStatement(), context);
+            return null;
+        }
+        if (statement.getCommonTableExpressions() != null) {
+            statement.getCommonTableExpressions().forEach(x -> visit(x, context));
+        }
+        if (statement.getAssignments() != null) {
+            statement.getAssignments().forEach(x -> visit(x.getExpr(), context));
+        }
+        if (statement.getWherePredicate() != null) {
+            visit(statement.getWherePredicate(), context);
+        }
+        if (statement.getFromRelations() != null) {
+            statement.getFromRelations().forEach(x -> visit(x, context));
         }
         return null;
     }
 
     @Override
     public R visitDeleteStatement(DeleteStmt statement, C context) {
-        //Delete Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
+        // See visitUpdateStatement: use exactly one representation for each analysis phase.
         if (statement.getQueryStatement() != null) {
             visit(statement.getQueryStatement(), context);
+            return null;
+        }
+        if (statement.getCommonTableExpressions() != null) {
+            statement.getCommonTableExpressions().forEach(x -> visit(x, context));
+        }
+        if (statement.getWherePredicate() != null) {
+            visit(statement.getWherePredicate(), context);
+        }
+        if (statement.getUsingRelations() != null) {
+            statement.getUsingRelations().forEach(x -> visit(x, context));
         }
         return null;
     }
 
     @Override
     public R visitMergeIntoStatement(MergeIntoStmt statement, C context) {
-        //MergeInto Statement after analyze, all information will be used to build QueryStatement, so it is enough to traverse Query
+        // See visitUpdateStatement: use exactly one representation for each analysis phase.
         if (statement.getQueryStatement() != null) {
             visit(statement.getQueryStatement(), context);
+            return null;
+        }
+        if (statement.getWhenClauses() != null) {
+            for (MergeWhenClause clause : statement.getWhenClauses()) {
+                if (clause.getOptionalCondition() != null) {
+                    visit(clause.getOptionalCondition(), context);
+                }
+                if (clause instanceof MergeWhenMatchedUpdateClause) {
+                    ((MergeWhenMatchedUpdateClause) clause).getAssignments()
+                            .forEach(x -> visit(x.getExpr(), context));
+                } else if (clause instanceof MergeWhenNotMatchedInsertClause &&
+                        ((MergeWhenNotMatchedInsertClause) clause).getValues() != null) {
+                    ((MergeWhenNotMatchedInsertClause) clause).getValues()
+                            .forEach(x -> visit(x, context));
+                }
+            }
+        }
+        if (statement.getMergeCondition() != null) {
+            visit(statement.getMergeCondition(), context);
+        }
+        if (statement.getSourceRelation() != null) {
+            visit(statement.getSourceRelation(), context);
         }
         return null;
     }
@@ -140,6 +186,12 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
         if (node.getOutputExpression() != null) {
             node.getOutputExpression().forEach(x -> visit(x, context));
+        } else if (node.getSelectList() != null) {
+            // outputExpression is populated by the analyzer. Before analysis, expressions (including
+            // scalar subqueries) only live in the parser-owned select list.
+            node.getSelectList().getItems().stream()
+                    .filter(x -> !x.isStar())
+                    .forEach(x -> visit(x.getExpr(), context));
         }
 
         if (node.getPredicate() != null) {
@@ -148,6 +200,18 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
         if (node.getGroupBy() != null) {
             node.getGroupBy().forEach(x -> visit(x, context));
+        } else if (node.getGroupByClause() != null) {
+            // groupBy is analyzer-owned. Traverse the non-generating parser representation before
+            // analysis so scalar subqueries are not skipped or the AST mutated by the visitor.
+            GroupByClause groupByClause = node.getGroupByClause();
+            if (groupByClause.getGroupingType() == GroupByClause.GroupingType.GROUPING_SETS) {
+                if (groupByClause.getGroupingSetList() != null) {
+                    groupByClause.getGroupingSetList().forEach(
+                            groupingSet -> groupingSet.forEach(x -> visit(x, context)));
+                }
+            } else if (groupByClause.getOriGroupingExprs() != null) {
+                groupByClause.getOriGroupingExprs().forEach(x -> visit(x, context));
+            }
         }
 
         if (node.getAggregate() != null) {
@@ -175,6 +239,49 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
     @Override
     public R visitSubqueryRelation(SubqueryRelation node, C context) {
         return visit(node.getQueryStatement(), context);
+    }
+
+    @Override
+    public R visitPivotRelation(PivotRelation node, C context) {
+        visitRelation(node, context);
+        if (node.getAggregateFunctions() != null) {
+            node.getAggregateFunctions().forEach(x -> visit(x.getFunctionCallExpr(), context));
+        }
+
+        if (node.getPivotColumns() != null) {
+            node.getPivotColumns().forEach(x -> visit(x, context));
+        }
+
+        // The pivoted relation is the one that actually reads the table, so it must be visited for
+        // the same reasons as any other nested relation.
+        if (node.getQuery() != null) {
+            return visit(node.getQuery(), context);
+        }
+        return null;
+    }
+
+    @Override
+    public R visitValues(ValuesRelation node, C context) {
+        node.getRows().forEach(row -> row.forEach(x -> visit(x, context)));
+        return visitRelation(node, context);
+    }
+
+    @Override
+    public R visitTableFunction(TableFunctionRelation node, C context) {
+        // childExpressions is analyzer-owned. Use the original function parameters before analysis,
+        // and avoid visiting both representations after analysis.
+        if (node.getChildExpressions() != null) {
+            node.getChildExpressions().forEach(x -> visit(x, context));
+        } else if (node.getFunctionParams() != null && node.getFunctionParams().exprs() != null) {
+            node.getFunctionParams().exprs().forEach(x -> visit(x, context));
+        }
+        return visitRelation(node, context);
+    }
+
+    @Override
+    public R visitNormalizedTableFunction(NormalizedTableFunctionRelation node, C context) {
+        visitRelation(node, context);
+        return visitJoin(node, context);
     }
 
     @Override

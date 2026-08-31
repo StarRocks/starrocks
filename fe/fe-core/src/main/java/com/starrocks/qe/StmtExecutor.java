@@ -369,6 +369,12 @@ public class StmtExecutor {
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext = null;
+    // A pristine executable copy may be materialized while rendering COM_STMT_EXECUTE audit SQL.
+    // Reuse it for the first planning attempt to avoid parsing the prepared SQL twice.
+    private PrepareStmt preparedExecutionStmt = null;
+    // Captured before the PREPARE metadata AST is policy-marked and analyzed. EXECUTE reparses this
+    // source instead of reusing the analyzer-mutated metadata working copy.
+    private final OriginStatement preparedStatementOrigin;
     private boolean isInternalStmt = false;
     // Stores the last generated exec plan, used to dump the plan to fe.plan.log on query failure.
     private ExecPlan lastExecPlan = null;
@@ -412,11 +418,24 @@ public class StmtExecutor {
         this.isProxy = false;
         this.isInternalStmt = isInternalStmt;
         this.deploymentFinished = deploymentFinished;
+        this.preparedStatementOrigin = parsedStmt instanceof PrepareStmt
+                ? getPreparedStatementOrigin((PrepareStmt) parsedStmt) : null;
+    }
+
+    private OriginStatement getPreparedStatementOrigin(PrepareStmt prepareStmt) {
+        if (prepareStmt.getOrigStmt() != null) {
+            return prepareStmt.getOrigStmt();
+        }
+        return new OriginStatement(AstToSQLBuilder.toSQLWithCredential(prepareStmt.getInnerStmt()), 0);
     }
 
     public void setProxy() {
         isProxy = true;
         proxyResultBuffer = new ArrayList<>();
+    }
+
+    public void setPreparedExecutionStmt(PrepareStmt preparedExecutionStmt) {
+        this.preparedExecutionStmt = preparedExecutionStmt;
     }
 
     public Coordinator getCoordinator() {
@@ -868,15 +887,23 @@ public class StmtExecutor {
                                 executeStmt.getStmtName());
                     }
                     PrepareStmt prepareStmt = prepareStmtContext.getStmt();
-                    parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
-                    parsedStmt.setOrigStmt(originStmt);
-
+                    // Query-scope hints are already resolved on the metadata working copy. Apply
+                    // them before policy lookup/planning of the fresh executable copy.
+                    parsedStmt = prepareStmt.getInnerStmt();
                     if (prepareStmt.getInnerStmt().isExistQueryScopeHint()) {
                         processQueryScopeHint();
                     }
 
                     try {
-                        execPlan = PrepareStmtPlanner.plan(executeStmt, parsedStmt, context);
+                        PrepareStmt executableCopy = preparedExecutionStmt;
+                        // A retry must start from another pristine copy because normal analysis
+                        // mutates the statement passed to the first attempt.
+                        preparedExecutionStmt = null;
+                        PrepareStmtPlanner.PreparedStatementPlan preparedPlan =
+                                PrepareStmtPlanner.plan(executeStmt, context, executableCopy);
+                        parsedStmt = preparedPlan.getStatement();
+                        parsedStmt.setOrigStmt(originStmt);
+                        execPlan = preparedPlan.getExecPlan();
                     } catch (SemanticException e) {
                         if (e.getMessage().contains("Unknown partition")) {
                             throw new SemanticException(e.getMessage() +
@@ -3204,7 +3231,8 @@ public class StmtExecutor {
         boolean isBinaryRowFormat = context.getCommand() == MysqlCommand.COM_STMT_PREPARE;
         // register prepareStmt
         LOG.debug("add prepared statement {}, isBinaryProtocol {}", prepareStmt.getName(), isBinaryRowFormat);
-        context.putPreparedStmt(prepareStmt.getName(), new PrepareStmtContext(prepareStmt, context, execPlan));
+        context.putPreparedStmt(prepareStmt.getName(),
+                new PrepareStmtContext(prepareStmt, context, execPlan, preparedStatementOrigin));
         if (isBinaryRowFormat) {
             sendStmtPrepareOK(prepareStmt);
         }

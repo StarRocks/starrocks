@@ -356,12 +356,14 @@ public class ConnectProcessorTest extends DDLTestBase {
     @Test
     public void testResetConnection() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(resetConnectionPacket), GlobalStateMgr.getCurrentState());
+        ctx.putPreparedStmt("stale", new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null));
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
         Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
         Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
         Assertions.assertFalse(myContext.isKilled());
+        Assertions.assertNull(ctx.getPreparedStmt("stale"));
     }
 
     // A pooled connection handed back out must not expose the previous unit of work's diagnostics:

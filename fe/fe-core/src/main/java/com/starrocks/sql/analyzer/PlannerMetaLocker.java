@@ -32,6 +32,7 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
@@ -285,6 +286,13 @@ public class PlannerMetaLocker implements AutoCloseable {
         }
 
         @Override
+        public Void visitPrepareStatement(PrepareStmt node, Void context) {
+            // PREPARE is opaque to the generic traverser because it is a deferred execution
+            // boundary. Metadata analysis still needs the same table locks as its inner query.
+            return visit(node.getInnerStmt(), context);
+        }
+
+        @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             TableRef tableRef = node.getTableRef();
             TableName tableName = TableName.fromTableRef(tableRef);
@@ -317,15 +325,6 @@ public class PlannerMetaLocker implements AutoCloseable {
             TableName tableName = TableName.fromTableRef(tableRef);
             Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
-            // PlannerMetaLocker is constructed in StatementPlanner BEFORE
-            // Analyzer.analyze runs, so node.getQueryStatement() is null at
-            // this point. super's default traversal walks the analyzed
-            // QueryStatement and would skip the raw USING source — visit the
-            // source relation explicitly so its tables are locked alongside
-            // the target before the analyzer resolves the join.
-            if (node.getSourceRelation() != null) {
-                visit(node.getSourceRelation());
-            }
             return super.visitMergeIntoStatement(node, context);
         }
 
