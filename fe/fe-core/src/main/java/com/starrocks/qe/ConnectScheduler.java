@@ -359,6 +359,12 @@ public class ConnectScheduler {
     }
 
     public void closeAllIdleConnection() {
+        // Only select candidates under the lock; run cleanup() after releasing it. A follower
+        // cleanup may forward an explicit-txn rollback to the leader, a synchronous Thrift RPC,
+        // and doing that while holding connStatsLock would stall register/unregisterConnection
+        // (both take the same lock), keeping totalConns above 0 and blocking the graceful-exit
+        // drain until the hard timeout.
+        List<ConnectContext> toCleanup = Lists.newArrayList();
         try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
             connectionMap.values().forEach(context -> {
                 // Skip connections with an active explicit transaction while the graceful-exit drain
@@ -369,10 +375,11 @@ public class ConnectScheduler {
                 boolean explicitTxnExempt = context.inActiveExplicitTransaction()
                         && !GracefulExitFlag.isDrainWindowElapsed();
                 if (!explicitTxnExempt && context.isIdleLastFor(1000)) {
-                    context.cleanup();
+                    toCleanup.add(context);
                 }
             });
         }
+        toCleanup.forEach(ConnectContext::cleanup);
     }
 
     public void printAllRunningQuery() {
