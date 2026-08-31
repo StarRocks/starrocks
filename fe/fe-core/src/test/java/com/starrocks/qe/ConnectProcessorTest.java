@@ -59,12 +59,10 @@ import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.mysql.RequestPackage;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectProcessor;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -82,11 +80,9 @@ import com.starrocks.transaction.ExplicitTxnStatementValidator;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
-import mockit.Expectations;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -2273,144 +2269,4 @@ public class ConnectProcessorTest extends DDLTestBase {
             return new PrepareStmt("test_stmt", null, null);
         }
     }
-
-    @Test
-    public void testQueryRejectedDuringGracefulExit(@Mocked GracefulExitFlag gracefulExitFlag) throws Exception {
-        new Expectations() {
-            {
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
-            }
-        };
-
-        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
-        ConnectProcessor processor = new ConnectProcessor(ctx);
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                // The query runs normally; only the connection is closed afterward
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-        processor.processOnce(new RequestPackage(0, queryPacket));
-
-        // The query executes and returns OK, but the context is flagged so ReadListener closes
-        // the connection and the pool silently reconnects.
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
-        Assertions.assertTrue(ctx.isGracefulCloseConn());
-    }
-
-    @Test
-    public void testPreQueryAcceptedDuringGracefulExit(@Mocked GracefulExitFlag gracefulExitFlag) throws Exception {
-        new Expectations() {
-            {
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
-            }
-        };
-
-        // pre-query SQL (JDBC connection probe): executes normally, then the connection is also
-        // closed (no more exemption -- kill-conn makes exemption unnecessary).
-        MysqlSerializer serializer = MysqlSerializer.newInstance();
-        serializer.writeInt1(3);
-        serializer.writeEofString("select @@version_comment");
-        ByteBuffer preQueryPacket = serializer.toByteBuffer();
-
-        ConnectContext ctx = initMockContext(mockChannel(preQueryPacket), GlobalStateMgr.getCurrentState());
-        ConnectProcessor processor = new ConnectProcessor(ctx);
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                // pre-query runs normally
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-        processor.processOnce(new RequestPackage(0, preQueryPacket));
-
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-        // Pre-query is no longer exempt -- connection is closed after it completes
-        Assertions.assertTrue(ctx.isGracefulCloseConn());
-    }
-
-    @Test
-    public void testMultiStmtRejectedMidway(@Mocked GracefulExitFlag gracefulExitFlag) throws Exception {
-        // The accept-new window no longer rejects statements mid-packet. Both statements execute;
-        // shouldAcceptNewRequest() is consulted once at the end of processOnce and the connection stays open.
-        new Expectations() {
-            {
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = true;
-            }
-        };
-
-        MysqlSerializer serializer = MysqlSerializer.newInstance();
-        serializer.writeInt1(3);
-        serializer.writeEofString("select * from a; select * from b");
-        ByteBuffer multiPacket = serializer.toByteBuffer();
-
-        ConnectContext ctx = initMockContext(mockChannel(multiPacket), GlobalStateMgr.getCurrentState());
-        ConnectProcessor processor = new ConnectProcessor(ctx);
-        final int[] execCount = {0};
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                execCount[0]++;
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-        processor.processOnce(new RequestPackage(0, multiPacket));
-
-        // Both statements execute (no mid-packet reject).
-        Assertions.assertEquals(2, execCount[0]);
-        // shouldAcceptNewRequest() first call (returns true) is used at end of processOnce
-        Assertions.assertFalse(ctx.isGracefulCloseConn());
-        Assertions.assertEquals(QueryState.MysqlStateType.OK, myContext.getState().getStateType());
-    }
-
-    @Test
-    public void testActiveTxnNotClosedDuringGracefulExit(@Mocked GracefulExitFlag gracefulExitFlag) throws Exception {
-        new Expectations() {
-            {
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
-            }
-        };
-
-        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
-        ConnectProcessor processor = new ConnectProcessor(ctx);
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void execute() throws Exception {
-                // The query runs normally; only the connection is closed afterward
-            }
-
-            @Mock
-            public PQueryStatistics getQueryStatisticsForAuditLog() {
-                return statistics;
-            }
-        };
-        // Simulate an active explicit transaction (BEGIN..COMMIT/ROLLBACK): the connection must NOT
-        // be marked for close, otherwise the ExplicitTxnState would be stranded in
-        // GlobalTransactionMgr when the connection dies mid-transaction.
-        ctx.setTxnId(12345L);
-        processor.processOnce(new RequestPackage(0, queryPacket));
-
-        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
-        Assertions.assertFalse(ctx.isGracefulCloseConn());
-    }
-
 }

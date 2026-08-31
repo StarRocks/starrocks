@@ -171,10 +171,6 @@ public class ConnectContext {
     protected MysqlCapability capability;
     // Indicate if this client is killed.
     protected volatile boolean isKilled;
-    // Set after a query completes during graceful exit (after the accept-new window): the query
-    // ran normally, but the connection is closed so a JDBC connection-pool client detects the
-    // dead connection and silently reconnects through the load balancer to a healthy FE.
-    protected volatile boolean gracefulCloseConn;
     // Db
     protected String currentDb = "";
 
@@ -411,7 +407,6 @@ public class ConnectContext {
         returnRows = 0;
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
         isKilled = false;
-        gracefulCloseConn = false;
         serializer = MysqlSerializer.newInstance();
         sessionVariable = globalStateMgr.getVariableMgr().newSessionVariable();
         userVariables = new ConcurrentHashMap<>();
@@ -1051,14 +1046,6 @@ public class ConnectContext {
     // Set kill flag to true;
     public void setKilled() {
         isKilled = true;
-    }
-
-    public boolean isGracefulCloseConn() {
-        return gracefulCloseConn;
-    }
-
-    public void setGracefulCloseConn() {
-        gracefulCloseConn = true;
     }
 
     public TUniqueId getExecutionId() {

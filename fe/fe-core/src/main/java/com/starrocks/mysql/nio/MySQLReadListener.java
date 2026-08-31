@@ -15,6 +15,7 @@
 package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.RequestPackage;
 import com.starrocks.mysql.ssl.SSLDecoder;
@@ -22,6 +23,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.sql.ast.StatementBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -127,12 +130,13 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
      * Termination logic:
      * <ul>
      *   <li>Returns {@code true} if the terminated flag is already set (client disconnected)</li>
-     *   <li>Returns {@code true} during graceful exit when the last request is marked for graceful
-     *       close by {@link ConnectProcessor} — regardless of whether that request created a
-     *       {@link StmtExecutor}, so control commands (COM_PING, COM_INIT_DB, COM_RESET_CONNECTION)
-     *       cannot keep the connection alive throughout the drain. Active explicit transactions
-     *       remain open until commit or rollback so their transaction state is not stranded.</li>
-     *   <li>Returns {@code false} otherwise.</li>
+     *   <li>Returns {@code false} if no statement has been executed yet (executor is null)</li>
+     *   <li>During graceful exit (leader transfer), returns {@code true} only if the last executed
+     *       statement is NOT a pre-query SQL. Pre-query SQLs (like {@code select @@query_timeout},
+     *       {@code set query_timeout=xxx}, {@code select connection_id()}) are initialization queries
+     *       sent by JDBC drivers and should not cause connection termination to avoid breaking
+     *       client connections during leadership transitions. A connection with an active explicit
+     *       transaction is also kept alive so its transaction state is not stranded mid-flight.</li>
      * </ul>
      *
      * @return {@code true} if the connection should be terminated, {@code false} otherwise
@@ -141,7 +145,14 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
         if (terminated) {
             return true;
         }
-        return ctx.isGracefulCloseConn();
+        StmtExecutor executor = connectProcessor.getExecutor();
+        if (executor == null) {
+            return false;
+        }
+        final StatementBase lastStmt = executor.getParsedStmt();
+        return GracefulExitFlag.isGracefulExit()
+                && !SqlUtils.isPreQuerySQL(lastStmt)
+                && !ctx.inActiveExplicitTransaction();
     }
 
     private synchronized void handleRequest(RequestPackage req) {

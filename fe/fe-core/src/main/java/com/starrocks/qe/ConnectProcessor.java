@@ -75,7 +75,6 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
@@ -1496,17 +1495,7 @@ public class ConnectProcessor {
 
         ctx.setCommand(MysqlCommand.COM_SLEEP);
         ctx.setEndTime();
-        markGracefulCloseIfNeeded();
     }
-
-    private void markGracefulCloseIfNeeded() {
-        // The query runs normally and sends its result before the listener closes the connection.
-        // Keep active explicit transactions open so their transaction state is not stranded.
-        if (!GracefulExitFlag.shouldAcceptNewRequest() && !ctx.inActiveExplicitTransaction()) {
-            ctx.setGracefulCloseConn();
-        }
-    }
-
 
     // handle one process
     public void processOnce() throws IOException {
@@ -1538,8 +1527,6 @@ public class ConnectProcessor {
 
         ctx.setCommand(MysqlCommand.COM_SLEEP);
         ctx.setEndTime();
-
-        markGracefulCloseIfNeeded();
     }
 
     protected void loopForTest() {
