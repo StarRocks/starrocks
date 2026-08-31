@@ -27,6 +27,58 @@ description: "StarRocks 3.5 release notes: Iceberg view creation, OAuth 2.0 and 
 
 :::
 
+## 3.5.21
+
+Release date: August 28, 2026
+
+### Behavior Changes
+
+- Reverted the 3.5.20 change that cached Iceberg REST vended-credential tables and kept their credentials fresh: on `branch-3.5`, that caching caused `INSERT OVERWRITE` transactions against a slow Iceberg REST catalog to stay `COMMITTED` but not `VISIBLE` for several seconds, because a REST metadata refresh could now run while the planner held a lock that transaction publishing also needs. The caching behavior remains in place on the 4.x line. [#77039](https://github.com/StarRocks/starrocks/pull/77039)
+- GIN (inverted) indexes on Primary Key tables now read from the correct segment after a column-mode partial update, instead of serving stale index data from the unmodified base segment. [#76271](https://github.com/StarRocks/starrocks/pull/76271)
+- Audit logs for statements forwarded to the leader FE now record the leader-resolved, fully qualified table relations (with CTEs excluded), instead of the follower's unresolved names. [#76387](https://github.com/StarRocks/starrocks/pull/76387)
+- `ARRAY`/`MAP` constructor expressions now reject a result whose flattened size exceeds 4 GB instead of silently wrapping around and returning corrupted values. [#76419](https://github.com/StarRocks/starrocks/pull/76419)
+- Iceberg REST catalogs using OAuth2 client-credentials now self-heal their background token-refresh session after a prolonged failure, instead of leaving the catalog permanently unable to refresh its access token. [#76457](https://github.com/StarRocks/starrocks/pull/76457)
+- External scan contexts (for example, an abandoned Spark/Flink connector read) now properly cancel their pipeline fragments when reaped as expired, instead of leaving them running. [#76535](https://github.com/StarRocks/starrocks/pull/76535)
+- External scan plans (Spark/Flink connector reads) now set `query_delivery_timeout`, so their `QueryContext` no longer waits indefinitely for fragments that will never arrive. [#76536](https://github.com/StarRocks/starrocks/pull/76536)
+- `array_difference()` on integer arrays no longer overflows in 32-bit precision before widening to `BIGINT`, fixing incorrect results when the true difference falls outside the `INT` range. [#76569](https://github.com/StarRocks/starrocks/pull/76569)
+- Division expressions with a non-constant divisor (for example, `10 DIV c`) are no longer treated as monotonic, fixing incorrect ZoneMap-based pruning that could return an empty or wrong result. [#76744](https://github.com/StarRocks/starrocks/pull/76744)
+- The configured compression codec now applies to the synthetic null/offset sub-columns of flat JSON, `ARRAY`, `MAP`, and `STRUCT` columns, instead of always writing them as uncompressed raw pages. [#76949](https://github.com/StarRocks/starrocks/pull/76949)
+- Load quorum selection no longer picks a replica in `DECOMMISSION` state as the load primary. [#77035](https://github.com/StarRocks/starrocks/pull/77035)
+- Optimizer rules that rebuild a logical window operator now preserve its `inputIsBinary` flag, keeping the binary-input merge optimization for ranking-window pre-aggregation intact. [#77058](https://github.com/StarRocks/starrocks/pull/77058)
+
+### Improvements
+
+- Materialized views no longer force a full-partition refresh when manually set from `INACTIVE` to `ACTIVE`; only the metadata version map is cleared during a schema change. [#57371](https://github.com/StarRocks/starrocks/pull/57371)
+- Improved error messages for large-column-capacity-limit checks by removing internal diagnostics (raw pointers, operator dumps) from the user-facing error, and fixed a typo in the shared status string. [#76303](https://github.com/StarRocks/starrocks/pull/76303)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Guarded against cyclic view definitions: an `ALTER VIEW` that closes a reference cycle (`v1` -> `v2` -> `v1`) is now rejected with a clear error instead of causing a later `SELECT` to recurse forever and crash with `StackOverflowError`. [#75033](https://github.com/StarRocks/starrocks/pull/75033)
+- Forbade pushing an aggregate down through a CASE expression that has a non-null constant ELSE branch, fixing a planning abort (`IllegalStateException`) that could occur once the rule fired. [#75037](https://github.com/StarRocks/starrocks/pull/75037)
+- `CTEAnchor` now prunes correctly when its child is a `ValueOperator`. [#64491](https://github.com/StarRocks/starrocks/pull/64491)
+- Fixed predicate conversion for Paimon: an AND-combined predicate now retains its convertible not-null branch instead of the whole conversion returning null. [#66038](https://github.com/StarRocks/starrocks/pull/66038)
+- The Arrow Flight prepared-statement schema no longer reports every view column as nullable regardless of its actual `NOT NULL` definition, and a related regression that produced wrong nullability for `GROUP BY ROLLUP`/`CUBE`/`GROUPING SETS` key columns has also been fixed. [#75684](https://github.com/StarRocks/starrocks/pull/75684) [#76149](https://github.com/StarRocks/starrocks/pull/76149)
+- Fixed two statistics bugs: an OR-predicate statistics estimate that always clamped the merged `nullsFraction` to `1` regardless of the real value, and a column-statistics cache load failure under `ERROR_IF_OVERFLOW` when a column's persisted min/max is an empty string. [#75864](https://github.com/StarRocks/starrocks/pull/75864) [#76684](https://github.com/StarRocks/starrocks/pull/76684)
+- Fixed a bRPC stub cache timer leak that leaked memory over time. [#75973](https://github.com/StarRocks/starrocks/pull/75973)
+- `UNNEST` output struct pruning now uses its input array's subfield group instead of the output's own, fixing a mismatch between the struct type BE materializes and the one FE declares. [#76002](https://github.com/StarRocks/starrocks/pull/76002)
+- Fixed Arrow Flight Prepared Statement forwarding sending the wrong action-type string when a request is forwarded to a different FE, which caused every ADBC client using prepared statements behind a load balancer to fail. [#76310](https://github.com/StarRocks/starrocks/pull/76310)
+- Hive `getTable()` now reconnects before falling back to `get_table_req()`, fixing an intermittent `out of sequence response` / `Unknown table` error when querying an Iceberg table through a Hive metastore catalog. [#76456](https://github.com/StarRocks/starrocks/pull/76456)
+- Made catalog-drop existence checks atomic under the write lock, fixing a check-then-act race that could persist a redundant drop record when two drops of the same catalog ran concurrently. [#76778](https://github.com/StarRocks/starrocks/pull/76778)
+- Fixed `PipeObservable` emitting a source event instead of a sink event on a deferred sink notification, which could leave a driver blocked on `OUTPUT_FULL` unresponsive. [#76782](https://github.com/StarRocks/starrocks/pull/76782)
+- `dictionary_get()` no longer rejects a non-NULL key when its input column's cached `has_null` flag is stale. [#76881](https://github.com/StarRocks/starrocks/pull/76881)
+- Added the missing `arrow-compression` module for Arrow Flight SQL, restoring LZ4/ZSTD codec support for compressed Arrow IPC clients. [#76921](https://github.com/StarRocks/starrocks/pull/76921)
+- Fixed an OOM in streaming pre-aggregation under memory pressure with spill enabled. [#76702](https://github.com/StarRocks/starrocks/pull/76702)
+- `Set` operators are no longer placed in colocate execution groups, fixing a hang caused by their branches being terminated by a plain local-exchange sink instead of a grouped-execution sink. [#77025](https://github.com/StarRocks/starrocks/pull/77025)
+- Stopped the query cache from storing incomplete per-tablet results for an aggregation with a `LIMIT`, which could return wrong results from the cache. [#77066](https://github.com/StarRocks/starrocks/pull/77066)
+- An insert-overwrite failure is no longer journaled against a table that was concurrently dropped, fixing an FE crash on journal replay. [#77212](https://github.com/StarRocks/starrocks/pull/77212)
+- Checkpoint-thread-created thread pools are no longer registered in the metrics registry. [#77367](https://github.com/StarRocks/starrocks/pull/77367)
+- Stopped shipping test-scope jars in the `java-extensions` reader libraries. [#77752](https://github.com/StarRocks/starrocks/pull/77752)
+- Resolved tablet backend IDs outside the `TabletInvertedIndex` write lock, fixing an FE deadlock between materialized-view refresh/insert-overwrite commit and tablet force-delete. [#78102](https://github.com/StarRocks/starrocks/pull/78102)
+- Several BE/CN crashes: a crash during graceful shutdown when a pending brpc closure ran after `SinkBuffer` was destroyed; a null-pointer crash in `SparseRangeIterator::has_more()` on an empty physical-split tablet; a `bad_weak_ptr` abort from an unscheduled global runtime-filter timer in `PipelineDriver`'s destructor; a SIGSEGV in the native Parquet reader on an incomplete nested lake schema; a heap-use-after-free with a multi-character CSV delimiter that straddles a buffer expansion; and a heap-buffer-overflow building the error message for a raw JSON value in `SimdJsonConverter`. [#73202](https://github.com/StarRocks/starrocks/pull/73202) [#75985](https://github.com/StarRocks/starrocks/pull/75985) [#76252](https://github.com/StarRocks/starrocks/pull/76252) [#76455](https://github.com/StarRocks/starrocks/pull/76455) [#76718](https://github.com/StarRocks/starrocks/pull/76718) [#76752](https://github.com/StarRocks/starrocks/pull/76752)
+- Several dependency CVEs: excluded an unused `avro-ipc` dependency that bundled a vulnerable jQuery 1.4.2; bumped Netty to 4.1.136.Final; excluded vulnerable Jetty jars and bumped pgjdbc to 42.7.12; bumped Apache Thrift to 0.24.0; and bumped Apache HttpCore to 5.4.3. [#76270](https://github.com/StarRocks/starrocks/pull/76270) [#76555](https://github.com/StarRocks/starrocks/pull/76555) [#76783](https://github.com/StarRocks/starrocks/pull/76783) [#76922](https://github.com/StarRocks/starrocks/pull/76922) [#77753](https://github.com/StarRocks/starrocks/pull/77753)
+
 ## 3.5.20
 
 Release date: July 23, 2026
