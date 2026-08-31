@@ -223,7 +223,7 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
     else
         # Normal mode: take the value from the `jemalloc_conf` config in be.conf/cn.conf so it is
         # observable via information_schema.be_configs. Fall back to the built-in default when unset.
-        # NOTE: keep this default in sync with CONF_String(jemalloc_conf, ...) in be/src/common/config.h.
+        # NOTE: keep this default in sync with CONF_mString(jemalloc_conf, ...) in be/src/common/config.h.
         jemalloc_conf="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
         if [ ${RUN_BE} -eq 1 ]; then
             read_var_from_conf jemalloc_conf $STARROCKS_HOME/conf/be.conf

@@ -116,14 +116,18 @@ CONF_Bool(enable_jemalloc_memory_tracker, "true");
 
 // The jemalloc runtime options applied via the JEMALLOC_CONF environment variable when the
 // process is started in the normal mode (i.e. neither --jemalloc_debug nor --check_mem_leak) and JEMALLOC_CONF is not already set.
-// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so this config does not
-// reconfigure jemalloc at runtime; it is exported by bin/start_backend.sh and surfaced here purely
-// for observability via information_schema.be_configs. It is ignored under the jemalloc_debug and
-// check_mem_leak modes, which force their own JEMALLOC_CONF.
+// jemalloc reads JEMALLOC_CONF at process init before BE config parsing, so it is exported by
+// bin/start_backend.sh. It is ignored under the jemalloc_debug and check_mem_leak modes, which
+// force their own JEMALLOC_CONF.
+// Updating this config at runtime only re-applies the options that jemalloc itself allows to be
+// changed after init, namely dirty_decay_ms, muzzy_decay_ms and prof_active. Adding, removing or
+// changing any other option is rejected, because the corresponding `opt.*` mallctl nodes are
+// read-only; those need a restart. Note that prof_active can only be turned on when the process
+// was started with prof:true.
 // NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
-CONF_String(jemalloc_conf,
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
-            "background_thread:true,prof:true,prof_active:false");
+CONF_mString(jemalloc_conf,
+             "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
+             "background_thread:true,prof:true,prof_active:false");
 
 // On arm64, bin/start_backend.sh auto-detects the host's page size (via getconf PAGESIZE) to
 // decide whether to load the 4K- or 64K-page jemalloc build. Set this to "4k"/"4096" or

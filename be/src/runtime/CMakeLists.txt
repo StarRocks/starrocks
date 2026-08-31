@@ -48,6 +48,7 @@ set(RUNTIME_SRCS
     memory/mem_chunk_allocator.cpp
     memory/memory_allocator.cpp
     memory/memory_lock.cpp
+    memory/jemalloc_conf_updater.cpp
     exception_stack.cpp
     prof/heap_prof.cpp
     serde/chunk_encode_context.cpp
