@@ -460,10 +460,21 @@ cd -
 echo "Finished patching $STREAMVBYTE_SOURCE"
 
 # patch hyperscan
+<<<<<<< HEAD
 cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
     patch -p1 < $TP_PATCH_DIR/hyperscan-5.4.0.patch
     touch $PATCHED_MARK
+=======
+if [[ -d $TP_SOURCE_DIR/$HYPERSCAN_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.4.0.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $HYPERSCAN_SOURCE"
+>>>>>>> db6f6ab ([BugFix] Upgrade Hyperscan to Vectorscan 5.4.12 on Linux AArch64 (#78326))
 fi
 cd -
 echo "Finished patching $HYPERSCAN_SOURCE"
