@@ -542,8 +542,10 @@ public class CachingMvPlanContextBuilder {
      * Submit an async task to be executed in MV plan cache executor.
      * @param taskName: the name of the task.
      * @param task: the task to be executed.
+     * @return the future of the submitted task, so callers can use it as a barrier. NOTE: the future
+     *         completes exceptionally if the task throws, so barriers must not use a bare join().
      */
-    public static void submitAsyncTask(String taskName, Supplier<Void> task) {
+    public static CompletableFuture<?> submitAsyncTask(String taskName, Supplier<Void> task) {
         CompletableFuture<?> future = CompletableFuture.supplyAsync(task, MV_PLAN_CACHE_EXECUTOR);
         long startTime = System.currentTimeMillis();
         future.whenComplete((result, e) -> {
@@ -554,6 +556,7 @@ public class CachingMvPlanContextBuilder {
                 LOG.warn("async task {} failed: {}, cost: {}ms", taskName, e.getMessage(), duration, e);
             }
         });
+        return future;
     }
 
     public static String getMVPlanCacheStats() {

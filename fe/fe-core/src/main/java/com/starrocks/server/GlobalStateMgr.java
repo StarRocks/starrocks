@@ -600,6 +600,8 @@ public class GlobalStateMgr {
     private final PipeListener pipeListener;
     private final PipeScheduler pipeScheduler;
     private final MVActiveChecker mvActiveChecker;
+    private final MvStartupActivationCoordinator mvStartupActivationCoordinator =
+            new MvStartupActivationCoordinator();
 
     private final MVLifecycleAutoKeeper mvLifeCycleAutoKeeper;
 
@@ -1688,6 +1690,26 @@ public class GlobalStateMgr {
         return isReady.get();
     }
 
+    /**
+     * Block until the startup materialized view activation pipeline has drained.
+     * <p>
+     * Called from the FE startup path after {@link #waitForReady()} and before any service port is bound, so
+     * that the FE does not accept queries while a large part of the mv plan cache is still being built. A
+     * query whose candidate mv has a pending plan future blocks on it instead of degrading, so opening the
+     * ports early turns a slow startup into a slow service.
+     * <p>
+     * This is a one-shot startup gate and must stay out of {@link #isReady()}: on a follower isReady is
+     * recomputed continuously by the replayer and flips with metadata staleness, while this must happen
+     * exactly once per process.
+     */
+    public void waitForStartupMvActivation() throws InterruptedException {
+        mvStartupActivationCoordinator.await();
+    }
+
+    public MvStartupActivationCoordinator getMvStartupActivationCoordinator() {
+        return mvStartupActivationCoordinator;
+    }
+
     private void transferToLeader() {
         // stop replayer. Bound the join so a stuck replay applier (e.g. one pinned on a lock it cannot
         // acquire) cannot hang leader activation on the single state-change thread forever; if it does
@@ -2661,6 +2683,12 @@ public class GlobalStateMgr {
 
         // only load image async when FE restart and it's not checkpoint thread to avoid changing original behavior.
         boolean isReloadAsync = Config.enable_mv_post_image_reload_cache && !isCheckpointThread();
+        // Collect the activation futures so that the startup readiness gate can wait for them. Only an
+        // asynchronous reload leaves anything to wait for: a synchronous one has already finished by the time
+        // this method returns. Nothing is awaited here on purpose -- this runs on the image loading thread and
+        // journal replay only starts after it returns, so blocking would hold replay behind every activation.
+        List<CompletableFuture<?>> activations = isReloadAsync && Config.enable_mv_startup_activation_gate
+                ? new ArrayList<>(topoOrder.size()) : null;
         int size = topoOrder.size();
         for (int i = 0; i < size; i++) {
             MaterializedView mv = topoOrder.get(i);
@@ -2670,7 +2698,13 @@ public class GlobalStateMgr {
             LOG.info("start to reload mv {}/{}: {}.{} after load image, isReloadAsync:{}",
                     i + 1, size, dbName, mv.getName(), isReloadAsync);
             // set `postLoadImage` flag to true to indicate that this is called after image loading
-            mv.onReload(isReloadAsync);
+            CompletableFuture<?> activation = mv.onReload(isReloadAsync);
+            if (activations != null) {
+                activations.add(activation);
+            }
+        }
+        if (activations != null) {
+            mvStartupActivationCoordinator.submit(activations);
         }
 
         long duration = System.currentTimeMillis() - startMillis;

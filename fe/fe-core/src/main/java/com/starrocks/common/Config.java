@@ -4467,6 +4467,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The timeout for waiting async mv reload done, 3 min by default")
     public static int mv_async_reload_wait_timeout_second = 3 * 60; // 3 min
 
+    @ConfField(mutable = true, comment = "Whether the FE waits for the startup MV activation tasks to "
+            + "drain before binding service ports. Those tasks occupy the whole mv-plan-cache pool, so "
+            + "without the wait the FE opens its ports while everything else queued on that pool, plan "
+            + "cache building included, is still stuck behind them. Note the wait covers activation only: "
+            + "plan cache building is queued separately and is not awaited. When disabled, ports open as "
+            + "soon as the catalog is ready, i.e. the behaviour before this change. Kill switch for the "
+            + "startup readiness gate; not a staged rollout knob.")
+    public static boolean enable_mv_startup_activation_gate = true;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */

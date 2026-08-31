@@ -36,6 +36,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MvStartupActivationCoordinator;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -1246,6 +1247,42 @@ public class MaterializedViewTest extends StarRocksTestBase {
         Assertions.assertEquals(2, baseMv.getRelatedMaterializedViews().size());
         Assertions.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv1.getMvId()));
         Assertions.assertTrue(baseMv.getRelatedMaterializedViews().contains(mv2.getMvId()));
+    }
+
+    /**
+     * The startup readiness gate must be a true kill switch: with it off, processMvRelatedMeta has to keep
+     * using the flat submit path and hand nothing to the coordinator, so await() is a no-op and the FE opens
+     * its ports exactly as it did before the gate existed. Same when post-image async reload is off, since
+     * then the reload is fully synchronous and there is no async task for the gate to wait on.
+     */
+    @Test
+    public void testStartupActivationGateIsOffByConfig() throws Exception {
+        boolean oldGate = Config.enable_mv_startup_activation_gate;
+        boolean oldPostImageReload = Config.enable_mv_post_image_reload_cache;
+        MvStartupActivationCoordinator coordinator =
+                GlobalStateMgr.getCurrentState().getMvStartupActivationCoordinator();
+        int mvsHandedOverBefore = coordinator.getTotalMvs();
+        try {
+            // gate off, async reload on
+            Config.enable_mv_startup_activation_gate = false;
+            Config.enable_mv_post_image_reload_cache = true;
+            GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+            Assertions.assertEquals(mvsHandedOverBefore, coordinator.getTotalMvs(),
+                    "the gate is disabled but mvs were still handed to the startup coordinator");
+
+            // gate on, async reload off: isReloadAsync is false, so there is nothing to await either
+            Config.enable_mv_startup_activation_gate = true;
+            Config.enable_mv_post_image_reload_cache = false;
+            GlobalStateMgr.getCurrentState().processMvRelatedMeta();
+            Assertions.assertEquals(mvsHandedOverBefore, coordinator.getTotalMvs(),
+                    "post-image async reload is disabled but mvs were still handed to the coordinator");
+
+            // in both cases the gate must not block startup
+            GlobalStateMgr.getCurrentState().waitForStartupMvActivation();
+        } finally {
+            Config.enable_mv_startup_activation_gate = oldGate;
+            Config.enable_mv_post_image_reload_cache = oldPostImageReload;
+        }
     }
 
     @Test

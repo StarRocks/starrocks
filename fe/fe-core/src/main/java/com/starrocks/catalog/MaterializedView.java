@@ -114,6 +114,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -1545,9 +1546,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Reload the materialized view with original active state.
      * NOTE: This method will not try to activate the materialized view.
      * @param isReloadAsync whether reload mv asynchronously when it is desired to be active.
+     * @return a future completed when the asynchronous activation task of this mv is done. It is an
+     *         already completed future when the reload ran synchronously or was skipped, so callers can
+     *         always join on it. Used by the startup pipeline to wait for a whole topological layer.
      */
-    public void onReload(boolean isReloadAsync) {
-        onReload(isReloadAsync, isActive(), false);
+    public CompletableFuture<?> onReload(boolean isReloadAsync) {
+        return onReload(isReloadAsync, isActive(), false);
     }
 
     /**
@@ -1561,13 +1565,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @param isReloadAsync whether this reload is called after FE's image loading process.
      * @param desiredActive whether the materialized view should be active after reload.
      */
-    private void onReload(boolean isReloadAsync,
-                          boolean desiredActive,
-                          boolean isThrowException) {
+    private CompletableFuture<?> onReload(boolean isReloadAsync,
+                                          boolean desiredActive,
+                                          boolean isThrowException) {
         // Only skip reload during FE startup/checkpoint scenarios (isReloadAsync=true).
         if (isReloadAsync && hasReloaded()) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
+        CompletableFuture<?> activationTask = CompletableFuture.completedFuture(null);
         try {
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
@@ -1576,7 +1581,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // reload mv required metadata synchronously
             onReloadImpl();
             // if desired to be active, check whether you can be active
-            checkAndSetActive(isReloadAsync, desiredActive);
+            activationTask = checkAndSetActive(isReloadAsync, desiredActive);
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             // only set inactive when it is desired to be active
@@ -1592,16 +1597,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 changeReloadState(RELOAD_STATE_DONE);
             }
         }
+        return activationTask;
     }
 
-    private void checkAndSetActive(boolean isReloadAsync, boolean desiredActive) {
+    private CompletableFuture<?> checkAndSetActive(boolean isReloadAsync, boolean desiredActive) {
         // to avoid blocking the main replay thread and reduce fe restart time, check isActive asynchronously,
         // this method is time costing because:
         // - if mv contains external base tables, it may need to connect external systems to check table existence
         // - if mv contains hierarchical mvs, it may need to recursively reload base mvs
         // so we submit an async task to do this check
         if (isReloadAsync) {
-            CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
+            // The returned future is what the startup readiness gate waits on; the task body itself is
+            // unchanged. Plan cache building stays where it was -- queued asynchronously by the setActive()
+            // hook -- and is deliberately NOT part of this task, see MvStartupActivationCoordinator.
+            return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVCheckIsActive"), () -> {
                 try {
                     onReloadImplHeavy();
 
@@ -1611,7 +1620,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     }
                 } catch (Throwable e) {
                     LOG.error("check and set active failed for mv: {}", this, e);
-                    setInActiveReason(InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
+                    setInActiveReason(
+                            InactiveReason.ofInactive("check and set active failed: " + e.getMessage()));
                 } finally {
                     changeReloadState(RELOAD_STATE_DONE);
                 }
@@ -1624,6 +1634,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 InactiveReason reason = checkIsActiveOnLoadBlocking();
                 setInActiveReason(reason);
             }
+            return CompletableFuture.completedFuture(null);
         }
     }
 

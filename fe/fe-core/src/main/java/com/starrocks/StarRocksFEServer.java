@@ -157,6 +157,12 @@ public class StarRocksFEServer {
             // wait globalStateMgr to be ready
             GlobalStateMgr.getCurrentState().waitForReady();
 
+            // Then wait for the startup materialized view activation pipeline to drain, before any service
+            // port below is bound. A query whose candidate mv still has a pending plan future blocks on that
+            // future instead of falling back to the base tables, so opening the ports while the pipeline is
+            // still running turns a slow startup into an apparently-up-but-unusable FE.
+            GlobalStateMgr.getCurrentState().waitForStartupMvActivation();
+
             FrontendOptions.saveStartType();
 
             CoordinatorMonitor.getInstance().start();
