@@ -122,7 +122,7 @@ public class ResourceGroup {
                     (rg, classifier) -> new DecimalFormat("#.##").format(
                             Objects.requireNonNullElse(rg.getSpillMemLimitThreshold(), 1.0) * 100) + "%"),
             new ColumnMeta(
-                    new Column(MEM_USED_PCT_LIMIT, TypeFactory.createVarcharType(200)),
+                    new Column(MEM_USED_PCT_LIMIT, ScalarType.createVarcharType(200)),
                     (rg, classifier) -> !rg.isMemUsedPctLimitEffective() ? "null" :
                             new DecimalFormat("#.##").format(rg.getMemUsedPctLimit() * 100) + "%"),
             new ColumnMeta(
