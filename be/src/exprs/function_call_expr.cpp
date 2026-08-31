@@ -230,6 +230,13 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
 bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
                                                     const NgramBloomFilterReaderOptions& reader_options) const {
+    // Legacy NGRAMBF metadata can omit gram_num. Do not use such an index for
+    // pruning. This check must precede the cached NgramBloomFilterState because
+    // one ExprContext can scan rowsets with different index metadata.
+    if (reader_options.index_gram_num == 0) {
+        return true;
+    }
+
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
