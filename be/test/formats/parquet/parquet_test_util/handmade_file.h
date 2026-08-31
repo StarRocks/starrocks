@@ -19,13 +19,13 @@
 #include <string>
 #include <vector>
 
-#include "base/bit/bit_util.h"
-#include "base/bit/rle_encoding.h"
-#include "base/coding.h"
-#include "base/string/faststring.h"
-#include "common/util/thrift_util.h"
 #include "formats/parquet/types.h"
 #include "gen_cpp/parquet_types.h"
+#include "util/bit_util.h"
+#include "util/coding.h"
+#include "util/faststring.h"
+#include "util/rle_encoding.h"
+#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
