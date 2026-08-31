@@ -294,11 +294,10 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    // update cache size of the segment with the given key, optionally provide the segment address hint.
-    // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
-    // instance address matches the address provided by the segment_addr_hint. This is used to prevent
-    // updating the cache size where the cached object is not the one as expected.
-    void update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint = 0);
+    // Update the cache size of the segment with the given key. The update is applied only when the
+    // key still maps to `segment`, so that a cache entry replaced by a different instance in the
+    // meantime is not charged with this segment's memory cost.
+    void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
