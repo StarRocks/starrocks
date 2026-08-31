@@ -443,6 +443,11 @@ public class ResourceGroupMgr implements Writable {
                     wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 
+                Double memUsedPctLimit = changedProperties.getMemUsedPctLimit();
+                if (memUsedPctLimit != null) {
+                    wg.setMemUsedPctLimit(memUsedPctLimit);
+                }
+
                 // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);
