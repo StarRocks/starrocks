@@ -362,7 +362,7 @@ protected:
         return tablet_metadatas.at(merged_tablet);
     }
 
-    std::shared_ptr<TabletMetadataPB> make_allocator_source(int64_t tablet_id, uint32_t next_rowset_id = 1) {
+    std::shared_ptr<TabletMetadataPB> make_allocator_source(int64_t tablet_id, uint32_t next_rowset_id) {
         auto metadata = std::make_shared<TabletMetadataPB>();
         metadata->set_id(tablet_id);
         metadata->set_version(1);
@@ -390,23 +390,21 @@ protected:
     }
 
     SegmentMetadataPB* add_allocator_segment(RowsetMetadataPB* rowset, const std::string& segment_name,
-                                             uint32_t segment_idx, bool explicit_segment_idx = true) {
+                                             uint32_t segment_idx) {
         auto* segment = rowset->add_segment_metas();
         segment->set_filename(segment_name);
         segment->set_size(1);
         segment->set_num_rows(1);
-        if (explicit_segment_idx) segment->set_segment_idx(segment_idx);
+        segment->set_segment_idx(segment_idx);
         rowset->set_num_rows(rowset->num_rows() + 1);
         rowset->set_data_size(rowset->data_size() + 1);
         return segment;
     }
 
     StatusOr<TabletMetadataPtr> publish_allocator_merge(
-            const std::vector<std::shared_ptr<TabletMetadataPB>>& mutable_sources,
-            const std::function<void()>& before_merge = {}, int64_t* attempted_target_id = nullptr) {
+            const std::vector<std::shared_ptr<TabletMetadataPB>>& mutable_sources) {
         if (mutable_sources.empty()) return Status::InvalidArgument("allocator merge fixture has no source");
         const int64_t target_id = next_id();
-        if (attempted_target_id != nullptr) *attempted_target_id = target_id;
         prepare_tablet_dirs(target_id);
         std::vector<TabletMetadataPtr> sources;
         sources.reserve(mutable_sources.size());
@@ -416,7 +414,7 @@ protected:
         }
         std::unordered_map<int64_t, TabletMetadataPtr> published;
         RETURN_IF_ERROR(publish_resharding_merge(sources, target_id, /*base_version=*/1, /*new_version=*/2,
-                                                 /*txn_id=*/next_id(), published, before_merge));
+                                                 /*txn_id=*/next_id(), published));
         auto target = published.find(target_id);
         if (target == published.end()) return Status::InternalError("allocator merge target was not published");
         return target->second;
