@@ -34,6 +34,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
+#include "formats/parquet/parquet_test_util/handmade_file.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
@@ -4294,4 +4295,653 @@ TEST_F(FileReaderTest, test_filter_to_dict_decoder) {
     EXPECT_EQ(2, total_row_nums);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(FileReaderTest, test_data_page_v2) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+
+    const std::string file_path = "./be/test/formats/parquet/test_data/data_page_v2_test.parquet";
+    Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"name", TYPE_VARCHAR_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file_path, slot_descs);
+    auto file_reader = _create_file_reader(file_path);
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        // for (int i = 0; i < chunk->num_rows(); i++) {
+        //     std::cout << chunk->debug_row(i) << std::endl;
+        // }
+        if (chunk->num_rows() == 4) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 'a']");
+            ASSERT_EQ(chunk->debug_row(1), "[2, 'b']");
+            ASSERT_EQ(chunk->debug_row(2), "[3, 'c']");
+            ASSERT_EQ(chunk->debug_row(3), "[4, 'd']");
+        }
+    }
+    EXPECT_EQ(4, total_row_nums);
+}
+
+TEST_F(FileReaderTest, test_read_variant) {
+    const std::string variant_file_path = "./be/test/exec/test_data/parquet_data/variant.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    // --------------init context---------------
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {
+            {"name", TYPE_VARCHAR_DESC}, {"col_variant", variant_type}, {"json_col", TYPE_VARCHAR_DESC}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
+
+    EXPECT_EQ(file_reader->row_group_size(), 1);
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // Should have 4 IO ranges: name, col_variant.metadata, col_variant.value, json_col
+    EXPECT_EQ(ranges.size(), 4);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << "Failed to read variant data: " << status.message();
+
+    chunk->check_or_die();
+
+    std::vector<std::string> expected_rows = {
+            R"(['object_primitive', {"boolean_false_field":false,"boolean_true_field":true,"double_field":1.23456789,"int_field":1,"null_field":null,"string_field":"Apache Parquet","timestamp_field":"2025-04-16T12:34:56.78"}, '{"boolean_false_field":false,"boolean_true_field":true,"double_field":1.23456789,"int_field":1,"null_field":null,"string_field":"Apache Parquet","timestamp_field":"2025-04-16T12:34:56.78"}'])",
+            R"(['primitive_string', "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!", '"This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!"'])",
+            R"(['object_nested', {"id":1,"observation":{"location":"In the Volcano","time":"12:34:56","value":{"humidity":456,"temperature":123}},"species":{"name":"lava monster","population":6789}}, '{"id":1,"observation":{"location":"In the Volcano","time":"12:34:56","value":{"humidity":456,"temperature":123}},"species":{"name":"lava monster","population":6789}}'])",
+            R"(['array_nested', [{"id":1,"thing":{"names":["Contrarian","Spider"]}},null,{"id":2,"names":["Apple","Ray",null],"type":"if"}], '[{"id":1,"thing":{"names":["Contrarian","Spider"]}},null,{"id":2,"names":["Apple","Ray",null],"type":"if"}]'])",
+            R"==(['short_string', "Less than 64 bytes (❤️ with utf8)", '"Less than 64 bytes (❤️ with utf8)"'])==",
+            R"(['primitive_decimal16', 12345678912345678.9, '12345678912345678.9'])",
+            R"(['primitive_timestampntz', "2025-04-16 12:34:56.780000", '"2025-04-16 12:34:56.78"'])",
+            R"(['primitive_timestamp', "2025-04-16 04:34:56.78+00:00", '"2025-04-16 12:34:56.78+08:00"'])",
+            R"(['array_primitive', [2,1,5,9], '[2,1,5,9]'])",
+            R"(['primitive_binary', "AxM33q2+78r+", '"AxM33q2+78r+"'])",
+            R"(['primitive_decimal8', 12345678.9, '12345678.9'])",
+            R"(['primitive_double', 1234567890.1234, '1.2345678901234E9'])",
+            R"(['primitive_int64', 1234567890123456789, '1234567890123456789'])",
+            R"(['primitive_boolean_true', true, 'true'])",
+            R"(['primitive_decimal4', 12.34, '12.34'])",
+            R"(['primitive_boolean_false', false, 'false'])",
+            R"(['primitive_date', "2025-04-16", '"2025-04-16"'])",
+            R"(['primitive_int32', 123456, '123456'])",
+            R"(['primitive_float', 1.23456794e+09, '1.23456794E9'])",
+            R"(['primitive_int16', 1234, '1234'])",
+            R"(['primitive_int8', 42, '42'])",
+            R"(['object_empty', {}, '{}'])",
+            R"(['array_empty', [], '[]'])",
+            R"(['primitive_null', NULL, NULL])"};
+
+    for (size_t i = 0; i < chunk->num_rows(); ++i) {
+        ASSERT_EQ(chunk->debug_row(i), expected_rows[i]) << "Row " << i << " does not match";
+    }
+
+    ColumnPtr variant_column = chunk->get_column_by_index(1);
+    ASSERT_TRUE(variant_column->is_variant()) << "Column should be variant type";
+
+    size_t total_rows = chunk->num_rows();
+    while (true) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        if (status.is_end_of_file()) {
+            break;
+        }
+        ASSERT_TRUE(status.ok()) << "Error reading subsequent chunks: " << status.message();
+        total_rows += chunk->num_rows();
+    }
+
+    ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(file_reader->row_group_size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const ColumnPtr& variant_col_nullable = chunk->get_column_by_index(0);
+    ASSERT_TRUE(variant_col_nullable->is_nullable());
+    const auto* nullable = down_cast<const NullableColumn*>(variant_col_nullable.get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_FALSE(variant_col->shredded_paths().empty());
+    ASSERT_NE(-1, variant_col->find_shredded_path("id"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("age"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("score"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("profile.salary"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("events"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("numbers"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("groups"));
+
+    VariantRowValue row0;
+    ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    ASSERT_TRUE(row0_json.value().find("\"id\":1000") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"age\":20") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"score\":80") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"department\":\"dept_0\"") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"count\":2") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"numbers\":[1,2,3]") != std::string::npos);
+    // groups: array-of-objects-with-nested-array; verifies BUG-2 fix in _collect_overlays_for_array_element
+    ASSERT_TRUE(row0_json.value().find("\"groups\"") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"scores\":[10,20,30]") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"scores\":[40,50,60]") != std::string::npos);
+
+    VariantRowValue row1;
+    ASSERT_NE(variant_col->get_row_value(1, &row1), nullptr);
+    auto row1_json = row1.to_json();
+    ASSERT_TRUE(row1_json.ok());
+    ASSERT_TRUE(row1_json.value().find("\"score\":\"S81\"") != std::string::npos);
+    ASSERT_TRUE(row1_json.value().find("\"rank\":\"L2\"") != std::string::npos);
+    ASSERT_TRUE(row1_json.value().find("\"numbers\":[2,3,4]") != std::string::npos);
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    auto id_or = ColumnAccessPath::create(TAccessPathType::FIELD, "id", 0, root->absolute_path());
+    ASSERT_TRUE(id_or.ok()) << id_or.status().to_string();
+    root->children().emplace_back(std::move(id_or).value());
+    auto profile_or = ColumnAccessPath::create(TAccessPathType::FIELD, "profile", 0, root->absolute_path());
+    ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
+    auto profile = std::move(profile_or).value();
+    auto salary_or = ColumnAccessPath::create(TAccessPathType::FIELD, "salary", 0, profile->absolute_path());
+    ASSERT_TRUE(salary_or.ok()) << salary_or.status().to_string();
+    profile->children().emplace_back(std::move(salary_or).value());
+    root->children().emplace_back(std::move(profile));
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    ASSERT_NE(nullable, nullptr);
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_EQ(2u, variant_col->shredded_paths().size());
+    ASSERT_EQ(2u, variant_col->typed_columns().size());
+    // Fast path: all bindings are SCALAR, so base payload (metadata/remain) is not populated.
+    ASSERT_FALSE(variant_col->has_metadata_column());
+    ASSERT_FALSE(variant_col->has_remain_value());
+    int id_idx = variant_col->find_shredded_path("id");
+    int salary_idx = variant_col->find_shredded_path("profile.salary");
+    ASSERT_NE(-1, id_idx);
+    ASSERT_NE(-1, salary_idx);
+    ASSERT_EQ(-1, variant_col->find_shredded_path("age"));
+    ASSERT_EQ(-1, variant_col->find_shredded_path("score"));
+    ASSERT_EQ(-1, variant_col->find_shredded_path("events"));
+
+    // Verify typed column values directly (id: INT64, salary: DOUBLE).
+    const auto& id_col = variant_col->typed_columns()[id_idx];
+    const auto& salary_col = variant_col->typed_columns()[salary_idx];
+    ASSERT_FALSE(id_col->is_null(0));
+    ASSERT_FALSE(salary_col->is_null(0));
+    ASSERT_EQ(1000, id_col->get(0).get_int64());
+    ASSERT_NEAR(50000.0, salary_col->get(0).get_double(), 0.1);
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths_nulls) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_sparse.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    auto id_or = ColumnAccessPath::create(TAccessPathType::FIELD, "id", 0, root->absolute_path());
+    ASSERT_TRUE(id_or.ok()) << id_or.status().to_string();
+    root->children().emplace_back(std::move(id_or).value());
+    auto profile_or = ColumnAccessPath::create(TAccessPathType::FIELD, "profile", 0, root->absolute_path());
+    ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
+    auto profile = std::move(profile_or).value();
+    auto salary_or = ColumnAccessPath::create(TAccessPathType::FIELD, "salary", 0, profile->absolute_path());
+    ASSERT_TRUE(salary_or.ok()) << salary_or.status().to_string();
+    profile->children().emplace_back(std::move(salary_or).value());
+    root->children().emplace_back(std::move(profile));
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    ASSERT_NE(nullable, nullptr);
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_EQ(2u, variant_col->typed_columns().size());
+    ASSERT_FALSE(variant_col->has_metadata_column());
+    ASSERT_FALSE(variant_col->has_remain_value());
+
+    int id_idx = variant_col->find_shredded_path("id");
+    int salary_idx = variant_col->find_shredded_path("profile.salary");
+    ASSERT_NE(-1, id_idx);
+    ASSERT_NE(-1, salary_idx);
+
+    const auto& id_col = variant_col->typed_columns()[id_idx];
+    const auto& salary_col = variant_col->typed_columns()[salary_idx];
+    ASSERT_EQ(1000, id_col->get(0).get_int64());
+    ASSERT_NEAR(50000.0, salary_col->get(0).get_double(), 0.1);
+    ASSERT_FALSE(id_col->is_null(2));
+    ASSERT_TRUE(salary_col->is_null(2));
+    ASSERT_TRUE(id_col->is_null(3));
+    ASSERT_FALSE(salary_col->is_null(3));
+    ASSERT_TRUE(id_col->is_null(4));
+    ASSERT_TRUE(salary_col->is_null(4));
+    ASSERT_TRUE(nullable->is_null(4));
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    auto profile_or = ColumnAccessPath::create(TAccessPathType::FIELD, "profile", 0, root->absolute_path());
+    ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
+    root->children().emplace_back(std::move(profile_or).value());
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    ASSERT_NE(nullable, nullptr);
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_EQ(1u, variant_col->shredded_paths().size());
+    ASSERT_EQ(1u, variant_col->typed_columns().size());
+    ASSERT_NE(-1, variant_col->find_shredded_path("profile"));
+    ASSERT_EQ(-1, variant_col->find_shredded_path("profile.salary"));
+    ASSERT_EQ(-1, variant_col->find_shredded_path("profile.department"));
+    ASSERT_EQ(-1, variant_col->find_shredded_path("id"));
+
+    VariantRowValue row0;
+    ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    ASSERT_TRUE(row0_json.value().find("\"salary\":50000.0") != std::string::npos);
+    ASSERT_TRUE(row0_json.value().find("\"department\":\"dept_0\"") != std::string::npos);
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_with_prefix_access_path_null_row) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding_sparse.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    auto profile_or = ColumnAccessPath::create(TAccessPathType::FIELD, "profile", 0, root->absolute_path());
+    ASSERT_TRUE(profile_or.ok()) << profile_or.status().to_string();
+    root->children().emplace_back(std::move(profile_or).value());
+    column_access_paths.emplace_back(std::move(root));
+    _scanner_ctx.format_scan_context.column_access_paths = std::move(column_access_paths);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    ASSERT_NE(nullable, nullptr);
+    ASSERT_TRUE(nullable->is_null(4));
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_TRUE(variant_col->has_metadata_column());
+    ASSERT_TRUE(variant_col->has_remain_value());
+
+    VariantRowValue row0;
+    ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    ASSERT_TRUE(row0_json.value().find("\"salary\":50000.0") != std::string::npos);
+
+    VariantRowValue row4;
+    ASSERT_NE(variant_col->get_row_value(4, &row4), nullptr);
+    auto row4_json = row4.to_json();
+    ASSERT_TRUE(row4_json.ok());
+    ASSERT_EQ("null", row4_json.value());
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_with_whole_column_access_path) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    column_access_paths.emplace_back(std::move(root_or).value());
+    _scanner_ctx.format_scan_context.column_access_paths = std::move(column_access_paths);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    ASSERT_NE(nullable, nullptr);
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_NE(variant_col, nullptr);
+    ASSERT_TRUE(variant_col->is_shredded_variant());
+    ASSERT_GT(variant_col->shredded_paths().size(), 2u);
+    ASSERT_NE(-1, variant_col->find_shredded_path("id"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("age"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("profile.salary"));
+    ASSERT_NE(-1, variant_col->find_shredded_path("events"));
+}
+
+// A Parquet `null_count` statistic is a hint, not a fact: files written by old parquet-mr
+// under-report it, and StarRocks used to take it at face value. When the statistic claims
+// "no NULLs" but the definition levels disagree, the reader asked the value decoder for one
+// physical value per row while the page only stores the non-NULL ones, and the read walked
+// off the end of the page:
+//   going to read out-of-bounds data, offset=1050424,count=187,size=1050424
+// The definition levels have already been decoded by the time the decoder is picked, so the
+// true NULL count is available for free and must win over the statistic.
+class HandmadeNullCountTest : public FileReaderTest {
+protected:
+    // Writes `values` into a scratch file whose statistics are whatever `options` says.
+    std::string _write_handmade_file(const std::vector<std::optional<std::string>>& values,
+                                     const HandmadeParquetFile::Options& options, const std::string& tag) {
+        std::string content = HandmadeParquetFile::build(values, options);
+        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
+        auto file = *FileSystem::Default()->new_writable_file(path);
+        CHECK_OK(file->append(Slice(content)));
+        CHECK_OK(file->close());
+        _scratch_files.emplace_back(path);
+        return path;
+    }
+
+    // Reads the single "c0" column out in one chunk.
+    StatusOr<ColumnPtr> _read_c0(const std::string& path, size_t expected_rows) {
+        auto file_reader = _create_file_reader(path);
+        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {""}};
+        auto* ctx = _create_scan_context(slot_descs, path);
+        RETURN_IF_ERROR(file_reader->init(&ctx->format_scan_context));
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+        RETURN_IF_ERROR(file_reader->get_next(&chunk));
+        EXPECT_EQ(expected_rows, chunk->num_rows());
+        return chunk->get_column_by_index(0);
+    }
+
+    void TearDown() override {
+        for (const auto& path : _scratch_files) {
+            std::filesystem::remove(path);
+        }
+        _scratch_files.clear();
+        FileReaderTest::TearDown();
+    }
+
+    // "a", NULL, "bbb", NULL, "c" — three physical values behind five rows.
+    static std::vector<std::optional<std::string>> _values_with_nulls() {
+        return {std::string("a"), std::nullopt, std::string("bbb"), std::nullopt, std::string("c")};
+    }
+
+    static void _expect_values_with_nulls(const ColumnPtr& column) {
+        ASSERT_EQ("['a', NULL, 'bbb', NULL, 'c']", column->debug_string());
+    }
+
+private:
+    std::vector<std::string> _scratch_files;
+};
+
+// The shape seen in the field: the row group counts its NULLs correctly, but the page header
+// claims the page has none. Only the page statistic lies. Before the fix this failed with
+// "going to read out-of-bounds data".
+TEST_F(HandmadeNullCountTest, reads_a_page_that_under_reports_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 2;
+    options.page_null_count = 0;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "page_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// The same lie one level up: the row group claims no NULLs and the page carries no statistics.
+TEST_F(HandmadeNullCountTest, reads_a_row_group_that_under_reports_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = std::nullopt;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "row_group_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// Both statistics lie at once.
+TEST_F(HandmadeNullCountTest, reads_when_both_statistics_lie) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = 0;
+    auto path = _write_handmade_file(_values_with_nulls(), options, "both_stat");
+
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// The control group: files whose statistics are honest, or that carry none. These read correctly
+// both before and after the fix -- that is what proves the hand-built files above are valid
+// parquet rather than mis-assembled bytes.
+TEST_F(HandmadeNullCountTest, honest_statistics_without_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 0;
+    options.page_null_count = 0;
+    std::vector<std::optional<std::string>> values = {std::string("a"), std::string("bb"), std::string("ccc")};
+
+    auto path = _write_handmade_file(values, options, "honest_no_null");
+    auto column = _read_c0(path, 3);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    ASSERT_EQ("['a', 'bb', 'ccc']", column.value()->debug_string());
+}
+
+TEST_F(HandmadeNullCountTest, honest_statistics_with_nulls) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = 2;
+    options.page_null_count = 2;
+
+    auto path = _write_handmade_file(_values_with_nulls(), options, "honest_with_null");
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+TEST_F(HandmadeNullCountTest, no_statistics_at_all) {
+    HandmadeParquetFile::Options options;
+    options.row_group_null_count = std::nullopt;
+    options.page_null_count = std::nullopt;
+
+    auto path = _write_handmade_file(_values_with_nulls(), options, "no_stat");
+    auto column = _read_c0(path, 5);
+    ASSERT_TRUE(column.ok()) << column.status().message();
+    _expect_values_with_nulls(column.value());
+}
+
+// `null_count` also drives pruning, where -- unlike decoding -- there are no definition levels to
+// cross-check against, so an under-reported count silently drops the rows `IS NULL` asks for.
+// StarRocks already refuses min/max from writers known to compute statistics incorrectly
+// (`ApplicationVersion::HasCorrectStatistics`, PARQUET-251); the fix asks the same writer-version
+// question about `null_count`.
+//
+// The column is INT32 on purpose. For BYTE_ARRAY from a legacy writer the min/max gate already
+// drops the statistics, so no zone map is built and the bug cannot be reached; for INT32 the gate
+// lets min/max through (`col_type != BYTE_ARRAY` returns early) and the bug is reachable.
+class LegacyNullCountPruningTest : public HandmadeNullCountTest {
+protected:
+    static constexpr const char* kLegacyWriter = "parquet-mr version 1.9.0-cdh6.3.2 (build handmade)";
+    static constexpr const char* kModernWriter = "parquet-mr version 1.13.1 (build handmade)";
+
+    // Statistics claim no NULLs. `with_nulls` decides whether that claim is a lie.
+    std::string _write_int_file(const std::string& created_by, bool with_nulls, const std::string& tag) {
+        HandmadeParquetFile::Options options;
+        options.row_group_null_count = 0;
+        options.page_null_count = 0;
+        options.row_group_min = HandmadeParquetFile::plain_int32(1);
+        options.row_group_max = HandmadeParquetFile::plain_int32(3);
+        options.created_by = created_by;
+
+        std::vector<std::optional<int32_t>> values = {1, 2, 3};
+        if (with_nulls) {
+            values = {1, std::nullopt, 3};
+        }
+        std::string content = HandmadeParquetFile::build_int32(values, options);
+        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
+        auto file = *FileSystem::Default()->new_writable_file(path);
+        CHECK_OK(file->append(Slice(content)));
+        CHECK_OK(file->close());
+        _int_scratch_files.emplace_back(path);
+        return path;
+    }
+
+    // Returns how many row groups survived `WHERE c0 IS NULL`. 0 means the group was pruned.
+    StatusOr<size_t> _row_groups_surviving_is_null(const std::string& path) {
+        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {""}};
+        std::vector<TExpr> t_conjuncts;
+        ParquetUTBase::is_null_pred(0, true, &t_conjuncts);
+        std::vector<ExprContext*> expr_ctxs;
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+
+        auto* ctx = _create_scan_context(slot_descs, path);
+        ctx->format_scan_context.conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[0], nullptr, tuple_desc,
+                                               _runtime_state, ctx);
+
+        auto file_reader = _create_file_reader(path);
+        RETURN_IF_ERROR(file_reader->init(&ctx->format_scan_context));
+        return file_reader->row_group_size();
+    }
+
+    void TearDown() override {
+        for (const auto& path : _int_scratch_files) {
+            std::filesystem::remove(path);
+        }
+        _int_scratch_files.clear();
+        HandmadeNullCountTest::TearDown();
+    }
+
+private:
+    std::vector<std::string> _int_scratch_files;
+};
+
+// CONTROL. A modern writer's statistics are still trusted, so an honest file with no NULLs is
+// still pruned away by `IS NULL`. This is also what proves the hand-built file reaches the zone
+// map at all -- without it the cases below would pass for the wrong reason.
+TEST_F(LegacyNullCountPruningTest, still_prunes_a_modern_writer) {
+    auto path = _write_int_file(kModernWriter, /*with_nulls=*/false, "modern_honest");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(0, surviving.value()) << "zone-map pruning never ran, so the cases below are inconclusive";
+}
+
+// A legacy writer under-reporting its `null_count` no longer drops the rows `IS NULL` asks for.
+TEST_F(LegacyNullCountPruningTest, stops_trusting_a_legacy_writer) {
+    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/true, "legacy_lying");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(1, surviving.value()) << "row group pruned away although the file does contain NULLs";
+}
+
+// A legacy writer with an honest file: no longer pruned. That is a lost optimisation, not a
+// wrong answer -- the predicate still rejects the rows downstream. Stated so the trade-off is
+// visible rather than discovered later in a benchmark.
+TEST_F(LegacyNullCountPruningTest, gives_up_pruning_on_honest_legacy_files) {
+    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/false, "legacy_honest_kept");
+    auto surviving = _row_groups_surviving_is_null(path);
+    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
+    EXPECT_EQ(1, surviving.value());
+}
+
+>>>>>>> f1f6893 ([BugFix] Stop trusting an under-reported parquet null_count (#78329))
 } // namespace starrocks::parquet
