@@ -43,6 +43,13 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+>>>>>>> 6cf4b2f ([BugFix] Fix avg() on DECIMAL256 returning wrong result after aggregate push down (backport #77832) (#78393))
 
 import java.util.List;
 import java.util.Map;
@@ -377,7 +384,11 @@ public class AggregatePushDownUtils {
             int countPrecision = avgFunc.getType().isDecimal256()
                     ? PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL256)
                     : PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+<<<<<<< HEAD
             ScalarType countType = ScalarType.createDecimalV3NarrowestType(countPrecision, 0);
+=======
+            ScalarType countType = TypeFactory.createDecimalV3NarrowestType(countPrecision, 0);
+>>>>>>> 6cf4b2f ([BugFix] Fix avg() on DECIMAL256 returning wrong result after aggregate push down (backport #77832) (#78393))
             newAvg.getChildren().set(1, new CastOperator(countType, newAvg.getChild(1), true));
         } else {
             final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
