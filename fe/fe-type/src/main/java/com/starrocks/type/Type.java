@@ -325,6 +325,23 @@ public abstract class Type implements Cloneable {
         return false;
     }
 
+    public boolean containsGeometry() {
+        if (isGeometryType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsGeometry();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsGeometry() ||
+                    ((MapType) this).getValueType().containsGeometry();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsGeometry());
+        }
+        return false;
+    }
+
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
         // Allow VARBINARY as distribution key.

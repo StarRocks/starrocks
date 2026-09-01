@@ -50,6 +50,9 @@ public class AnalyzePredicateTest {
         analyzeFail("select " + point + " = " + otherPoint, error);
         analyzeFail("select " + point + " between " + point + " and " + otherPoint, error);
         analyzeFail("select " + point + " in (" + otherPoint + ")", error);
+        analyzeFail("select [" + point + "] = [" + otherPoint + "]", error);
+        analyzeFail("select [[" + point + "]] in ([[" + otherPoint + "]])", error);
+        analyzeSuccess("select [" + point + "] is null");
     }
 
     @Test

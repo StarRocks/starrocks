@@ -85,6 +85,8 @@ public class AnalyzeSetOperationTest {
         analyzeFail("select " + point + " union select " + otherPoint, error);
         analyzeFail("select " + point + " intersect select " + otherPoint, error);
         analyzeFail("select " + point + " except select " + otherPoint, error);
+        analyzeSuccess("select [" + point + "] union all select [" + otherPoint + "]");
+        analyzeFail("select [" + point + "] union select [" + otherPoint + "]", "not support set operation");
     }
 
     @Test

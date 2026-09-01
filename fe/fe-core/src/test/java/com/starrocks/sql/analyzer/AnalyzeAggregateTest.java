@@ -65,6 +65,8 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = user()");
 
         analyzeSuccess("select count() from t0");
+        analyzeSuccess("select count(ST_GeomFromText('POINT (0 0)'))");
+        analyzeFail("select min(ST_GeomFromText('POINT (0 0)'))");
 
         analyzeSuccess("select max_by(v1,v2) from t0");
         analyzeFail("select max_by(v1) from t0", "No matching function with signature: max_by(bigint(20)).");
