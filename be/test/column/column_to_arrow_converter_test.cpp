@@ -72,8 +72,7 @@ void compare_arrow_value(const RunTimeCppType<LT>& datum, const ArrowTypeIdToArr
         ASSERT_EQ(data_array->Value(i), datum);
     } else if constexpr (lt_is_largeint<LT>) {
         ASSERT_EQ(data_array->GetString(i), int128_to_string(datum));
-    } else if constexpr (lt_is_string<LT> || lt_is_binary<LT> || lt_is_geometry<LT> ||
-                         lt_is_date_or_datetime<LT>) {
+    } else if constexpr (lt_is_string<LT> || lt_is_binary<LT> || lt_is_geometry<LT> || lt_is_date_or_datetime<LT>) {
         ASSERT_EQ(data_array->GetString(i), datum.to_string());
     } else if constexpr (lt_is_hll<LT>) {
         std::string s;
