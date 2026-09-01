@@ -16901,6 +16901,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
 
         std::unordered_map<int64_t, TabletMetadataPtr> retried;
         const int64_t retry_txn = next_id();
+        ASSIGN_OR_ABORT(const auto inventory_a_before_retry, delvec_inventory(child_a));
+        ASSIGN_OR_ABORT(const auto inventory_b_before_retry, delvec_inventory(child_b));
         ASSERT_OK(publish(target, retry_txn, &retried));
         ASSERT_TRUE(retried.contains(target));
         const auto& merged = *retried.at(target);
@@ -16908,7 +16910,23 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         ASSERT_TRUE(merged.delvec_meta().version_to_file().contains(kVersion));
         const auto& retry_output = merged.delvec_meta().version_to_file().at(kVersion).name();
         EXPECT_TRUE(retry_output.starts_with(fmt::format("{:016x}_", retry_txn)));
+        ASSIGN_OR_ABORT(const auto inventory_a_after_retry, delvec_inventory(child_a));
+        ASSIGN_OR_ABORT(const auto inventory_b_after_retry, delvec_inventory(child_b));
+        std::set<std::string> retry_target_outputs;
+        std::set_difference(inventory_a_after_retry.begin(), inventory_a_after_retry.end(),
+                            inventory_a_before_retry.begin(), inventory_a_before_retry.end(),
+                            std::inserter(retry_target_outputs, retry_target_outputs.end()));
+        ASSERT_EQ(std::set<std::string>({retry_output}), retry_target_outputs);
+        std::set<std::string> retry_target_outputs_b;
+        std::set_difference(inventory_b_after_retry.begin(), inventory_b_after_retry.end(),
+                            inventory_b_before_retry.begin(), inventory_b_before_retry.end(),
+                            std::inserter(retry_target_outputs_b, retry_target_outputs_b.end()));
+        EXPECT_EQ(retry_target_outputs, retry_target_outputs_b);
         allowed_target_outputs.insert(retry_output);
+        EXPECT_EQ(without_allowed_target_outputs(inventory_a_before),
+                  without_allowed_target_outputs(inventory_a_after_retry));
+        EXPECT_EQ(without_allowed_target_outputs(inventory_b_before),
+                  without_allowed_target_outputs(inventory_b_after_retry));
         DelVector loaded_raw;
         DelVector loaded_union;
         LakeIOOptions options;
