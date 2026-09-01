@@ -16850,8 +16850,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
     add_delvec(meta_b.get(), child_b, /*version=*/12, /*segment_id=*/2, "atomic-right.delvec", right.save());
     const std::string meta_a_before = meta_a->SerializeAsString();
     const std::string meta_b_before = meta_b->SerializeAsString();
-    ASSIGN_OR_ABORT(const auto inventory_a_before, delvec_inventory(child_a));
-    ASSIGN_OR_ABORT(const auto inventory_b_before, delvec_inventory(child_b));
+    std::set<std::string> allowed_target_outputs;
 
     auto publish = [&](int64_t target, int64_t txn, std::unordered_map<int64_t, TabletMetadataPtr>* published) {
         return publish_resharding_merge({meta_a, meta_b}, target, /*base_version=*/1, kVersion, txn, *published);
@@ -16860,6 +16859,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         SCOPED_TRACE(seam);
         const int64_t target = next_id();
         prepare_tablet_dirs(target);
+        ASSIGN_OR_ABORT(const auto inventory_a_before, delvec_inventory(child_a));
+        ASSIGN_OR_ABORT(const auto inventory_b_before, delvec_inventory(child_b));
         const std::string message = "injected publish delvec " + std::string(seam);
         int calls = 0;
         auto* sync = SyncPoint::GetInstance();
@@ -16881,22 +16882,33 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         EXPECT_EQ(meta_b_before, meta_b->SerializeAsString());
         ASSIGN_OR_ABORT(const auto inventory_a_after, delvec_inventory(child_a));
         ASSIGN_OR_ABORT(const auto inventory_b_after, delvec_inventory(child_b));
-        auto without_target_outputs = [](std::set<std::string> inventory) {
-            std::erase_if(inventory, [](const std::string& filename) {
-                return filename.size() > 17 && filename[16] == '_' && filename.ends_with(".delvec") &&
-                       std::all_of(filename.begin(), filename.begin() + 16,
-                                   [](unsigned char c) { return std::isxdigit(c); });
-            });
+        std::set<std::string> failed_target_outputs;
+        std::set_difference(inventory_a_after.begin(), inventory_a_after.end(), inventory_a_before.begin(),
+                            inventory_a_before.end(),
+                            std::inserter(failed_target_outputs, failed_target_outputs.end()));
+        ASSERT_EQ(1, failed_target_outputs.size());
+        const std::string failed_prefix = fmt::format("{:016x}_", failed_txn);
+        EXPECT_TRUE(failed_target_outputs.begin()->starts_with(failed_prefix));
+        allowed_target_outputs.insert(*failed_target_outputs.begin());
+        auto without_allowed_target_outputs = [&](std::set<std::string> inventory) {
+            for (const auto& target_output : allowed_target_outputs) inventory.erase(target_output);
             return inventory;
         };
-        EXPECT_EQ(inventory_a_before, without_target_outputs(inventory_a_after));
-        EXPECT_EQ(inventory_b_before, without_target_outputs(inventory_b_after));
+        EXPECT_EQ(without_allowed_target_outputs(inventory_a_before),
+                  without_allowed_target_outputs(inventory_a_after));
+        EXPECT_EQ(without_allowed_target_outputs(inventory_b_before),
+                  without_allowed_target_outputs(inventory_b_after));
 
         std::unordered_map<int64_t, TabletMetadataPtr> retried;
-        ASSERT_OK(publish(target, next_id(), &retried));
+        const int64_t retry_txn = next_id();
+        ASSERT_OK(publish(target, retry_txn, &retried));
         ASSERT_TRUE(retried.contains(target));
         const auto& merged = *retried.at(target);
         ASSERT_EQ(2, merged.delvec_meta().delvecs().size());
+        ASSERT_TRUE(merged.delvec_meta().version_to_file().contains(kVersion));
+        const auto& retry_output = merged.delvec_meta().version_to_file().at(kVersion).name();
+        EXPECT_TRUE(retry_output.starts_with(fmt::format("{:016x}_", retry_txn)));
+        allowed_target_outputs.insert(retry_output);
         DelVector loaded_raw;
         DelVector loaded_union;
         LakeIOOptions options;
