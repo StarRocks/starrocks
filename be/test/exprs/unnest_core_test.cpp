@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/table_function/unnest.h"
-
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -21,6 +19,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exprs/table_function/unnest.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
 
