@@ -186,8 +186,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
             RETURN_IF_ERROR(tablet_mgr->cache_tablet_metadata(new_metadata));
+<<<<<<< HEAD
             tablet_mgr->metacache()->cache_aggregation_partition(tablet_mgr->tablet_metadata_root_location(tablet_id),
                                                                  true);
+=======
+            tablet_mgr->cache_bundled_metadata_partition_marker(tablet_info.get_tablet_id_in_metadata());
+>>>>>>> 2ac2e7d ([BugFix] Avoid redundant lake metadata 404 probes (#78466))
         }
         return new_metadata;
     }
@@ -463,8 +467,28 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         }
     }
 
+<<<<<<< HEAD
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
+=======
+    // Apply max(prev_bv, fe_bv) for async vector index build
+    if (fe_built_version > 0 || new_metadata->has_vector_index_built_version()) {
+        int64_t prev_bv =
+                new_metadata->has_vector_index_built_version() ? new_metadata->vector_index_built_version() : 0;
+        new_metadata->set_vector_index_built_version(std::max(prev_bv, fe_built_version));
+    }
+
+    // Save new metadata. finish() commits the primary index and writes the new
+    // tablet metadata (and delvecs) to object storage; that metadata write is not
+    // covered by the apply counters, so time the whole step here.
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("apply_finish_latency_us");
+        RETURN_IF_ERROR(log_applier->finish());
+    }
+    if (skip_write_tablet_metadata) {
+        tablet_mgr->cache_bundled_metadata_partition_marker(tablet_info.get_tablet_id_in_metadata());
+    }
+>>>>>>> 2ac2e7d ([BugFix] Avoid redundant lake metadata 404 probes (#78466))
 
     delete_files_async(std::move(files_to_delete));
 
