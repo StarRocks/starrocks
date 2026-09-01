@@ -2474,6 +2474,18 @@ public class OlapTable extends Table {
         tableProperty.setHasForbiddenGlobalDict(hasForbiddenGlobalDict);
     }
 
+    public boolean isNoDictColumn(String columnName) {
+        return tableProperty != null && tableProperty.isNoDictColumn(columnName);
+    }
+
+    public java.util.Set<String> getNoDictColumns() {
+        return tableProperty == null ? java.util.Collections.emptySet() : tableProperty.getNoDictColumns();
+    }
+
+    public void setNoDictColumns(java.util.Set<String> noDictColumns) {
+        tableProperty.setNoDictColumns(noDictColumns);
+    }
+
     // return true if partition with given name already exist, both in partitions
     // and temp partitions.
     // return false otherwise

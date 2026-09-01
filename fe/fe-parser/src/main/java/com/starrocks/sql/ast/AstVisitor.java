@@ -851,6 +851,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitCompactionClause(CompactionClause clause, C context) {
         return visitNode(clause, context);
     }
