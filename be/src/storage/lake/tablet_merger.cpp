@@ -2203,7 +2203,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
 
     FileMetaPB new_delvec_file;
     std::vector<uint64_t> offsets;
-    int writer_invocations = 1;
+    [[maybe_unused]] int writer_invocations = 1;
     TEST_SYNC_POINT_CALLBACK("merge_delvecs:writer_invocations", &writer_invocations);
     RETURN_IF_ERROR(write_compacted_delvec_pages(tablet_manager, output_pages, new_metadata->id(), txn_id,
                                                  &new_delvec_file, &offsets));

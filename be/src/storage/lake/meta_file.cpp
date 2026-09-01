@@ -1140,7 +1140,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         TRACE_COUNTER_SCOPE_LATENCY_US("delvec_write_us");
         TRACE_COUNTER_INCREMENT("delvec_file_bytes", static_cast<int64_t>(_buf.size()));
         TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec", &_buf);
-        int64_t logical_size = _buf.size();
+        [[maybe_unused]] int64_t logical_size = _buf.size();
         TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec:logical_append_size", &logical_size);
         auto delvec_file_name = gen_delvec_filename(txn_id);
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
@@ -1328,7 +1328,7 @@ constexpr size_t kDelvecIoChunkSize = 1UL << 20;
 Status append_delvec_bytes_bounded(WritableFile* writer, Slice bytes) {
     while (!bytes.empty()) {
         const size_t chunk_size = std::min(bytes.size, kDelvecIoChunkSize);
-        size_t observed_chunk_size = chunk_size;
+        [[maybe_unused]] size_t observed_chunk_size = chunk_size;
         TEST_SYNC_POINT_CALLBACK("append_delvec_bytes_bounded:chunk_size", &observed_chunk_size);
         Status append_status;
         TEST_SYNC_POINT_CALLBACK("append_delvec_bytes_bounded:before_chunk", &append_status);
@@ -1475,7 +1475,7 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
     auto close_reader = [&] {
         if (current_reader != nullptr) {
             current_reader.reset();
-            int delta = -1;
+            [[maybe_unused]] int delta = -1;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
             current_source.reset();
         }
@@ -1497,7 +1497,7 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
                                                      source_options, tablet_mgr->delvec_location(
                                                                              raw.tablet_id, raw.delvec_file.name())));
             current_source = source_key;
-            int delta = 1;
+            [[maybe_unused]] int delta = 1;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
         }
         uint64_t copied = 0;
@@ -1506,7 +1506,7 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
         while (copied < raw.page.size()) {
             const size_t chunk_size =
                     static_cast<size_t>(std::min<uint64_t>(kDelvecIoChunkSize, raw.page.size() - copied));
-            size_t observed_chunk_size = chunk_size;
+            [[maybe_unused]] size_t observed_chunk_size = chunk_size;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:read_chunk_size", &observed_chunk_size);
             Status read_status;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_read_chunk", &read_status);
