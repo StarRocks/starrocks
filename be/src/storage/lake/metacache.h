@@ -57,7 +57,7 @@ public:
 
     std::shared_ptr<const DelVector> lookup_delvec(std::string_view key);
 
-    bool lookup_aggregation_partition(std::string_view key);
+    bool lookup_bundled_metadata_marker(std::string_view key);
 
     void cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata);
 
@@ -79,7 +79,7 @@ public:
 
     void cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec);
 
-    void cache_aggregation_partition(std::string_view key, bool is_aggregation);
+    void cache_bundled_metadata_marker(std::string_view key);
 
     void erase(std::string_view key);
 
