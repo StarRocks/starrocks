@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <ctime>
+#include <limits>
 #include <set>
 #include <unordered_map>
 
@@ -81,7 +82,7 @@ protected:
         ASSERT_OK(writer->close());
     }
 
-    DelvecFileInfo add_test_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
+    DelvecPageInfo add_test_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
                                    const std::string& filename, const std::string& content) {
         FileMetaPB file_meta;
         file_meta.set_name(filename);
@@ -94,7 +95,27 @@ protected:
         page.set_size(content.size());
         (*metadata->mutable_delvec_meta()->mutable_delvecs())[segment_id] = page;
         write_file(_tablet_manager->delvec_location(tablet_id, filename), content);
-        return DelvecFileInfo{tablet_id, std::move(file_meta)};
+        return DelvecPageInfo{tablet_id, std::move(file_meta), std::move(page)};
+    }
+
+    DelvecOutputPage raw_output_page(int64_t tablet_id, std::string filename, uint64_t offset, uint64_t size,
+                                     std::optional<int64_t> declared_size = std::nullopt) {
+        DelvecPageInfo raw;
+        raw.tablet_id = tablet_id;
+        raw.delvec_file.set_name(std::move(filename));
+        if (declared_size.has_value()) {
+            raw.delvec_file.set_size(*declared_size);
+        }
+        raw.page.set_version(1);
+        raw.page.set_offset(offset);
+        raw.page.set_size(size);
+        return DelvecOutputPage{.raw_page = std::move(raw)};
+    }
+
+    void expect_untouched_output(const FileMetaPB& before_file, const std::vector<uint64_t>& before_offsets,
+                                 const FileMetaPB& after_file, const std::vector<uint64_t>& after_offsets) {
+        EXPECT_EQ(before_file.SerializeAsString(), after_file.SerializeAsString());
+        EXPECT_EQ(before_offsets, after_offsets);
     }
 
     std::shared_ptr<TabletMetadataPB> make_shared_delvec_source(int64_t tablet_id, int segment_count) {
@@ -229,13 +250,264 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
     EXPECT_TRUE(rs.overlapped());           // composite spanning >1 op_write
 }
 
-TEST_F(MetaFileTest, test_merge_delvec_files_empty) {
-    std::vector<DelvecFileInfo> old_delvec_files;
+TEST_F(MetaFileTest, test_compacted_delvec_empty_plan_rejected) {
     FileMetaPB new_delvec_file;
-    std::vector<uint64_t> offsets;
+    new_delvec_file.set_name("unchanged.delvec");
+    std::vector<uint64_t> offsets = {1};
+    const FileMetaPB before_file = new_delvec_file;
+    const std::vector<uint64_t> before_offsets = offsets;
 
-    EXPECT_OK(merge_delvec_files(_tablet_manager.get(), old_delvec_files, 1, 1, &new_delvec_file, &offsets));
-    EXPECT_TRUE(offsets.empty());
+    const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {}, 1, 1, &new_delvec_file, &offsets);
+    EXPECT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_EQ("compacted delvec page plan is empty", status.message());
+    expect_untouched_output(before_file, before_offsets, new_delvec_file, offsets);
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_plan_shapes_and_filename) {
+    auto expect_invalid = [&](const std::vector<DelvecOutputPage>& pages, std::string_view message) {
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        std::vector<uint64_t> offsets = {9};
+        const FileMetaPB before_file = output;
+        const std::vector<uint64_t> before_offsets = offsets;
+        int preflight_opens = 0;
+        int source_sizes = 0;
+        int writer_opens = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("write_compacted_delvec_pages:preflight_source_open", [&](void*) { ++preflight_opens; });
+        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_sizes; });
+        sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), pages, next_id(), next_id(), &output, &offsets);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_EQ(message, status.message()) << status;
+        EXPECT_EQ(0, preflight_opens);
+        EXPECT_EQ(0, source_sizes);
+        EXPECT_EQ(0, writer_opens);
+        expect_untouched_output(before_file, before_offsets, output, offsets);
+    };
+
+    expect_invalid({}, "compacted delvec page plan is empty");
+    expect_invalid({DelvecOutputPage{}}, "compacted delvec output page must contain exactly one payload");
+    auto both = raw_output_page(next_id(), "both.delvec", 0, 1, 1);
+    both.serialized_page = "x";
+    expect_invalid({both}, "compacted delvec output page must contain exactly one payload");
+    expect_invalid({raw_output_page(next_id(), "", 0, 1, 1)}, "compacted delvec raw page filename is empty");
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_signed_and_file_domains) {
+    auto expect_invalid = [&](DelvecOutputPage page, std::string_view message) {
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        int source_sizes = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_sizes; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+        const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {std::move(page)}, next_id(),
+                                                           next_id(), &output, &offsets);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_EQ(message, status.message()) << status;
+        EXPECT_EQ(0, source_sizes);
+    };
+    expect_invalid(raw_output_page(next_id(), "zero.delvec", 0, 0, 0),
+                   "compacted delvec raw page size must be positive");
+    expect_invalid(raw_output_page(next_id(), "negative.delvec", 0, 1, -1),
+                   "compacted delvec declared source size is negative");
+    expect_invalid(raw_output_page(next_id(), "offset.delvec", uint64_t{std::numeric_limits<int64_t>::max()} + 1, 1,
+                                   std::numeric_limits<int64_t>::max()),
+                   "compacted delvec raw page offset is outside signed int64 domain");
+    expect_invalid(raw_output_page(next_id(), "size.delvec", 0, uint64_t{std::numeric_limits<int64_t>::max()} + 1,
+                                   std::numeric_limits<int64_t>::max()),
+                   "compacted delvec raw page size is outside signed int64 domain");
+    expect_invalid(raw_output_page(next_id(), "end.delvec", std::numeric_limits<int64_t>::max(), 1,
+                                   std::numeric_limits<int64_t>::max()),
+                   "compacted delvec raw page end is outside signed int64 domain");
+    expect_invalid(raw_output_page(next_id(), "undersize.delvec", 2, 3, 4),
+                   "compacted delvec declared source size does not contain page");
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_output_overflow) {
+    auto expect_invalid = [&](uint64_t initial, bool skip_int64, std::string_view message) {
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("write_compacted_delvec_pages:initial_output_offset",
+                          [&](void* arg) { *static_cast<uint64_t*>(arg) = initial; });
+        sync->SetCallBack("write_compacted_delvec_pages:test_skip_int64_output_limit",
+                          [&](void* arg) { *static_cast<bool*>(arg) = skip_int64; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), {DelvecOutputPage{.serialized_page = "xx"}},
+                                             next_id(), next_id(), &output, &offsets);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_EQ(message, status.message()) << status;
+    };
+    expect_invalid(std::numeric_limits<int64_t>::max(), false,
+                   "compacted delvec output size is outside signed int64 domain");
+    expect_invalid(std::numeric_limits<uint64_t>::max() - 1, true, "compacted delvec output size overflows uint64");
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_duplicate_declarations) {
+    const int64_t source_tablet = next_id();
+    const int64_t target_tablet = next_id();
+    const std::string filename = "duplicate-page.delvec";
+    write_file(_tablet_manager->delvec_location(source_tablet, filename), "abcd");
+
+    auto raw = raw_output_page(source_tablet, filename, 0, 4, 4);
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {raw, raw}, target_tablet, next_id(), &output,
+                                           &offsets));
+    EXPECT_EQ(std::vector<uint64_t>({0, 4}), offsets);
+    ASSIGN_OR_ABORT(auto reader,
+                    fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+    ASSIGN_OR_ABORT(auto copied, reader->read_all());
+    EXPECT_EQ("abcdabcd", copied);
+
+    auto conflicting = raw_output_page(source_tablet, filename, 0, 3, 4);
+    FileMetaPB untouched;
+    untouched.set_name("untouched.delvec");
+    std::vector<uint64_t> untouched_offsets = {3};
+    const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {raw, conflicting}, next_id(), next_id(),
+                                                       &untouched, &untouched_offsets);
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ("compacted delvec duplicate page declarations disagree on size", status.message());
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_plaintext_guard_raw_and_mixed) {
+    auto encrypted = raw_output_page(next_id(), "encrypted.delvec", 0, 1, 1);
+    encrypted.raw_page->delvec_file.set_encryption_meta("stale");
+    for (const auto& pages : std::vector<std::vector<DelvecOutputPage>>{
+                 {encrypted}, {encrypted, DelvecOutputPage{.serialized_page = "x"}}}) {
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), pages, next_id(), next_id(), &output, &offsets);
+        EXPECT_TRUE(status.is_not_supported()) << status;
+        EXPECT_EQ("encrypted delvec input is unsupported; delvec must be plaintext: encrypted.delvec",
+                  status.message());
+    }
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycle) {
+    const int64_t source_a = next_id();
+    const int64_t source_b = next_id();
+    write_file(_tablet_manager->delvec_location(source_a, "a.delvec"), "a");
+    write_file(_tablet_manager->delvec_location(source_b, "b.delvec"), "b");
+    const auto a = raw_output_page(source_a, "a.delvec", 0, 1);
+    const auto b = raw_output_page(source_b, "b.delvec", 0, 1);
+    int active_readers = 0;
+    int peak_readers = 0;
+    int copy_opens = 0;
+    int source_size_lookups = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+        active_readers += *static_cast<int*>(arg);
+        peak_readers = std::max(peak_readers, active_readers);
+        if (*static_cast<int*>(arg) == 1) ++copy_opens;
+    });
+    sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_size_lookups; });
+    sync->SetCallBack("write_compacted_delvec_pages:source_options", [&](void* arg) {
+        EXPECT_TRUE(static_cast<RandomAccessFileOptions*>(arg)->skip_fill_local_cache);
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(
+            write_compacted_delvec_pages(_tablet_manager.get(), {a, a, b, a}, next_id(), next_id(), &output, &offsets));
+    EXPECT_EQ(2, source_size_lookups);
+    EXPECT_EQ(3, copy_opens);
+    EXPECT_EQ(1, peak_readers);
+    EXPECT_EQ(0, active_readers);
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_serialized_output_uses_bounded_appends) {
+    const std::string expected(3 * (1UL << 20) + 17, 's');
+    const int64_t target_tablet = next_id();
+    std::vector<size_t> append_sizes;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("append_delvec_bytes_bounded:chunk_size",
+                      [&](void* arg) { append_sizes.push_back(*static_cast<size_t*>(arg)); });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {DelvecOutputPage{.serialized_page = expected}},
+                                           target_tablet, next_id(), &output, &offsets));
+    ASSERT_GT(append_sizes.size(), 1);
+    for (size_t size : append_sizes) EXPECT_LE(size, 1UL << 20);
+    ASSIGN_OR_ABORT(auto input,
+                    fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+    ASSIGN_OR_ABORT(auto actual, input->read_all());
+    EXPECT_EQ(expected, actual);
+}
+
+TEST_F(MetaFileTest, test_finalize_delvec_uses_bounded_appends) {
+    const int64_t tablet_id = next_id();
+    const int64_t version = 2;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(1);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector seed;
+    const uint32_t deleted = 7;
+    std::shared_ptr<DelVector> expected;
+    seed.add_dels_as_new_version({deleted}, version, &expected);
+    const std::string prefix = expected->save();
+    builder.append_delvec(expected, /*segment_id=*/1);
+
+    std::vector<size_t> append_sizes;
+    int64_t logical_size = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("MetaFileBuilder::_finalize_delvec", [&](void* arg) {
+        auto* buffer = static_cast<Buffer<uint8_t>*>(arg);
+        const size_t original_size = buffer->size();
+        buffer->resize(original_size + 3 * (1UL << 20) + 17);
+        std::fill(buffer->begin() + original_size, buffer->end(), static_cast<uint8_t>('p'));
+    });
+    sync->SetCallBack("MetaFileBuilder::_finalize_delvec:logical_append_size",
+                      [&](void* arg) { logical_size = *static_cast<int64_t*>(arg); });
+    sync->SetCallBack("append_delvec_bytes_bounded:chunk_size",
+                      [&](void* arg) { append_sizes.push_back(*static_cast<size_t*>(arg)); });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    ASSERT_OK(builder.finalize(next_id()));
+    ASSERT_GT(logical_size, 3 * (1UL << 20));
+    ASSERT_GT(append_sizes.size(), 1);
+    for (size_t size : append_sizes) EXPECT_LE(size, 1UL << 20);
+    const auto& file = metadata->delvec_meta().version_to_file().at(version);
+    EXPECT_EQ(logical_size, file.size());
+    EXPECT_TRUE(file.encryption_meta().empty());
+    DelVector loaded;
+    LakeIOOptions io_options;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *metadata, /*segment_id=*/1, false, io_options, &loaded));
+    EXPECT_EQ(prefix, loaded.save());
 }
 
 TEST_F(MetaFileTest, test_get_delvec_ignores_encryption_metadata) {
@@ -268,13 +540,13 @@ TEST_F(MetaFileTest, test_get_delvec_ignores_encryption_metadata) {
     EXPECT_EQ(expected.save(), actual.save());
 }
 
-TEST_F(MetaFileTest, test_merge_delvec_files_writes_plaintext) {
+TEST_F(MetaFileTest, test_compacted_delvec_raw_page_writes_plaintext) {
     const int64_t source_tablet_id = next_id();
     const int64_t target_tablet_id = next_id();
     const int64_t txn_id = next_id();
     const int64_t version = 11;
     const uint32_t segment_id = 7;
-    const std::string file_name = "plain-merge-source-with-stale-encryption-meta.delvec";
+    const std::string file_name = "plain-merge-source.delvec";
 
     DelVector expected;
     const uint32_t deleted_rowids[] = {2, 8};
@@ -282,15 +554,18 @@ TEST_F(MetaFileTest, test_merge_delvec_files_writes_plaintext) {
     const std::string content = expected.save();
     write_file(_tablet_manager->delvec_location(source_tablet_id, file_name), content);
 
-    DelvecFileInfo source;
+    DelvecPageInfo source;
     source.tablet_id = source_tablet_id;
     source.delvec_file.set_name(file_name);
     source.delvec_file.set_size(content.size());
-    source.delvec_file.set_encryption_meta(std::string(1, static_cast<char>(0xff)));
+    source.page.set_version(version);
+    source.page.set_offset(0);
+    source.page.set_size(content.size());
 
     FileMetaPB output;
     std::vector<uint64_t> offsets;
-    ASSERT_OK(merge_delvec_files(_tablet_manager.get(), {source}, target_tablet_id, txn_id, &output, &offsets));
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {DelvecOutputPage{.raw_page = source}},
+                                           target_tablet_id, txn_id, &output, &offsets));
     ASSERT_EQ(std::vector<uint64_t>({0}), offsets);
     EXPECT_TRUE(output.encryption_meta().empty());
 
@@ -308,7 +583,7 @@ TEST_F(MetaFileTest, test_merge_delvec_files_writes_plaintext) {
     EXPECT_EQ(expected.save(), actual.save());
 }
 
-TEST_F(MetaFileTest, test_write_delvec_buffer_writes_plaintext) {
+TEST_F(MetaFileTest, test_compacted_delvec_serialized_page_writes_plaintext) {
     const int64_t tablet_id = next_id();
     const int64_t txn_id = next_id();
     DelVector expected;
@@ -316,8 +591,12 @@ TEST_F(MetaFileTest, test_write_delvec_buffer_writes_plaintext) {
     expected.init(/*version=*/2, &deleted, 1);
 
     FileMetaPB output;
-    ASSERT_OK(write_delvec_file_from_buffer(_tablet_manager.get(), tablet_id, txn_id, Slice(expected.save()), &output));
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(),
+                                           {DelvecOutputPage{.serialized_page = expected.save()}}, tablet_id, txn_id,
+                                           &output, &offsets));
     EXPECT_TRUE(output.encryption_meta().empty());
+    EXPECT_EQ(std::vector<uint64_t>({0}), offsets);
 }
 
 TEST_F(MetaFileTest, test_delvec_output_append_failure_is_atomic) {
@@ -338,8 +617,10 @@ TEST_F(MetaFileTest, test_delvec_output_append_failure_is_atomic) {
     direct_delvec.init(/*version=*/2, &direct_deleted, 1);
     FileMetaPB direct_output;
     const std::string direct_output_before = direct_output.SerializeAsString();
-    auto direct_status = write_delvec_file_from_buffer(_tablet_manager.get(), next_id(), next_id(),
-                                                       Slice(direct_delvec.save()), &direct_output);
+    std::vector<uint64_t> direct_offsets;
+    auto direct_status = write_compacted_delvec_pages(_tablet_manager.get(),
+                                                      {DelvecOutputPage{.serialized_page = direct_delvec.save()}},
+                                                      next_id(), next_id(), &direct_output, &direct_offsets);
     EXPECT_FALSE(direct_status.ok());
     EXPECT_TRUE(direct_status.message().contains(kInjectedError)) << direct_status;
     EXPECT_EQ(direct_output_before, direct_output.SerializeAsString());
@@ -393,10 +674,10 @@ TEST_F(MetaFileTest, test_delvec_output_close_failure_is_atomic) {
     FileMetaPB direct_output;
     const std::string direct_output_before = direct_output.SerializeAsString();
     std::vector<uint64_t> direct_offsets;
-    uint64_t direct_union_offset = 0;
-    auto direct_status =
-            merge_delvec_files(_tablet_manager.get(), {direct_source}, next_id(), next_id(), &direct_output,
-                               &direct_offsets, Slice(direct_union_content), &direct_union_offset);
+    auto direct_status = write_compacted_delvec_pages(
+            _tablet_manager.get(),
+            {DelvecOutputPage{.raw_page = direct_source}, DelvecOutputPage{.serialized_page = direct_union_content}},
+            next_id(), next_id(), &direct_output, &direct_offsets);
     EXPECT_FALSE(direct_status.ok());
     EXPECT_TRUE(direct_status.message().contains(kInjectedError)) << direct_status;
     EXPECT_EQ(direct_output_before, direct_output.SerializeAsString());

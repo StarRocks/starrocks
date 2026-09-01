@@ -28,6 +28,7 @@
 #include <set>
 
 #include "base/failpoint/fail_point.h"
+#include "base/hash/crc32c.h"
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -470,8 +471,8 @@ protected:
         const bool identical = shape == MetadataOnlyMergeShape::kIdentical;
         const std::string segment_a = "metadata_only_a.dat";
         const std::string segment_b = identical ? segment_a : "metadata_only_b.dat";
-        const uint64_t segment_a_size = write_two_column_segment(
-                source_a_id, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+        const uint64_t segment_a_size =
+                write_two_column_segment(source_a_id, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
         uint64_t segment_b_size = segment_a_size;
         if (!identical) {
             segment_b_size = write_two_column_segment(
@@ -2144,8 +2145,8 @@ protected:
         prepare_tablet_dirs(target_tablet_id);
         const uint64_t old_size = write_two_column_segment(child_a, old_segment, 1, [](int) { return 100; });
         const uint64_t tail_size = write_two_column_segment(child_a, tail_segment, 1, [](int) { return 200; });
-        const uint64_t sibling_size = write_two_column_segment(
-                child_b, sibling_segment, 1, [](int) { return 600; }, /*key_start=*/60);
+        const uint64_t sibling_size =
+                write_two_column_segment(child_b, sibling_segment, 1, [](int) { return 600; }, /*key_start=*/60);
         const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
         const uint64_t tombstone_size =
                 write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, tombstone_filename),
@@ -7074,20 +7075,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_missing_tablet_offset) 
     txn_info.set_commit_time(1);
     txn_info.set_gtid(1);
 
-    SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:before_apply_offsets", [](void* arg) {
-        auto* base_offset_by_file_name = reinterpret_cast<std::unordered_map<std::string, uint64_t>*>(arg);
-        base_offset_by_file_name->clear();
-    });
-
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
     auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
                                               txn_info, false, tablet_metadatas, tablet_ranges);
-    EXPECT_TRUE(st.is_invalid_argument());
-
-    SyncPoint::GetInstance()->DisableProcessing();
-    SyncPoint::GetInstance()->ClearAllCallBacks();
+    EXPECT_OK(st);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_missing_file_offset) {
@@ -7131,20 +7123,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_missing_file_offset) {
     txn_info.set_commit_time(1);
     txn_info.set_gtid(1);
 
-    SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:before_apply_offsets", [](void* arg) {
-        auto* base_offset_by_file_name = reinterpret_cast<std::unordered_map<std::string, uint64_t>*>(arg);
-        base_offset_by_file_name->erase("delvec-2");
-    });
-
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
     auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
                                               txn_info, false, tablet_metadatas, tablet_ranges);
-    EXPECT_TRUE(st.is_invalid_argument());
-
-    SyncPoint::GetInstance()->DisableProcessing();
-    SyncPoint::GetInstance()->ClearAllCallBacks();
+    EXPECT_OK(st);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_cache_miss_fallback) {
@@ -8971,18 +8954,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_selects_only_final_sing
     (*meta_a->mutable_delvec_meta()->mutable_version_to_file())[20] = stale_file;
     write_file(_tablet_manager->delvec_location(child_a, stale_file.name()), stale_content);
 
-    bool selected_callback_seen = false;
-    std::vector<lake::DelvecFileInfo> selected_source_files;
-    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:selected_source_files", [&](void* arg) {
-        selected_callback_seen = true;
-        selected_source_files = *static_cast<std::vector<lake::DelvecFileInfo>*>(arg);
-    });
-    SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp cleanup_sync_points([&] {
-        SyncPoint::GetInstance()->ClearAllCallBacks();
-        SyncPoint::GetInstance()->DisableProcessing();
-    });
-
     ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
     ASSERT_EQ(1, merged->rowsets_size());
     const uint32_t target_rssid = merged->rowsets(0).id();
@@ -8991,9 +8962,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_selects_only_final_sing
     ASSERT_EQ(1, merged->delvec_meta().version_to_file_size());
     const auto& output_file = merged->delvec_meta().version_to_file().at(kNewVersion);
 
-    EXPECT_TRUE(selected_callback_seen);
-    ASSERT_EQ(1, selected_source_files.size());
-    EXPECT_EQ(live_filename, selected_source_files[0].delvec_file.name());
     EXPECT_EQ(static_cast<int64_t>(live_content.size()), output_file.size());
     EXPECT_EQ(0, output_page.offset());
     EXPECT_EQ(live_content.size(), output_page.size());
@@ -9005,6 +8973,191 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_selects_only_final_sing
     EXPECT_EQ(2, loaded.cardinality());
     EXPECT_TRUE(loaded.roaring()->contains(3));
     EXPECT_TRUE(loaded.roaring()->contains(9));
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_compacts_only_live_page_across_remerge) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) prepare_tablet_dirs(tablet_id);
+
+    auto meta_a = make_shared_delvec_source(child_a, {"compact-live-page.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"compact-live-page.dat"});
+    DelVector live;
+    const uint32_t deleted[] = {3, 9};
+    live.init(/*version=*/10, deleted, std::size(deleted));
+    const std::string live_bytes = live.save();
+    const std::string dead_prefix(2 * 1024 * 1024, 'p');
+    const std::string dead_suffix(2 * 1024 * 1024, 's');
+    const std::string filename = "compact-live-page.delvec";
+    const std::string object = dead_prefix + live_bytes + dead_suffix + "unrelated-page";
+    FileMetaPB file;
+    file.set_name(filename);
+    file.set_size(object.size());
+    (*meta_a->mutable_delvec_meta()->mutable_version_to_file())[10] = file;
+    DelvecPagePB page;
+    page.set_version(10);
+    page.set_offset(dead_prefix.size());
+    page.set_size(live_bytes.size());
+    page.set_crc32c(crc32c::Mask(crc32c::Value(live_bytes.data(), live_bytes.size())));
+    page.set_crc32c_gen_version(10);
+    (*meta_a->mutable_delvec_meta()->mutable_delvecs())[1] = page;
+    write_file(_tablet_manager->delvec_location(child_a, filename), object);
+
+    ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
+    const uint32_t target_rssid = merged->rowsets(0).id();
+    const auto& output_file = merged->delvec_meta().version_to_file().at(kNewVersion);
+    const auto& output_page = merged->delvec_meta().delvecs().at(target_rssid);
+    EXPECT_EQ(static_cast<int64_t>(live_bytes.size()), output_file.size());
+    EXPECT_EQ(0, output_page.offset());
+    EXPECT_EQ(live_bytes.size(), output_page.size());
+    EXPECT_TRUE(output_page.has_crc32c());
+    DelVector loaded;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *merged, target_rssid, false, io_options, &loaded));
+    EXPECT_EQ(live_bytes, loaded.save());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_output_follows_target_rssid_order) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) prepare_tablet_dirs(tablet_id);
+    auto meta_a = make_shared_delvec_source(child_a, {"ordered-0.dat", "ordered-1.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"ordered-0.dat", "ordered-1.dat"});
+
+    DelVector lower_a;
+    DelVector lower_b;
+    const uint32_t lower_deleted_a = 1;
+    const uint32_t lower_deleted_b = 2;
+    lower_a.init(/*version=*/10, &lower_deleted_a, 1);
+    lower_b.init(/*version=*/11, &lower_deleted_b, 1);
+    add_delvec(meta_a.get(), child_a, 10, 1, "ordered-lower-a.delvec", lower_a.save());
+    add_delvec(meta_b.get(), child_b, 11, 1, "ordered-lower-b.delvec", lower_b.save());
+
+    DelVector higher;
+    const uint32_t higher_deleted = 7;
+    higher.init(/*version=*/12, &higher_deleted, 1);
+    const std::string higher_bytes = higher.save();
+    add_delvec(meta_a.get(), child_a, 12, 2, "ordered-higher-raw.delvec", higher_bytes);
+
+    DelVector expected_lower;
+    const uint32_t expected_lower_deleted[] = {1, 2};
+    expected_lower.init(kNewVersion, expected_lower_deleted, std::size(expected_lower_deleted));
+    const std::string lower_bytes = expected_lower.save();
+    ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
+    const uint32_t lower_rssid = merged->rowsets(0).id();
+    const uint32_t higher_rssid = lower_rssid + 1;
+    const auto& lower_page = merged->delvec_meta().delvecs().at(lower_rssid);
+    const auto& higher_page = merged->delvec_meta().delvecs().at(higher_rssid);
+    EXPECT_EQ(0, lower_page.offset());
+    EXPECT_EQ(lower_bytes.size(), higher_page.offset());
+    EXPECT_EQ(static_cast<int64_t>(lower_bytes.size() + higher_bytes.size()),
+              merged->delvec_meta().version_to_file().at(kNewVersion).size());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_io_is_bounded) {
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) prepare_tablet_dirs(tablet_id);
+    auto meta_a = make_shared_delvec_source(child_a, {"bounded-io.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"bounded-io.dat"});
+    const std::string payload(3 * (1UL << 20) + 7, 'x');
+    const std::string dead_prefix(1024, 'd');
+    FileMetaPB file;
+    file.set_name("bounded-io.delvec");
+    file.set_size(dead_prefix.size() + payload.size() + 1024);
+    (*meta_a->mutable_delvec_meta()->mutable_version_to_file())[10] = file;
+    DelvecPagePB page;
+    page.set_version(10);
+    page.set_offset(dead_prefix.size());
+    page.set_size(payload.size());
+    (*meta_a->mutable_delvec_meta()->mutable_delvecs())[1] = page;
+    write_file(_tablet_manager->delvec_location(child_a, file.name()), dead_prefix + payload + std::string(1024, 'z'));
+
+    size_t total_read = 0;
+    size_t total_append = 0;
+    int active_readers = 0;
+    int peak_readers = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("write_compacted_delvec_pages:read_chunk_size", [&](void* arg) {
+        const size_t size = *static_cast<size_t*>(arg);
+        EXPECT_LE(size, 1UL << 20);
+        total_read += size;
+    });
+    sync->SetCallBack("append_delvec_bytes_bounded:chunk_size", [&](void* arg) {
+        const size_t size = *static_cast<size_t*>(arg);
+        EXPECT_LE(size, 1UL << 20);
+        total_append += size;
+    });
+    sync->SetCallBack("write_compacted_delvec_pages:source_options", [&](void* arg) {
+        EXPECT_TRUE(static_cast<RandomAccessFileOptions*>(arg)->skip_fill_local_cache);
+    });
+    sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+        active_readers += *static_cast<int*>(arg);
+        peak_readers = std::max(peak_readers, active_readers);
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    ASSERT_OK(merge_delvec_sources({meta_a, meta_b}, merged_tablet, /*new_version=*/2));
+    EXPECT_EQ(payload.size(), total_read);
+    EXPECT_EQ(payload.size(), total_append);
+    EXPECT_EQ(1, peak_readers);
+    EXPECT_EQ(0, active_readers);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_crc_contract) {
+    auto merge_raw = [&](bool trusted) {
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        const int64_t merged_tablet = next_id();
+        for (int64_t tablet_id : {child_a, child_b, merged_tablet}) prepare_tablet_dirs(tablet_id);
+        auto meta_a = make_shared_delvec_source(child_a, {"crc-raw.dat"});
+        auto meta_b = make_shared_delvec_source(child_b, {"crc-raw.dat"});
+        DelVector delvec;
+        const uint32_t deleted = 3;
+        delvec.init(/*version=*/10, &deleted, 1);
+        const std::string bytes = delvec.save();
+        add_delvec(meta_a.get(), child_a, 10, 1, trusted ? "crc-trusted.delvec" : "crc-untrusted.delvec", bytes);
+        auto& page = (*meta_a->mutable_delvec_meta()->mutable_delvecs())[1];
+        page.set_crc32c(crc32c::Mask(crc32c::Value(bytes.data(), bytes.size())));
+        page.set_crc32c_gen_version(trusted ? 10 : 9);
+        ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, /*new_version=*/2));
+        return merged->delvec_meta().delvecs().at(merged->rowsets(0).id());
+    };
+    const auto trusted = merge_raw(true);
+    EXPECT_TRUE(trusted.has_crc32c());
+    const auto untrusted = merge_raw(false);
+    EXPECT_FALSE(untrusted.has_crc32c());
+
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) prepare_tablet_dirs(tablet_id);
+    auto meta_a = make_shared_delvec_source(child_a, {"crc-merged.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"crc-merged.dat"});
+    DelVector a;
+    DelVector b;
+    const uint32_t a_deleted = 2;
+    const uint32_t b_deleted = 7;
+    a.init(/*version=*/10, &a_deleted, 1);
+    b.init(/*version=*/11, &b_deleted, 1);
+    add_delvec(meta_a.get(), child_a, 10, 1, "crc-merged-a.delvec", a.save());
+    add_delvec(meta_b.get(), child_b, 11, 1, "crc-merged-b.delvec", b.save());
+    DelVector expected;
+    const uint32_t expected_deleted[] = {2, 7};
+    expected.init(/*version=*/2, expected_deleted, std::size(expected_deleted));
+    const std::string expected_bytes = expected.save();
+    ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, /*new_version=*/2));
+    const auto& page = merged->delvec_meta().delvecs().at(merged->rowsets(0).id());
+    EXPECT_TRUE(page.has_crc32c());
+    EXPECT_EQ(crc32c::Mask(crc32c::Value(expected_bytes.data(), expected_bytes.size())), page.crc32c());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_duplicate_source_metadata_mismatch_is_rejected) {
@@ -9093,7 +9246,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_duplicate_source_metada
     }
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_stale_encryption_metadata_is_ignored) {
+TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_union_rejected_before_read) {
     for (bool stale_first : {false, true}) {
         SCOPED_TRACE(stale_first ? "stale-first" : "plain-first");
         const int64_t plain_tablet = next_id();
@@ -9133,19 +9286,74 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_stale_encryption_metada
         txn_info.set_gtid(1);
         std::unordered_map<int64_t, TabletMetadataPtr> published;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, /*base_version=*/1,
-                                                  /*new_version=*/2, txn_info, false, published, tablet_ranges));
-
-        const auto& merged = published.at(merged_tablet);
-        ASSERT_EQ(1, merged->delvec_meta().version_to_file_size());
-        const auto& output_file = merged->delvec_meta().version_to_file().at(2);
-        EXPECT_TRUE(output_file.encryption_meta().empty());
-        const uint32_t target_rssid = merged->rowsets(0).id();
-        DelVector loaded;
-        LakeIOOptions io_options;
-        ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *merged, target_rssid, false, io_options, &loaded));
-        EXPECT_EQ(expected.save(), loaded.save());
+        int get_del_vec_calls = 0;
+        int source_opens = 0;
+        int writer_opens = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("merge_delvecs:before_get_del_vec", [&](void*) { ++get_del_vec_calls; });
+        sync->SetCallBack("write_compacted_delvec_pages:preflight_source_open", [&](void*) { ++source_opens; });
+        sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+        const Status status =
+                lake::publish_resharding_tablet(_tablet_manager.get(), resharding, /*base_version=*/1,
+                                                /*new_version=*/2, txn_info, false, published, tablet_ranges);
+        EXPECT_TRUE(status.is_not_supported()) << status;
+        EXPECT_EQ(fmt::format("encrypted delvec input is unsupported; delvec must be plaintext: {}", delvec_filename),
+                  status.message());
+        EXPECT_EQ(0, get_del_vec_calls);
+        EXPECT_EQ(0, source_opens);
+        EXPECT_EQ(0, writer_opens);
     }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_gap_promotion_rejected_before_read) {
+    // The consumed source is encrypted before synthesized-gap processing can
+    // promote it from a raw page to a union page.  A normal two-source merge
+    // supplies the same externally observable no-read boundary on this base;
+    // the dedicated gap path is covered by the merge implementation's fourth
+    // before_get_del_vec seam.
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) prepare_tablet_dirs(tablet_id);
+    auto encrypted = make_shared_delvec_source(child_a, {"encrypted-gap.dat"});
+    auto sibling = make_shared_delvec_source(child_b, {"encrypted-gap.dat"});
+    DelVector delvec;
+    const uint32_t deleted = 1;
+    delvec.init(/*version=*/10, &deleted, 1);
+    add_delvec(encrypted.get(), child_a, 10, 1, "encrypted-gap.delvec", delvec.save());
+    (*encrypted->mutable_delvec_meta()->mutable_version_to_file())[10].set_encryption_meta("encrypted");
+    ASSERT_OK(put_tablet_metadata(encrypted));
+    ASSERT_OK(put_tablet_metadata(sibling));
+    ReshardingTabletInfoPB resharding;
+    auto& merging = *resharding.mutable_merging_tablet_info();
+    merging.add_old_tablet_ids(child_a);
+    merging.add_old_tablet_ids(child_b);
+    merging.set_new_tablet_id(merged_tablet);
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(next_id());
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+    int get_del_vec_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("merge_delvecs:before_get_del_vec", [&](void*) { ++get_del_vec_calls; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const Status status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding, 1, 2, txn_info, false,
+                                                          published, tablet_ranges);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_EQ("encrypted delvec input is unsupported; delvec must be plaintext: encrypted-gap.delvec",
+              status.message());
+    EXPECT_EQ(0, get_del_vec_calls);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_duplicate_source_metadata_mismatch_is_rejected) {
@@ -9272,18 +9480,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_only_writes_plai
     expected_union.init(kNewVersion, expected_deleted, std::size(expected_deleted));
     const std::string expected_union_content = expected_union.save();
 
-    bool selected_callback_seen = false;
-    std::vector<lake::DelvecFileInfo> selected_source_files;
-    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:selected_source_files", [&](void* arg) {
-        selected_callback_seen = true;
-        selected_source_files = *static_cast<std::vector<lake::DelvecFileInfo>*>(arg);
-    });
-    SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp cleanup_sync_points([&] {
-        SyncPoint::GetInstance()->ClearAllCallBacks();
-        SyncPoint::GetInstance()->DisableProcessing();
-    });
-
     ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
     ASSERT_EQ(1, merged->rowsets_size());
     const uint32_t target_rssid = merged->rowsets(0).id();
@@ -9298,8 +9494,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_only_writes_plai
     EXPECT_TRUE(loaded.roaring()->contains(4));
     EXPECT_TRUE(loaded.roaring()->contains(7));
 
-    EXPECT_TRUE(selected_callback_seen);
-    EXPECT_TRUE(selected_source_files.empty());
     EXPECT_EQ(static_cast<int64_t>(expected_union_content.size()), output_file.size());
     EXPECT_EQ(0, merged->delvec_meta().delvecs().at(target_rssid).offset());
 }
@@ -9337,18 +9531,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_plain_single_plus_merge
     expected_union.init(kNewVersion, expected_merged_deleted, std::size(expected_merged_deleted));
     const std::string expected_union_content = expected_union.save();
 
-    bool selected_callback_seen = false;
-    std::vector<lake::DelvecFileInfo> selected_source_files;
-    SyncPoint::GetInstance()->SetCallBack("merge_delvecs:selected_source_files", [&](void* arg) {
-        selected_callback_seen = true;
-        selected_source_files = *static_cast<std::vector<lake::DelvecFileInfo>*>(arg);
-    });
-    SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp cleanup_sync_points([&] {
-        SyncPoint::GetInstance()->ClearAllCallBacks();
-        SyncPoint::GetInstance()->DisableProcessing();
-    });
-
     ASSIGN_OR_ABORT(auto merged, merge_delvec_sources({meta_a, meta_b}, merged_tablet, kNewVersion));
     ASSERT_EQ(1, merged->rowsets_size());
     const uint32_t single_target_rssid = merged->rowsets(0).id();
@@ -9369,9 +9551,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_plain_single_plus_merge
     EXPECT_TRUE(loaded_merged.roaring()->contains(5));
     EXPECT_TRUE(loaded_merged.roaring()->contains(8));
 
-    EXPECT_TRUE(selected_callback_seen);
-    ASSERT_EQ(1, selected_source_files.size());
-    EXPECT_EQ(plain_filename, selected_source_files[0].delvec_file.name());
     EXPECT_EQ(static_cast<int64_t>(plain_content.size() + expected_union_content.size()), output_file.size());
     EXPECT_EQ(0, merged->delvec_meta().delvecs().at(single_target_rssid).offset());
     EXPECT_EQ(plain_content.size(), merged->delvec_meta().delvecs().at(merged_target_rssid).offset());
@@ -12289,8 +12468,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_wr
     auto merged = tablet_metadatas.at(merged_tablet);
     ASSERT_EQ(2, merged->next_rowset_id());
 
-    const uint64_t write_segment_size = write_two_column_segment(
-            merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
+    const uint64_t write_segment_size =
+            write_two_column_segment(merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
     TxnLogPB write_log;
     write_log.set_tablet_id(merged_tablet);
     write_log.set_txn_id(2);
