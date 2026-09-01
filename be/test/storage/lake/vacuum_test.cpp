@@ -5480,7 +5480,6 @@ TEST_P(LakeVacuumTest, test_vacuum_min_retain_below_min_version) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
-<<<<<<< HEAD
 // A range-distribution reshard child's retain_versions may reference a pre-reshard version the
 // child never had (its earliest metadata is the reshard publish version). The version-interval
 // retain must: (a) not fail with NotFound -- it never reads {child}_V.meta; (b) keep a pre-reshard
@@ -5690,47 +5689,11 @@ TEST_P(LakeVacuumTest, test_vacuum_legacy_unset_version_fields) {
             "commit_time": 100
         }
         )DEL")));
-=======
-// The grace period stops a round from deleting anything, but a walk that ran off the bottom of the
-// prev_garbage_version chain still proved where that bottom is. That floor must be handed back to the
-// FE, otherwise every following round re-walks the same versions and re-pays the same NotFound read.
-TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_records_chain_bottom) {
-    // Tablet 5300's only surviving metadata is version 10; its prev_garbage_version points at version 6,
-    // which an earlier vacuum already removed. commit_time 2000 is at/after the grace timestamp used
-    // below, so the grace period blocks every deletion this round.
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
-        {
-            "id": 5300,
-            "version": 10,
-            "prev_garbage_version": 6,
-            "commit_time": 2000
-        }
-        )DEL")));
-
-    int64_t total_reads = 0;
-    int64_t not_found_reads = 0;
-    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
-        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
-        ++total_reads;
-        if (res->status().is_not_found()) {
-            ++not_found_reads;
-        }
-    });
-    SyncPoint::GetInstance()->EnableProcessing();
-    DeferOp defer([]() {
-        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
-        SyncPoint::GetInstance()->DisableProcessing();
-    });
-
-    int64_t next_min_version = 0;
-    // Round 1: read version 10, follow its prev_garbage_version to the missing version 6, stop there.
->>>>>>> 894ddde ([BugFix] Fix wasted reads and stray v1 deletes in grace-blocked vacuum (#78460))
     {
         VacuumRequest request;
         VacuumResponse response;
         request.set_delete_txn_log(false);
         auto* info = request.add_tablet_infos();
-<<<<<<< HEAD
         info->set_tablet_id(900);
         info->set_min_version(8);
         request.set_min_retain_version(8);
@@ -5769,7 +5732,65 @@ TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_records_chain_bottom) {
             "commit_time": 100
         }
         )DEL")));
-=======
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(901);
+        info->set_min_version(8);
+        request.set_min_retain_version(8);
+        request.set_grace_timestamp(::time(nullptr) + 3600);
+        request.set_min_active_txn_id(12345);
+        // no retain_versions: nothing pins these versions.
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // no snapshot -> legacy garbage (unset version) reclaimed normally.
+        EXPECT_FALSE(file_exist("00000000000159e4_dd000000-0000-0000-0000-000000000000.dat"));
+        EXPECT_FALSE(file_exist("00000000000159e3_ee000000-0000-0000-0000-000000000000.delvec"));
+        EXPECT_TRUE(file_exist("00000000000159e4_ff000000-0000-0000-0000-000000000000.dat"));
+    }
+}
+
+// The grace period stops a round from deleting anything, but a walk that ran off the bottom of the
+// prev_garbage_version chain still proved where that bottom is. That floor must be handed back to the
+// FE, otherwise every following round re-walks the same versions and re-pays the same NotFound read.
+TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_records_chain_bottom) {
+    // Tablet 5300's only surviving metadata is version 10; its prev_garbage_version points at version 6,
+    // which an earlier vacuum already removed. commit_time 2000 is at/after the grace timestamp used
+    // below, so the grace period blocks every deletion this round.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5300,
+            "version": 10,
+            "prev_garbage_version": 6,
+            "commit_time": 2000
+        }
+        )DEL")));
+
+    int64_t total_reads = 0;
+    int64_t not_found_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        ++total_reads;
+        if (res->status().is_not_found()) {
+            ++not_found_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    int64_t next_min_version = 0;
+    // Round 1: read version 10, follow its prev_garbage_version to the missing version 6, stop there.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
         info->set_tablet_id(5300);
         info->set_min_version(1);
         request.set_min_retain_version(10);
@@ -5795,27 +5816,11 @@ TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_records_chain_bottom) {
     // and re-paying the NotFound on -- version 6. Before the fix this round repeated both reads.
     total_reads = 0;
     not_found_reads = 0;
->>>>>>> 894ddde ([BugFix] Fix wasted reads and stray v1 deletes in grace-blocked vacuum (#78460))
     {
         VacuumRequest request;
         VacuumResponse response;
         request.set_delete_txn_log(false);
         auto* info = request.add_tablet_infos();
-<<<<<<< HEAD
-        info->set_tablet_id(901);
-        info->set_min_version(8);
-        request.set_min_retain_version(8);
-        request.set_grace_timestamp(::time(nullptr) + 3600);
-        request.set_min_active_txn_id(12345);
-        // no retain_versions: nothing pins these versions.
-        vacuum(_tablet_mgr.get(), request, &response);
-        ASSERT_TRUE(response.has_status());
-        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        // no snapshot -> legacy garbage (unset version) reclaimed normally.
-        EXPECT_FALSE(file_exist("00000000000159e4_dd000000-0000-0000-0000-000000000000.dat"));
-        EXPECT_FALSE(file_exist("00000000000159e3_ee000000-0000-0000-0000-000000000000.delvec"));
-        EXPECT_TRUE(file_exist("00000000000159e4_ff000000-0000-0000-0000-000000000000.dat"));
-=======
         info->set_tablet_id(5300);
         info->set_min_version(next_min_version);
         request.set_min_retain_version(10);
@@ -5986,7 +5991,6 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_keeps_v1_metadata_when_range_empty) {
         EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 1)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 2)));
         EXPECT_TRUE(file_exist(tablet_metadata_filename(701, 2)));
->>>>>>> 894ddde ([BugFix] Fix wasted reads and stray v1 deletes in grace-blocked vacuum (#78460))
     }
 }
 

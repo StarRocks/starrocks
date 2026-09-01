@@ -62,11 +62,6 @@ public class LakeTablet extends Tablet {
     // with the count it describes and read back the same way, see getRowCountAtVersion.
     private volatile long rowCountVersion = 0L;
 
-<<<<<<< HEAD
-=======
-    @SerializedName(value = "vibv")
-    private volatile long vectorIndexBuiltVersion = 0L;
-
     // The vacuum metadata floor the BE last proved for this tablet: no tablet metadata exists at or
     // below this version, so the next vacuum round starts its prev_garbage_version walk here instead
     // of descending into versions an earlier round already deleted. Sent to the BE as
@@ -81,7 +76,6 @@ public class LakeTablet extends Tablet {
     // extra metadata reads (one NotFound per tablet per round) until a later round restores it.
     // Persisting it would be an image/journal format change. Do not start relying on this value for
     // anything that must survive a restart.
->>>>>>> 894ddde ([BugFix] Fix wasted reads and stray v1 deletes in grace-blocked vacuum (#78460))
     private volatile long minVersion = 0L;
 
     // Written by the ALTER ... DROP PERSISTENT INDEX path and read lock-free by the lake publish
