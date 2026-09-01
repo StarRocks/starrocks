@@ -106,7 +106,7 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
         if (!endpoint.isEmpty()) {
             // If user specific endpoint, they don't need to specific storage account anymore
             // Like if user is using Azurite, they need to specific endpoint
-            String hadoopEndpoint = stripEndpointScheme(endpoint);
+            String hadoopEndpoint = getHadoopEndpoint(endpoint);
             if (!sharedKey.isEmpty()) {
                 String key = String.format("fs.azure.account.key.%s", hadoopEndpoint);
                 generatedConfigurationMap.put(key, sharedKey);
@@ -145,14 +145,18 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
         }
     }
 
-    private static String stripEndpointScheme(String endpoint) {
+    private static String getHadoopEndpoint(String endpoint) {
+        String endpointWithoutScheme = endpoint;
         if (endpoint.regionMatches(true, 0, "https://", 0, "https://".length())) {
-            return endpoint.substring("https://".length());
+            endpointWithoutScheme = endpoint.substring("https://".length());
+        } else if (endpoint.regionMatches(true, 0, "http://", 0, "http://".length())) {
+            endpointWithoutScheme = endpoint.substring("http://".length());
         }
-        if (endpoint.regionMatches(true, 0, "http://", 0, "http://".length())) {
-            return endpoint.substring("http://".length());
-        }
-        return endpoint;
+
+        // Hadoop WASB uses the account portion of the filesystem URI's raw authority for credential lookup.
+        // Exclude a trailing slash or path, but retain an explicit port because it is part of that authority.
+        int pathSeparator = endpointWithoutScheme.indexOf('/');
+        return pathSeparator >= 0 ? endpointWithoutScheme.substring(0, pathSeparator) : endpointWithoutScheme;
     }
 
     @Override
