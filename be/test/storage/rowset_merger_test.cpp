@@ -48,9 +48,9 @@ public:
     }
 
     Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) override {
-      added_chunk_num_rows.emplace_back(chunk.num_rows());
-      all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
-      return Status::OK();
+        added_chunk_num_rows.emplace_back(chunk.num_rows());
+        all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
+        return Status::OK();
     }
 
     Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr) override { return Status::NotSupported(""); }
