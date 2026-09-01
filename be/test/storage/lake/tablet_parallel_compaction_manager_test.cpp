@@ -22,6 +22,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
@@ -510,6 +511,7 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     auto state = _manager->get_tablet_state(tablet_id, txn_id);
     ASSERT_NE(nullptr, state);
     ASSERT_EQ(2, state->running_subtasks.size());
+    EXPECT_EQ(1, _manager->running_tasks());
     // Each group should have approximately 5 rowsets (5MB each)
     ASSERT_EQ(5, state->running_subtasks[0].input_rowset_ids.size());
     ASSERT_EQ(5, state->running_subtasks[1].input_rowset_ids.size());
@@ -517,6 +519,149 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_two_group
     // Unblock the thread
     block_promise.set_value();
     pool->wait();
+
+    EXPECT_EQ(0, _manager->running_tasks());
+    EXPECT_EQ(0, _manager->running_subtasks());
+    EXPECT_EQ(0, _manager->subtask_success_total());
+    EXPECT_EQ(2, _manager->subtask_failure_total());
+    EXPECT_EQ(0, _manager->task_success_total());
+    EXPECT_EQ(1, _manager->task_failure_total());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+    EXPECT_EQ(0, _manager->running_tasks());
+    EXPECT_EQ(0, _manager->task_success_total());
+    EXPECT_EQ(1, _manager->task_failure_total());
+    EXPECT_EQ(0, _manager->subtask_success_total());
+    EXPECT_EQ(2, _manager->subtask_failure_total());
+}
+
+TEST_F(TabletParallelCompactionManagerTest, test_parent_metrics_wait_until_all_subtasks_are_submitted) {
+    class NoopRunnable final : public Runnable {
+    public:
+        void run() override {}
+    };
+
+    constexpr int64_t tablet_id = 10061;
+    constexpr int64_t txn_id = 20061;
+    constexpr int64_t version = 11;
+
+    create_tablet_with_rowsets(tablet_id, 10, 1024 * 1024);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(2);
+    config.set_max_bytes_per_subtask(5 * 1024 * 1024);
+
+    CompactRequest request;
+    request.set_skip_write_txnlog(true);
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("early_complete_pool").set_min_threads(0).set_max_threads(1).build(&pool));
+
+    std::promise<void> first_submit_intercepted;
+    auto first_submit_intercepted_future = first_submit_intercepted.get_future();
+    std::promise<void> continue_submission;
+    auto continue_submission_future = continue_submission.get_future().share();
+    std::promise<void> completion_entered;
+    auto completion_entered_future = completion_entered.get_future();
+    std::atomic<int32_t> intercepted_submissions{0};
+
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:replace_task", [&](void* arg) {
+        *static_cast<std::shared_ptr<Runnable>*>(arg) = std::make_shared<NoopRunnable>();
+        if (intercepted_submissions.fetch_add(1, std::memory_order_relaxed) == 0) {
+            first_submit_intercepted.set_value();
+            continue_submission_future.wait();
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletParallelCompactionManager::on_subtask_complete:before_submission_lock",
+                                          [&](void* arg) {
+                                              if (*static_cast<int32_t*>(arg) == 0) {
+                                                  completion_entered.set_value();
+                                              }
+                                          });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:replace_task");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "TabletParallelCompactionManager::on_subtask_complete:before_submission_lock");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic<bool> submission_released{false};
+    auto release_submission = [&]() {
+        if (!submission_released.exchange(true, std::memory_order_relaxed)) {
+            continue_submission.set_value();
+        }
+    };
+
+    auto create_result = std::async(std::launch::async, [&]() {
+        return _manager->create_parallel_tasks(
+                tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+    });
+    DeferOp unblock_submission(release_submission);
+
+    ASSERT_EQ(std::future_status::ready, first_submit_intercepted_future.wait_for(std::chrono::seconds(5)));
+
+    auto first_completion = std::async(std::launch::async, [&]() {
+        auto context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+        context->subtask_id = 0;
+        context->status = Status::InternalError("injected first subtask failure");
+        _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(context));
+    });
+
+    const auto completion_entry_status = completion_entered_future.wait_for(std::chrono::seconds(5));
+    EXPECT_EQ(std::future_status::ready, completion_entry_status);
+    if (completion_entry_status != std::future_status::ready) {
+        release_submission();
+        create_result.get();
+        first_completion.get();
+        pool->wait();
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        return;
+    }
+    const bool finished_while_submission_blocked = closure.wait_finish(1000);
+    EXPECT_FALSE(finished_while_submission_blocked);
+
+    release_submission();
+    auto st = create_result.get();
+    first_completion.get();
+    pool->wait();
+
+    ASSERT_TRUE(st.ok()) << st.status();
+    ASSERT_EQ(2, st.value());
+    auto state = _manager->get_tablet_state(tablet_id, txn_id);
+    ASSERT_NE(nullptr, state);
+    EXPECT_EQ(1, state->running_subtasks.size());
+    EXPECT_TRUE(state->running_subtasks.contains(1));
+    EXPECT_FALSE(closure.is_finished());
+    EXPECT_EQ(1, _manager->running_tasks());
+    EXPECT_EQ(1, _manager->running_subtasks());
+    EXPECT_EQ(0, _manager->task_success_total());
+    EXPECT_EQ(0, _manager->task_failure_total());
+    EXPECT_EQ(0, _manager->subtask_success_total());
+    EXPECT_EQ(1, _manager->subtask_failure_total());
+
+    // The buggy implementation has already finished the callback, whose request state is single-use.
+    // Avoid invoking that callback a second time after recording the expected test failures above.
+    if (finished_while_submission_blocked) {
+        _manager->cleanup_tablet(tablet_id, txn_id);
+        return;
+    }
+
+    auto context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    context->subtask_id = 1;
+    _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(context));
+
+    EXPECT_TRUE(closure.is_finished());
+    EXPECT_EQ(0, _manager->running_tasks());
+    EXPECT_EQ(0, _manager->running_subtasks());
+    EXPECT_EQ(1, _manager->task_success_total());
+    EXPECT_EQ(0, _manager->task_failure_total());
+    EXPECT_EQ(1, _manager->subtask_success_total());
+    EXPECT_EQ(1, _manager->subtask_failure_total());
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
@@ -862,6 +1007,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_regular_path_put_txn_log_failur
     // And nothing was persisted at the standalone txn-log location.
     auto merged_log_or = _tablet_mgr->get_txn_log(tablet_id, txn_id);
     EXPECT_FALSE(merged_log_or.ok());
+    EXPECT_EQ(0, _manager->task_success_total());
+    EXPECT_EQ(1, _manager->task_failure_total());
 
     _manager->cleanup_tablet(tablet_id, txn_id);
     ASSERT_EQ(nullptr, _manager->get_tablet_state(tablet_id, txn_id));
@@ -1178,6 +1325,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_acquire_t
 
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.status().is_resource_busy());
+    EXPECT_EQ(0, _manager->running_tasks());
+    EXPECT_EQ(0, _manager->running_subtasks());
+    EXPECT_EQ(0, _manager->task_success_total());
+    EXPECT_EQ(0, _manager->task_failure_total());
 }
 
 // Test for on_subtask_complete with subtask not found (lines 374-381)
@@ -1218,14 +1369,18 @@ TEST_F(TabletParallelCompactionManagerTest, test_on_subtask_complete_subtask_not
     auto st = _manager->create_parallel_tasks(
             tablet_id, txn_id, version, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_TRUE(st.ok());
+    const auto running_subtasks = _manager->running_subtasks();
+    ASSERT_GT(running_subtasks, 0);
 
     // Try to complete a non-existent subtask (id 999)
     auto ctx = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
     ctx->subtask_id = 999; // Non-existent subtask
     _manager->on_subtask_complete(tablet_id, txn_id, 999, std::move(ctx));
+    EXPECT_EQ(running_subtasks, _manager->running_subtasks());
 
     block_promise.set_value();
     pool->wait();
+    EXPECT_EQ(0, _manager->running_subtasks());
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
 
@@ -2306,14 +2461,13 @@ TEST_F(TabletParallelCompactionManagerTest, test_metrics_after_completion) {
 
     ASSERT_TRUE(closure.is_finished());
 
-    // Unblock the pool. The queued execute_subtask tasks will run but find state cleaned up,
-    // which will decrement running_subtasks (expected behavior for orphaned tasks).
+    // Unblock the pool. The queued execute_subtask tasks will run but find that the subtasks
+    // were already completed and removed.
     block_promise.set_value();
     pool->wait();
 
-    // After pool completes, running_subtasks will be decremented by the orphaned execute_subtask calls.
-    // This is expected: 2 execute_subtask calls each decrement counter when they find state missing.
-    EXPECT_EQ(initial_running - 2, _manager->running_subtasks());
+    // Duplicate completion must not decrement the running counter again.
+    EXPECT_EQ(initial_running, _manager->running_subtasks());
 }
 
 // Test for rowsets marking and unmarking (lines 606-620)
@@ -4092,6 +4246,10 @@ TEST_F(TabletParallelCompactionManagerTest, test_submit_subtasks_thread_pool_fai
     EXPECT_FALSE(st.ok()) << "Should fail when thread pool submission fails";
     // All tokens should be released
     EXPECT_GT(release_count, 0) << "Tokens should be released on failure";
+    EXPECT_EQ(0, _manager->running_tasks());
+    EXPECT_EQ(0, _manager->running_subtasks());
+    EXPECT_EQ(0, _manager->task_success_total());
+    EXPECT_EQ(0, _manager->task_failure_total());
 
     _manager->cleanup_tablet(tablet_id, txn_id);
 }
@@ -7594,6 +7752,8 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
             tablet_id, txn_id, version, pconfig, callback, false, pool.get(), []() { return true; }, [](bool) {});
     ASSERT_OK(st.status());
     ASSERT_GT(st.value(), 0);
+    EXPECT_EQ(1, _manager->running_tasks());
+    EXPECT_EQ(st.value(), _manager->running_subtasks());
 
     auto state = _manager->get_tablet_state(tablet_id, txn_id);
     ASSERT_NE(nullptr, state);
@@ -7609,6 +7769,12 @@ TEST_F(TabletParallelCompactionManagerTest, test_create_parallel_tasks_range_spl
     unblock_pool.cancel();
     pool->wait();
     ASSERT_TRUE(closure.wait_finish());
+    EXPECT_EQ(0, _manager->running_tasks());
+    EXPECT_EQ(0, _manager->running_subtasks());
+    EXPECT_EQ(1, _manager->task_success_total());
+    EXPECT_EQ(0, _manager->task_failure_total());
+    EXPECT_EQ(st.value(), _manager->subtask_success_total());
+    EXPECT_EQ(0, _manager->subtask_failure_total());
 
     {
         std::lock_guard<std::mutex> lock(state->mutex);

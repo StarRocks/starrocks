@@ -93,6 +93,9 @@ public:
     }
 
 private:
+    void _register_lake_compaction_hook();
+    void _deregister_lake_compaction_hook();
+
     std::unique_ptr<lake::TabletManager> _lake_tablet_manager;
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     std::shared_ptr<lake::RemoteStarletLocationProvider> _remote_starlet_location_provider;
@@ -102,6 +105,7 @@ private:
     spill::DirManager* _spill_dir_mgr = nullptr;
     LoadSpillBlockMergeExecutor* _load_spill_block_merge_executor = nullptr;
     std::unique_ptr<VectorIndexCache> _vector_index_cache;
+    bool _lake_compaction_hook_registered = false;
 };
 
 } // namespace starrocks

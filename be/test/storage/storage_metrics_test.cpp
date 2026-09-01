@@ -145,6 +145,80 @@ TEST(StorageMetricsTest, InstallRegistersCompactionMetrics) {
 
     metrics.running_update_compaction_task_num.set_value(17);
     assert_metric_value(&registry, "running_update_compaction_task_num", "17");
+
+    metrics.lake_compaction_parallel_running_tasks.set_value(18);
+    assert_metric_value(&registry, "lake_compaction_running_tasks", MetricLabels().add("mode", "parallel"), "18");
+
+    metrics.lake_compaction_non_parallel_running_tasks.set_value(19);
+    assert_metric_value(&registry, "lake_compaction_running_tasks", MetricLabels().add("mode", "non_parallel"), "19");
+
+    metrics.lake_compaction_queued_tasks.set_value(20);
+    assert_metric_value(&registry, "lake_compaction_queued_tasks", "20");
+
+    metrics.lake_compaction_max_concurrency.set_value(21);
+    assert_metric_value(&registry, "lake_compaction_max_concurrency", "21");
+
+    metrics.lake_compaction_effective_concurrency.set_value(22);
+    assert_metric_value(&registry, "lake_compaction_effective_concurrency", "22");
+
+    metrics.lake_compaction_parallel_task_success_total.increment(23);
+    assert_metric_value(&registry, "lake_compaction_task_success_total", MetricLabels().add("mode", "parallel"), "23");
+
+    metrics.lake_compaction_non_parallel_task_success_total.increment(24);
+    assert_metric_value(&registry, "lake_compaction_task_success_total", MetricLabels().add("mode", "non_parallel"),
+                        "24");
+
+    metrics.lake_compaction_parallel_task_failure_total.increment(25);
+    assert_metric_value(&registry, "lake_compaction_task_failure_total", MetricLabels().add("mode", "parallel"), "25");
+
+    metrics.lake_compaction_non_parallel_task_failure_total.increment(26);
+    assert_metric_value(&registry, "lake_compaction_task_failure_total", MetricLabels().add("mode", "non_parallel"),
+                        "26");
+
+    metrics.lake_compaction_parallel_fallback_total.increment(27);
+    assert_metric_value(&registry, "lake_compaction_parallel_fallback_total", "27");
+
+    metrics.lake_compaction_running_subtasks.set_value(28);
+    assert_metric_value(&registry, "lake_compaction_running_subtasks", "28");
+
+    metrics.lake_compaction_subtask_success_total.increment(29);
+    assert_metric_value(&registry, "lake_compaction_subtask_success_total", "29");
+
+    metrics.lake_compaction_subtask_failure_total.increment(30);
+    assert_metric_value(&registry, "lake_compaction_subtask_failure_total", "30");
+
+    for (const auto* name : {"lake_compaction_queued_tasks", "lake_compaction_max_concurrency",
+                             "lake_compaction_effective_concurrency", "lake_compaction_running_subtasks"}) {
+        auto* metric = registry.get_metric(name);
+        ASSERT_NE(nullptr, metric) << name;
+        EXPECT_EQ(MetricType::GAUGE, metric->type()) << name;
+        EXPECT_EQ(MetricUnit::NOUNIT, metric->unit()) << name;
+    }
+    for (const auto* mode : {"parallel", "non_parallel"}) {
+        auto* metric = registry.get_metric("lake_compaction_running_tasks", MetricLabels().add("mode", mode));
+        ASSERT_NE(nullptr, metric) << mode;
+        EXPECT_EQ(MetricType::GAUGE, metric->type()) << mode;
+        EXPECT_EQ(MetricUnit::NOUNIT, metric->unit()) << mode;
+    }
+    for (const auto* name : {"lake_compaction_parallel_fallback_total", "lake_compaction_subtask_success_total",
+                             "lake_compaction_subtask_failure_total"}) {
+        auto* metric = registry.get_metric(name);
+        ASSERT_NE(nullptr, metric) << name;
+        EXPECT_EQ(MetricType::COUNTER, metric->type()) << name;
+        EXPECT_EQ(MetricUnit::NOUNIT, metric->unit()) << name;
+    }
+    for (const auto* name : {"lake_compaction_task_success_total", "lake_compaction_task_failure_total"}) {
+        for (const auto* mode : {"parallel", "non_parallel"}) {
+            auto* metric = registry.get_metric(name, MetricLabels().add("mode", mode));
+            ASSERT_NE(nullptr, metric) << name << ":" << mode;
+            EXPECT_EQ(MetricType::COUNTER, metric->type()) << name << ":" << mode;
+            EXPECT_EQ(MetricUnit::NOUNIT, metric->unit()) << name << ":" << mode;
+        }
+    }
+    for (const auto* name : {"lake_compaction_running_tasks", "lake_compaction_task_success_total",
+                             "lake_compaction_task_failure_total"}) {
+        EXPECT_EQ(nullptr, registry.get_metric(name)) << name;
+    }
 }
 
 TEST(StorageMetricsTest, InstallRegistersFlushAndDeltaWriterMetrics) {

@@ -15,6 +15,8 @@
 #pragma once
 
 #include <functional>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -24,6 +26,10 @@
 namespace starrocks {
 
 class ThreadPool;
+
+namespace lake {
+class CompactionScheduler;
+}
 
 class StorageMetrics {
 public:
@@ -39,6 +45,8 @@ public:
     void register_metadata_cache_bytes_total_hook(std::function<int64_t()> value_fn);
     void register_unused_rowsets_count_hook(std::function<uint64_t()> value_fn);
     void register_rowset_count_generated_and_in_use_hook(std::function<uint64_t()> value_fn);
+    bool register_lake_compaction_hook(lake::CompactionScheduler* scheduler);
+    void deregister_lake_compaction_hook();
 
     METRIC_DEFINE_INT_COUNTER(push_requests_success_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(push_requests_fail_total, MetricUnit::REQUESTS);
@@ -137,6 +145,20 @@ public:
     METRIC_DEFINE_INT_COUNTER(update_compaction_outputs_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(update_compaction_duration_us, MetricUnit::MICROSECONDS);
 
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_parallel_running_tasks, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_non_parallel_running_tasks, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_queued_tasks, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_max_concurrency, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_effective_concurrency, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(lake_compaction_parallel_task_success_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(lake_compaction_non_parallel_task_success_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(lake_compaction_parallel_task_failure_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(lake_compaction_non_parallel_task_failure_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(lake_compaction_parallel_fallback_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_running_subtasks, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(lake_compaction_subtask_success_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_ATOMIC_COUNTER(lake_compaction_subtask_failure_total, MetricUnit::NOUNIT);
+
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_execute_duration_us, MetricUnit::MICROSECONDS);
@@ -214,15 +236,23 @@ private:
         std::function<uint64_t()> value_fn;
     };
 
+    struct PendingLakeCompactionHook {
+        std::string name;
+        std::function<void()> hook;
+    };
+
     void _register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
                                        ThreadPool* threadpool);
     void _register_int_gauge_hook(const std::string& name, IntGauge* metric, std::function<int64_t()> value_fn);
     void _register_uint_gauge_hook(const std::string& name, UIntGauge* metric, std::function<uint64_t()> value_fn);
+    void _update_lake_compaction_metrics(const lake::CompactionScheduler* scheduler);
 
+    std::mutex _lake_compaction_metrics_update_mutex;
     MetricRegistry* _registry = nullptr;
     std::vector<PendingThreadPoolMetrics> _pending_thread_pool_metrics;
     std::vector<PendingIntGaugeHook> _pending_int_gauge_hooks;
     std::vector<PendingUIntGaugeHook> _pending_uint_gauge_hooks;
+    std::optional<PendingLakeCompactionHook> _pending_lake_compaction_hook;
 };
 
 } // namespace starrocks

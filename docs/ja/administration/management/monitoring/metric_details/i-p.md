@@ -280,12 +280,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 ## `lake_compaction_running`
 
 - 単位: 件数
-- 説明: 現在実行中のストレージ・コンピュート分離（lake）コンパクションジョブの数。
+- 説明: 現在ストレージ・コンピュート分離（lake）コンパクションジョブを実行している物理パーティションの数。各物理パーティションは最大 1 件として数えられます。
 
 ## `lake_compaction_running_tasks`
 
 - 単位: 件数
-- 説明: 実行中のすべてのストレージ・コンピュート分離（lake）コンパクションジョブにわたって、現在コンパクション中の tablet 数。これはスケジューラが `lake_compaction_max_tasks` 設定で上限を設ける際に用いる単位と同じで、コンパクションジョブ（パーティションごとに 1 つ）を数える `lake_compaction_running` よりも細かい粒度です。1 つのジョブは tablet ごとに 1 つの tablet 単位タスクに分割されます。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+- 説明: 実行中のすべてのストレージ・コンピュート分離（lake）コンパクションジョブに含まれる、未完了の tablet 単位コンパクションタスク数。このメトリクスは `lake_compaction_max_tasks` と同じ単位です。`lake_compaction_running` は物理パーティション数を表すため、1 つのパーティションが複数の tablet 単位タスクとして数えられることがあります。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
 
 ## `lake_compaction_score_at_trigger`
 

@@ -19,6 +19,7 @@
 #include <gtest/gtest_prod.h>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
 
 #include "base/concurrency/blocking_queue.hpp"
@@ -156,6 +157,7 @@ class CompactionScheduler {
         void memory_limit_exceeded();
 
         int16_t concurrency() const;
+        int16_t max_concurrency() const;
 
         void adapt_to_task_queue_size(int16_t new_val);
 
@@ -193,6 +195,7 @@ class CompactionScheduler {
         }
 
         int task_queue_size();
+        int64_t queued_tasks() const { return _queued_tasks.load(std::memory_order_relaxed); }
 
         void set_target_size(int32_t target_size);
 
@@ -217,6 +220,7 @@ class CompactionScheduler {
 
         std::mutex _task_queues_mutex;
         std::vector<std::shared_ptr<TaskQueue>> _internal_task_queues;
+        std::atomic<int64_t> _queued_tasks{0};
         int16_t _target_size;
     };
 
@@ -240,6 +244,22 @@ public:
     void list_tasks(std::vector<CompactionTaskInfo>* infos);
 
     int16_t concurrency() const { return _limiter.concurrency(); }
+    int16_t max_concurrency() const { return _limiter.max_concurrency(); }
+    int64_t queued_tasks() const { return _task_queues.queued_tasks(); }
+    int64_t parallel_running_tasks() const;
+    int64_t non_parallel_running_tasks() const { return _non_parallel_running_tasks.load(std::memory_order_relaxed); }
+    int64_t parallel_task_success_total() const;
+    int64_t non_parallel_task_success_total() const {
+        return _non_parallel_task_success_total.load(std::memory_order_relaxed);
+    }
+    int64_t parallel_task_failure_total() const;
+    int64_t non_parallel_task_failure_total() const {
+        return _non_parallel_task_failure_total.load(std::memory_order_relaxed);
+    }
+    int64_t parallel_fallback_total() const { return _parallel_fallback_total.load(std::memory_order_relaxed); }
+    int64_t running_subtasks() const;
+    int64_t subtask_success_total() const;
+    int64_t subtask_failure_total() const;
 
     // update at runtime
     void update_compact_threads(int32_t new_val);
@@ -274,6 +294,10 @@ private:
     std::atomic<bool> _stopped{false};
     std::mutex _mutex;
     WrapTaskQueues _task_queues;
+    std::atomic<int64_t> _non_parallel_running_tasks{0};
+    std::atomic<int64_t> _non_parallel_task_success_total{0};
+    std::atomic<int64_t> _non_parallel_task_failure_total{0};
+    std::atomic<int64_t> _parallel_fallback_total{0};
 
     // Per-tablet parallel compaction manager
     std::unique_ptr<TabletParallelCompactionManager> _parallel_mgr;
@@ -318,6 +342,11 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
 inline int16_t CompactionScheduler::Limiter::concurrency() const {
     std::lock_guard l(_mtx);
     return _total - _reserved;
+}
+
+inline int16_t CompactionScheduler::Limiter::max_concurrency() const {
+    std::lock_guard l(_mtx);
+    return _total;
 }
 
 inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {
@@ -376,7 +405,9 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(int64_t txn_id,
     int idx = _task_queue_safe_index(txn_id);
     context->enqueue_time_sec = ::time(nullptr);
     context->enqueue_time_ns = MonotonicNanos();
-    _internal_task_queues[idx]->put(std::move(context));
+    if (_internal_task_queues[idx]->put(std::move(context))) {
+        _queued_tasks.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
@@ -388,7 +419,9 @@ inline void CompactionScheduler::WrapTaskQueues::put_by_txn_id(
     for (auto& context : contexts) {
         context->enqueue_time_sec = now;
         context->enqueue_time_ns = now_ns;
-        _internal_task_queues[idx]->put(std::move(context));
+        if (_internal_task_queues[idx]->put(std::move(context))) {
+            _queued_tasks.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 }
 
@@ -397,7 +430,11 @@ inline bool CompactionScheduler::WrapTaskQueues::try_get(int idx, std::unique_pt
     if (idx >= _internal_task_queues.size()) { // idx might be invalid
         return false;
     }
-    return _internal_task_queues[idx]->try_get(context);
+    if (!_internal_task_queues[idx]->try_get(context)) {
+        return false;
+    }
+    _queued_tasks.fetch_sub(1, std::memory_order_relaxed);
+    return true;
 }
 
 inline void CompactionScheduler::WrapTaskQueues::resize(int new_val) {
@@ -425,6 +462,7 @@ inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
     auto queue_count = _internal_task_queues.size();
     for (int i = 0; i < queue_count; i++) {
         if (_internal_task_queues[(start_index + i) % queue_count]->try_get(context)) {
+            _queued_tasks.fetch_sub(1, std::memory_order_relaxed);
             return;
         }
     }

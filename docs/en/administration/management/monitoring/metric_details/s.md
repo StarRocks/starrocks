@@ -189,6 +189,69 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
 
+## `starrocks_be_lake_compaction_effective_concurrency`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Current number of concurrent lake compaction execution slots that the CN permits after automatic adjustment for memory pressure. A sustained value below `starrocks_be_lake_compaction_max_concurrency` indicates that memory pressure is limiting compaction concurrency. Regular tasks and parallel subtasks that are already in progress can temporarily cause the number of admitted in-flight execution units to exceed this value.
+
+## `starrocks_be_lake_compaction_max_concurrency`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Current maximum number of concurrent lake compaction execution slots on the CN. The value reflects runtime configuration changes after they take effect. If `starrocks_be_lake_compaction_effective_concurrency` is lower, memory pressure is limiting compaction below this capacity.
+
+## `starrocks_be_lake_compaction_parallel_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Cumulative number of tablet-level lake compaction tasks for which parallel execution was enabled and attempted, but which actually fell back to regular, non-parallel execution. Each tablet task is counted once. Tablet tasks for which parallel execution is not attempted are not counted.
+
+## `starrocks_be_lake_compaction_queued_tasks`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of regular, non-parallel lake compaction tablet tasks waiting to start on the CN, including tasks that fell back from parallel execution. Parallel compaction subtasks are not included. Sustained growth indicates that incoming work is exceeding the CN's available compaction capacity.
+
+## `starrocks_be_lake_compaction_running_subtasks`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of active physical parallel compaction subtasks that have not yet completed. This can include subtasks being admitted for execution or waiting briefly in the execution thread pool.
+
+## `starrocks_be_lake_compaction_running_tasks`
+
+- Unit: Count
+- Type: Instantaneous
+- Labels: `mode` (`parallel` or `non_parallel`)
+- Description: Number of tablet-level lake compaction tasks currently running on the CN, grouped by their actual execution mode. A parallel task counts once regardless of its number of subtasks. A task that falls back from parallel execution is reported with `mode="non_parallel"`. This metric does not directly represent occupied execution slots; use `starrocks_be_lake_compaction_running_subtasks` to observe physical parallel work.
+
+## `starrocks_be_lake_compaction_subtask_failure_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Cumulative number of physical parallel compaction subtasks whose final outcome is failure. Each completed subtask is counted once.
+
+## `starrocks_be_lake_compaction_subtask_success_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Cumulative number of physical parallel compaction subtasks whose final outcome is success. Each completed subtask is counted once.
+
+## `starrocks_be_lake_compaction_task_failure_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `mode` (`parallel` or `non_parallel`)
+- Description: Cumulative number of tablet-level lake compaction tasks whose final outcome is failure, grouped by their actual execution mode. Each tablet task is counted once. For a parallel task, this is the final tablet-level outcome after its subtasks are combined; individual subtask outcomes are reported separately by the subtask metrics. A failed subtask alone does not necessarily make the tablet-level task fail. A task that falls back from parallel execution is reported with `mode="non_parallel"`. A sustained increase means more tasks are failing; compare its rate with `starrocks_be_lake_compaction_task_success_total` and inspect the CN logs to determine the cause.
+
+## `starrocks_be_lake_compaction_task_success_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `mode` (`parallel` or `non_parallel`)
+- Description: Cumulative number of tablet-level lake compaction tasks whose final outcome is success, grouped by their actual execution mode. Each tablet task is counted once. For a parallel task, this is the final tablet-level outcome after its subtasks are combined; individual subtask outcomes are reported separately by the subtask metrics. A parallel task can therefore be counted as successful even when one or more subtasks fail. A task that falls back from parallel execution is reported with `mode="non_parallel"`. The rate of increase is the successful compaction task completion rate.
+
 ## `starrocks_be_lake_tablet_metadata_get_not_found_total`
 
 - Unit: Count

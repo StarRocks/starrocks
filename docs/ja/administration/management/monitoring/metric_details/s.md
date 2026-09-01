@@ -183,6 +183,69 @@ description: "Alphabetical s"
 - タイプ: 累積値
 - 説明: `FlatJsonColumnWriter` に追加された行数（`append()` 時点でカウント、実際のフラット化の前）。
 
+## `starrocks_be_lake_compaction_effective_concurrency`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: メモリ負荷に応じた自動調整後に、CN が同時使用を許可している Lake Compaction 実行スロット数の現在値。`starrocks_be_lake_compaction_max_concurrency` を下回る状態が続く場合、メモリ負荷によってコンパクションの同時実行数が制限されています。すでに実行中の通常タスクと並列サブタスクにより、実行が許可されて未完了の実行単位数がこの値を一時的に上回ることがあります。
+
+## `starrocks_be_lake_compaction_max_concurrency`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: CN で現在有効な Lake Compaction の最大同時実行スロット数。実行時の設定変更が有効になった後の値を示します。`starrocks_be_lake_compaction_effective_concurrency` がこの値より低い場合、メモリ負荷によってコンパクションの同時実行数がこの容量未満に制限されています。
+
+## `starrocks_be_lake_compaction_parallel_fallback_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 並列実行が有効化されて試行されたものの、実際には通常の非並列実行へフォールバックしたタブレット単位の Lake Compaction タスクの累積数。タブレットタスクごとに 1 回カウントします。並列実行を試行しないタブレットタスクはカウントされません。
+
+## `starrocks_be_lake_compaction_queued_tasks`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: CN で開始を待っている通常の非並列 Lake Compaction タブレットタスク数。並列実行からフォールバックしたタスクを含みますが、並列 Compaction サブタスクは含まれません。増加が続く場合、投入される処理量が CN で利用可能なコンパクション処理能力を上回っています。
+
+## `starrocks_be_lake_compaction_running_subtasks`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- 説明: 並列実行の処理対象となってから完了するまでの物理サブタスク数。実行の受け入れ処理中、または実行スレッドプールで短時間待機しているサブタスクが含まれる場合があります。
+
+## `starrocks_be_lake_compaction_running_tasks`
+
+- 単位: カウント
+- タイプ: 瞬間値
+- ラベル: `mode`（`parallel` または `non_parallel`）
+- 説明: CN で現在実行中のタブレット単位の Lake Compaction タスク数。実際の実行モード別に集計されます。並列タスクはサブタスク数にかかわらず 1 回だけカウントされます。並列実行からフォールバックしたタスクは `mode="non_parallel"` として報告されます。このメトリクスは実行スロットの占有数を直接示すものではありません。並列の物理実行単位を確認するには、`starrocks_be_lake_compaction_running_subtasks` を使用してください。
+
+## `starrocks_be_lake_compaction_subtask_failure_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 最終結果が失敗となった並列 Compaction の物理サブタスクの累積数。完了したサブタスクごとに 1 回カウントします。
+
+## `starrocks_be_lake_compaction_subtask_success_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 最終結果が成功となった並列 Compaction の物理サブタスクの累積数。完了したサブタスクごとに 1 回カウントします。
+
+## `starrocks_be_lake_compaction_task_failure_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- ラベル: `mode`（`parallel` または `non_parallel`）
+- 説明: 最終結果が失敗となったタブレット単位の Lake Compaction タスクの累積数。実際の実行モード別に集計され、タブレットタスクごとに 1 回カウントします。並列タスクの場合、各サブタスクを統合した後のタブレット単位の最終結果を示し、個々のサブタスクの結果はサブタスクメトリクスで別途報告されます。個々のサブタスクが失敗しても、それだけでタブレット単位のタスクが失敗になるとは限りません。並列実行からフォールバックしたタスクは `mode="non_parallel"` として報告されます。増加が続く場合は失敗したタスクが増えているため、`starrocks_be_lake_compaction_task_success_total` の増加率および CN ログと合わせて原因を確認してください。
+
+## `starrocks_be_lake_compaction_task_success_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- ラベル: `mode`（`parallel` または `non_parallel`）
+- 説明: 最終結果が成功となったタブレット単位の Lake Compaction タスクの累積数。実際の実行モード別に集計され、タブレットタスクごとに 1 回カウントします。並列タスクの場合、各サブタスクを統合した後のタブレット単位の最終結果を示し、個々のサブタスクの結果はサブタスクメトリクスで別途報告されます。そのため、一部のサブタスクが失敗していても、並列タスクが成功としてカウントされる場合があります。並列実行からフォールバックしたタスクは `mode="non_parallel"` として報告されます。この指標の増加率は、コンパクションタスクが正常に完了する頻度を示します。
+
 ## `starrocks_be_lake_tablet_metadata_get_not_found_total`
 
 - 単位: カウント

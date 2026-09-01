@@ -20,6 +20,7 @@
 #include <sstream>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
@@ -736,6 +737,8 @@ std::shared_ptr<TabletParallelCompactionState> TabletParallelCompactionManager::
 
 void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int64_t txn_id, int32_t subtask_id,
                                                           std::unique_ptr<CompactionTaskContext> context) {
+    const bool success = context->status.ok();
+
     std::string state_key = make_state_key(tablet_id, txn_id);
 
     // Get a shared_ptr copy to prevent use-after-free if cleanup_tablet is called concurrently.
@@ -751,6 +754,11 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
             LOG(WARNING) << "Tablet state not found for subtask completion, tablet=" << tablet_id
                          << ", txn_id=" << txn_id << ", subtask_id=" << subtask_id
                          << ". Decremented running_subtasks counter.";
+            if (success) {
+                _subtask_success_total.fetch_add(1, std::memory_order_relaxed);
+            } else {
+                _subtask_failure_total.fetch_add(1, std::memory_order_relaxed);
+            }
             return;
         }
         state = it->second; // Copy shared_ptr to extend lifetime
@@ -759,16 +767,17 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
     std::shared_ptr<CompactionTaskCallback> callback;
     bool all_complete = false;
 
+    TEST_SYNC_POINT_CALLBACK("TabletParallelCompactionManager::on_subtask_complete:before_submission_lock",
+                             &subtask_id);
     {
+        std::lock_guard<std::mutex> submission_lock(state->submission_mutex);
         std::lock_guard<std::mutex> lock(state->mutex);
 
         auto it = state->running_subtasks.find(subtask_id);
         if (it == state->running_subtasks.end()) {
             // Subtask was already removed (should not happen in normal flow, but handle defensively).
-            // We must still decrement the counter to prevent counter leakage.
-            _running_subtasks--;
             LOG(WARNING) << "Subtask not found, tablet=" << tablet_id << ", txn_id=" << txn_id
-                         << ", subtask_id=" << subtask_id << ". Decremented running_subtasks counter.";
+                         << ", subtask_id=" << subtask_id;
             return;
         }
 
@@ -788,6 +797,12 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
         VLOG(1) << "Parallel compaction subtask completed, tablet=" << tablet_id << ", txn_id=" << txn_id
                 << ", subtask_id=" << subtask_id << ", remaining=" << state->running_subtasks.size()
                 << ", completed=" << state->completed_subtasks.size();
+    }
+
+    if (success) {
+        _subtask_success_total.fetch_add(1, std::memory_order_relaxed);
+    } else {
+        _subtask_failure_total.fetch_add(1, std::memory_order_relaxed);
     }
 
     // If all subtasks are complete, notify the callback
@@ -897,6 +912,20 @@ void TabletParallelCompactionManager::on_subtask_complete(int64_t tablet_id, int
         {
             std::lock_guard<std::mutex> lock(state->mutex);
             merged_context->subtask_count = static_cast<int32_t>(state->completed_subtasks.size());
+
+            if (state->parent_task_metric_state == TabletParallelCompactionState::ParentTaskMetricState::RUNNING) {
+                _running_tasks.fetch_sub(1, std::memory_order_relaxed);
+            }
+            state->parent_task_metric_state = TabletParallelCompactionState::ParentTaskMetricState::FINISHED;
+
+            if (!state->parent_task_outcome_recorded) {
+                state->parent_task_outcome_recorded = true;
+                if (merged_context->status.ok()) {
+                    _task_success_total.fetch_add(1, std::memory_order_relaxed);
+                } else {
+                    _task_failure_total.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
         }
 
         callback->finish_task(std::move(merged_context));
@@ -926,7 +955,11 @@ void TabletParallelCompactionManager::cleanup_tablet(int64_t tablet_id, int64_t 
             // causing use-after-free when state_lock's destructor tries to unlock.
             {
                 std::lock_guard<std::mutex> state_lock(it->second->mutex);
-                // Just access to synchronize, no need to get subtask_count anymore
+                if (it->second->parent_task_metric_state ==
+                    TabletParallelCompactionState::ParentTaskMetricState::RUNNING) {
+                    _running_tasks.fetch_sub(1, std::memory_order_relaxed);
+                }
+                it->second->parent_task_metric_state = TabletParallelCompactionState::ParentTaskMetricState::FINISHED;
             }
             _tablet_states.erase(it);
         }
@@ -1471,6 +1504,7 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
         // This is acceptable because state cleanup implies the compaction request has been
         // abandoned (e.g., timeout from FE side).
         _running_subtasks--;
+        _subtask_failure_total.fetch_add(1, std::memory_order_relaxed);
         // Release limiter token
         if (release_token) {
             release_token(false);
@@ -2267,6 +2301,7 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     // Now create and submit all subtasks. Since we've acquired all tokens,
     // we won't have partial large-rowset splits due to token exhaustion.
     // Thread pool submission failures are still possible but rare.
+    std::unique_lock<std::mutex> submission_lock(state_ptr->submission_mutex);
     int subtasks_created = 0;
     int64_t submitted_bytes = 0;
 
@@ -2324,6 +2359,16 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
 
         _running_subtasks++;
 
+        const bool is_first_submission = subtasks_created == 0;
+        if (is_first_submission) {
+            std::lock_guard<std::mutex> lock(state_ptr->mutex);
+            if (state_ptr->parent_task_metric_state ==
+                TabletParallelCompactionState::ParentTaskMetricState::NOT_SUBMITTED) {
+                state_ptr->parent_task_metric_state =
+                        TabletParallelCompactionState::ParentTaskMetricState::SUBMIT_IN_FLIGHT;
+            }
+        }
+
         // Submit task to thread pool (token already acquired)
         Status submit_st;
         if (group.type == SubtaskType::NORMAL) {
@@ -2363,6 +2408,20 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
                     });
         }
 
+        if (is_first_submission) {
+            std::lock_guard<std::mutex> lock(state_ptr->mutex);
+            if (state_ptr->parent_task_metric_state ==
+                TabletParallelCompactionState::ParentTaskMetricState::SUBMIT_IN_FLIGHT) {
+                if (submit_st.ok()) {
+                    state_ptr->parent_task_metric_state = TabletParallelCompactionState::ParentTaskMetricState::RUNNING;
+                    _running_tasks.fetch_add(1, std::memory_order_relaxed);
+                } else {
+                    state_ptr->parent_task_metric_state =
+                            TabletParallelCompactionState::ParentTaskMetricState::NOT_SUBMITTED;
+                }
+            }
+        }
+
         if (!submit_st.ok()) {
             LOG(WARNING) << "Parallel compaction: failed to submit subtask " << subtask_id << " for tablet "
                          << tablet_id << ": " << submit_st;
@@ -2389,6 +2448,7 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
             }
 
             if (subtasks_created == 0) {
+                submission_lock.unlock();
                 cleanup_tablet(tablet_id, txn_id);
                 return submit_st;
             }
@@ -2418,6 +2478,7 @@ StatusOr<int> TabletParallelCompactionManager::submit_subtasks_from_groups(
     }
 
     if (subtasks_created == 0) {
+        submission_lock.unlock();
         cleanup_tablet(tablet_id, txn_id);
         return Status::NotFound(strings::Substitute(
                 "Failed to create any subtask: tablet_id=$0, txn_id=$1, total_groups=$2, max_parallel=$3", tablet_id,
@@ -2444,6 +2505,7 @@ void TabletParallelCompactionManager::execute_subtask_segment_range(int64_t tabl
     auto state = get_tablet_state(tablet_id, txn_id);
     if (state == nullptr) {
         _running_subtasks--;
+        _subtask_failure_total.fetch_add(1, std::memory_order_relaxed);
         if (release_token) {
             release_token(false);
         }
@@ -2895,6 +2957,7 @@ void TabletParallelCompactionManager::execute_subtask_range_split(
     auto state = get_tablet_state(tablet_id, txn_id);
     if (state == nullptr) {
         _running_subtasks--;
+        _subtask_failure_total.fetch_add(1, std::memory_order_relaxed);
         if (release_token) {
             release_token(false);
         }

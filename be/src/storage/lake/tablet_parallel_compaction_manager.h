@@ -105,6 +105,13 @@ struct SubtaskInfo {
 
 // Single tablet's parallel compaction state
 struct TabletParallelCompactionState {
+    enum class ParentTaskMetricState {
+        NOT_SUBMITTED,
+        SUBMIT_IN_FLIGHT,
+        RUNNING,
+        FINISHED,
+    };
+
     int64_t tablet_id = 0;
     int64_t txn_id = 0;
     int64_t version = 0;
@@ -165,6 +172,15 @@ struct TabletParallelCompactionState {
     // submission so a partial thread-pool submission cannot be published.
     int32_t expected_unshare_subtask_count = 0;
 
+    // Parent task metric state. A subtask may finish before submit_func() returns,
+    // so metric updates need an explicit state instead of a counted flag.
+    ParentTaskMetricState parent_task_metric_state = ParentTaskMetricState::NOT_SUBMITTED;
+    bool parent_task_outcome_recorded = false;
+
+    // Prevent completion handling from observing a temporarily empty running_subtasks map
+    // before all accepted subtasks have been registered. Always acquire this before mutex.
+    mutable std::mutex submission_mutex;
+
     // Mutex for thread-safe access
     mutable std::mutex mutex;
 
@@ -215,8 +231,13 @@ public:
     StatusOr<TxnLogPB> get_merged_txn_log(int64_t tablet_id, int64_t txn_id);
 
     // Metrics
+    int64_t running_tasks() const { return _running_tasks.load(std::memory_order_relaxed); }
     int64_t running_subtasks() const { return _running_subtasks.load(); }
     int64_t completed_subtasks() const { return _completed_subtasks.load(); }
+    int64_t task_success_total() const { return _task_success_total.load(std::memory_order_relaxed); }
+    int64_t task_failure_total() const { return _task_failure_total.load(std::memory_order_relaxed); }
+    int64_t subtask_success_total() const { return _subtask_success_total.load(std::memory_order_relaxed); }
+    int64_t subtask_failure_total() const { return _subtask_failure_total.load(std::memory_order_relaxed); }
 
     // List all running parallel compaction tasks for monitoring
     // Forward declaration of CompactionTaskInfo is in compaction_scheduler.h
@@ -437,8 +458,13 @@ private:
     mutable std::mutex _states_mutex;
 
     // Metrics
+    std::atomic<int64_t> _running_tasks{0};
     std::atomic<int64_t> _running_subtasks{0};
     std::atomic<int64_t> _completed_subtasks{0};
+    std::atomic<int64_t> _task_success_total{0};
+    std::atomic<int64_t> _task_failure_total{0};
+    std::atomic<int64_t> _subtask_success_total{0};
+    std::atomic<int64_t> _subtask_failure_total{0};
 };
 
 } // namespace starrocks::lake

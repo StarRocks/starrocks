@@ -280,12 +280,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 ## `lake_compaction_running`
 
 - 单位：计数
-- 描述：当前正在运行的存算分离（lake）压缩作业数量（每个分区一个作业）。
+- 描述：当前存在运行中存算分离（lake）压缩作业的物理分区数量。每个物理分区最多计为一个作业。
 
 ## `lake_compaction_running_tasks`
 
 - 单位：计数
-- 描述：所有正在运行的存算分离（lake）压缩作业中当前正在被压缩的 tablet 数量。该数量与调度器通过 `lake_compaction_max_tasks` 配置进行限流时所用的单位一致，比统计压缩作业数量（每个分区一个）的 `lake_compaction_running` 更细粒度——单个作业会按 tablet 拆分为一个个 tablet 级任务。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
+- 描述：所有运行中的存算分离（lake）压缩作业中尚未完成的 tablet 级压缩任务数量。该指标与 `lake_compaction_max_tasks` 的单位相同。`lake_compaction_running` 统计的是物理分区，因此一个分区可能对应多个 tablet 级任务。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
 
 ## `lake_compaction_score_at_trigger`
 

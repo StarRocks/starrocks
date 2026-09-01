@@ -19,6 +19,7 @@
 #include <bthread/condition_variable.h>
 #include <butil/time.h> // NOLINT
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 
@@ -303,6 +304,30 @@ CompactionScheduler::~CompactionScheduler() {
     stop();
 }
 
+int64_t CompactionScheduler::parallel_running_tasks() const {
+    return _parallel_mgr != nullptr ? _parallel_mgr->running_tasks() : 0;
+}
+
+int64_t CompactionScheduler::parallel_task_success_total() const {
+    return _parallel_mgr != nullptr ? _parallel_mgr->task_success_total() : 0;
+}
+
+int64_t CompactionScheduler::parallel_task_failure_total() const {
+    return _parallel_mgr != nullptr ? _parallel_mgr->task_failure_total() : 0;
+}
+
+int64_t CompactionScheduler::running_subtasks() const {
+    return _parallel_mgr != nullptr ? _parallel_mgr->running_subtasks() : 0;
+}
+
+int64_t CompactionScheduler::subtask_success_total() const {
+    return _parallel_mgr != nullptr ? _parallel_mgr->subtask_success_total() : 0;
+}
+
+int64_t CompactionScheduler::subtask_failure_total() const {
+    return _parallel_mgr != nullptr ? _parallel_mgr->subtask_failure_total() : 0;
+}
+
 void CompactionScheduler::stop() {
     bool expected = false;
     auto changed = false;
@@ -416,6 +441,7 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
             // Fall back to non-parallel mode for this tablet if:
             // 1. create_parallel_tasks failed (result.status() is not OK)
             // 2. create_parallel_tasks returned 0 (indicates fallback, e.g., data size too small)
+            _parallel_fallback_total.fetch_add(1, std::memory_order_relaxed);
             if (!result.ok()) {
                 VLOG(1) << "Failed to create parallel tasks for tablet " << tablet_id << ": " << result.status()
                         << ", falling back to normal compaction";
@@ -554,6 +580,8 @@ void CompactionScheduler::thread_task(int id) {
         }
 
         if (context != nullptr) {
+            _non_parallel_running_tasks.fetch_add(1, std::memory_order_relaxed);
+            DeferOp running_task_guard([this] { _non_parallel_running_tasks.fetch_sub(1, std::memory_order_relaxed); });
             auto st = do_compaction(std::move(context));
             if (st.is_mem_limit_exceeded()) {
                 _limiter.memory_limit_exceeded();
@@ -660,6 +688,12 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         // is greater than zero before reading "status".
         context->finish_time.store(finish_time, std::memory_order_release);
 
+        if (status.ok()) {
+            _non_parallel_task_success_total.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            _non_parallel_task_failure_total.fetch_add(1, std::memory_order_relaxed);
+        }
+
         auto cb = context->callback;
         cb->finish_task(std::move(context));
     }
@@ -680,6 +714,7 @@ void CompactionScheduler::abort_compaction(std::unique_ptr<CompactionTaskContext
         context->stats->queue_wait_ns += start_time_ns - context->enqueue_time_ns;
     }
     context->status = Status::Aborted("Compaction task aborted due to BE/CN shutdown!");
+    _non_parallel_task_failure_total.fetch_add(1, std::memory_order_relaxed);
     LOG(WARNING) << "Fail to compact tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id << " : "
                  << context->status << " table_id=" << context->table_id << " partition_id=" << context->partition_id;
     // make sure every task can be finished no matter it is succeeded or failed.

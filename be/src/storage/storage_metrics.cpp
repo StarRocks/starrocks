@@ -14,10 +14,19 @@
 
 #include "storage/storage_metrics.h"
 
+#include <algorithm>
+
 #include "common/thread/threadpool.h"
 #include "gutil/macros.h"
+#include "storage/lake/compaction_scheduler.h"
 
 namespace starrocks {
+
+namespace {
+
+constexpr const char* kLakeCompactionMetricsHookName = "lake_compaction_metrics";
+
+} // namespace
 
 StorageMetrics* StorageMetrics::instance() {
     // Process-lifetime singleton: registered Metric objects keep back-pointers
@@ -133,6 +142,25 @@ void StorageMetrics::install(MetricRegistry* registry) {
                               &update_compaction_outputs_bytes_total);
     registry->register_metric("update_compaction_duration_us", MetricLabels().add("type", "update"),
                               &update_compaction_duration_us);
+    registry->register_metric("lake_compaction_running_tasks", MetricLabels().add("mode", "parallel"),
+                              &lake_compaction_parallel_running_tasks);
+    registry->register_metric("lake_compaction_running_tasks", MetricLabels().add("mode", "non_parallel"),
+                              &lake_compaction_non_parallel_running_tasks);
+    REGISTER_STORAGE_METRIC(lake_compaction_queued_tasks);
+    REGISTER_STORAGE_METRIC(lake_compaction_max_concurrency);
+    REGISTER_STORAGE_METRIC(lake_compaction_effective_concurrency);
+    registry->register_metric("lake_compaction_task_success_total", MetricLabels().add("mode", "parallel"),
+                              &lake_compaction_parallel_task_success_total);
+    registry->register_metric("lake_compaction_task_success_total", MetricLabels().add("mode", "non_parallel"),
+                              &lake_compaction_non_parallel_task_success_total);
+    registry->register_metric("lake_compaction_task_failure_total", MetricLabels().add("mode", "parallel"),
+                              &lake_compaction_parallel_task_failure_total);
+    registry->register_metric("lake_compaction_task_failure_total", MetricLabels().add("mode", "non_parallel"),
+                              &lake_compaction_non_parallel_task_failure_total);
+    REGISTER_STORAGE_METRIC(lake_compaction_parallel_fallback_total);
+    REGISTER_STORAGE_METRIC(lake_compaction_running_subtasks);
+    REGISTER_STORAGE_METRIC(lake_compaction_subtask_success_total);
+    REGISTER_STORAGE_METRIC(lake_compaction_subtask_failure_total);
 
     REGISTER_STORAGE_METRIC(async_delta_writer_execute_total);
     REGISTER_STORAGE_METRIC(async_delta_writer_task_total);
@@ -194,6 +222,11 @@ void StorageMetrics::install(MetricRegistry* registry) {
     }
     _pending_uint_gauge_hooks.clear();
 
+    if (_pending_lake_compaction_hook.has_value()) {
+        _registry->register_hook(_pending_lake_compaction_hook->name, _pending_lake_compaction_hook->hook);
+        _pending_lake_compaction_hook.reset();
+    }
+
 #undef REGISTER_ENGINE_REQUEST_METRIC
 #undef REGISTER_STORAGE_METRIC
 }
@@ -235,6 +268,50 @@ void StorageMetrics::register_rowset_count_generated_and_in_use_hook(std::functi
     }
     _register_uint_gauge_hook("rowset_count_generated_and_in_use", &rowset_count_generated_and_in_use,
                               std::move(value_fn));
+}
+
+bool StorageMetrics::register_lake_compaction_hook(lake::CompactionScheduler* scheduler) {
+    if (scheduler == nullptr) {
+        return false;
+    }
+    auto hook = [this, scheduler] { _update_lake_compaction_metrics(scheduler); };
+    if (_registry == nullptr) {
+        if (_pending_lake_compaction_hook.has_value()) {
+            return false;
+        }
+        _pending_lake_compaction_hook.emplace(
+                PendingLakeCompactionHook{kLakeCompactionMetricsHookName, std::move(hook)});
+        return true;
+    }
+    if (lake_compaction_non_parallel_running_tasks.registry() != _registry) {
+        return false;
+    }
+    return _registry->register_hook(kLakeCompactionMetricsHookName, hook);
+}
+
+void StorageMetrics::deregister_lake_compaction_hook() {
+    _pending_lake_compaction_hook.reset();
+    if (_registry == nullptr || lake_compaction_non_parallel_running_tasks.registry() != _registry) {
+        return;
+    }
+    _registry->deregister_hook(kLakeCompactionMetricsHookName);
+}
+
+void StorageMetrics::_update_lake_compaction_metrics(const lake::CompactionScheduler* scheduler) {
+    std::lock_guard lock(_lake_compaction_metrics_update_mutex);
+    lake_compaction_parallel_running_tasks.set_value(scheduler->parallel_running_tasks());
+    lake_compaction_non_parallel_running_tasks.set_value(scheduler->non_parallel_running_tasks());
+    lake_compaction_queued_tasks.set_value(scheduler->queued_tasks());
+    lake_compaction_max_concurrency.set_value(scheduler->max_concurrency());
+    lake_compaction_effective_concurrency.set_value(std::max<int64_t>(0, scheduler->concurrency()));
+    lake_compaction_parallel_task_success_total.set_value(scheduler->parallel_task_success_total());
+    lake_compaction_non_parallel_task_success_total.set_value(scheduler->non_parallel_task_success_total());
+    lake_compaction_parallel_task_failure_total.set_value(scheduler->parallel_task_failure_total());
+    lake_compaction_non_parallel_task_failure_total.set_value(scheduler->non_parallel_task_failure_total());
+    lake_compaction_parallel_fallback_total.set_value(scheduler->parallel_fallback_total());
+    lake_compaction_running_subtasks.set_value(scheduler->running_subtasks());
+    lake_compaction_subtask_success_total.set_value(scheduler->subtask_success_total());
+    lake_compaction_subtask_failure_total.set_value(scheduler->subtask_failure_total());
 }
 
 void StorageMetrics::_register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,

@@ -38,6 +38,7 @@
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
+#include "storage/storage_metrics.h"
 
 #ifdef USE_STAROS
 #include "common/config_starlet_fwd.h"
@@ -61,6 +62,7 @@ StorageEnv* StorageEnv::GetInstance() {
 StorageEnv::StorageEnv() = default;
 
 StorageEnv::~StorageEnv() {
+    _deregister_lake_compaction_hook();
     destroy_vector_index_cache();
     _parallel_compact_mgr.reset();
     _lake_replication_txn_manager.reset();
@@ -137,7 +139,22 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
     _lake_update_manager = std::move(lake_update_manager);
     _lake_replication_txn_manager = std::move(lake_replication_txn_manager);
     _parallel_compact_mgr = std::move(parallel_compact_mgr);
+    _register_lake_compaction_hook();
     return Status::OK();
+}
+
+void StorageEnv::_register_lake_compaction_hook() {
+    _lake_compaction_hook_registered =
+            StorageMetrics::instance()->register_lake_compaction_hook(_lake_tablet_manager->compaction_scheduler());
+}
+
+void StorageEnv::_deregister_lake_compaction_hook() {
+    if (!_lake_compaction_hook_registered) {
+        return;
+    }
+
+    StorageMetrics::instance()->deregister_lake_compaction_hook();
+    _lake_compaction_hook_registered = false;
 }
 
 Status StorageEnv::init_vector_index_cache(int64_t process_mem_limit, MemTracker* vector_index_mem_tracker) {
@@ -200,6 +217,7 @@ void StorageEnv::destroy_vector_index_cache() {
 
 void StorageEnv::destroy() {
     _spill_dir_mgr = nullptr;
+    _deregister_lake_compaction_hook();
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
     }

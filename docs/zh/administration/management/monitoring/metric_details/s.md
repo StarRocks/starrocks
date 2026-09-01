@@ -209,6 +209,69 @@ description: "Alphabetical s"
 - 类型: 累积值
 - 描述: 进入 `FlatJsonColumnWriter` 的行数（在 `append()` 处统计，实际扁平化之前）。
 
+## `starrocks_be_lake_compaction_effective_concurrency`
+
+- 单位: 计数
+- 类型: 瞬时
+- 描述: CN 根据内存压力自动调整后，当前允许并发使用的 Lake Compaction 执行槽位数。若该值长期低于 `starrocks_be_lake_compaction_max_concurrency`，说明内存压力正在限制压缩并发度。已在执行的普通任务和并行子任务可能使已准入且尚未完成的执行单元数量短暂高于该值。
+
+## `starrocks_be_lake_compaction_max_concurrency`
+
+- 单位: 计数
+- 类型: 瞬时
+- 描述: CN 当前生效的 Lake Compaction 最大并发执行槽位数。该值在运行时配置变更生效后随之更新。若 `starrocks_be_lake_compaction_effective_concurrency` 低于该值，说明内存压力正在将压缩并发度限制在此容量以下。
+
+## `starrocks_be_lake_compaction_parallel_fallback_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 已启用并尝试并行执行、但实际回退为普通非并行执行的 tablet 级 Lake Compaction 任务累计数量。每个 tablet 任务计数一次；未尝试并行执行的 tablet 任务不计入。
+
+## `starrocks_be_lake_compaction_queued_tasks`
+
+- 单位: 计数
+- 类型: 瞬时
+- 描述: CN 上等待开始的普通非并行 Lake Compaction tablet 任务数，包括从并行执行回退的任务，但不包括并行 Compaction 子任务。若该值持续增长，说明任务进入速度超过了 CN 当前可用的压缩处理能力。
+
+## `starrocks_be_lake_compaction_running_subtasks`
+
+- 单位: 计数
+- 类型: 瞬时
+- 描述: 已进入并行执行生命周期且尚未完成的物理子任务数量，可能包括正在准入执行或在线程池中短暂等待的子任务。
+
+## `starrocks_be_lake_compaction_running_tasks`
+
+- 单位: 计数
+- 类型: 瞬时
+- 标签: `mode`（`parallel` 或 `non_parallel`）
+- 描述: CN 上当前正在运行的 tablet 级 Lake Compaction 任务数，按实际执行模式归类。一个并行任务无论包含多少个子任务都只计数一次；从并行执行回退的任务归入 `mode="non_parallel"`。该指标不直接表示执行槽位占用情况；如需观察并行物理执行单元，请使用 `starrocks_be_lake_compaction_running_subtasks`。
+
+## `starrocks_be_lake_compaction_subtask_failure_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 最终结果为失败的并行 Compaction 物理子任务累计数量。每个已完成的子任务计数一次。
+
+## `starrocks_be_lake_compaction_subtask_success_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 最终结果为成功的并行 Compaction 物理子任务累计数量。每个已完成的子任务计数一次。
+
+## `starrocks_be_lake_compaction_task_failure_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 标签: `mode`（`parallel` 或 `non_parallel`）
+- 描述: 最终结果为失败的 tablet 级 Lake Compaction 任务累计数量，按实际执行模式归类。每个 tablet 任务计数一次。对于并行任务，该结果是合并各子任务后得到的 tablet 级最终结果；各子任务的结果由子任务指标单独统计。单个子任务失败并不必然导致 tablet 级任务失败。从并行执行回退的任务归入 `mode="non_parallel"`。若该指标持续增长，说明失败任务正在增加；建议结合 `starrocks_be_lake_compaction_task_success_total` 的增长速率和 CN 日志确认原因。
+
+## `starrocks_be_lake_compaction_task_success_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 标签: `mode`（`parallel` 或 `non_parallel`）
+- 描述: 最终结果为成功的 tablet 级 Lake Compaction 任务累计数量，按实际执行模式归类。每个 tablet 任务计数一次。对于并行任务，该结果是合并各子任务后得到的 tablet 级最终结果；各子任务的结果由子任务指标单独统计。因此，即使部分子任务失败，并行任务仍可能计为成功。从并行执行回退的任务归入 `mode="non_parallel"`。该指标的增长速率反映压缩任务的成功完成速率。
+
 ## `starrocks_be_lake_tablet_metadata_get_not_found_total`
 
 - 单位: 计数
