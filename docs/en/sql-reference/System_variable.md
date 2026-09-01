@@ -418,8 +418,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 1024
 * **Introduced in**: v2.5
 
-<<<<<<< HEAD
-=======
 ### count_distinct_implementation
 
 * **Description**: Controls the function implementation when `COUNT(DISTINCT expr)` contains only one parameter. Valid values (case-insensitive):
@@ -454,13 +452,6 @@ Setting this value with hints applies only to `COUNT(DISTINCT)` with a single pa
 * **Data type**: String
 * **Introduced in**: v3.4.0
 
-### custom_session_name (session)
-
-* **Description**: Used to specify custom name of current session, analog of `applicationName` or `program_name` in DMBS like MySQL or PostgreSQL. Can be set using `SET SESSION custom_session_name = 'my session name';`. Value can be found in audit logs in `customSessionName` field.
-* **Default**: ""
-* **Data type**: String
-* **Introduced in**: v4.1.0
-
 ### datacache_sharing_work_period
 
 * **Description**: The period of time that Cache Sharing takes effect. After each cluster scaling operation, only the requests within this period of time will try to access the cache data from other nodes if the Cache Sharing feature is enabled.
@@ -484,7 +475,6 @@ Setting this value with hints applies only to `COUNT(DISTINCT)` with a single pa
 * **Data Type**: String
 * **Introduced in**: -
 
->>>>>>> 2669313 ([Doc] Doc for `count_distinct_implementation` (#78424))
 ### default_rowset_type (global)
 
 Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
