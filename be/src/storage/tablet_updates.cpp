@@ -5049,6 +5049,18 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             return Status::Cancelled("snapshot version too small");
         }
 
+        // A full snapshot replaces every unapplied edit. If one of those edits is a compaction,
+        // its apply task will never complete the compaction lifecycle and release the running state.
+        bool discarded_pending_compaction = false;
+        if (!restore_from_backup) {
+            for (size_t i = _apply_version_idx + 1; i < _edit_version_infos.size(); ++i) {
+                if (_edit_version_infos[i]->compaction != nullptr) {
+                    discarded_pending_compaction = true;
+                    break;
+                }
+            }
+        }
+
         std::stringstream ss;
         uint32_t new_next_rowset_id = _next_rowset_id;
         ss << "next_rowset_id before:" << _next_rowset_id << " rowsets:";
@@ -5177,6 +5189,12 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             auto* pindex_load_executor = manager->get_pindex_load_executor();
             (void)pindex_load_executor->submit_task_and_wait_for(
                     std::static_pointer_cast<Tablet>(_tablet.shared_from_this()), rebuild_pk_index_wait_seconds);
+        }
+
+        if (discarded_pending_compaction) {
+            // Reset the abandoned in-memory state before allowing another compaction.
+            _compaction_state.reset();
+            _compaction_running = false;
         }
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false) << ss.str();
