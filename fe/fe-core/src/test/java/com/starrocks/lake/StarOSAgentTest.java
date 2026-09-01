@@ -363,7 +363,7 @@ public class StarOSAgentTest {
 
         new Expectations(client) {
             {
-                client.createShard("1", (List<CreateShardInfo>) any);
+                client.createShard("1", (List<CreateShardInfo>) any, anyLong);
                 result = shards;
                 client.createShardGroup("1", (List<CreateShardGroupInfo>) any);
                 result = groups;
@@ -397,6 +397,50 @@ public class StarOSAgentTest {
             Assertions.assertEquals(1, realGroupIds.size());
             Assertions.assertEquals(groupId, realGroupIds.get(0).getGroupId());
         });
+    }
+
+    @Test
+    public void testCreateShardsFallsBackWithoutMetaGroupOnDefinitiveRejection() throws Exception {
+        AtomicLong counter = new AtomicLong(2048);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return counter.getAndAdd(10);
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        List<ShardInfo> shards = Lists.newArrayList(
+                ShardInfo.newBuilder().setShardId(10L).build(), ShardInfo.newBuilder().setShardId(11L).build());
+
+        // The meta group has no buckets to join yet: a definitive pre-creation rejection, so the
+        // shards are created without the meta group instead of failing the DDL.
+        new Expectations(client) {
+            {
+                client.createShard("1", (List<CreateShardInfo>) any, 777L);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT,
+                        "meta group 777 has no shard group joined yet, can not join it at shard creation.");
+                client.createShard("1", (List<CreateShardInfo>) any);
+                result = shards;
+            }
+        };
+        List<Long> shardIds = starosAgent.createShards(2, pathInfo, cacheInfo, 333L, null, Collections.emptyMap(),
+                777L, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(Lists.newArrayList(10L, 11L), shardIds);
+
+        // Anything else is not retried: the shards may already exist after a transport failure.
+        new Expectations(client) {
+            {
+                client.createShard("1", (List<CreateShardInfo>) any, 777L);
+                result = new StarClientException(StatusCode.GRPC, "io exception");
+                client.createShard("1", (List<CreateShardInfo>) any);
+                times = 0;
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Failed to create shards. error: GRPC:io exception",
+                () -> starosAgent.createShards(2, pathInfo, cacheInfo, 333L, null, Collections.emptyMap(),
+                        777L, WarehouseManager.DEFAULT_RESOURCE));
     }
 
     /**
