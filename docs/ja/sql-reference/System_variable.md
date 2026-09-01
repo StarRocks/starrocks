@@ -387,6 +387,33 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1024
 * **導入バージョン**: v2.5
 
+### count_distinct_implementation
+
+* **説明**: `COUNT(DISTINCT expr)` にパラメータが 1 つだけ含まれる場合の関数実装を制御します。使用できる値（大文字と小文字は区別されません）:
+  * `default`: `COUNT(DISTINCT expr)` の実装をデフォルトのままにします。オプティマイザは、クエリ形式、統計情報、およびコストに基づいて適切な集計プランを選択します。
+  * `multi_count_distinct`: `COUNT(DISTINCT expr)` の実装を `multi_distinct_count` に変更し、正確なカウントを行います。カーディナリティが低い列または中程度の列をカウントする場合、この実装によってシャッフルおよび重複排除のフェーズを 1 つ削減でき、クエリの速度を向上させられる場合があります。ただし、distinct 値を HashSet に保持するため、カーディナリティが高い列を重複排除するとメモリ使用量が過剰になり、OOM が発生する可能性があります。代表的なワークロードで事前に検証せず、この値をグローバルに設定しないでください。
+  * `ndv`: `COUNT(DISTINCT expr)` の実装を `ndv(expr)` に変更します。この関数は HyperLogLog を使用するため、メモリ使用量を抑えながら近似結果を返します。
+* **デフォルト**: `default`
+* **導入バージョン**: v3.3.6、v3.4.0
+
+:::note[`multi_distinct_count` の使用上の注意事項]
+`multi_distinct_count()` は正確な結果を返します。
+
+ほとんどのクエリでは、`COUNT(DISTINCT expr)` の使用を推奨します。オプティマイザが適切な集計プランを選択できるように、`count_distinct_implementation` を `default` に設定してください。
+
+カーディナリティが低い列または中程度の列を重複排除する場合は、`multi_distinct_count()` をテストして使用できます。この関数は 2 フェーズの集計を使用するため、シャッフルおよび重複排除のフェーズを 1 つ削減し、パフォーマンスを向上させられる場合があります。ただし、HashSet の状態保持と最終マージによってメモリ使用量が過剰になり、カーディナリティが高い列を重複排除すると OOM が発生する可能性があります。
+
+セッション全体ではなく、特定の `COUNT(DISTINCT expr)` に対してこの実装をテストする場合は、クエリヒントで `count_distinct_implementation` を設定できます。
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+この値をヒントで設定した場合、適用対象はパラメータが 1 つの `COUNT(DISTINCT)` のみに限定されます。`COUNT(DISTINCT expr1, expr2)` のような複数列の重複排除式には影響しません。
+:::
+
 ### custom_query_id (session)
 
 * **説明**: 現在のクエリに外部識別子をバインドするために使用されます。クエリ実行前に `SET SESSION custom_query_id = 'my-query-id';` のように設定できます。クエリ終了後に値はリセットされます。この値は `KILL QUERY 'my-query-id'` に渡すことができます。値は監査ログの `customQueryId` フィールドで確認できます。
