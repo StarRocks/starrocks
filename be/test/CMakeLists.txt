@@ -464,6 +464,7 @@ set(EXEC_FILES
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/memory/counting_allocator_test.cpp
+        ./runtime/memory/jemalloc_conf_updater_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp

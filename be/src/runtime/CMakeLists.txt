@@ -83,6 +83,7 @@ set(RUNTIME_FILES
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
     memory/column_allocator.cpp
+    memory/jemalloc_conf_updater.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp
