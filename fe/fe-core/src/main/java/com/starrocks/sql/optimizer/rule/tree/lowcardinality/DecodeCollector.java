@@ -1318,7 +1318,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         private ScalarOperator merge(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
+<<<<<<< HEAD
             if (collectors.stream().anyMatch(s -> s.getType().isArrayType())) {
+=======
+            // the result becomes a new dictionary, so it must be a scalar string; the collectors are
+            // BOOLEAN sentinels for constant operands and cannot report the operator's own type
+            Type selfType = scalarOperator.getType();
+            if (selfType.isArrayType() || selfType.isStructType()
+                    || collectors.stream().anyMatch(s -> s.getType().isArrayType()
+                        || s.getType().isStructType())) {
+>>>>>>> c5e0bd0 ([BugFix] Do not dictionarize an expression returning ARRAY/STRUCT (#78488))
                 return forbidden(collectors, scalarOperator);
             }
             return mergeWithArray(collectors, scalarOperator);
