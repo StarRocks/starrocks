@@ -42,7 +42,7 @@ under the License.
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
-        <log4j.version>2.19.0</log4j.version>
+        <log4j.version>2.25.4</log4j.version>
         <jackson.version>2.21.4</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.4 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
@@ -59,7 +59,7 @@ under the License.
         <odps.version>0.48.7-public</odps.version>
         <kudu.version>1.17.1</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
-        <kafka-clients.version>3.9.1</kafka-clients.version>
+        <kafka-clients.version>3.9.2</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.76.0</grpc.version>
         <io.netty.version>4.1.137.Final</io.netty.version>
@@ -67,7 +67,7 @@ under the License.
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
-        <nimbusds.version>9.37.2</nimbusds.version>
+        <nimbusds.version>9.37.4</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <paimon.version>1.2.0</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
@@ -77,7 +77,7 @@ under the License.
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>
         <!-- azure native sdk -->
-        <azure.version>1.2.34</azure.version>
+        <azure.version>1.2.36</azure.version>
         <fastutil.version>8.5.15</fastutil.version>
         <async-profiler.version>4.0</async-profiler.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
@@ -268,7 +268,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.4.3</version>
+                <version>5.4.4</version>
             </dependency>
 
             <dependency>
@@ -1034,7 +1034,7 @@ under the License.
             <dependency>
                 <groupId>com.qcloud.cos</groupId>
                 <artifactId>hadoop-cos</artifactId>
-                <version>3.3.0-8.3.2</version>
+                <version>3.4.0-8.3.12</version>
             </dependency>
 
             <!-- hadoop-cos pulls tencentcloud-sdk 3.1.213 whose okhttp 2.7.5 is EOL;

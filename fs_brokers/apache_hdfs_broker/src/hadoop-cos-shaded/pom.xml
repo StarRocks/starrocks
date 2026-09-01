@@ -43,7 +43,7 @@ under the License.
         <dependency>
             <groupId>com.qcloud.cos</groupId>
             <artifactId>hadoop-cos</artifactId>
-            <version>3.3.3-8.3.10</version>
+            <version>3.4.0-8.3.12</version>
             <exclusions>
                 <exclusion>
                     <groupId>org.json</groupId>

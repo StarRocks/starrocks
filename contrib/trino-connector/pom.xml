@@ -14,7 +14,7 @@
         <air.main.basedir>${project.basedir}</air.main.basedir>
         <dep.airlift.version>230</dep.airlift.version>
         <dep.airlift.units.version>1.8</dep.airlift.units.version>
-        <dep.jackson.version>2.15.0</dep.jackson.version>
+        <dep.jackson.version>2.18.9</dep.jackson.version>
         <dep.guava.version>32.0.0-jre</dep.guava.version>
         <dep.guice.version>6.0.0</dep.guice.version>
         <dep.drift.version>1.14</dep.drift.version>

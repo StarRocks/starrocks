@@ -15,14 +15,14 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <starrocks.thirdparty.home>${env.STARROCKS_THIRDPARTY}</starrocks.thirdparty.home>
-        <arrow.version>16.1.0</arrow.version>
+        <arrow.version>17.0.0</arrow.version>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.9</version>
+            <version>3.18.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
