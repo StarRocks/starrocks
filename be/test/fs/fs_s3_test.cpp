@@ -23,6 +23,7 @@
 #include <fstream>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/uid_util.h"
 #include "common/config_object_storage_fwd.h"
 #include "common/s3_uri.h"
@@ -617,6 +618,48 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
     config::object_storage_rename_file_request_timeout_ms = default_value;
     config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
+}
+
+TEST_F(S3FileSystemTest, test_request_timeout_is_part_of_client_cache_key) {
+    close_s3_clients();
+    SCOPED_UPDATE(int64_t, config::object_storage_client_cache_size, 8);
+
+    Aws::Client::ClientConfiguration ordinary = S3ClientFactory::getClientConfig();
+    ordinary.endpointOverride = "s3-request-timeout-cache-key-test";
+    ordinary.region = "us-east-1";
+    ordinary.requestTimeoutMs = 10000;
+    auto rename = ordinary;
+    rename.requestTimeoutMs = 30000;
+
+    auto ordinary_client = S3ClientFactory::instance().new_client(ordinary, FSOptions());
+    auto rename_client = S3ClientFactory::instance().new_client(rename, FSOptions());
+
+    ASSERT_NE(ordinary_client, rename_client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(ordinary));
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(rename));
+    close_s3_clients();
+}
+
+TEST_F(S3FileSystemTest, test_unset_request_timeout_reaches_poco_client) {
+    close_s3_clients();
+    SCOPED_UPDATE(int64_t, config::object_storage_request_timeout_ms, -1);
+    SCOPED_UPDATE(bool, config::enable_poco_client_for_aws_sdk, true);
+
+    std::map<std::string, std::string> test_properties;
+    test_properties[AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR] = "true";
+    TCloudConfiguration t_cloud_configuration;
+    t_cloud_configuration.__set_cloud_type(TCloudType::AWS);
+    t_cloud_configuration.__set_cloud_properties(test_properties);
+    auto cloud_config = CloudConfigurationFactory::create_aws(t_cloud_configuration);
+
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(t_cloud_configuration));
+
+    Aws::Client::ClientConfiguration expected = S3ClientFactory::getClientConfig();
+    expected.scheme = Aws::Http::Scheme::HTTPS;
+    expected.maxConnections = config::object_storage_max_connection;
+    expected.requestTimeoutMs = -1;
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(expected, &cloud_config));
+    close_s3_clients();
 }
 
 TEST_F(S3FileSystemTest, test_s3_client_factory_close_idempotent_and_reusable) {
