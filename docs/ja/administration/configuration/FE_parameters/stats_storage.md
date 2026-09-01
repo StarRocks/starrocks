@@ -569,8 +569,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：テーブルまたはマテリアライズドビューを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトのテーブル分散方法として使用するかどうか。この設定は共有データモードでのみ有効であり、共有なしモードでは効果がありません。`false` に設定すると、このデフォルト動作が無効になり、そのようなテーブルは代わりに従来のデフォルト分散動作を使用します（PRIMARY KEY テーブルはデフォルトで hash、DUPLICATE KEY テーブルは random となり、AGGREGATE KEY または UNIQUE KEY テーブルは明示的な `DISTRIBUTED BY` 句が必要です）。
+- 説明：テーブルを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトのテーブル分散方法として使用するかどうか。この設定は共有データモードでのみ有効であり、共有なしモードでは効果がありません。`false` に設定すると、このデフォルト動作が無効になり、そのようなテーブルは代わりに従来のデフォルト分散動作を使用します（PRIMARY KEY テーブルはデフォルトで hash、DUPLICATE KEY テーブルは random となり、AGGREGATE KEY または UNIQUE KEY テーブルは明示的な `DISTRIBUTED BY` 句が必要です）。`DISTRIBUTED BY` 句なしで作成されたマテリアライズドビューにはさらに `enable_mv_range_distribution` が必要です。
 - 導入時期：v4.1.0
+
+### `enable_mv_range_distribution`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：非同期マテリアライズドビューを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトの分散方法として使用するかどうか。この設定はテーブルには影響しません。この設定と `enable_range_distribution` の両方が `true` で、かつ共有データモードである場合にのみ、デフォルトで Range-based Distribution セマンティクスが選択されます。それ以外の場合、テーブルが range 分散になる環境であっても、マテリアライズドビューは従来のデフォルト分散動作（増分維持されるマテリアライズドビューはキー列による hash、それ以外は random）を使用します。
+- 導入時期：v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 

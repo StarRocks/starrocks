@@ -470,6 +470,9 @@ TEST_F(BackendMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("disks_total_capacity", MetricLabels().add("path", kTestDiskPath)));
     ASSERT_NE(nullptr, instance->get_metric("http_requests_total"));
     ASSERT_NE(nullptr, instance->get_metric("http_request_send_bytes"));
+    ASSERT_NE(nullptr, instance->get_metric("ai_http_requests_total"));
+    ASSERT_NE(nullptr, instance->get_metric("ai_http_retries_total"));
+    ASSERT_NE(nullptr, instance->get_metric("ai_http_timeouts_total"));
     ASSERT_NE(nullptr, instance->get_metric("txn_request", MetricLabels().add("type", "begin")));
     ASSERT_NE(nullptr, instance->get_metric("txn_request", MetricLabels().add("type", "commit")));
     ASSERT_NE(nullptr, instance->get_metric("txn_request", MetricLabels().add("type", "rollback")));

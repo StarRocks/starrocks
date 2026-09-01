@@ -283,9 +283,6 @@ TEST_P(LakePartialUpdateTest, test_write) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_segment) {
@@ -656,9 +653,6 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
                       check(version, [](int c0, int c1, int c2) { return (c0 * 4 == c1) && (c0 * 4 == c2); }));
         }
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 // Validates that column-mode partial update rejects a merge_condition when the condition column
@@ -987,9 +981,6 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
@@ -1071,9 +1062,6 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
@@ -1143,9 +1131,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
 }
 
@@ -1221,9 +1206,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
 }
 
@@ -1309,9 +1291,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
@@ -1388,9 +1367,6 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
         auto sstable_meta = new_tablet_metadata->sstable_meta();
@@ -2483,9 +2459,6 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
@@ -2653,9 +2626,6 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
     EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 namespace {

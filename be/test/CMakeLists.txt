@@ -211,6 +211,7 @@ endif ()
 # Tests that link against ServiceBE / Cache. Append before add_library so the
 # object library actually picks them up (CMake evaluates EXEC_FILES by value
 # at add_library call time).
+list(APPEND EXEC_FILES ./service/ai_config_update_hooks_test.cpp)
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
     list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
@@ -218,11 +219,7 @@ endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
-if (NOT STARROCKS_JIT_ENABLE)
-    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
-else()
-    SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-endif ()
+SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
 set(STARROCKS_TEST_LINK_LIBS ${TEST_LINK_LIBS})
@@ -300,6 +297,7 @@ SET(DW_TEST_FILES
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/segment_metadata_filter_test.cpp
+    ./storage/lake/parallel_task_runner_test.cpp
     ./storage/lake/segment_task_runner_test.cpp
     ./storage/lake/add_index_schema_change_test.cpp
     ./storage/lake/schema_change_test.cpp
@@ -444,12 +442,16 @@ if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
 
-# paimon-cpp smoke test, a standalone binary that exists only with
-# --with-paimon-cpp, so starrocks_test never depends on libpaimon.so.
+# paimon-cpp tests live in a standalone binary that exists only with
+# --with-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
+    target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_predicate_converter_test.cpp
+        connector/paimon/paimon_file_system_test.cpp
+    )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()
 

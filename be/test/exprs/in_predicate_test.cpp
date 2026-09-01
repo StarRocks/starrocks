@@ -21,6 +21,8 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/variant_column.h"
+#include "column/variant_encoder.h"
 #include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
@@ -66,6 +68,21 @@ public:
 private:
     ObjectPool _objpool;
 };
+
+static MutableColumnPtr create_variant_column(const std::vector<std::string>& json_values) {
+    auto column = VariantColumn::create();
+    for (const auto& json : json_values) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json);
+        CHECK(encoded.ok()) << encoded.status().to_string();
+        column->append(encoded.value());
+    }
+    CHECK(column->is_shredded_variant());
+    return column;
+}
+
+static MutableColumnPtr create_const_variant_column(const std::string& json, size_t size) {
+    return ConstColumn::create(create_variant_column({json}), size);
+}
 
 TEST_F(VectorizedInPredicateTest, sliceInTrue) {
     for (auto i = 0; i < 2; i++) {
@@ -476,6 +493,65 @@ TEST_F(VectorizedInPredicateTest, inArrayConstAllNULL) {
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ASSERT_TRUE(ptr->only_null());
         }
+    }
+}
+
+TEST_F(VectorizedInPredicateTest, variantInAndNotIn) {
+    for (auto not_in : is_not_in) {
+        expr_node.__set_child_type_desc(TypeDescriptor(TYPE_VARIANT).to_thrift());
+        expr_node.child_type = TPrimitiveType::VARIANT;
+        expr_node.opcode = not_in ? TExprOpcode::FILTER_NOT_IN : TExprOpcode::FILTER_IN;
+        expr_node.in_predicate.is_not_in = not_in;
+
+        auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+        MockExpr lhs(TypeDescriptor(TYPE_VARIANT), create_variant_column({"1", "2", "3"}));
+        auto* rhs1 = new_fake_const_expr(create_const_variant_column("1", 3), TypeDescriptor(TYPE_VARIANT));
+        auto* rhs2 = new_fake_const_expr(create_const_variant_column("2", 3), TypeDescriptor(TYPE_VARIANT));
+        expr->add_child(&lhs);
+        expr->add_child(rhs1);
+        expr->add_child(rhs2);
+
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_FALSE(result->is_nullable());
+        const auto* values = down_cast<const BooleanColumn*>(result.get());
+        EXPECT_EQ(!not_in, values->immutable_data()[0]);
+        EXPECT_EQ(!not_in, values->immutable_data()[1]);
+        EXPECT_EQ(not_in, values->immutable_data()[2]);
+    }
+}
+
+TEST_F(VectorizedInPredicateTest, variantInNullSemantics) {
+    for (auto not_in : is_not_in) {
+        expr_node.__set_child_type_desc(TypeDescriptor(TYPE_VARIANT).to_thrift());
+        expr_node.child_type = TPrimitiveType::VARIANT;
+        expr_node.opcode = not_in ? TExprOpcode::FILTER_NOT_IN : TExprOpcode::FILTER_IN;
+        expr_node.in_predicate.is_not_in = not_in;
+
+        auto expr = std::unique_ptr<Expr>(VectorizedInPredicateFactory::from_thrift(expr_node));
+        auto lhs_data = create_variant_column({"1", "2", "3"});
+        auto lhs_nulls = NullColumn::create();
+        lhs_nulls->append(0);
+        lhs_nulls->append(1);
+        lhs_nulls->append(0);
+        MockExpr lhs(TypeDescriptor(TYPE_VARIANT), NullableColumn::create(std::move(lhs_data), std::move(lhs_nulls)));
+        auto* rhs = new_fake_const_expr(create_const_variant_column("1", 3), TypeDescriptor(TYPE_VARIANT));
+        auto* null_rhs = new_fake_const_expr(ColumnHelper::create_const_null_column(3), TypeDescriptor(TYPE_VARIANT));
+        expr->add_child(&lhs);
+        expr->add_child(rhs);
+        expr->add_child(null_rhs);
+
+        ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_TRUE(result->is_nullable());
+        const auto* nullable = down_cast<const NullableColumn*>(result.get());
+        const auto* values = down_cast<const BooleanColumn*>(nullable->data_column().get());
+        EXPECT_FALSE(result->is_null(0));
+        EXPECT_EQ(!not_in, values->immutable_data()[0]);
+        EXPECT_TRUE(result->is_null(1));
+        EXPECT_TRUE(result->is_null(2));
     }
 }
 

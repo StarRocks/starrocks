@@ -867,6 +867,18 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
+     * The amount of free space (in bytes) bdb-je tries to keep on the volume holding `meta_dir`.
+     * The same value gates FE startup: the FE refuses to start when the free space is below it.
+     * <p>
+     * The default equals the bdb-je default. Lowering it is the recovery path for an FE that cannot
+     * start on a nearly full metadata volume: it lets bdb-je open and reclaim its own reserved files.
+     * Note that bdb-je needs this headroom for its housekeeping, so a value far below the default
+     * leaves an FE that starts but may reject metadata writes. Takes effect after a restart.
+     */
+    @ConfField
+    public static long bdbje_free_disk_size = 5L * 1024 * 1024 * 1024;
+
+    /**
      * Timeout seconds for doing checkpoint
      */
     @ConfField(mutable = true)
@@ -4808,6 +4820,24 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = true;
 
     /**
+     * Whether to use range distribution as the default distribution of an asynchronous materialized
+     * view created without an explicit DISTRIBUTED BY clause. This is the materialized view half of
+     * enable_range_distribution, split off so that a cluster can adopt range-distributed tables
+     * without changing how its materialized views are distributed.
+     * <p>
+     * The default selects range distribution only when this config and enable_range_distribution are
+     * both true, in shared-data mode. Otherwise a materialized view created without a DISTRIBUTED BY
+     * clause uses the previous default distribution behavior (incrementally refreshed -> hash over
+     * its key columns, otherwise random), even where a table would be range-distributed. Range
+     * distribution has no DISTRIBUTED BY syntax, so with this config off the INVISIBLE session
+     * variable enable_range_distribution is the only remaining way to ask for it.
+     */
+    @ConfField(mutable = true, comment = "Whether to use range distribution as the default "
+            + "materialized view distribution in shared-data mode. Takes effect only when "
+            + "enable_range_distribution is also true. Has no effect in shared-nothing mode.")
+    public static boolean enable_mv_range_distribution = false;
+
+    /**
      * The default scheduler interval for tablet reshard jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs. "
@@ -5081,4 +5111,13 @@ public class Config extends ConfigBase {
             "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
+    public static String ai_default_chat_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    public static String ai_default_chat_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    public static String ai_default_chat_provider = "";
 }

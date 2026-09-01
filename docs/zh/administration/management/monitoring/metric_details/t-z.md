@@ -16,6 +16,71 @@ description: "Alphabetical t - z"
 - 单位: -
 - 描述: 此BE中tablet的最高累积合并分数。
 
+## `tablet_merge_sstable_fallback_cohort_mismatch_total`
+
+- 单位: 计数
+- 描述: 因各源 tablet 的 SST 队列在数量、顺序或语义元数据上不一致而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
+
+- 单位: 计数
+- 描述: 因候选 SST 队列中存在重复物理 SST 文件名而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_embedded_delvec_total`
+
+- 单位: 计数
+- 描述: 因 SST 投影后无法解析所需内嵌删除向量而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
+
+- 单位: 计数
+- 描述: 因源到目标的 RSSID 映射或所有权不满足元数据安全复用的一致性要求而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_projected_domain_total`
+
+- 单位: 计数
+- 描述: 因投影后的 SST 所有者、RSSID 偏移或水位超出可复用的存活域或支持域而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
+
+- 单位: 计数
+- 描述: 因各源 rowset 的物理布局不一致而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_shared_or_mixed_total`
+
+- 单位: 计数
+- 描述: 因源 SST 为共享所有权或混合所有权而无法安全复用元数据并选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
+
+- 单位: 计数
+- 描述: 因源范围或 SST 元数据不符合支持的复用形式而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_meta_identical_total`
+
+- 单位: 计数
+- 描述: 在合并后 tablet 元数据中复用一组完整且完全相同的继承 SST 队列的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_meta_lazy_rebuild_total`
+
+- 单位: 计数
+- 描述: 省略源 SST 元数据，使下一次加载主键索引的操作或使用方重建该索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_meta_private_total`
+
+- 单位: 计数
+- 描述: 投影并复用一组完整私有源 SST 元数据的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_omitted_bytes_total`
+
+- 单位: Bytes
+- 描述: 延迟重建回退期间从合并索引元数据中省略并记录为孤立文件的唯一源 SST 文件累计大小。
+
+## `tablet_merge_sstable_omitted_file_total`
+
+- 单位: 计数
+- 描述: 延迟重建回退期间从合并索引元数据中省略并记录为孤立文件的唯一源 SST 文件累计数量。
+
 ## `tablet_metadata_mem_bytes`
 
 - 单位: 字节

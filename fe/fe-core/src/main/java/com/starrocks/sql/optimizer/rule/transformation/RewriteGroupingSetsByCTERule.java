@@ -127,9 +127,11 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
                 newAggregations.put(aggColumnRef, (CallOperator) rewriter.rewrite(kv.getValue()));
             }
 
-            // new group by keys
+            // new group by keys. A grouping set must never yield a duplicated group-by key: the aggregation
+            // tuple holds one slot per distinct key, while the BE builds its output from one column per
+            // group-by expression.
             List<ColumnRefOperator> rewriteGroupingKeys = groupingSetKeys.stream().
-                    map(column -> (ColumnRefOperator) rewriter.rewrite(column)).collect(
+                    map(column -> (ColumnRefOperator) rewriter.rewrite(column)).distinct().collect(
                             Collectors.toList());
             // add grouping id and grouping
             Map<ColumnRefOperator, ConstantOperator> groupingIdMap = new HashMap<>();

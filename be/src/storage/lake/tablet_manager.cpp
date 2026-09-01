@@ -58,6 +58,7 @@
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/utils.h"
 #include "storage_primitive/tablet_basic_info.h"
@@ -92,6 +93,10 @@ static Status save_lake_protobuf(const std::string& path, const ::google::protob
 
 // Load a lake metadata/txn-log protobuf. Auto-detects the checksummed header format and
 // falls back to legacy headerless protobuf, regardless of lake_enable_protobuf_file_checksum.
+//
+// This is the unmetered loader, correct for txn logs. To read a tablet metadata object,
+// call TabletManager::load_tablet_metadata_file_with_meter instead, or
+// lake_tablet_metadata_get_not_found_total will under-report.
 static Status load_lake_protobuf(const std::string& path, ::google::protobuf::Message* message, bool fill_cache,
                                  const std::shared_ptr<FileSystem>& fs = nullptr) {
     ProtobufFileWithHeader file(path, fs, LAKE_META_HEADER_MAGIC_NUMBER, /*allow_plain_protobuf_fallback=*/true);
@@ -220,10 +225,9 @@ Status TabletManager::drop_local_cache(const std::string& path) {
     return fs->drop_local_cache(path);
 }
 
-// current lru cache does not support updating value size, so use refill to update.
-void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
+void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment) {
     TEST_SYNC_POINT_CALLBACK("lake::TabletManager::update_segment_cache_size", nullptr);
-    _metacache->cache_segment_if_present(key, mem_cost, segment_addr_hint);
+    _metacache->update_segment_cache_size(key, mem_cost, segment);
 }
 
 void TabletManager::prune_metacache() {
@@ -729,13 +733,13 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
-    auto s = load_lake_protobuf(metadata_location, metadata.get(), fill_data_cache, fs);
+    auto s = load_tablet_metadata_file_with_meter(metadata_location, metadata.get(), fill_data_cache, fs);
     if (!s.ok()) {
         RETURN_IF_ERROR(corrupted_tablet_meta_handler(s, metadata_location));
         // reset metadata
         metadata = std::make_shared<TabletMetadataPB>();
-        // read again
-        RETURN_IF_ERROR(load_lake_protobuf(metadata_location, metadata.get(), fill_data_cache, fs));
+        // read again, into the freshly allocated metadata
+        RETURN_IF_ERROR(load_tablet_metadata_file_with_meter(metadata_location, metadata.get(), fill_data_cache, fs));
     }
 
     // Back-fill segment_metas from the deprecated legacy arrays for rowsets written by a
@@ -935,17 +939,37 @@ StatusOr<BundleTabletMetadataPtr> TabletManager::parse_bundle_tablet_metadata(co
     return bundle_metadata;
 }
 
+Status TabletManager::load_tablet_metadata_file_with_meter(const std::string& path, TabletMetadataPB* metadata,
+                                                           bool fill_cache, const std::shared_ptr<FileSystem>& fs) {
+    auto status = load_lake_protobuf(path, metadata, fill_cache, fs);
+    if (status.is_not_found()) {
+        StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total.increment(1);
+    }
+    return status;
+}
+
+StatusOr<std::string> TabletManager::read_bundle_metadata_file_with_meter(FileSystem* fs, const std::string& path,
+                                                                          bool skip_fill_local_cache) {
+    RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
+    auto read_result = [&]() -> StatusOr<std::string> {
+        ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, path));
+        return input_file->read_all();
+    }();
+    if (!read_result.ok() && read_result.status().is_not_found()) {
+        StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total.increment(1);
+    }
+    return read_result;
+}
+
 StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                                   FileSystem* input_fs) {
-    std::unique_ptr<RandomAccessFile> input_file;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+    std::shared_ptr<FileSystem> owned_fs;
     if (input_fs == nullptr) {
-        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(location));
-        ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
-    } else {
-        ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
+        ASSIGN_OR_RETURN(owned_fs, FileSystemFactory::CreateSharedFromString(location));
+        input_fs = owned_fs.get();
     }
-    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+    ASSIGN_OR_RETURN(auto serialized_string,
+                     read_bundle_metadata_file_with_meter(input_fs, location, /*skip_fill_local_cache=*/true));
 
     auto file_size = serialized_string.size();
     ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(location, serialized_string));
@@ -1009,20 +1033,20 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     } else {
         file_system = fs;
     }
-    RandomAccessFileOptions opts{.skip_fill_local_cache = !cache_opts.fill_data_cache};
     // TODO(zhangqiang)
     // `read_all` only need to one api call and not increase the IOPS
     // but it will incur additional IO bandwidth overhead
     // Perhaps we need to consider the additional costs of IO bandwidth and IOPS later.
     g_read_bundle_tablet_meta_cnt << 1;
     auto t0 = butil::gettimeofday_us();
+    auto read_bundle_metadata_from_remote = [&]() -> StatusOr<std::string> {
+        g_read_bundle_tablet_meta_real_access_cnt << 1;
+        return read_bundle_metadata_file_with_meter(file_system.get(), path,
+                                                    /*skip_fill_local_cache=*/!cache_opts.fill_data_cache);
+    };
     // use real path as key, so that every tablet can share a same path of bundle tablet meta.
     ASSIGN_OR_RETURN(auto serialized_string,
-                     _bundle_tablet_metadata_group.Do(real_path, [&]() -> StatusOr<std::string> {
-                         g_read_bundle_tablet_meta_real_access_cnt << 1;
-                         ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
-                         return input_file->read_all();
-                     }));
+                     _bundle_tablet_metadata_group.Do(real_path, read_bundle_metadata_from_remote));
     g_read_bundle_tablet_meta_latency << (butil::gettimeofday_us() - t0);
 
     auto file_size = serialized_string.size();
@@ -1031,8 +1055,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     if (!bundle_metadata_status.ok()) {
         RETURN_IF_ERROR(corrupted_tablet_meta_handler(bundle_metadata_status.status(), path));
         // read bundle metadata again
-        ASSIGN_OR_RETURN(auto input_file, file_system->new_random_access_file(opts, path));
-        ASSIGN_OR_RETURN(serialized_string, input_file->read_all());
+        ASSIGN_OR_RETURN(serialized_string, read_bundle_metadata_from_remote());
         file_size = serialized_string.size();
         ASSIGN_OR_RETURN(bundle_metadata, parse_bundle_tablet_metadata(path, serialized_string));
     } else {
@@ -1283,9 +1306,45 @@ Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
     return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
 }
 
+static Status check_combined_txn_log_coverage(const CombinedTxnLogPB& logs,
+                                              const std::set<int64_t>& expected_tablet_ids) {
+    if (expected_tablet_ids.empty()) {
+        return Status::OK();
+    }
+    std::set<int64_t> present;
+    for (const auto& log : logs.txn_logs()) {
+        present.insert(log.tablet_id());
+    }
+    std::string missing;
+    size_t missing_count = 0;
+    for (int64_t expected_id : expected_tablet_ids) {
+        if (present.count(expected_id) > 0) {
+            continue;
+        }
+        // Cap the id list: a whole node's contribution can go missing at once, and this string
+        // ends up in a load error that gets logged and returned to the client.
+        if (missing_count < 16) {
+            missing.append(missing.empty() ? "" : ",").append(std::to_string(expected_id));
+        }
+        ++missing_count;
+    }
+    if (missing_count > 0) {
+        return Status::InternalError(
+                fmt::format("refuse to write incomplete combined txn log: missing {} of {} tablets [{}{}]",
+                            missing_count, expected_tablet_ids.size(), missing, missing_count > 16 ? ",..." : ""));
+    }
+    return Status::OK();
+}
+
 DEFINE_FAIL_POINT(put_combined_txn_log_success);
 DEFINE_FAIL_POINT(put_combined_txn_log_fail);
-Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs) {
+Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs,
+                                           const std::set<int64_t>& expected_tablet_ids) {
+    // Ahead of the fail points on purpose: this is an invariant on the object we are about to
+    // write, not part of the write itself, so a fail point that stubs out the object-store call
+    // must not be able to skip it -- otherwise put_combined_txn_log_success silently disables the
+    // check and no test using that fail point can observe it.
+    RETURN_IF_ERROR(check_combined_txn_log_coverage(logs, expected_tablet_ids));
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_success, Status::OK());
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_fail, Status::InternalError("write combined_txn_log_fail"));
     if (UNLIKELY(logs.txn_logs_size() == 0)) {

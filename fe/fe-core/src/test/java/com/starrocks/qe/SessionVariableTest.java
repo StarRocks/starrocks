@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TBinaryEncodingFormat;
 import com.starrocks.thrift.TBinaryEncodingLevel;
@@ -23,6 +24,24 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 public class SessionVariableTest {
+
+    @Test
+    public void testPaimonReaderMode() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.AUTO, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertEquals("AUTO",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "auto"));
+        Assertions.assertEquals("JNI",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "jNi"));
+        String nativeMode = VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "native");
+        Assertions.assertEquals("NATIVE", nativeMode);
+        sessionVariable.setPaimonReaderMode(nativeMode);
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.NATIVE, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertThrows(DdlException.class,
+                () -> VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "invalid"));
+    }
 
     @Test
     public void testNonDefaultVariables() {

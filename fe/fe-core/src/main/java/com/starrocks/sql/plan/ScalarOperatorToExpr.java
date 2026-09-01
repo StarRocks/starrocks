@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
+import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
@@ -554,15 +555,28 @@ public class ScalarOperatorToExpr {
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
-                    List<Expr> arg = call.getChildren().stream()
+                    Preconditions.checkNotNull(call.getFunction());
+                    List<ScalarOperator> semanticChildren = call.getChildren();
+                    if (call.getFunction().isAi()) {
+                        Preconditions.checkState(!call.getFunction().hasVarArgs(),
+                                "AI functions must have fixed semantic arity");
+                        int semanticArity = call.getFunction().getNumArgs();
+                        Preconditions.checkState(call.getChildren().size() == semanticArity + 1,
+                                "AI call must contain exactly one optimizer-only occurrence child");
+                        semanticChildren = call.getChildren().subList(0, semanticArity);
+                    }
+                    List<Expr> arg = semanticChildren.stream()
                             .map(expr -> buildExpr.build(expr, context))
                             .collect(Collectors.toList());
                     if (call.isCountStar()) {
                         callExpr = new FunctionCallExpr(call.getFnName(), FunctionParams.createStarParam());
+                    } else if (call.getFunction().isAi()) {
+                        callExpr = new FunctionCallExpr(call.getFnName(),
+                                new FunctionParams(call.isDistinct(), arg),
+                                AIModelConfigs.SYSTEM_CHAT_CONFIG_ID);
                     } else {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }
-                    Preconditions.checkNotNull(call.getFunction());
                     ((FunctionCallExpr) callExpr).setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;

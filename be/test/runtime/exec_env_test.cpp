@@ -22,12 +22,14 @@
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "common/config_storage_fwd.h"
+#include "compute_env/ai/ai_executor.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/profile_report_worker.h"
 #include "exec/pipeline/driver_executor_factory.h"
 #include "exec/pipeline/driver_queue_factory.h"
 #include "exec/schema_scanner_factory.h"
 #include "exec/schema_scanner_factory_adapter.h"
+#include "platform/llm/ai_metrics.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "runtime/runtime_filter_query_lifecycle.h"
@@ -96,6 +98,15 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().runtime_filter_sender, nullptr);
     EXPECT_EQ(env.runtime_services().runtime_filter_query_lifecycle, nullptr);
     EXPECT_EQ(env.compute_env(), nullptr);
+    const AIServices* const ai_services = &env.ai_services();
+    EXPECT_EQ(env.query_execution_services().ai, ai_services);
+    EXPECT_EQ(nullptr, ai_services->config_source);
+    EXPECT_EQ(nullptr, ai_services->admission_controller);
+    EXPECT_EQ(nullptr, ai_services->http_client);
+    EXPECT_EQ(nullptr, ai_services->completion_executor);
+    EXPECT_EQ(nullptr, ai_services->clock);
+    EXPECT_EQ(nullptr, ai_services->random);
+    EXPECT_EQ(nullptr, ai_services->metrics);
 
     std::error_code ec;
     std::filesystem::create_directories(config::spill_local_storage_dir, ec);
@@ -111,6 +122,17 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     ComputeEnv compute_env;
     ASSERT_OK(compute_env.init(compute_env_options));
     env.set_compute_env(&compute_env);
+
+    ASSERT_NE(nullptr, compute_env.ai_executor());
+    EXPECT_EQ(ai_services, &env.ai_services());
+    EXPECT_EQ(ai_services, env.query_execution_services().ai);
+    EXPECT_EQ(compute_env.ai_executor()->config_source(), ai_services->config_source);
+    EXPECT_EQ(compute_env.ai_executor()->admission_controller(), ai_services->admission_controller);
+    EXPECT_EQ(compute_env.ai_executor()->http_client(), ai_services->http_client);
+    EXPECT_EQ(compute_env.ai_executor()->completion_executor(), ai_services->completion_executor);
+    EXPECT_EQ(compute_env.ai_executor()->clock(), ai_services->clock);
+    EXPECT_EQ(compute_env.ai_executor()->random(), ai_services->random);
+    EXPECT_EQ(AIMetrics::instance(), ai_services->metrics);
 
     ProfileReportWorkerOptions profile_report_worker_options;
     profile_report_worker_options.start_worker_thread = false;
@@ -191,6 +213,14 @@ TEST(ExecEnvTest, refresh_service_contexts_keeps_context_views_in_sync) {
     EXPECT_EQ(env.runtime_services().spill_dir_mgr, nullptr);
     EXPECT_EQ(env.runtime_services().global_spill_manager, nullptr);
     EXPECT_EQ(env.runtime_services().load_spill_block_merge_executor, nullptr);
+    EXPECT_EQ(ai_services, &env.ai_services());
+    EXPECT_EQ(ai_services, env.query_execution_services().ai);
+    EXPECT_EQ(nullptr, ai_services->config_source);
+    EXPECT_EQ(nullptr, ai_services->admission_controller);
+    EXPECT_EQ(nullptr, ai_services->http_client);
+    EXPECT_EQ(nullptr, ai_services->completion_executor);
+    EXPECT_EQ(nullptr, ai_services->clock);
+    EXPECT_EQ(nullptr, ai_services->random);
 
     env._query_context_mgr = nullptr;
     compute_env.destroy();

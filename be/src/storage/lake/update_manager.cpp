@@ -35,12 +35,11 @@
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
-#include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
-#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
@@ -53,6 +52,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/storage_engine.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
@@ -479,13 +479,13 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             std::vector<std::map<int, SegmentFileInfo>> per_seg_replace(batch_count);
             std::vector<std::vector<FileMetaPB>> per_seg_orphans(batch_count);
 
-            std::mutex status_mutex;
-            Status shared_status;
             auto token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
+            ParallelTaskRunner runner(token.get());
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
-                auto func = [&, i]() {
+                // Each task writes only its own per_seg_* element.
+                runner.run([&, i]() {
                     uint32_t idx = i - batch_start;
                     auto st = state.load_segment(i, params, base_version, true /*resolve conflict*/,
                                                  false /*no need lock*/);
@@ -493,20 +493,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                     if (st.ok()) {
                         st = state.rewrite_segment(i, txn_id, params, &per_seg_replace[idx], &per_seg_orphans[idx]);
                     }
+                    // Released whether or not the above succeeded: the state cache would otherwise hold
+                    // this segment's partial state for the rest of the publish.
                     state.release_segment_partial_state(i);
                     _update_state_cache.update_object_size(state_entry, state.memory_usage());
-
-                    std::lock_guard<std::mutex> l(status_mutex);
-                    shared_status.update(st);
-                };
-                auto submit_st = token->submit_func(func);
-                if (!submit_st.ok()) {
-                    std::lock_guard<std::mutex> l(status_mutex);
-                    shared_status.update(submit_st);
-                }
+                    return st;
+                });
             }
-            token->wait();
-            RETURN_IF_ERROR(shared_status);
+            RETURN_IF_ERROR(runner.join());
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
                 uint32_t idx = i - batch_start;
@@ -1518,15 +1512,10 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
-    // TRACE_COUNTER_* reads a thread-local current trace that pool worker threads do not
-    // inherit, so counters incremented inside a submitted compare task would silently drop.
-    // Capture the publish thread's trace and re-adopt it inside each worker task.
-    Trace* parent_trace = Trace::CurrentTrace();
-
-    std::mutex mutex;
-    Status status = Status::OK();
-    // Per-chunk results accumulated in iteration order; consumed after the compare barrier.
+    // Per-chunk results accumulated in iteration order; consumed after the compare barrier. Each task
+    // writes only its own result, so there is no shared state to guard.
     std::vector<std::unique_ptr<ChunkCondMergeResult>> chunk_results;
+    ParallelTaskRunner compare_runner(token.get());
 
     for (; !upsert->done(); upsert->next()) {
         auto current = upsert->current();
@@ -1534,35 +1523,17 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         auto* result = chunk_results.back().get();
         result->chunk_physical_rowid_offset = current.physical_rowid_offset;
 
-        auto compare_func = [&, result, current]() {
-            ADOPT_TRACE(parent_trace);
-            auto st = process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx,
-                                                                        upsert.get(), current, tablet_column,
-                                                                        read_column_ids, index, result);
-            if (!st.ok()) {
-                std::lock_guard<std::mutex> lock(mutex);
-                status.update(st);
-            }
-        };
-
-        if (token) {
-            auto submit_st = token->submit_func(compare_func);
-            if (!submit_st.ok()) {
-                std::lock_guard<std::mutex> lock(mutex);
-                status.update(submit_st);
-            }
-        } else {
-            // Single-chunk (or parallel execution disabled): compare on the publish thread.
-            compare_func();
-            RETURN_IF_ERROR(status);
-        }
+        compare_runner.run([&, result, current]() {
+            return process_single_chunk_update_with_condition_no_sst(this, params, rowset_id, upsert_idx, upsert.get(),
+                                                                     current, tablet_column, read_column_ids, index,
+                                                                     result);
+        });
     }
 
-    if (token) {
+    {
         TRACE_COUNTER_SCOPE_LATENCY_US("condition_update_compare_phase_us");
-        token->wait();
+        RETURN_IF_ERROR(compare_runner.join());
     }
-    RETURN_IF_ERROR(status);
     RETURN_IF_ERROR(upsert->status());
 
     // PHASE 2: apply index.upsert for each chunk's winners.
@@ -2473,22 +2444,6 @@ Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& me
         return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
     }
     return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
-}
-
-Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir) {
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry == nullptr) {
-        return Status::OK();
-    }
-    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
-    auto& index = index_entry->value();
-
-    // release when function end
-    DeferOp index_defer([&]() { _index_cache.release(index_entry); });
-    _index_cache.update_object_size(index_entry, index.memory_usage());
-    RETURN_IF_ERROR(index.major_compaction(data_dir, tablet_id, index.get_index_lock()));
-    index.set_local_pk_index_write_amp_score(0.0);
-    return Status::OK();
 }
 
 bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {

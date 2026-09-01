@@ -19,8 +19,10 @@
 
 #include "base/metrics.h"
 #include "common/config_exec_env_fwd.h"
+#include "common/config_llm_fwd.h"
 #include "common/logging.h"
 #include "common/system/cpu_info.h"
+#include "compute_env/ai/ai_executor.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/dictionary_cache/dictionary_cache_manager.h"
 #include "compute_env/load/load_stream_mgr.h"
@@ -42,6 +44,24 @@
 #include "runtime/runtime_env.h"
 
 namespace starrocks {
+namespace {
+
+AIRuntimeConfig ai_runtime_config_from_globals() {
+    AIRuntimeConfig config;
+    config.request_timeout_ms = config::ai_function_request_timeout_ms;
+    config.connect_timeout_ms = config::ai_function_connect_timeout_ms;
+    config.max_response_bytes = config::ai_function_max_response_bytes;
+    config.worker_thread_num = config::ai_function_worker_thread_num;
+    config.sub_chunk_size = config::ai_function_sub_chunk_size;
+    config.max_retries = config::ai_function_max_retries;
+    config.max_retries_on_throttle = config::ai_function_max_retries_on_throttle;
+    config.on_error = config::ai_function_on_error.value();
+    config.rate_limit_qps_chat = config::ai_function_rate_limit_qps_chat;
+    config.max_inflight = config::ai_function_max_inflight;
+    return config;
+}
+
+} // namespace
 
 ComputeEnv::ComputeEnv() = default;
 
@@ -54,7 +74,8 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     if (!options.driver_queue_factory || !options.driver_executor_factory) {
         return Status::InternalError("ComputeEnv workgroup driver factories must be set");
     }
-    if (_driver_limiter != nullptr || _pipeline_timer != nullptr || _workgroup_manager != nullptr) {
+    if (_ai_executor != nullptr || _driver_limiter != nullptr || _pipeline_timer != nullptr ||
+        _workgroup_manager != nullptr) {
         return Status::InternalError("ComputeEnv has been initialized");
     }
 
@@ -63,6 +84,12 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
         return Status::InternalError("RuntimeEnv execution thread pools are not initialized");
     }
     const int max_num_pipeline_drivers = max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread;
+
+    auto ai_executor_or = AIExecutor::create(ai_runtime_config_from_globals());
+    if (!ai_executor_or.ok()) {
+        return ai_executor_or.status();
+    }
+    _ai_executor = std::move(ai_executor_or).value();
 
     _dictionary_cache_manager = std::make_unique<DictionaryCacheManager>();
     _load_stream_mgr = std::make_unique<LoadStreamMgr>();
@@ -74,7 +101,11 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     auto result_mgr = std::make_unique<ResultBufferMgr>(options.metrics);
     auto result_queue_mgr = std::make_unique<ResultQueueMgr>(options.metrics);
     _load_stream_mgr->install_metrics(options.metrics);
-    RETURN_IF_ERROR(pipeline_timer->start());
+    Status status = pipeline_timer->start();
+    if (!status.ok()) {
+        destroy();
+        return status;
+    }
 
     driver_limiter->init(options.metrics);
     _driver_limiter = std::move(driver_limiter);
@@ -83,7 +114,7 @@ Status ComputeEnv::init(const ComputeEnvOptions& options) {
     _result_mgr = std::move(result_mgr);
     _result_queue_mgr = std::move(result_queue_mgr);
 
-    Status status = _init_workgroup(options, max_executor_threads);
+    status = _init_workgroup(options, max_executor_threads);
     if (!status.ok()) {
         destroy();
         return status;
@@ -236,6 +267,9 @@ Status ComputeEnv::init_profile_report_worker(ProfileReportWorkerOptions options
 }
 
 void ComputeEnv::stop() {
+    if (_ai_executor != nullptr) {
+        _ai_executor->shutdown();
+    }
     _stop_stream_load_pipes();
     if (_stream_mgr != nullptr) {
         _stream_mgr->close();
@@ -286,6 +320,12 @@ void ComputeEnv::_destroy_load_path() {
 }
 
 void ComputeEnv::destroy() {
+    // Most process shutdown paths call stop() first, but initialization failures and tests may destroy directly.
+    // Drain AI callbacks before tearing down the execution resources they can wake, while retaining the rejecting
+    // facade until all other ComputeEnv resources have been released.
+    if (_ai_executor != nullptr) {
+        _ai_executor->shutdown();
+    }
     destroy_profile_report_worker();
     _destroy_load_path();
     SpillMetrics::instance()->load_spill_block_merge.unregister_metrics();
@@ -309,6 +349,7 @@ void ComputeEnv::destroy() {
     _driver_limiter.reset();
     _pipeline_timer.reset();
     _dictionary_cache_manager.reset();
+    _ai_executor.reset();
 }
 
 } // namespace starrocks

@@ -15,7 +15,6 @@
 #pragma once
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -134,6 +133,17 @@ public:
 
     bool is_delivery_expired() const { return _now_ms() > _delivery_deadline_ms.load(); }
     bool is_query_expired() const { return _now_ms() > _query_deadline_ms.load(); }
+    int64_t query_deadline_ns() const {
+        constexpr int64_t kNanosPerMillisecond = 1'000'000;
+        const int64_t deadline_ms = _query_deadline_ms.load();
+        if (deadline_ms < 0) return 0;
+        if (deadline_ms >= std::numeric_limits<int64_t>::max() / kNanosPerMillisecond) {
+            return std::numeric_limits<int64_t>::max();
+        }
+        // Query expiration uses a strict millisecond comparison. Convert the first expired instant so nanosecond
+        // consumers using >= preserve the same boundary instead of expiring up to one millisecond early.
+        return (deadline_ms + 1) * kNanosPerMillisecond;
+    }
 
     void extend_delivery_lifetime() {
         _delivery_deadline_ms.store(_now_ms() + _delivery_expire_seconds.load() * 1000L);
@@ -219,11 +229,7 @@ public:
     void add_total_scan_stats(QueryStatistics* query_statistic);
 
 private:
-    static int64_t _now_ms() {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(
-                       std::chrono::steady_clock::now().time_since_epoch())
-                .count();
-    }
+    static int64_t _now_ms() { return MonotonicMillis(); }
 
     NodeExecStats* _find_node_exec_stats(int32_t plan_node_id) {
         auto it = _node_exec_stats.find(plan_node_id);

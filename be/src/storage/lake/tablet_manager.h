@@ -151,6 +151,21 @@ public:
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
                                                                           const std::string& serialized_string);
 
+    // A lake tablet's metadata lives in exactly one of two remote locations, never in
+    // both: its own metadata object, or a bundle file shared with the other tablets of
+    // an aggregated partition. The two `_with_meter` helpers below are the only
+    // sanctioned way to read either location; both record NotFound outcomes into
+    // lake_tablet_metadata_get_not_found_total. Reading a tablet metadata file through
+    // anything else makes that metric silently under-report.
+    //
+    // Note that txn logs deliberately do NOT go through these: they share the underlying
+    // protobuf loader but are not tablet metadata, so they must stay unmetered.
+    static Status load_tablet_metadata_file_with_meter(const std::string& path, TabletMetadataPB* metadata,
+                                                       bool fill_cache, const std::shared_ptr<FileSystem>& fs);
+
+    static StatusOr<std::string> read_bundle_metadata_file_with_meter(FileSystem* fs, const std::string& path,
+                                                                      bool skip_fill_local_cache);
+
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
 
@@ -174,7 +189,18 @@ public:
 
     Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
-    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+    // |expected_tablet_ids| is the set of tablets this combined txn log must cover. A combined txn
+    // log is the only record of those tablets' rowset metadata: publish looks each tablet up inside
+    // it and has no per-tablet fallback, so an object written short of an entry leaves the
+    // transaction permanently unpublishable once it commits.
+    //
+    // Mirrors put_bundle_tablet_metadata(): the set is only worth passing when it comes from a
+    // source independent of whatever produced |logs| -- deriving it from the collected logs would
+    // just compare that source against itself. Callers with no such source pass empty, which is
+    // what the single-argument overload does, leaving them exactly as they were.
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs, const std::set<int64_t>& expected_tablet_ids);
+
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs) { return put_combined_txn_log(logs, {}); }
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
@@ -283,11 +309,10 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    // update cache size of the segment with the given key, optionally provide the segment address hint.
-    // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
-    // instance address matches the address provided by the segment_addr_hint. This is used to prevent
-    // updating the cache size where the cached object is not the one as expected.
-    void update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint = 0);
+    // Update the cache size of the segment with the given key. The update is applied only when the
+    // key still maps to `segment`, so that a cache entry replaced by a different instance in the
+    // meantime is not charged with this segment's memory cost.
+    void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_meta_cache,

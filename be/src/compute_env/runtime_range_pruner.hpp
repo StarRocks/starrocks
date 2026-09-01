@@ -16,12 +16,15 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "column/global_dict/config.h"
 #include "compute_env/runtime_range_pruner.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "exprs/binary_predicate.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/literal.h"
 #include "runtime/descriptors.h"
@@ -32,9 +35,52 @@
 #include "storage_primitive/column_value_range.h"
 #include "storage_primitive/filter_condition.h"
 #include "storage_primitive/predicate_parser.h"
+#include "types/datum.h"
 
 namespace starrocks {
 namespace detail {
+// The offset of a probe expression shaped `slot + c` / `slot - c` / `c + slot`, or nullopt.
+// Only these invert: multiplication is not injective under wrapping (wrap(2a) collides a with
+// a + 2^63) and `c - slot` reverses the order. Non-integral value types are excluded too -- the
+// checked builtins do not apply to them.
+template <typename CppType>
+std::optional<CppType> probe_expr_offset(const Expr* expr, SlotId slot_id, ExprContext* ctx) {
+    if constexpr (std::is_integral_v<CppType>) {
+        if (expr->node_type() != TExprNodeType::ARITHMETIC_EXPR) return std::nullopt;
+        if (expr->op() != TExprOpcode::ADD && expr->op() != TExprOpcode::SUBTRACT) return std::nullopt;
+        if (expr->get_num_children() != 2) return std::nullopt;
+
+        auto is_the_slot = [&](const Expr* e) {
+            return e->node_type() == TExprNodeType::SLOT_REF && e->is_slotref() &&
+                   down_cast<const ColumnRef*>(e)->slot_id() == slot_id;
+        };
+        // evaluate_const() dereferences the context it is given, so it gets the one owning this tree.
+        auto literal_value = [&](const Expr* e, CppType* out) {
+            if (e->node_type() != TExprNodeType::INT_LITERAL) return false;
+            auto res = const_cast<Expr*>(e)->evaluate_const(ctx);
+            if (!res.ok()) return false;
+            ColumnPtr column = std::move(res).value();
+            if (column == nullptr || column->size() < 1 || column->is_null(0)) return false;
+            *out = column->get(0).get<CppType>();
+            return true;
+        };
+
+        CppType c{};
+        if (is_the_slot(expr->get_child(0)) && literal_value(expr->get_child(1), &c)) {
+            if (expr->op() == TExprOpcode::ADD) return c;
+            CppType negated{};
+            // `slot - CppType_MIN` has no representable offset.
+            if (__builtin_sub_overflow(CppType{0}, c, &negated)) return std::nullopt;
+            return negated;
+        }
+        if (expr->op() == TExprOpcode::ADD && is_the_slot(expr->get_child(1)) &&
+            literal_value(expr->get_child(0), &c)) {
+            return c;
+        }
+    }
+    return std::nullopt;
+}
+
 struct RuntimeColumnPredicateBuilder {
     template <LogicalType ltype>
     StatusOr<std::vector<const ColumnPredicate*>> operator()(const ColumnIdToGlobalDictMap* global_dictmaps,
@@ -53,8 +99,32 @@ struct RuntimeColumnPredicateBuilder {
             ExprContext* probe_expr_ctx = desc->probe_expr_ctx();
             Expr* probe_expr = probe_expr_ctx->root();
 
+            // Offset of an additive probe expression, in the column's own value space; zero for a
+            // plain slot ref. Carrying it into the range built below is all the inversion takes.
+            typename RunTimeTypeLimits<ltype>::value_type key_offset{};
+            bool has_key_offset = false;
+
             if (!probe_expr->is_slotref()) {
                 if (!probe_expr->is_monotonic()) return preds;
+
+                // The FE marks arithmetic monotonic from the expression's shape alone, but machine
+                // integers wrap, and zone_map_filter skips a segment from the expression's value at
+                // the zone's two ends -- one row at BIGINT_MIN makes `a - 4000` positive there and
+                // takes the whole segment with it (#76720, d3002abafa9). Invert the bounds onto the
+                // column instead, and only for shapes computed in the column's own width: ltype is
+                // the expression's type (see _get_predicates()), so a promotion means the join
+                // wraps in a width the column does not have.
+                if (auto offset = probe_expr_offset<typename RunTimeTypeLimits<ltype>::value_type>(
+                            probe_expr, slot->id(), probe_expr_ctx);
+                    offset.has_value() && slot->type().type == ltype) {
+                    key_offset = *offset;
+                    has_key_offset = true;
+                }
+            }
+
+            if (!probe_expr->is_slotref() && !has_key_offset) {
+                // year() keeps the pushdown: total, and its 0..9999 result cannot overflow.
+                if (probe_expr->node_type() != TExprNodeType::FUNCTION_CALL) return preds;
 
                 // Skip index filtering if the column referenced by the expr is dict encoded.
                 if (global_dictmaps != nullptr &&
@@ -122,7 +192,7 @@ struct RuntimeColumnPredicateBuilder {
 
             // process agg in runtime-filter
             auto* in_filter = rf->get_in_filter();
-            if (in_filter) {
+            if (in_filter && !has_key_offset) { // the IN values would need shifting as well
                 if constexpr (ltype == TYPE_VARCHAR) {
                     auto cid = parser->column_id(*slot);
                     if (global_dictmaps == nullptr || global_dictmaps->find(cid) == global_dictmaps->end()) {
@@ -140,13 +210,15 @@ struct RuntimeColumnPredicateBuilder {
                     auto cid = parser->column_id(*slot);
                     if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
                         build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(
-                                range, minmax, pool, iter->second);
+                                range, minmax, pool, {}, iter->second);
                     } else {
-                        build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool,
+                        build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, {},
                                                                                               nullptr);
                     }
                 } else {
-                    build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, nullptr);
+                    build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(
+                            range, minmax, pool,
+                            static_cast<typename RunTimeTypeTraits<limit_type>::CppType>(key_offset), nullptr);
                 }
             }
 
@@ -272,9 +344,15 @@ struct RuntimeColumnPredicateBuilder {
         (void)range.add_fixed_values(FILTER_IN, values);
     }
 
+    // `offset` moves the filter's bounds out of the probe key's space and back onto the column, for
+    // a probe expression of `slot + offset`; it is zero for a plain slot ref. The shift is checked:
+    // when it overflows the preimage wraps around the type and is no longer an interval, so neither
+    // bound is added and the range stays open. Pruning on a wrapped preimage would drop rows the
+    // join really does match -- the join compares wrapped values too.
     template <class Range, LogicalType SlotType, LogicalType mapping_type, template <class> class Decoder,
               class... Args>
-    static void build_minmax_range(Range& range, const RuntimeFilter* rf, ObjectPool* pool, Args&&... args) {
+    static void build_minmax_range(Range& range, const RuntimeFilter* rf, ObjectPool* pool,
+                                   typename RunTimeTypeTraits<SlotType>::CppType offset, Args&&... args) {
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
         auto* filter = down_cast<const MinMaxRuntimeFilter<mapping_type>*>(rf->get_min_max_filter());
@@ -293,8 +371,7 @@ struct RuntimeColumnPredicateBuilder {
         } else {
             min_op = to_olap_filter_type(TExprOpcode::GT, false);
         }
-        auto min_value = parser.min_value(pool);
-        (void)range.add_range(min_op, static_cast<ValueType>(min_value));
+        auto min_value = static_cast<ValueType>(parser.min_value(pool));
 
         SQLFilterOp max_op;
         if (filter->right_close_interval()) {
@@ -303,8 +380,21 @@ struct RuntimeColumnPredicateBuilder {
             max_op = to_olap_filter_type(TExprOpcode::LT, false);
         }
 
-        auto max_value = parser.max_value(pool);
-        (void)range.add_range(max_op, static_cast<ValueType>(max_value));
+        auto max_value = static_cast<ValueType>(parser.max_value(pool));
+
+        if constexpr (std::is_integral_v<ValueType>) {
+            // Both or neither: with one bound shifted the range would describe the wrong half of a
+            // preimage that has wrapped into two pieces.
+            ValueType shifted_min{};
+            ValueType shifted_max{};
+            if (__builtin_sub_overflow(min_value, offset, &shifted_min)) return;
+            if (__builtin_sub_overflow(max_value, offset, &shifted_max)) return;
+            min_value = shifted_min;
+            max_value = shifted_max;
+        }
+
+        (void)range.add_range(min_op, min_value);
+        (void)range.add_range(max_op, max_value);
     }
 };
 } // namespace detail
