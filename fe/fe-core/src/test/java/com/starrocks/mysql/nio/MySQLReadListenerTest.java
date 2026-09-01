@@ -34,10 +34,14 @@ import org.junit.jupiter.api.Test;
 import org.xnio.XnioWorker;
 import org.xnio.conduits.ConduitStreamSourceChannel;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class MySQLReadListenerTest {
     @Mocked
@@ -55,14 +59,35 @@ public class MySQLReadListenerTest {
         return (boolean) method.invoke(listener);
     }
 
+    private static void resetGracefulExitFlag() throws Exception {
+        Field flagField = GracefulExitFlag.class.getDeclaredField("GRACEFUL_EXIT");
+        flagField.setAccessible(true);
+        ((AtomicBoolean) flagField.get(null)).set(false);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(0L);
+        GracefulExitFlag.setBoundaryTxnId(Long.MAX_VALUE);
+    }
+
+    // Simulate that the graceful-exit drain window (accept-new window + min wait) has elapsed.
+    private static void markDrainWindowElapsed() throws Exception {
+        GracefulExitFlag.markGracefulExit();
+        long windowNanos = TimeUnit.MILLISECONDS.toNanos(Config.graceful_exit_accept_new_window_ms);
+        long minNanos = TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(System.nanoTime() - windowNanos - minNanos - 1L);
+    }
+
     @BeforeEach
-    public void setUp() {
-        // Reset GracefulExitFlag before each test
+    public void setUp() throws Exception {
+        resetGracefulExitFlag();
         listener = new MySQLReadListener(ctx, connectProcessor);
     }
 
     @AfterEach
-    public void tearDown() {
+    public void tearDown() throws Exception {
+        resetGracefulExitFlag();
     }
 
     @Test
@@ -129,6 +154,74 @@ public class MySQLReadListenerTest {
         // state is not stranded mid-flight.
         Assertions.assertFalse(result,
                 "isTerminated should return false when an explicit transaction is active");
+    }
+
+    @Test
+    public void testIsTerminatedWithExplicitTxnBegunAfterGracefulExit() throws Exception {
+        // Set terminated flag to false
+        Deencapsulation.setField(listener, "terminated", false);
+
+        // Mark graceful exit and let the drain window elapse
+        markDrainWindowElapsed();
+        // A transaction begun after graceful exit holds a txnId above the drain boundary
+        GracefulExitFlag.setBoundaryTxnId(1000L);
+
+        // Parse a non-pre-query SQL statement (regular SELECT)
+        StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+                ctx.inActiveExplicitTransaction();
+                result = true;
+                ctx.getTxnId();
+                result = 2000L;
+            }
+        };
+
+        boolean result = invokeIsTerminated();
+
+        // After the window, a BEGIN issued after SIGUSR1 must not keep the connection exempt:
+        // it would otherwise allow fresh work to continue until the hard shutdown timeout.
+        Assertions.assertTrue(result,
+                "isTerminated should return true when the explicit transaction began after graceful exit");
+    }
+
+    @Test
+    public void testIsTerminatedWithExplicitTxnBegunBeforeGracefulExit() throws Exception {
+        // Set terminated flag to false
+        Deencapsulation.setField(listener, "terminated", false);
+
+        // Mark graceful exit and let the drain window elapse
+        markDrainWindowElapsed();
+        // A transaction that predates graceful exit holds a txnId below the drain boundary
+        GracefulExitFlag.setBoundaryTxnId(1000L);
+
+        // Parse a non-pre-query SQL statement (regular SELECT)
+        StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+                ctx.inActiveExplicitTransaction();
+                result = true;
+                ctx.getTxnId();
+                result = 500L;
+            }
+        };
+
+        boolean result = invokeIsTerminated();
+
+        // A transaction already active when graceful exit began stays exempt after the window,
+        // so its in-flight work is not cut short mid-transaction.
+        Assertions.assertFalse(result,
+                "isTerminated should return false when the explicit transaction began before graceful exit");
     }
 
     @Test

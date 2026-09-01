@@ -23,6 +23,19 @@ public class GracefulExitFlag {
     private static final AtomicBoolean GRACEFUL_EXIT = new AtomicBoolean(false);
     // System.nanoTime() when graceful exit was marked (0 = not marked)
     private static final AtomicLong BEGIN_NANO = new AtomicLong(0L);
+    // Transaction-id boundary captured at drain start: transactions begun before graceful exit hold
+    // ids strictly below this value, so after the accept-new window closes only those keep their
+    // connection exempt. Defaults to MAX_VALUE so a connection is never wrongly terminated when the
+    // boundary has not been captured (e.g. tests that exercise isTerminated() directly).
+    private static final AtomicLong BOUNDARY_TXN_ID = new AtomicLong(Long.MAX_VALUE);
+
+    public static void setBoundaryTxnId(long txnId) {
+        BOUNDARY_TXN_ID.set(txnId);
+    }
+
+    public static long getBoundaryTxnId() {
+        return BOUNDARY_TXN_ID.get();
+    }
 
     // Atomically claim the graceful-exit start. Returns true only for the caller that wins the
     // CAS, so exactly one drain thread is spawned even under a burst of SIGUSR1. A repeated call

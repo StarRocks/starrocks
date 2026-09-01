@@ -259,6 +259,13 @@ public class StarRocksFEServer {
     private static void waitForDraining() throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         final long waitInterval = 1000L;
+        // Capture the transaction-id boundary at drain start. Transaction ids are globally monotonic,
+        // so any explicit transaction begun after graceful exit holds an id >= this boundary. After the
+        // accept-new window closes, isTerminated() exempts only transactions with an id below it, so a
+        // BEGIN issued after SIGUSR1 cannot keep the connection open with fresh work until the hard timeout.
+        GracefulExitFlag.setBoundaryTxnId(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionIDGenerator().peekNextTransactionId());
         // Probe failure fires at the very start of graceful exit: the TCP probe (query, MySQL port)
         // fails as soon as stopAccept closes the port, and the HTTP probe (load) fails because
         // HealthAction returns 500. Idle connections are force-closed from the very start (a client

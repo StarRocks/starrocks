@@ -150,9 +150,17 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
             return false;
         }
         final StatementBase lastStmt = executor.getParsedStmt();
+        // An active explicit transaction keeps the connection exempt while the accept-new window is
+        // open (new work is still being admitted). Once the window closes, only a transaction that
+        // began before graceful exit (txnId below the drain boundary) remains exempt, so a BEGIN
+        // issued after SIGUSR1 cannot keep the connection (and its fresh work) alive until the hard
+        // shutdown timeout.
+        boolean txnExempt = ctx.inActiveExplicitTransaction()
+                && (GracefulExitFlag.shouldAcceptNewRequest()
+                || ctx.getTxnId() < GracefulExitFlag.getBoundaryTxnId());
         return GracefulExitFlag.isGracefulExit()
                 && !SqlUtils.isPreQuerySQL(lastStmt)
-                && !ctx.inActiveExplicitTransaction();
+                && !txnExempt;
     }
 
     private synchronized void handleRequest(RequestPackage req) {
