@@ -60,6 +60,10 @@ public class IcebergRewriteDataJob {
     private ExecPlan execPlan;
     private List<IcebergScanNode> scanNodes;
     private IcebergRewriteData rewriteData;
+    // Snapshot the rewrite planned against, frozen in prepare(). Every batch rewrites the
+    // file set picked there, so this is the snapshot the commit must validate from -- see
+    // the comment on IcebergSinkExtra.baseSnapshotId.
+    private Long baseSnapshotId;
     private long batchParallelism = 1;
     private StatementBase parsedStmt;
     private final ConcurrentLinkedQueue<FinishArgs> collected = new ConcurrentLinkedQueue<>();
@@ -178,6 +182,7 @@ public class IcebergRewriteDataJob {
             return;
         }
 
+        this.baseSnapshotId = targetNode.getBaseSnapshotId().orElse(null);
         this.rewriteData = new IcebergRewriteData();
         this.rewriteData.setSource(targetNode.getSourceRange());
         this.rewriteData.setBatchSize(batchSize);
@@ -283,6 +288,7 @@ public class IcebergRewriteDataJob {
                 return RewriteMetrics.EMPTY;
             }
             IcebergSinkExtra extra = new IcebergSinkExtra();
+            extra.setBaseSnapshotId(baseSnapshotId);
             List<TSinkCommitInfo> faList = Lists.newArrayList();
             for (FinishArgs fa : collected) {
                 extra.addScannedDataFiles(((IcebergSinkExtra) fa.getExtra()).getScannedDataFiles());

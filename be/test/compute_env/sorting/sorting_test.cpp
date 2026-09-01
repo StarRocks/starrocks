@@ -226,6 +226,9 @@ protected:
 
         CascadeChunkMerger merger(_runtime_state.get());
         CHECK_OK(merger.init(providers, &_sort_exprs, sort_desc));
+        // Priming the cursors is part of the contract: SimpleChunkSortCursor::try_get_next() requires it, and
+        // both merge_sorted_cursor_cascade() and spill::OrderedInputStream::is_ready() call it before consuming.
+        CHECK(merger.is_data_ready());
 
         std::vector<int32_t> ids;
         std::atomic<bool> eos{false};

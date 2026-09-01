@@ -160,6 +160,60 @@ These storage volumes are used **only during migration** to give target CNs read
    - It is recommended to use temporary credentials (access key / secret key) for the source storage volume. These can be revoked after migration is complete.
    :::
 
+#### Migrate range-distributed tables
+
+Range-distributed table migration is supported only between shared-data clusters. The migration tool creates a missing target table automatically from the source table definition. Do not create the target table manually.
+
+Record the original values of the following FE configurations. For each dynamic setting, also add the matching persistent setting to **fe.conf** on every applicable FE so that an FE restart does not change the migration contract.
+
+1. On both the source and target clusters, disable tablet merge and keep range distribution enabled:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true");
+   ```
+
+2. `enable_execute_script_on_frontend` is a static configuration. Set it to `true` in **fe.conf** on every source and target FE, and restart the FEs before the migration window.
+
+   ```Properties
+   enable_execute_script_on_frontend = true
+   ```
+
+3. On the target cluster, suppress size-triggered automatic tablet split by setting the target size to a very large value:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ```
+
+4. Before starting the tool, run the following query separately on the source and target clusters:
+
+   ```SQL
+   SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_TYPE = 'MERGE_TABLET'
+     AND JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   Start migration only when this query returns no relevant rows on either cluster. This waits for every non-final merge state, including `PENDING`, `PREPARING`, `RUNNING`, `CLEANING`, and `ABORTING`. Keep source automatic split enabled so that the source topology can evolve. Do not run independent writes or pre-split operations on the target while migration is active.
+
+The tool reads the actual source and target topology through leader-only `ADMIN EXECUTE ON FRONTEND` calls. The complete range value for each tablet contains `lowerBound`, `lowerIncluded`, `upperBound`, and `upperIncluded`. A null endpoint means negative or positive infinity. In a finite multi-column endpoint list, a null cell means SQL NULL; every other cell is a canonical string value. This representation preserves both inclusion flags and distinguishes a literal string `NULL` from SQL NULL. Although the bridge retains this complete representation for future extension, the current FE-to-BE split path accepts only half-open `[lower, upper)` child ranges.
+
+`ADMIN EXECUTE ON FRONTEND` is not forwarded to another FE. The tool must discover and connect to each cluster's Leader FE, and the migration users need the SYSTEM-level `OPERATE` privilege. FE scripts are privileged code: use a dedicated trusted account, protect its credentials, and pass generated script parameters as properly escaped JSON inside one SQL string. The DDL executor must send the complete ADMIN statement without splitting it at semicolons. After migration, restore the recorded static script-execution setting as described below.
+
+For each range-distributed table, the tool compares freshly read source and target topologies. If they differ, the tool stops generating new replication jobs for that table but lets queued, sending, and target-running jobs finish. After all such jobs and replication transactions have drained, it submits an exact-boundary tablet split through the existing DDL queue. Replication resumes only after another topology read proves that source and target ranges are structurally equal.
+
+Range distribution does not change shared-data version synchronization. Each replication uses the source physical partition's `visibleVersion`, compares the complete metadata and file sets, and skips files that already exist on the target.
+
+When transparent data encryption (TDE) is used in shared-data-to-shared-data migration, a newly copied private standalone physical file is read with its source encryption metadata and then re-encrypted under the target policy. If the source key hierarchy cannot be unwrapped, migration fails before the target publication. Newly copied shared or bundled physical files are unsupported when the source file is encrypted or target TDE is enabled. Objects that already exist on the target can be reused directly and retain their target encryption metadata. Migration from a shared-nothing source to a shared-data target fails closed when a source rowset or DCG file is encrypted; decrypting and re-encrypting those files on this path is not supported.
+
+:::warning
+
+This workflow supports split convergence only. It fails closed if convergence would require a target merge, including a source merge, a target-only boundary, crossing ranges, or a target topology finer than the source topology. Range-colocate layouts are also unsupported.
+
+:::
+
+After migration, first wait for the tool, replication jobs and transactions, and tablet reshard jobs to drain. Restore dynamic configurations, including the source and target merge setting and the target tablet size, with `ADMIN SET FRONTEND CONFIG`, and restore their recorded values in **fe.conf**. Restore automatic reshard behavior only if it was enabled before migration; otherwise keep it disabled. Separately restore the recorded static `enable_execute_script_on_frontend` value in **fe.conf** on every FE and restart the FEs. Disable script execution only if its recorded value was `false` or you intentionally choose a stricter post-migration security policy.
+
 </TabItem>
 </Tabs>
 

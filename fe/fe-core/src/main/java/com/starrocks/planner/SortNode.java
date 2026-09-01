@@ -451,4 +451,11 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         planNode.setNode_type(TPlanNodeType.SORT_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into a partition-sort sink plus a (parallel) merge-sort source, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

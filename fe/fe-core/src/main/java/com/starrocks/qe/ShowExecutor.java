@@ -238,6 +238,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -422,6 +423,25 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowStatement(ShowStmt statement, ConnectContext context) {
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), EMPTY_SET);
+        }
+
+        @Override
+        public ShowResultSet visitShowWarningStatement(ShowWarningStmt statement, ConnectContext context) {
+            // `SHOW WARNINGS` returns all diagnostics of the previous statement; `SHOW ERRORS`
+            // returns only the Error-level ones. Both keywords parse to ShowWarningStmt. The
+            // optional WHERE / LIMIT are applied by the ShowExecutor.execute() pipeline (ORDER BY
+            // parses but takes effect only together with WHERE, a pre-existing limitation of
+            // ShowStmtAnalyzer.analyzeShowPredicateClause, which returns before building the
+            // order-by pairs when there is no predicate).
+            boolean onlyErrors = statement.isShowErrors();
+            List<List<String>> rows = Lists.newArrayList();
+            for (QueryWarning warning : context.getWarnings()) {
+                if (onlyErrors && !warning.isError()) {
+                    continue;
+                }
+                rows.add(Lists.newArrayList(warning.getLevel(), warning.getCode(), warning.getMessage()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
 
         @Override
@@ -1891,7 +1911,7 @@ public class ShowExecutor {
                         long indexReplicaCount = 0;
                         long indexRowCount = 0;
                         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                            MaterializedIndex mIndex = partition.getLatestIndex(indexMetaId);
+                            MaterializedIndex mIndex = partition.getQueryableIndex(indexMetaId);
                             indexSize += mIndex.getDataSize();
                             indexReplicaCount += mIndex.getReplicaCount();
                             indexRowCount += mIndex.getRowCount();
@@ -2395,8 +2415,9 @@ public class ShowExecutor {
                 throw new SemanticException("Repository " + statement.getRepoName() + " does not exist");
             }
 
-            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(), statement.getTimestamp(),
-                    statement.getSnapshotNames());
+            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(),
+                    statement.getTimestamp(), statement.getSnapshotNames(),
+                    GlobalStateMgr.getCurrentState().getBackupHandler().getRetentionCache());
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), snapshotInfos);
         }
 
@@ -3250,10 +3271,17 @@ public class ShowExecutor {
                         if (matcher != null && !matcher.match(name)) {
                             continue;
                         }
+                        // pause and both counters are optional on the wire: a BE built before them
+                        // sends null, so never dereference a boxed value here.
+                        boolean paused = Boolean.TRUE.equals(triggerMode.pause);
                         List<String> row = Lists.newArrayList();
                         row.add(failPointInfo.name);
-                        row.add(triggerMode.mode.toString());
-                        if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
+                        // A pause is sent as DISABLE + pause=true so old backends degrade safely;
+                        // report what it actually means.
+                        row.add(paused ? "PAUSE" : triggerMode.mode.toString());
+                        if (paused) {
+                            row.add("");
+                        } else if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
                             row.add(Integer.toString(triggerMode.nTimes));
                         } else if (triggerMode.mode == FailPointTriggerModeType.PROBABILITY_ENABLE) {
                             row.add(Double.toString(triggerMode.probability));
@@ -3261,6 +3289,10 @@ public class ShowExecutor {
                             row.add("");
                         }
                         row.add(String.format("%s:%d", node.getHost(), node.getBePort()));
+                        row.add(Long.toString(failPointInfo.triggerCount == null
+                                ? 0L : failPointInfo.triggerCount));
+                        row.add(Long.toString(failPointInfo.pausedThreadCount == null
+                                ? 0L : failPointInfo.pausedThreadCount));
                         rows.add(row);
                     }
                 } catch (InterruptedException e) {

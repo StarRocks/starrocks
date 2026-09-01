@@ -183,6 +183,7 @@ void PipelineExecutorMetrics::register_all_metrics(MetricRegistry* registry) {
     }
     _registry = registry;
     poller_metrics.register_all_metrics(registry);
+    driver_queue_metrics.register_all_metrics(registry);
     driver_executor_metrics.register_all_metrics(registry);
     scan_executor_metrics.register_all_metrics(registry, "scan");
     connector_scan_executor_metrics.register_all_metrics(registry, "connector_scan");

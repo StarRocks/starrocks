@@ -1,0 +1,16 @@
+-- name: test_nested_lambda_topn
+-- ORDER BY plus LIMIT builds a TopN node, and its runtime-filter construction asks whether each
+-- expression is bound by a set of tuples. That walk descends into the inner lambda and reaches the
+-- slot the planner materialised for the cast around array_length(), which belongs to no tuple.
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1 limit 1;
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) desc limit 7, 100;
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1 asc limit 100 offset 7;
+-- the same expression without a TopN, as a reference for the value above
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]);
+-- neighbouring shapes: each drops one ingredient and never reached the missing parent
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1;
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) limit 1;
+select array_map(a -> array_map(b -> b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1 limit 1;
+select array_map(a -> a + 1, ARRAY<TINYINT>[1,2]) order by 1 limit 1;
+-- ordering still works over several rows
+select x, array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) from (select 3 as x union all select 1 union all select 2) t order by x desc limit 2;

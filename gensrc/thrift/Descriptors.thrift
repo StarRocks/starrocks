@@ -128,94 +128,102 @@ struct TTextFileDesc {
     9: optional i32 skip_header_line_count
 }
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TSchemaTableType {
     SCH_AUTHORS= 0,
-    SCH_CHARSETS,
-    SCH_COLLATIONS,
-    SCH_COLLATION_CHARACTER_SET_APPLICABILITY,
-    SCH_COLUMNS,
-    SCH_COLUMN_PRIVILEGES,
-    SCH_CREATE_TABLE,
-    SCH_ENGINES,
-    SCH_EVENTS,
-    SCH_FILES,
-    SCH_GLOBAL_STATUS,
-    SCH_GLOBAL_VARIABLES,
-    SCH_KEY_COLUMN_USAGE,
-    SCH_MATERIALIZED_VIEWS,
-    SCH_OPEN_TABLES,
-    SCH_PARTITIONS,
-    SCH_PLUGINS,
-    SCH_PROCESSLIST,
-    SCH_PROFILES,
-    SCH_REFERENTIAL_CONSTRAINTS,
-    SCH_PROCEDURES,
-    SCH_SCHEMATA,
-    SCH_SCHEMA_PRIVILEGES,
-    SCH_SESSION_STATUS,
-    SCH_SESSION_VARIABLES,
-    SCH_STATISTICS,
-    SCH_STATUS,
-    SCH_TABLES,
-    SCH_TABLES_CONFIG,
-    SCH_TABLE_CONSTRAINTS,
-    SCH_TABLE_NAMES,
-    SCH_TABLE_PRIVILEGES,
-    SCH_TRIGGERS,
-    SCH_USER_PRIVILEGES,
-    SCH_VARIABLES,
-    SCH_VIEWS,
-    SCH_TASKS,
-    SCH_TASK_RUNS,
-    SCH_VERBOSE_SESSION_VARIABLES,
-    SCH_BE_TABLETS,
-    SCH_BE_METRICS,
-    SCH_BE_TXNS,
-    SCH_BE_CONFIGS,
-    SCH_LOADS,
-    SCH_LOAD_TRACKING_LOGS,
-    SCH_FE_TABLET_SCHEDULES,
-    SCH_BE_COMPACTIONS,
-    SCH_BE_THREADS,
-    SCH_BE_LOGS,
-    SCH_BE_BVARS,
-    SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    SCH_CHARSETS = 1,
+    SCH_COLLATIONS = 2,
+    SCH_COLLATION_CHARACTER_SET_APPLICABILITY = 3,
+    SCH_COLUMNS = 4,
+    SCH_COLUMN_PRIVILEGES = 5,
+    SCH_CREATE_TABLE = 6,
+    SCH_ENGINES = 7,
+    SCH_EVENTS = 8,
+    SCH_FILES = 9,
+    SCH_GLOBAL_STATUS = 10,
+    SCH_GLOBAL_VARIABLES = 11,
+    SCH_KEY_COLUMN_USAGE = 12,
+    SCH_MATERIALIZED_VIEWS = 13,
+    SCH_OPEN_TABLES = 14,
+    SCH_PARTITIONS = 15,
+    SCH_PLUGINS = 16,
+    SCH_PROCESSLIST = 17,
+    SCH_PROFILES = 18,
+    SCH_REFERENTIAL_CONSTRAINTS = 19,
+    SCH_PROCEDURES = 20,
+    SCH_SCHEMATA = 21,
+    SCH_SCHEMA_PRIVILEGES = 22,
+    SCH_SESSION_STATUS = 23,
+    SCH_SESSION_VARIABLES = 24,
+    SCH_STATISTICS = 25,
+    SCH_STATUS = 26,
+    SCH_TABLES = 27,
+    SCH_TABLES_CONFIG = 28,
+    SCH_TABLE_CONSTRAINTS = 29,
+    SCH_TABLE_NAMES = 30,
+    SCH_TABLE_PRIVILEGES = 31,
+    SCH_TRIGGERS = 32,
+    SCH_USER_PRIVILEGES = 33,
+    SCH_VARIABLES = 34,
+    SCH_VIEWS = 35,
+    SCH_TASKS = 36,
+    SCH_TASK_RUNS = 37,
+    SCH_VERBOSE_SESSION_VARIABLES = 38,
+    SCH_BE_TABLETS = 39,
+    SCH_BE_METRICS = 40,
+    SCH_BE_TXNS = 41,
+    SCH_BE_CONFIGS = 42,
+    SCH_LOADS = 43,
+    SCH_LOAD_TRACKING_LOGS = 44,
+    SCH_FE_TABLET_SCHEDULES = 45,
+    SCH_BE_COMPACTIONS = 46,
+    SCH_BE_THREADS = 47,
+    SCH_BE_LOGS = 48,
+    SCH_BE_BVARS = 49,
+    SCH_BE_CLOUD_NATIVE_COMPACTIONS = 50,
 
-    STARROCKS_ROLE_EDGES,
-    STARROCKS_GRANT_TO_ROLES,
-    STARROCKS_GRANT_TO_USERS,
-    SCH_ROUTINE_LOAD_JOBS,
-    SCH_STREAM_LOADS,
-    SCH_PIPE_FILES,
-    SCH_PIPES,
-    SCH_FE_METRICS,
-    STARROCKS_OBJECT_DEPENDENCIES,
-    SYS_FE_LOCKS,
-    SYS_FE_MEMORY_USAGE,
-    SCH_PARTITIONS_META,
-    SCH_BE_DATACACHE_METRICS,
-    SCH_TEMP_TABLES,
+    STARROCKS_ROLE_EDGES = 51,
+    STARROCKS_GRANT_TO_ROLES = 52,
+    STARROCKS_GRANT_TO_USERS = 53,
+    SCH_ROUTINE_LOAD_JOBS = 54,
+    SCH_STREAM_LOADS = 55,
+    SCH_PIPE_FILES = 56,
+    SCH_PIPES = 57,
+    SCH_FE_METRICS = 58,
+    STARROCKS_OBJECT_DEPENDENCIES = 59,
+    SYS_FE_LOCKS = 60,
+    SYS_FE_MEMORY_USAGE = 61,
+    SCH_PARTITIONS_META = 62,
+    SCH_BE_DATACACHE_METRICS = 63,
+    SCH_TEMP_TABLES = 64,
     
-    SCH_COLUMN_STATS_USAGE,
-    SCH_ANALYZE_STATUS,
+    SCH_COLUMN_STATS_USAGE = 65,
+    SCH_ANALYZE_STATUS = 66,
 
-    SCH_CLUSTER_SNAPSHOTS,
-    SCH_CLUSTER_SNAPSHOT_JOBS,
+    SCH_CLUSTER_SNAPSHOTS = 67,
+    SCH_CLUSTER_SNAPSHOT_JOBS = 68,
 
-    SCH_KEYWORDS,
-    SCH_APPLICABLE_ROLES,
+    SCH_KEYWORDS = 69,
+    SCH_APPLICABLE_ROLES = 70,
 
-    SCH_WAREHOUSE_METRICS,
-    SCH_WAREHOUSE_QUERIES,
+    SCH_WAREHOUSE_METRICS = 71,
+    SCH_WAREHOUSE_QUERIES = 72,
 
-    SCH_TABLET_RESHARD_JOBS,
-    SCH_RECYCLEBIN_CATALOGS,
+    SCH_TABLET_RESHARD_JOBS = 73,
+    SCH_RECYCLEBIN_CATALOGS = 74,
 
-    SCH_FE_THREADS,
+    SCH_FE_THREADS = 75,
 
-    SCH_BE_TABLET_WRITE_LOG,
+    SCH_BE_TABLET_WRITE_LOG = 76,
 
-    SCH_MATERIALIZED_VIEW_REFRESH_JOBS
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS = 77
 }
 
 enum THdfsCompression {
@@ -579,6 +587,10 @@ struct TIcebergSchemaField {
     // Refer to field name
     2: optional string name
 
+    // Mirrors Types.NestedField#isOptional(). Unset means optional: never enforce
+    // NOT NULL without an explicit signal from the Iceberg schema.
+    3: optional bool is_optional
+
     // You can fill other field properties here if you needed
     // .......
 
@@ -687,6 +699,12 @@ struct TPaimonTable {
 
     // reuse iceberg schema here, used to support schema evolution
     4: optional TIcebergSchema paimon_schema
+
+    // Paimon table base path used by the C++ native reader
+    5: optional string paimon_table_path
+
+    // Paimon TableSchema serialized as JSON at planning time
+    6: optional string paimon_table_schema_json
 }
 
 struct TFlussTable {

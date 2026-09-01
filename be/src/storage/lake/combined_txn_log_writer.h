@@ -16,13 +16,20 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 
 #include "common/status.h"
 
 namespace starrocks {
 class CombinedTxnLogPB;
 
-Status write_combined_txn_log(const CombinedTxnLogPB& logs);
-Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map);
+// partition id -> the tablets that partition's combined txn log must cover. Supplying it makes
+// put_combined_txn_log() refuse to write an object that is short of an entry; see the comment on
+// TabletManager::put_combined_txn_log. Pass empty to keep the previous unchecked behaviour.
+using ExpectedTabletsByPartition = std::map<int64_t, std::set<int64_t>>;
+
+Status write_combined_txn_log(const CombinedTxnLogPB& logs, const std::set<int64_t>& expected_tablet_ids = {});
+Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map,
+                                       const ExpectedTabletsByPartition& expected_by_partition = {});
 
 } // namespace starrocks

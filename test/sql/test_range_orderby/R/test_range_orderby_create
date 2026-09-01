@@ -1,0 +1,109 @@
+-- name: test_range_orderby_create @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(32) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't1';
+-- result:
+RANGE	`k1`, `k2`	`v1`, `v2`
+-- !result
+insert into t1 values (1, 1, 900, 'z'), (1, 2, 100, 'a'), (2, 1, 500, 'm');
+-- result:
+-- !result
+insert into t1 values (1, 1, 1, 'b');
+-- result:
+-- !result
+select * from t1 order by k1, k2;
+-- result:
+1	1	1	b
+1	2	100	a
+2	1	500	m
+-- !result
+select count(*) from t1;
+-- result:
+3
+-- !result
+create table t_no_bundling (
+    k1 int not null,
+    v1 int not null
+)
+primary key(k1)
+order by(v1)
+properties('replication_num' = '1', 'file_bundling' = 'false');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Range-distributed primary key tables with ORDER BY different from the primary key require file_bundling=true.')
+-- !result
+create table t_same_order (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null
+)
+primary key(k1, k2)
+order by(k1, k2)
+properties('replication_num' = '1', 'file_bundling' = 'false');
+-- result:
+-- !result
+select distribute_type, primary_key, sort_key from information_schema.tables_config
+    where table_schema = 'db_${uuid0}' and table_name = 't_same_order';
+-- result:
+RANGE	`k1`, `k2`	`k1`, `k2`
+-- !result
+create table t_hash (
+    k1 int not null,
+    v1 int not null
+)
+primary key(k1)
+distributed by hash(k1) buckets 3
+order by(v1)
+properties('replication_num' = '1', 'file_bundling' = 'false');
+-- result:
+-- !result
+insert into t_hash values (1, 10), (2, 20), (1, 5);
+-- result:
+-- !result
+select * from t_hash order by k1;
+-- result:
+1	5
+2	20
+-- !result
+create table t_bad_sort_type (
+    k1 int not null,
+    v1 double not null
+)
+primary key(k1)
+order by(v1)
+properties('replication_num' = '1');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Sort key column[v1] type not supported: double.')
+-- !result
+create table t_uniq (
+    k1 int not null,
+    k2 int not null,
+    v1 int
+)
+unique key(k1, k2)
+order by(v1, k1)
+properties('replication_num' = '1');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The sort columns must be same with key columns.')
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

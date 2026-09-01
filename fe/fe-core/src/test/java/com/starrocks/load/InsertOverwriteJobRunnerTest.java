@@ -16,6 +16,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -167,6 +168,168 @@ public class InsertOverwriteJobRunnerTest {
             hook.verify(() -> InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
                     insertStmt, context, 42L));
         }
+    }
+
+    // ---- static INSERT OVERWRITE pre-split hook ----
+
+    /** A table shaped like a static overwrite target mid-job: real partitions plus a cloned temporary one. */
+    private void withClonedTemporaryPartition(String tableName, StaticOverwriteCase body) throws Exception {
+        starRocksAssert.withTable(
+                "create table insert_overwrite_test." + tableName + "(c1 int, c2 int) "
+                        + "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
+                        + "(PARTITION p1 VALUES [('0'), ('10')), PARTITION p2 VALUES [('10'), ('20'))) "
+                        + "DISTRIBUTED BY HASH(c2) BUCKETS 1 PROPERTIES('replication_num'='1')",
+                () -> {
+                    starRocksAssert.alterTable("ALTER TABLE insert_overwrite_test." + tableName
+                            + " ADD TEMPORARY PARTITION tp1 VALUES [('0'), ('10'))");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getDb("insert_overwrite_test");
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getFullName(), tableName);
+                    body.accept(db, table);
+                });
+    }
+
+    private interface StaticOverwriteCase {
+        void accept(Database db, OlapTable table) throws Exception;
+    }
+
+    private static InsertOverwriteJobRunner staticOverwriteRunner(
+            long jobId, long dbId, long tableId, InsertStmt insertStmt, ConnectContext context,
+            List<Long> tmpPartitionIds, List<String> sourcePartitionNames) {
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                jobId, insertStmt, dbId, tableId, WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                /*dynamicOverwrite*/ false);
+        job.setTmpPartitionIds(tmpPartitionIds);
+        job.setSourcePartitionNames(sourcePartitionNames);
+        return new InsertOverwriteJobRunner(job, context, Mockito.mock(StmtExecutor.class));
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitPassesClonedTemporaryPartitionNames() throws Exception {
+        withClonedTemporaryPartition("t_static_presplit_ok", (db, table) -> {
+            long temporaryPartitionId = table.getPartition("tp1", true).getId();
+            InsertStmt insertStmt = Mockito.mock(InsertStmt.class);
+            ConnectContext context = Mockito.mock(ConnectContext.class);
+            InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                    401L, db.getId(), table.getId(), insertStmt, context,
+                    Lists.newArrayList(temporaryPartitionId), Lists.newArrayList("p1"));
+
+            try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+                runner.preSplitStaticOverwriteTempPartitions();
+
+                // The ids resolve through OlapTable#getPartition's temporary-partition fallback, and
+                // the two lists must reach the hook index-aligned: PreSplitPartitionScope zips them
+                // positionally to map each sampled logical partition onto the replacement partition
+                // the load will actually write.
+                hook.verify(() -> InsertPreSplitHook.maybeRunStaticOverwritePreSplit(
+                        insertStmt, context, List.of("p1"), List.of("tp1"), Estimates.ZERO));
+            }
+        });
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsDynamicOverwrite() {
+        // Dynamic overwrite has its own hook, which runs after its transaction is assigned so the
+        // temporary partitions can be excluded from cleanup. Running both would split twice.
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                402L, Mockito.mock(InsertStmt.class), 11L, 12L,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, /*dynamicOverwrite*/ true);
+        job.setTmpPartitionIds(Lists.newArrayList(2001L));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitStaticOverwriteTempPartitions();
+
+            hook.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenTmpPartitionIdsAreUnset() {
+        // tmpPartitionIds stays null until prepare() assigns it.
+        assertStaticOverwritePreSplitSkipped(403L, null);
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenNoTemporaryPartitionWasCloned() {
+        // An empty list means the overwrite resolved to no target partition, so there is nothing
+        // to pre-split.
+        assertStaticOverwritePreSplitSkipped(404L, Lists.newArrayList());
+    }
+
+    private static void assertStaticOverwritePreSplitSkipped(long jobId, List<Long> tmpPartitionIds) {
+        InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                jobId, 11L, 12L, Mockito.mock(InsertStmt.class), Mockito.mock(ConnectContext.class),
+                tmpPartitionIds, Lists.newArrayList("p1"));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitStaticOverwriteTempPartitions();
+
+            hook.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenDatabaseIsGone() {
+        // The database can be dropped between createTempPartitions() and this hook. Skipping keeps
+        // the overwrite itself free to fail (or not) on its own terms.
+        InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                405L, /*dbId*/ 11L, /*tableId*/ 12L, Mockito.mock(InsertStmt.class),
+                Mockito.mock(ConnectContext.class),
+                Lists.newArrayList(2001L), Lists.newArrayList("p1"));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitStaticOverwriteTempPartitions();
+
+            hook.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenAClonedPartitionNoLongerResolves() throws Exception {
+        // One id resolving to nothing is the dangerous case: the surviving names would be shorter
+        // than job.getSourcePartitionNames(), so the positional zip in PreSplitPartitionScope would
+        // silently map a source partition onto some other partition's replacement and split the
+        // wrong target. The size check must drop the whole attempt instead.
+        withClonedTemporaryPartition("t_static_presplit_vanished", (db, table) -> {
+            long temporaryPartitionId = table.getPartition("tp1", true).getId();
+            InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                    406L, db.getId(), table.getId(), Mockito.mock(InsertStmt.class),
+                    Mockito.mock(ConnectContext.class),
+                    Lists.newArrayList(temporaryPartitionId, /*already dropped*/ 987654321L),
+                    Lists.newArrayList("p1", "p2"));
+
+            try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+                runner.preSplitStaticOverwriteTempPartitions();
+
+                hook.verifyNoInteractions();
+            }
+        });
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSwallowsFailureAndReleasesTheLock() {
+        // The target table can be dropped between createTempPartitions() and this hook, making
+        // checkAndGetTable throw from inside the table READ lock. By this point the temporary
+        // partitions are already cloned and the overwrite is committed to running, so the throw
+        // must not surface as a failed INSERT OVERWRITE -- and the lock must still be released.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                407L, db.getId(), /*tableId that no longer exists*/ 987654321L,
+                Mockito.mock(InsertStmt.class), Mockito.mock(ConnectContext.class),
+                Lists.newArrayList(2001L), Lists.newArrayList("p1"));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            Assertions.assertDoesNotThrow(runner::preSplitStaticOverwriteTempPartitions);
+
+            hook.verifyNoInteractions();
+        }
+
+        // A leaked READ lock would deadlock the next writer; taking the same lock again proves the
+        // try-with-resources released it on the throwing path.
+        Assertions.assertDoesNotThrow(runner::preSplitStaticOverwriteTempPartitions);
     }
 
     @Test

@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.RangeDistributionInfo;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -806,6 +807,16 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
             CreateMaterializedViewStatement fallbackStmt = analyzeMvDdl(
                     incrementalMvDdl("mv_ivm_hash_fallback", ""));
             assertNormalizedHash(fallbackStmt, 0);
+
+            // enable_mv_range_distribution only gates the config-driven default, which still needs
+            // enable_range_distribution and shared-data mode; on its own it selects nothing here.
+            boolean savedMvConfig = Config.enable_mv_range_distribution;
+            Config.enable_mv_range_distribution = true;
+            try {
+                assertNormalizedHash(analyzeMvDdl(incrementalMvDdl("mv_ivm_mv_config_only", "")), 0);
+            } finally {
+                Config.enable_mv_range_distribution = savedMvConfig;
+            }
 
             for (boolean rangeEnabled : List.of(true, false)) {
                 connectContext.getSessionVariable().setEnableRangeDistribution(rangeEnabled);

@@ -189,6 +189,12 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
 
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Total number of remote storage read attempts for lake tablet metadata that return `NotFound`. A tablet's metadata lives either in its own metadata object or inside a bundled metadata file, never in both, and reads of either location are counted, including the bundle reads issued by vacuum. Each failed fallback read is counted separately. Cache misses and successful reads do not increment this metric. Reads of a source cluster's metadata during replication and of snapshot metadata during restore are not counted.
+
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
 - Unit: Bytes
@@ -331,6 +337,18 @@ description: "Alphabetical s"
 - Labels: `type` (`add_column`, `drop_column`, or `modify_column`), `is_leader`
 - Description: Number of ALTER TABLE column operations, by type. A single statement can contain several operations — for example, `ADD COLUMN a, DROP COLUMN b` — and each is counted separately under its type. Renames, reorders, and comment-only changes are not counted. Reported only by the Leader FE (`is_leader="true"`).
 
+## `starrocks_fe_backup_snapshot_clean_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The total number of failed attempts to delete a backup snapshot from its repository, whether by automatic TTL cleanup or by DROP SNAPSHOT.
+
+## `starrocks_fe_backup_snapshot_clean_success`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The total number of backup snapshots deleted from their repository, whether by automatic TTL cleanup or by DROP SNAPSHOT.
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -360,6 +378,12 @@ description: "Alphabetical s"
 - Unit: ms
 - Type: Instantaneous
 - Description: Indicates the end time of the last query or loading under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse.
+
+## `starrocks_fe_max_journal_replay_lag`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The largest number of metadata journals that any alive Follower or Observer FE still has to replay to catch up with the Leader. Reported only by the Leader FE (`is_leader="true"`), which is the only node that knows both its own journal write position and, through heartbeats, every other node's replayed journal ID. FE nodes that are not alive are excluded, because the journal ID they last reported is frozen at their final successful heartbeat; use the `Alive` column of `SHOW FRONTENDS` to detect those instead. It returns `0` when every other node has caught up, when no other FE node is alive, and on a single-FE cluster. A high or continuously growing value means metadata replay on at least one node is falling behind, which causes that node to serve stale metadata and, once `meta_delay_toleration_second` is exceeded, to forward its queries to the Leader.
 
 ## `starrocks_fe_memory_usage`
 
@@ -558,8 +582,8 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets).
-- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition (P2-a) path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve.
+- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets). Derived-tier values (the refresh of a range-distributed incremental materialized view, whose boundaries are derived rather than sampled): `materialized_view_target` (the target is a materialized view the derived tier cannot key — not an incremental materialized view, more than one visible index, a sort key that is not the single hidden row-id column, or a row-id kind no boundary source serves yet), `row_id_span_too_small` (the estimated output is too small for the row-id key space to be carved usefully — a tablet's share of rows would not stay clear of the gaps that per-node id caching leaves behind, so the split would be unbalanced rather than helpful), `row_id_space_not_pristine` (the target's auto-increment counter has already handed out ids, so compute nodes may hold cached id intervals the planner cannot account for; only a pristine id space lets the boundaries be derived), `estimate_unavailable` (no usable output-size estimate, so the tablet count cannot be chosen), `multiple_temporary_partitions` (the refresh writes more than one replacement partition; a row-id key comes from one counter for the whole table, so ids for a single partition form a contiguous band and cuts spanning the whole id space would leave most of each partition's tablets empty — enabling the feature would not change this, which is why it is reported separately from `disabled_by_config`), `derivation_failed` (the boundary source threw or produced boundaries that failed validation — distinct from `tablet_pre_split_sampler_failed{reason=sample_failed}`, which belongs to the sampling tiers), `stale_catalog_state` (derived tier: the target's visible-index set changed between deriving the cuts and building the job — the same stale-snapshot race as the multi-partition meaning above, observed on a different snapshot), `submit_failed` (derived tier: the derived cuts could not be turned into an admitted job — either the reshard-job factory refused to build one, or `TabletReshardJobMgr` rejected it. Distinct from `derivation_failed`, which means the cuts themselves could not be produced. The sampling tiers record this same label under `tablet_pre_split_sampler_failed` instead, because there a sampler did run).
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition (P2-a) path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve. Derived-tier skips land here as well rather than under `tablet_pre_split_sampler_failed`, because the derived tier reads nothing at all and therefore never runs a sampler — `derivation_failed` included.
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -571,15 +595,15 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission), `pre_create_failed` (multi-partition path: `LocalMetastore.addPartitions` threw while pre-creating a target partition — that one partition is dropped from the combined submit and falls back to BE runtime auto-create; sibling partitions in the same load continue).
+- Labels: `reason` — the post-eligibility failure category (lower-cased SkipReason), one of `sample_failed` (sampler executor threw), `timeout_pre_submit` (sample + plan + build phase exceeded `tablet_pre_split_pre_submit_timeout_seconds`), `submit_failed` (`TabletReshardJobMgr` rejected admission — the sampling tiers only; the derived tier reports the same rejection under `tablet_pre_split_eligibility_skipped`, since no sampler ran), `pre_create_failed` (multi-partition path: `LocalMetastore.addPartitions` threw while pre-creating a target partition — that one partition is dropped from the combined submit and falls back to BE runtime auto-create; sibling partitions in the same load continue).
 - Description: Total times the sampler attempted but did not produce an admitted reshard job, broken down by reason. Distinct from `tablet_pre_split_eligibility_skipped` (sampler never ran) and from `tablet_pre_split_tier_used` (which records the tier that succeeded). Meta-tier → data-tier fallback alone is not a failure; it is tracked via `tablet_pre_split_tier_used{tier=data_tier}`.
 
 ## `starrocks_fe_tablet_pre_split_tier_used`
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `tier` — `meta_tier` (boundaries computed from Parquet/ORC row-group statistics; no row data read) or `data_tier` (boundaries computed from actual row samples collected via a FILES sub-query — covers both direct data-tier invocations and meta-tier → data-tier fallbacks).
-- Description: Total Sample-Based Tablet Pre-Split invocations by which sampler tier produced the boundaries.
+- Labels: `tier` — `meta_tier` (boundaries computed from Parquet/ORC row-group statistics; no row data read), `data_tier` (boundaries computed from actual row samples collected via a FILES sub-query — covers both direct data-tier invocations and meta-tier → data-tier fallbacks), or `derived_tier` (boundaries computed from what is known about the sort key's own value domain — no file statistics and no row sample, so nothing is read at all; used when the sort key is a hidden row-id column whose value distribution follows from how the id is produced rather than from the data).
+- Description: Total Sample-Based Tablet Pre-Split invocations by which tier produced the boundaries.
 
 ## `starrocks_fe_tablet_pre_split_boundaries_planned`
 
@@ -616,19 +640,54 @@ All transaction metrics share the following labels:
 
 - Unit: ms
 - Type: Histogram
-- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on all production load kinds — INSERT-from-FILES and INSERT-from-table (both via `InsertPreSplitHook`, called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn) and Broker Load (via `BrokerLoadPreSplitHook`, called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`), all sync-awaiting through the shared `PreSplitFlow` — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
+- Description: Wall-clock time the coordinator spent awaiting `FINISHED` on the admitted Sample-Based Tablet Pre-Split reshard job. Fires on all production load kinds — INSERT-from-FILES and INSERT-from-table (both via `InsertPreSplitHook`, called from `StmtExecutor` before `StatementPlanner.plan` opens the load txn), Broker Load (via `BrokerLoadPreSplitHook`, called from `BrokerLoadJob.createLoadingTask` before `beginTxn` opens `T_load`), and the refresh of a range-distributed incremental materialized view (via `InsertPreSplitHook` on the overwrite's replacement partition), all sync-awaiting through the shared `PreSplitFlow` — and on the optional `runPreSplit` synchronous-await wrapper used by tests. In all cases the trigger load itself plans against the post-split layout.
 
 ## `starrocks_fe_tablet_pre_split_post_submit_hard_cap`
 
 - Unit: Count
 - Type: Cumulative
-- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on every production load kind on timeout — INSERT-from-FILES, INSERT-from-table, and Broker Load (all sync-await through the shared `PreSplitFlow`) — as well as the `runPreSplit` synchronous-await wrapper. The load then proceeds without abort against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); `tablet_pre_split_load_abort` is NOT incremented because the load itself is not aborted.
+- Description: Total Sample-Based Tablet Pre-Split post-submit hard-cap events. Incremented when the admitted reshard job did not reach `FINISHED` within `tablet_pre_split_post_submit_wait_seconds`. Fires on every production load kind on timeout — INSERT-from-FILES, INSERT-from-table, Broker Load, and the refresh of a range-distributed incremental materialized view (all sync-await through the shared `PreSplitFlow`) — as well as the `runPreSplit` synchronous-await wrapper. The load then proceeds without abort against the currently visible tablet layout (still the original layout if the daemon hasn't transitioned, or partially / fully post-split if the daemon raced past the wait); `tablet_pre_split_load_abort` is NOT incremented because the load itself is not aborted.
+
+  Proceeding is not the same as succeeding for the two routes that finish by replacing partitions — INSERT OVERWRITE and an incremental materialized view refresh. Those swap partitions only while the table is in the `NORMAL` state, so they wait for the reshard job to finish before committing and fail the statement if it has not finished within the statement's remaining timeout. A sustained count here on those routes is therefore worth investigating rather than ignoring.
 
 ## `starrocks_fe_tablet_pre_split_load_abort`
 
 - Unit: Count
 - Type: Cumulative
 - Description: Total load transactions aborted because Sample-Based Tablet Pre-Split could not confirm the admitted reshard job reached `FINISHED` in time. Sibling counter of `tablet_pre_split_post_submit_hard_cap`. Production load paths proceed without abort against the currently visible layout on post-submit timeout rather than abort, so this counter stays at zero in production today; it only fires when a caller uses the strict `runPreSplit` wrapper (tests, or a future caller that opts into abort-on-timeout).
+
+## `starrocks_fe_tablet_reshard_job_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`split` or `merge`)
+- Description: Total tablet reshard jobs admitted by `TabletReshardJobMgr`, counted once the job has been queued and journaled. Covers both automatic reshard (tablet split and merge) and jobs submitted by Sample-Based Tablet Pre-Split. Per-state job counts are also exposed through the generic `job` gauge with the labels `job="tablet_reshard"`, `type`, and `state`. Only the Leader FE increments this counter; it stays at zero on followers and restarts from zero after an FE restart or a leader change.
+
+## `starrocks_fe_tablet_reshard_job_finished`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`split` or `merge`)
+- Description: Total tablet reshard jobs that reached `FINISHED`. Compare with `tablet_reshard_job_total` to see how many admitted jobs have completed. Only the Leader FE increments this counter.
+
+## `starrocks_fe_tablet_reshard_job_aborted`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `type` (`split` or `merge`)
+- Description: Total tablet reshard jobs that ended in `ABORTED`. A job can only abort before its transaction commits; once committed there is no rollback path, so a failure after that point is retried instead of aborted and is never counted here. Use `tablet_reshard_publish_failed` to detect that case. Only the Leader FE increments this counter.
+
+## `starrocks_fe_tablet_reshard_publish_failed`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total reshard publish attempts that failed and will be retried, one increment per attempt. Because a reshard transaction is already committed by publish time, a failed publish is retried with exponential backoff (1s, doubling, capped at 30s) until it succeeds: the job stays `RUNNING` and never aborts, so `tablet_reshard_job_aborted` stays flat while the job is stuck. This counter is therefore the metric to alert on. At the 30s cap a permanently failing partition keeps it moving about twice a minute, so `increase(starrocks_fe_tablet_reshard_publish_failed[5m]) > 0` catches a stuck job within roughly a minute of the first failure. The reason for each failure is reported in the `ERROR_MESSAGE` column of `information_schema.tablet_reshard_jobs` and in `fe.warn.log`. Only the Leader FE increments this counter.
+
+## `starrocks_fe_tablet_reshard_parallel_tablets`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of tablets currently being resharded across all unfinished reshard jobs, that is, the live reshard parallelism. Non-Leader FE nodes report `0`.
 
 ## `starrocks_fe_tablet_max_compaction_score`
 

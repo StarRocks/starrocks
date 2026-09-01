@@ -119,6 +119,26 @@ class InsertFromTableSampleSubqueryExecutorTest {
                 "SELECT must include LIMIT: " + capturedSql);
     }
 
+    @Test
+    void estimatesPredicateFilteredBytesFromObservedIcebergSample() throws Exception {
+        // 128 MB / (50k * 256 B) => sampling rate 0.1. One observed row estimates ten
+        // filtered rows out of the one-thousand-row snapshot, hence 1.28 MB of input.
+        OlapTable sourceTable = mockOlapTable(0L);
+        ComputeResource computeResource = Mockito.mock(ComputeResource.class);
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`iceberg`.`db`.`src`", Map.of("k", "k"), "`tenant_id` = 't1'",
+                computeResource, 128_000_000L, 1_000L);
+        SampleRequest request = new SampleRequest(
+                scanContext, List.of(bigintColumn("k")), List.of(), Long.MAX_VALUE, 0L);
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, ignoredResource, ignoredTimeout) -> List.of(jsonResultBatch("{\"data\":[\"5\"]}")));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertEquals(10L, execution.estimates().totalRows());
+        Assertions.assertEquals(1_280_000L, execution.estimates().totalBytes());
+    }
+
     // ---------------------------------------------------------------------------
     // Decode tests
     // ---------------------------------------------------------------------------

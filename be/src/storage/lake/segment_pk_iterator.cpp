@@ -18,6 +18,7 @@
 #include "column/chunk_factory.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/current_thread.h"
+#include "storage/lake/cross_publish_context.h"
 #include "storage/lake/pk_index_utils.h"
 #include "storage_primitive/primary_key_encoder.h"
 
@@ -67,7 +68,17 @@ Status SegmentPKIterator::_load() {
         ASSIGN_OR_RETURN(_standalone_pk_column, encoded_pk_column(_pk_column_chunk.get()));
     }
     if (_pk_column_chunk->num_rows() == 0) {
+        _owned.clear();
         return Status::OK();
+    }
+    // Decide ownership here rather than in current(): the chunk is complete at this point and this
+    // function already returns Status, so a selection that cannot be built fails the load instead of
+    // handing the caller a chunk it would process as "own every row". current() runs after the
+    // consumer loop has already committed the previous chunk, so an error raised there is too late --
+    // LakePrimaryIndex::parallel_upsert checks the iterator status only after flush_memtable() has
+    // durably written the sstable.
+    if (_row_selector != nullptr) {
+        ASSIGN_OR_RETURN(_owned, _row_selector->select(*_pk_column_chunk));
     }
     _current_rows += _pk_column_chunk->num_rows();
     _begin_rowid_offsets.push_back(_current_rows);
@@ -122,6 +133,7 @@ SegmentPKChunkRef SegmentPKIterator::current() {
     SegmentPKChunkRef ref;
     const size_t logical_rowid_offset = _begin_rowid_offsets[_current_pk_column_idx];
     ref.physical_rowid_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(logical_rowid_offset);
+    ref.owned = std::move(_owned);
     ref.chunk = std::move(_pk_column_chunk);
     return ref;
 }

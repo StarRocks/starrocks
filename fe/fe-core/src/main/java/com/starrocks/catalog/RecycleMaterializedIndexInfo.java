@@ -33,9 +33,8 @@ import org.apache.logging.log4j.Logger;
  * touches it; the shards are reclaimed by {@code StarMgrMetaSyncer.syncTableMetaInternal}, which lists
  * every shard in the group and drops the ones not referenced by an index still on the partition. While
  * the old index is installed, {@code getAllMaterializedIndices} enumerates it, its tablets are
- * subtracted, and its shards are kept. Reads/writes never pick it: every scan/load resolves the
- * partition via {@code getLatestIndex}/{@code getLatestMaterializedIndices}, which return only the new
- * child.
+ * subtracted, and its shards are kept. Reads/writes never pick it: scans resolve through the queryable
+ * APIs and loads resolve through the writable APIs; both return only the active layout.
  *
  * <p>{@link #delete()} detaches the index from the partition (under the table write lock) and drops its
  * tablets from the {@code TabletInvertedIndex}. The next {@code StarMgrMetaSyncer} cycle then reaps the

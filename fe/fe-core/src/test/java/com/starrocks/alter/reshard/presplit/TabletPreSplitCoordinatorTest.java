@@ -61,21 +61,26 @@ public class TabletPreSplitCoordinatorTest {
 
     private boolean savedConfigInsertFromFiles;
     private boolean savedConfigBrokerLoad;
+    private boolean savedConfigMvRefresh;
     private long savedConfigReshardTargetSize;
     private int savedConfigReshardMaxSplitCount;
     private long savedConfigReshardMinSplitSize;
     private long savedConfigSampleByteLimit;
+    private long savedConfigPreSplitTargetSize;
 
     @BeforeEach
     public void setUp() {
         savedConfigInsertFromFiles = Config.enable_tablet_pre_split_for_insert_from_files;
         savedConfigBrokerLoad = Config.enable_tablet_pre_split_for_broker_load;
+        savedConfigMvRefresh = Config.enable_tablet_pre_split_for_mv_refresh;
         savedConfigReshardTargetSize = Config.tablet_reshard_target_size;
         savedConfigReshardMaxSplitCount = Config.tablet_reshard_max_split_count;
         savedConfigReshardMinSplitSize = Config.tablet_reshard_min_split_size;
         savedConfigSampleByteLimit = Config.tablet_pre_split_sample_byte_limit;
+        savedConfigPreSplitTargetSize = Config.tablet_pre_split_target_size;
         Config.enable_tablet_pre_split_for_insert_from_files = true;
         Config.enable_tablet_pre_split_for_broker_load = false;
+        Config.enable_tablet_pre_split_for_mv_refresh = false;
         // Pin tablet-count-selection inputs so the test arithmetic stays valid if defaults move.
         Config.tablet_reshard_target_size = 10L * DebugUtil.GIGABYTE;
         Config.tablet_reshard_max_split_count = 1024;
@@ -168,10 +173,12 @@ public class TabletPreSplitCoordinatorTest {
         ConnectContext.remove();
         Config.enable_tablet_pre_split_for_insert_from_files = savedConfigInsertFromFiles;
         Config.enable_tablet_pre_split_for_broker_load = savedConfigBrokerLoad;
+        Config.enable_tablet_pre_split_for_mv_refresh = savedConfigMvRefresh;
         Config.tablet_reshard_target_size = savedConfigReshardTargetSize;
         Config.tablet_reshard_max_split_count = savedConfigReshardMaxSplitCount;
         Config.tablet_reshard_min_split_size = savedConfigReshardMinSplitSize;
         Config.tablet_pre_split_sample_byte_limit = savedConfigSampleByteLimit;
+        Config.tablet_pre_split_target_size = savedConfigPreSplitTargetSize;
     }
 
     private PreSplitOutcome invokeMaybeAct() {
@@ -226,6 +233,39 @@ public class TabletPreSplitCoordinatorTest {
         PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
                 database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.BROKER_LOAD);
         assertSkipped(outcome, SkipReason.DISABLED_BY_CONFIG);
+    }
+
+    @Test
+    public void testMvRefreshCallReturnsEligibleWithOnlyMvRefreshConfigOn() {
+        // An incremental MV refresh is gated by its own flag, so operators can turn pre-split off for
+        // refreshes without giving it up for user INSERTs.
+        Config.enable_tablet_pre_split_for_insert_from_files = false;
+        Config.enable_tablet_pre_split_for_mv_refresh = true;
+
+        PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH);
+        Assertions.assertInstanceOf(PreSplitOutcome.Eligible.class, outcome);
+    }
+
+    @Test
+    public void testMvRefreshCallSkippedWhenOnlyInsertConfigOn() {
+        // And the inverse, so enabling the INSERT paths cannot silently enable MV refreshes.
+        Config.enable_tablet_pre_split_for_insert_from_files = true;
+        Config.enable_tablet_pre_split_for_mv_refresh = false;
+
+        PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH);
+        assertSkipped(outcome, SkipReason.DISABLED_BY_CONFIG);
+    }
+
+    @Test
+    public void testMvRefreshCallSkippedWhenSessionVariableOff() {
+        Config.enable_tablet_pre_split_for_mv_refresh = true;
+        ConnectContext.get().getSessionVariable().setEnableTabletPreSplit(false);
+
+        PreSplitOutcome outcome = TabletPreSplitCoordinator.maybeAct(
+                database, table, PARTITION_ID, DUMMY_CONTEXT, LoadKind.MV_REFRESH);
+        assertSkipped(outcome, SkipReason.DISABLED_BY_SESSION);
     }
 
     @Test
@@ -463,6 +503,70 @@ public class TabletPreSplitCoordinatorTest {
                 () -> TabletPreSplitCoordinator.selectTabletCount(anyEstimates, 3));
     }
 
+    // ---- selectPreSplitTabletCount / tablet_pre_split_target_size ----
+
+    private static int selectPreSplitTabletCount(long totalBytes, int activeComputeNodeCount) {
+        return TabletPreSplitCoordinator.selectPreSplitTabletCount(
+                new Estimates(totalBytes, /*totalRows*/ 0L), activeComputeNodeCount);
+    }
+
+    @Test
+    public void testPreSplitTargetSizeDefaultsToReshardTargetSize() {
+        // Zero is the default: pre-split must size exactly as it did before the config existed.
+        Config.tablet_pre_split_target_size = 0L;
+        Assertions.assertEquals(Config.tablet_reshard_target_size,
+                TabletPreSplitCoordinator.preSplitTargetSize());
+        Assertions.assertEquals(selectTabletCount(100L * DebugUtil.GIGABYTE, 3),
+                selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testPreSplitTargetSizeOverridesReshardTargetSize() {
+        Config.tablet_pre_split_target_size = DebugUtil.GIGABYTE;
+        Assertions.assertEquals(DebugUtil.GIGABYTE, TabletPreSplitCoordinator.preSplitTargetSize());
+    }
+
+    @Test
+    public void testPreSplitTargetSizeNegativeFallsBackToReshardTargetSize() {
+        // Guards the > 0 test: a negative value must not reach the sizing precondition as a
+        // "configured" override, because that would fail the load's pre-split with an
+        // IllegalStateException instead of falling back.
+        Config.tablet_pre_split_target_size = -1L;
+        Assertions.assertEquals(Config.tablet_reshard_target_size,
+                TabletPreSplitCoordinator.preSplitTargetSize());
+        Assertions.assertEquals(12, selectPreSplitTabletCount(100L * DebugUtil.GIGABYTE, 3));
+    }
+
+    @Test
+    public void testPreSplitTargetSizeUnblocksSinkParallelismForSmallPartitions() {
+        // A ~4 GB range partition on a 30-node warehouse. Under the 10 GB reshard target the
+        // byte volume asks for one tablet and the 2 GB min-split-size bound caps node alignment
+        // at two, so the clamp floor produces the minimum 2 tablets -- barely more sink
+        // parallelism than the single catch-all tablet the partition started from.
+        Assertions.assertEquals(2, selectPreSplitTabletCount(4L * DebugUtil.GIGABYTE, 30));
+
+        // Lowering only the pre-split target to 512 MB carves the same partition into 8 tablets,
+        // so the load's sink spreads over 8 backends instead of 1. tablet_reshard_target_size is
+        // untouched: the two-argument form still answers 2, and the background split/merge daemon
+        // still measures against 10 GB, so it merges these back together after the load.
+        Config.tablet_pre_split_target_size = 512L * DebugUtil.MEGABYTE;
+        Assertions.assertEquals(8, selectPreSplitTabletCount(4L * DebugUtil.GIGABYTE, 30));
+        Assertions.assertEquals(2, selectTabletCount(4L * DebugUtil.GIGABYTE, 30));
+    }
+
+    @Test
+    public void testPreSplitTargetSizeAloneOvercomesMinSplitSize() {
+        // effectiveMinSize is min(tablet_reshard_min_split_size, targetSize), so lowering the
+        // pre-split target alone is sufficient and no second knob is needed: the 2 GB
+        // min-split-size does not veto the finer split. Were it not clamped, 1900 MB would fill
+        // zero whole 2 GB tablets, node alignment would collapse to 1, and this would answer 4
+        // instead of aligning to 3 nodes for 6.
+        Config.tablet_pre_split_target_size = 512L * DebugUtil.MEGABYTE;
+        Config.tablet_reshard_min_split_size = 2L * DebugUtil.GIGABYTE;
+        Assertions.assertEquals(6, selectPreSplitTabletCount(1900L * DebugUtil.MEGABYTE, 30));
+        Assertions.assertEquals(2, selectTabletCount(1900L * DebugUtil.MEGABYTE, 30));
+    }
+
     // ---- runPreSplit pipeline orchestration ----
 
     private static final PreSplitPipeline.PreparedReshardJob FAKE_PREPARED_JOB =
@@ -506,9 +610,14 @@ public class TabletPreSplitCoordinatorTest {
     }
 
     private PreSplitOutcome invokeRunPreSplit(FakePipeline pipeline) throws PreSplitPostSubmitTimeoutException {
+        return invokeRunPreSplit(pipeline, LoadKind.INSERT_FROM_FILES);
+    }
+
+    private PreSplitOutcome invokeRunPreSplit(FakePipeline pipeline, LoadKind loadKind)
+            throws PreSplitPostSubmitTimeoutException {
         return TabletPreSplitCoordinator.runPreSplit(
                 database, table, PARTITION_ID, DUMMY_CONTEXT,
-                LoadKind.INSERT_FROM_FILES, pipeline, /*activeComputeNodeCount*/ 3);
+                loadKind, pipeline, /*activeComputeNodeCount*/ 3);
     }
 
     @Test
@@ -729,6 +838,63 @@ public class TabletPreSplitCoordinatorTest {
             assertSamplerFailedBucketIncrementsBy1(SkipReason.SUBMIT_FAILED, pipeline ->
                     pipeline.submitThrow = new StarRocksException("table state changed during submit"));
         });
+    }
+
+    @Test
+    public void testDerivedRouteRecordsAdmissionRejectionInTheEligibilityFamily() {
+        // A derived route runs no sampler, so an admission rejection must not bump
+        // tablet_pre_split_sampler_failed: that counter is read as a ratio against the
+        // sampler-invocation counter, and a failure with no matching invocation breaks it.
+        Config.enable_tablet_pre_split_for_mv_refresh = true;
+        withCoordinatorMetricsWired(ignoredHardCapCounter -> {
+            String label = SkipReason.SUBMIT_FAILED.name().toLowerCase();
+            long eligibilityBaseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(label).getValue();
+            long samplerFailedBaseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED
+                    .getMetric(label).getValue();
+
+            FakePipeline pipeline = new FakePipeline();
+            pipeline.submitThrow = new StarRocksException("table state changed during submit");
+            PreSplitOutcome outcome;
+            try {
+                outcome = invokeRunPreSplit(pipeline, LoadKind.MV_REFRESH);
+            } catch (PreSplitPostSubmitTimeoutException impossible) {
+                throw new AssertionError("post-submit timeout cannot fire on a submit failure", impossible);
+            }
+
+            assertSkipped(outcome, SkipReason.SUBMIT_FAILED);
+            Assertions.assertEquals(eligibilityBaseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "derived admission rejection belongs to the eligibility family");
+            Assertions.assertEquals(samplerFailedBaseline,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_SAMPLER_FAILED.getMetric(label).getValue().longValue(),
+                    "derived admission rejection must not bump the sampler-failed family");
+        });
+    }
+
+    @Test
+    public void testDerivedRouteSurvivesNonPositiveSampleByteLimit() throws Exception {
+        // tablet_pre_split_sample_byte_limit is mutable and SampleRequest rejects a non-positive
+        // value, so a derived route that read it would throw IllegalArgumentException before the
+        // pipeline ran -- escaping the coordinator with no skip reason recorded at all.
+        Config.enable_tablet_pre_split_for_mv_refresh = true;
+        Config.tablet_pre_split_sample_byte_limit = 0L;
+
+        FakePipeline pipeline = new FakePipeline();
+        PreSplitOutcome outcome = invokeRunPreSplit(pipeline, LoadKind.MV_REFRESH);
+
+        Assertions.assertInstanceOf(PreSplitOutcome.Finished.class, outcome);
+        Assertions.assertEquals(1, pipeline.preSubmitCalls, "the derived pipeline must still be reached");
+    }
+
+    @Test
+    public void testSampledRouteStillReadsTheSampleByteLimit() {
+        // The inverse, so the derived placeholder cannot silently start applying to sampled routes:
+        // a sampled route must keep consulting the config, invalid value and all.
+        Config.tablet_pre_split_sample_byte_limit = 0L;
+
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> invokeRunPreSplit(new FakePipeline(), LoadKind.INSERT_FROM_FILES));
     }
 
     private void assertSamplerFailedBucketIncrementsBy1(

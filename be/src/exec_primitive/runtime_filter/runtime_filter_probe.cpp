@@ -14,7 +14,6 @@
 
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 
-#include <algorithm>
 #include <sstream>
 
 #include "base/simd/simd.h"
@@ -112,15 +111,6 @@ void RuntimeFilterProbeDescriptor::close(RuntimeState* state) {
     for (auto* partition_by_expr : _partition_by_exprs_contexts) {
         partition_by_expr->close(state);
     }
-}
-
-void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, ExprContext* new_probe_expr_ctx) {
-    // close old probe expr
-    _probe_expr_ctx->close(state);
-    // create new probe expr and open it.
-    _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
-    WARN_IF_ERROR(_probe_expr_ctx->prepare(state), "prepare probe expr failed");
-    WARN_IF_ERROR(_probe_expr_ctx->open(state), "open probe expr failed");
 }
 
 std::string RuntimeFilterProbeDescriptor::debug_string() const {
@@ -500,49 +490,6 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
     }
     if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
-    }
-}
-
-static bool contains_dict_mapping_expr(Expr* expr) {
-    if (expr->is_dictmapping_expr()) {
-        return true;
-    }
-
-    return std::any_of(expr->children().begin(), expr->children().end(),
-                       [](Expr* child) { return contains_dict_mapping_expr(child); });
-}
-
-static bool contains_dict_mapping_expr(RuntimeFilterProbeDescriptor* probe_desc) {
-    auto* probe_expr_ctx = probe_desc->probe_expr_ctx();
-    if (probe_expr_ctx == nullptr) {
-        return false;
-    }
-    return contains_dict_mapping_expr(probe_expr_ctx->root());
-}
-
-void RuntimeFilterProbeCollector::push_down(const RuntimeState* state, TPlanNodeId target_plan_node_id,
-                                            RuntimeFilterProbeCollector* parent, const std::vector<TupleId>& tuple_ids,
-                                            std::set<TPlanNodeId>& local_rf_waiting_set) {
-    if (this == parent) return;
-    auto iter = parent->_descriptors.begin();
-    while (iter != parent->_descriptors.end()) {
-        RuntimeFilterProbeDescriptor* desc = iter->second;
-        if (!desc->can_push_down_runtime_filter()) {
-            ++iter;
-            continue;
-        }
-        if (desc->is_bound(tuple_ids) &&
-            !(state->broadcast_join_right_offsprings().contains(target_plan_node_id) &&
-              state->non_broadcast_rf_ids().contains(desc->filter_id())) &&
-            !contains_dict_mapping_expr(desc)) {
-            add_descriptor(desc);
-            if (desc->is_local()) {
-                local_rf_waiting_set.insert(desc->build_plan_node_id());
-            }
-            iter = parent->_descriptors.erase(iter);
-        } else {
-            ++iter;
-        }
     }
 }
 

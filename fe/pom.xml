@@ -71,7 +71,7 @@ under the License.
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.76.0</grpc.version>
-        <io.netty.version>4.1.136.Final</io.netty.version>
+        <io.netty.version>4.1.137.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -82,7 +82,7 @@ under the License.
         <fluss.version>0.9.1-incubating</fluss.version>
         <delta-kernel.version>4.3.0</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>4.2-rc3</staros.version>
+        <staros.version>4.2-rc4</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>

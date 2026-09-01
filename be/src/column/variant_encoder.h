@@ -92,6 +92,10 @@ public:
     // then encode the value referencing that metadata.
     static StatusOr<VariantRowValue> encode_datum(const Datum& datum, const TypeDescriptor& type);
 
+    // Convert a supported MAP key to the canonical object-field representation used
+    // by both metadata collection and value encoding.
+    static std::string map_key_to_string(TypeInfo* type_info, const Datum& datum);
+
     // Encode a VelocyPack (VPack) slice into a VariantRowValue.
     //
     // Why: VPack is StarRocks' internal binary JSON representation. JSON values

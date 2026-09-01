@@ -15,31 +15,45 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * {@link ScanContext} concrete for the INSERT-from-OLAP-table integration.
- * Carries the source {@link OlapTable} reference so the sampler can obtain its
- * data-size estimate and the pre-quoted FROM clause SQL, plus the full target-&gt;source
+ * {@link ScanContext} concrete for the INSERT-from-table integration.
+ * Carries the source {@link Table} reference, source snapshot estimates, and the
+ * pre-quoted FROM clause SQL, plus the full target-&gt;source
  * column-name map the sampler uses to project any index's sort key (base or rollup) and
  * the partition columns by their source-table column names. The optional WHERE predicate
  * SQL is threaded through verbatim from the INSERT-SELECT statement so the sample covers
  * only the rows the load will actually write.
  */
 public record InsertFromTableScanContext(
-        OlapTable sourceTable,
+        Table sourceTable,
         String sourceFromSql,                       // "`db`.`tbl` `alias`" or "`db`.`tbl`"
         Map<String, String> targetToSourceColumnNames,   // directly mapped lower-cased target name -> source name
         String wherePredicateSql,                   // nullable
-        ComputeResource computeResource) implements ScanContext {
+        ComputeResource computeResource,
+        long sourceTotalBytes,
+        long sourceTotalRows) implements ScanContext {
 
     public InsertFromTableScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(sourceFromSql, "sourceFromSql");
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(computeResource, "computeResource");
+        if (sourceTotalBytes < 0 || sourceTotalRows < 0) {
+            throw new IllegalArgumentException("source estimates must be non-negative");
+        }
+    }
+
+    /** Backward-compatible constructor for the original internal-OLAP source path and its tests. */
+    public InsertFromTableScanContext(
+            OlapTable sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
+            String wherePredicateSql, ComputeResource computeResource) {
+        this(sourceTable, sourceFromSql, targetToSourceColumnNames, wherePredicateSql, computeResource,
+                Math.max(0L, sourceTable.getDataSize()), Math.max(0L, sourceTable.getRowCount()));
     }
 }

@@ -32,6 +32,7 @@ import java.util.Set;
 public class PushDownLimitDirectRule extends TransformationRule {
     private static final Set<OperatorType> SUPPORTED_OPERATOR = Set.of(
             OperatorType.LOGICAL_PROJECT,
+            OperatorType.LOGICAL_AI_PROJECT,
             OperatorType.LOGICAL_ASSERT_ONE_ROW,
             OperatorType.LOGICAL_CTE_CONSUME
     );

@@ -31,6 +31,14 @@ SHOW SNAPSHOT ON <repo_name>
 | Status     | Displays `OK` if the snapshot is okay. Displays error message if the snapshot is not okay. |
 | Database   | Name of the database that the snapshot belongs to.           |
 | Details    | JSON-formatted directory and structure of the snapshot.      |
+| ClusterId  | ID of the cluster that created the snapshot. Supported from v4.2.0 onwards. |
+| FinishTime | Time at which the backup finished. Supported from v4.2.0 onwards. |
+| TTL        | Retention of the snapshot, as set by the `ttl` property of [BACKUP](./BACKUP.md). Supported from v4.2.0 onwards. |
+| ExpireTime | Time at which the snapshot expires and becomes eligible for automatic cleanup. Supported from v4.2.0 onwards. |
+
+`ClusterId`, `FinishTime`, `TTL` and `ExpireTime` are read from the snapshot itself. All four are `NULL` when the snapshot metadata cannot be read, which is the case for a snapshot created before v4.2.0, for a backup that is still running, and for one that was interrupted. `TTL` and `ExpireTime` are also `NULL` for a snapshot that is kept forever.
+
+`Timestamp` is when the backup started and is what names the snapshot; `FinishTime` is when it wrapped up, and is the point `ExpireTime` was measured from.
 
 ## Example
 

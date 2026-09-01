@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -93,6 +94,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergFileContent;
@@ -142,6 +144,7 @@ import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Evaluator;
 import org.apache.iceberg.expressions.Expression;
@@ -757,7 +760,23 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void dropTable(ConnectContext context, DropTableStmt stmt) {
-        Table icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+        Table icebergTable;
+        try {
+            icebergTable = getTable(new ConnectContext(), stmt.getDbName(), stmt.getTableName());
+        } catch (StarRocksConnectorException | NotFoundException e) {
+            if (!isMetadataFileMissing(e) || !isTableMetadataMissing(stmt.getDbName(), stmt.getTableName())) {
+                throw e;
+            }
+            // Iceberg tolerates this on drop: HiveCatalog#dropTable still removes the catalog entry when the
+            // metadata cannot be read. Never purge here, the table's files are unknown without its metadata.
+            LOG.warn("Metadata of iceberg table {}.{} is missing, only dropping the catalog entry",
+                    stmt.getDbName(), stmt.getTableName(), e);
+            icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), false);
+            tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
+            dropNameKeyedStatistics(stmt.getDbName(), stmt.getTableName());
+            asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+            return;
+        }
 
         if (icebergTable != null && icebergTable.isIcebergView()) {
             icebergCatalog.dropView(context, stmt.getDbName(), stmt.getTableName());
@@ -772,6 +791,51 @@ public class IcebergMetadata implements ConnectorMetadata {
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
+    }
+
+    /**
+     * Iceberg raises {@link NotFoundException} only for a file that is really absent, so an unreadable one
+     * (permission, connectivity) keeps propagating: that table's metadata may be intact and dropping its entry
+     * would orphan the data. The cause chain is walked because {@link CachingIcebergCatalog#getTable} wraps
+     * load failures into a {@link StarRocksConnectorException}.
+     */
+    private static boolean isMetadataFileMissing(Throwable throwable) {
+        return Throwables.getCausalChain(throwable).stream().anyMatch(t -> t instanceof NotFoundException);
+    }
+
+    /**
+     * {@link #getTable} also analyzes the table properties, which loads the tables a foreign key constraint
+     * refers to ({@link PropertyAnalyzer#analyzeForeignKeyConstraint}). Confirm the missing file is this
+     * table's own, or a healthy table would lose its catalog entry over a broken neighbour.
+     */
+    private boolean isTableMetadataMissing(String dbName, String tableName) {
+        try {
+            icebergCatalog.getTable(new ConnectContext(), dbName, tableName);
+            return false;
+        } catch (Exception e) {
+            return isMetadataFileMissing(e);
+        }
+    }
+
+    /**
+     * Drops what is reachable by name, so that a table recreated under this name does not inherit a broken
+     * table's leftovers. Data goes with the metadata describing it:
+     * {@link AnalyzeMgr#clearStatisticFromExternalDroppedTable} finds leftovers through the basic stats
+     * metadata, so dropping that alone would strand the rows for good. The rest is keyed by the table UUID,
+     * unreachable without the missing metadata and never mistaken for a recreated table's own statistics.
+     */
+    private void dropNameKeyedStatistics(String dbName, String tableName) {
+        IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
+        if (catalogType == IcebergCatalogType.HIVE_CATALOG || catalogType == IcebergCatalogType.GLUE_CATALOG) {
+            // getTable() lower cases the names of these catalogs before the statistics get keyed by them
+            dbName = dbName.toLowerCase();
+            tableName = tableName.toLowerCase();
+        }
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        analyzeMgr.dropExternalBasicStatsMetaAndData(catalogName, dbName, tableName);
+        analyzeMgr.dropExternalHistogramStatsMetaAndData(catalogName, dbName, tableName);
+        analyzeMgr.dropAnalyzeJob(catalogName, dbName, tableName);
     }
 
     public void updateTableProperty(Database db, IcebergTable icebergTable) {
@@ -2978,7 +3042,22 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (isRewrite && extra != null) {
             ((IcebergSinkExtra) extra).getScannedDataFiles().forEach(batchWrite::deleteFile);
             ((IcebergSinkExtra) extra).getAppliedDeleteFiles().forEach(batchWrite::deleteFile);
-            ((RewriteData) batchWrite).setSnapshotId(nativeTbl.currentSnapshot().snapshotId());
+            // Validate from the snapshot the rewrite planned against, not the one current at
+            // commit time. RewriteFiles checks for row-level deletes added to the files being
+            // replaced over the range (startingSnapshot, current]; passing the commit-time
+            // snapshot makes that range empty, so a DELETE/UPDATE that landed while the rewrite
+            // was running is never seen. Replacing its data files then strands the position
+            // deletes on paths no longer in the table, silently resurrecting deleted rows.
+            Long baseSnapshotId = ((IcebergSinkExtra) extra).getBaseSnapshotId();
+            if (baseSnapshotId == null) {
+                Snapshot currentSnapshot = nativeTbl.currentSnapshot();
+                if (currentSnapshot != null) {
+                    baseSnapshotId = currentSnapshot.snapshotId();
+                }
+            }
+            if (baseSnapshotId != null) {
+                ((RewriteData) batchWrite).setSnapshotId(baseSnapshotId);
+            }
         }
 
         // Set audit info for the commit

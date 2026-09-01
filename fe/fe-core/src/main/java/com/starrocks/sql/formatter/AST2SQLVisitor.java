@@ -238,7 +238,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                     if (!item.getExcludedColumns().isEmpty()) {
                         tmp += " EXCLUDE ( ";
                         tmp += item.getExcludedColumns().stream()
-                                .map(col -> "\"" + col + "\"")
+                                .map(ParseUtil::backquote)
                                 .collect(Collectors.joining(","));
                         tmp += " ) ";
                     }

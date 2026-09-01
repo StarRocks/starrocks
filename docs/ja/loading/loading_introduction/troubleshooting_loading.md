@@ -200,6 +200,41 @@ Load Profiles を分析するには、[ANALYZE PROFILE](../../sql-reference/sql-
 
 プロファイルは詳細なオペレーターメトリクスを提供します。主要なコンポーネントには `OlapTableSink` オペレーターと `LoadChannel` オペレーターが含まれます。
 
+#### PreSplit ノード
+
+StarRocks が INSERT、Broker Load、または増分マテリアライズドビューのリフレッシュで Range 分散ターゲットの事前分割を試行すると、トップレベルの Load Profile に `PreSplit` ノードが含まれます。ロードで事前分割が試行されなかった場合、このノードは出力されません。
+
+このノードには、次の時間メトリクスが含まれます。
+
+| メトリック | 説明 |
+| ---------- | ---- |
+| TotalTime | ロード内のすべての事前分割試行に費やされた合計実時間。 |
+| SourceSamplingTime | ソースサンプルまたはファイルメタデータの読み取りに費やされた時間。`derived_tier` では `0` です。 |
+| PartitionAndBoundaryPlanningTime | サンプル行をターゲットパーティション別にグループ化し、分割境界を計画するために費やされた時間。 |
+| JobSubmissionTime | 計画された Tablet reshard ジョブの登録に費やされた時間。 |
+| ReshardWaitTime | ロードを続行する前に、送信済み reshard ジョブが終端状態に到達するまで待機した時間。 |
+
+このノードには、次のカウンターも含まれます。
+
+| カウンター | 説明 |
+| ---------- | ---- |
+| Attempts | ターゲットテーブルに対する事前分割の試行回数。 |
+| SampleRows | Data tier のサンプリングで保持された行数。Metadata tier と derived tier の試行では加算されません。 |
+| EstimatedInputBytes | 各試行におけるソースデータの推定バイト数。同じターゲットテーブルの試行内でインデックスごとに重複する推定値は一度だけ数えられます。 |
+| TargetPartitions | 事前分割の対象として選択されたパーティション数。 |
+| BoundariesPlanned | ターゲットパーティションおよびインデックスに対して計画された分割境界の総数。 |
+
+次の情報文字列によって実行パスを識別できます。
+
+| フィールド | 説明 |
+| ---------- | ---- |
+| LoadKinds | 事前分割を試行したロードパス。例：`INSERT-from-FILES`、`INSERT-from-table`、`Broker Load`、`incremental MV refresh`。 |
+| Tables | 事前分割を試行したターゲットテーブル。 |
+| SourceTiers | 試行された境界ソースの tier：`meta_tier`、`data_tier`、`derived_tier`。複数の値はフォールバックまたは複数テーブルの試行を示します。 |
+| Outcomes | 事前分割中に確認された送信、完了、フォールバック、またはスキップの結果。 |
+| SampleQueryIds | Data tier の内部サンプリングクエリの Query ID。 |
+| ReshardJobIds | 送信された Tablet reshard ジョブの ID。 |
+
 #### OlapTableSink オペレーター
 
 | メトリック            | 説明                                                  |

@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.DnsCache;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -44,7 +45,15 @@ public class DictionaryCacheSink extends DataSink {
     private final long txnId;
 
     public DictionaryCacheSink(List<TNetworkAddress> nodes, Dictionary dictionary, long txnId) {
-        this.nodes = nodes;
+        // Resolve here, at the boundary where the node list crosses over to a BE. The BE turns every
+        // entry into a stub via HttpBrpcStubCache::get_http_stub(), whose cache is keyed by the resolved
+        // EndPoint -- so a hostname costs one uncached getaddrinfo per node per refresh, since the BE has
+        // no DNS cache of its own. Doing it here rather than in the caller keeps the shared node-list
+        // helper single-behavior: FE-originated RPC and the hostname SHOW DICTIONARY prints stay untouched.
+        // DnsCache passes IP literals through unchanged and falls back to the hostname on failure.
+        this.nodes = nodes.stream()
+                .map(node -> new TNetworkAddress(DnsCache.tryLookup(node.getHostname()), node.getPort()))
+                .collect(Collectors.toList());
         this.dictionary = dictionary;
         this.txnId = txnId;
     }

@@ -402,4 +402,43 @@ TEST_F(KeyCoderTest, test_boolean_roundtrip) {
     }
 }
 
+template <LogicalType type>
+void check_full_encode_size() {
+    const KeyCoder* key_coder = get_key_coder(type);
+    ASSERT_NE(nullptr, key_coder) << "no coder registered for type " << type;
+    using CppType = StorageCppType<type>;
+    CppType value{};
+    std::string buf;
+    key_coder->full_encode_ascending(&value, &buf);
+    EXPECT_EQ(buf.size(), key_coder->full_encode_size()) << "width mismatch for type " << type;
+}
+
+// full_encode_size() must equal the number of bytes full_encode_ascending() actually appends, for
+// every fixed-width type registered in KeyCoderResolver (key_coder.cpp:47-67). Callers that need an
+// encoded key's size without paying to encode it -- the sort key size guard -- rely on this, so any
+// drift between a traits' encoder and its declared width would silently miscount.
+TEST_F(KeyCoderTest, full_encode_size_matches_encoder_output) {
+    check_full_encode_size<TYPE_BOOLEAN>();
+    check_full_encode_size<TYPE_TINYINT>();
+    check_full_encode_size<TYPE_SMALLINT>();
+    check_full_encode_size<TYPE_INT>();
+    check_full_encode_size<TYPE_UNSIGNED_INT>();
+    check_full_encode_size<TYPE_BIGINT>();
+    check_full_encode_size<TYPE_UNSIGNED_BIGINT>();
+    check_full_encode_size<TYPE_LARGEINT>();
+    check_full_encode_size<TYPE_INT256>();
+    check_full_encode_size<TYPE_DATE_V1>();
+    check_full_encode_size<TYPE_DATE>();
+    check_full_encode_size<TYPE_DATETIME_V1>();
+    check_full_encode_size<TYPE_DATETIME>();
+    check_full_encode_size<TYPE_DECIMAL>();
+    check_full_encode_size<TYPE_DECIMALV2>();
+
+    // Variable-length types report 0: their encoded length depends on the value, so callers must
+    // measure the value rather than consult a fixed width.
+    EXPECT_EQ(0u, get_key_coder(TYPE_CHAR)->full_encode_size());
+    EXPECT_EQ(0u, get_key_coder(TYPE_VARCHAR)->full_encode_size());
+    EXPECT_EQ(0u, get_key_coder(TYPE_VARBINARY)->full_encode_size());
+}
+
 } // namespace starrocks

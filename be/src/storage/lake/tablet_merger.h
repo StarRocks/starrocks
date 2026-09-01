@@ -24,9 +24,14 @@ namespace starrocks::lake {
 
 class TabletManager;
 
+// |skip_sstable_merge| drops the primary-index sstable merge from the result. Only pass true for a
+// read-only alias such as the query-side parent an ORDER BY != PK split keeps alive: rewriting the
+// inherited multi-rssid sstables costs a parse+remap+reserialize of every index entry, and nothing
+// that reads such an alias consults the persistent index -- scans need rowsets and delvecs only,
+// while upserts go to the writable child layout. A real MERGE must never set it.
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                                 const std::vector<TabletMetadataPtr>& old_tablet_metadatas,
                                                 const MergingTabletInfoPB& merging_tablet, int64_t new_version,
-                                                const TxnInfoPB& txn_info);
+                                                const TxnInfoPB& txn_info, bool skip_sstable_merge = false);
 
 } // namespace starrocks::lake

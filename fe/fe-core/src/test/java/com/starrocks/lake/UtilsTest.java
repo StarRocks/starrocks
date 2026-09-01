@@ -15,18 +15,32 @@
 
 package com.starrocks.lake;
 
+import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.PublishTabletsInfo;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.DnsCache;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.PublishVersionRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 public class UtilsTest {
 
@@ -91,5 +105,100 @@ public class UtilsTest {
         // pass a right tBackend
         Assertions.assertEquals(10001L, Utils.getWarehouseIdByNodeId(systemInfo, 10001).get().longValue());
         Assertions.assertEquals(10002L, Utils.getWarehouseIdByNodeId(systemInfo, 10002).get().longValue());
+    }
+
+    private static TxnInfoPB txn(long id, boolean unshare) {
+        TxnInfoPB info = new TxnInfoPB();
+        info.txnId = id;
+        info.unshareCompaction = unshare;
+        return info;
+    }
+
+    private static PublishVersionRequest req(TxnInfoPB... txnInfos) {
+        PublishVersionRequest request = new PublishVersionRequest();
+        request.setTxnInfos(List.of(txnInfos));
+        return request;
+    }
+
+    /**
+     * The UNSHARE publish retires a split's parent view, so it must not be handed parent metadata to
+     * build. aggregatePublishWithCarryForward fills one request from two batches that share a single
+     * parentTabletPublishInfos list, and the carry-forward batch's synthetic TXN_EMPTY infos do not
+     * repeat the marker -- so the answer has to come from the whole request, not one batch.
+     */
+    @Test
+    public void testUnshareMarkerIsReadAcrossEveryBatchInTheRequest() {
+        TxnInfoPB unshare = txn(1001L, true);
+        TxnInfoPB ordinary = txn(1002L, false);
+        // A carry-forward batch as PublishVersionDaemon builds it: no marker of its own.
+        TxnInfoPB carryForward = txn(-1L, false);
+
+        Assertions.assertFalse(Utils.publishesUnshareCompaction(List.of(ordinary), List.of(req(ordinary))),
+                "an ordinary publish still gets its parent metadata");
+        Assertions.assertTrue(Utils.publishesUnshareCompaction(List.of(unshare), List.of(req(unshare))),
+                "the batch carrying the marker is an unshare publish");
+        Assertions.assertTrue(
+                Utils.publishesUnshareCompaction(List.of(carryForward), List.of(req(carryForward), req(unshare))),
+                "the carry-forward batch must not re-attach the parent view the first batch withheld");
+
+        Assertions.assertFalse(Utils.publishesUnshareCompaction(null, null),
+                "an empty request publishes no unshare compaction");
+    }
+
+    // The aggregator turns every ComputeNodePB into a brpc stub via
+    // LakeServiceBrpcStubCache::get_stub(), which has to resolve the host before it can look up its
+    // (EndPoint-keyed) cache. Shipping a hostname there therefore costs one uncached getaddrinfo per
+    // sub-request per publish on the CN. Pin that FE sends the resolved IP instead.
+    @Test
+    public void testAggregatePublishSubRequestCarriesResolvedIp() throws Exception {
+        ComputeNode node = new ComputeNode(1001L, "cn-0.starrocks-cn-search.svc.cluster.local", 9040);
+        node.setBrpcPort(9050);
+
+        PublishTabletsInfo tabletsInfo = new PublishTabletsInfo();
+        tabletsInfo.addTabletId(101L);
+
+        new MockUp<DnsCache>() {
+            @Mock
+            public String tryLookup(String hostname) {
+                return "cn-0.starrocks-cn-search.svc.cluster.local".equals(hostname) ? "10.0.0.7" : hostname;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return new WarehouseManager();
+            }
+        };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public Map<ComputeNode, PublishTabletsInfo> processTablets(List<Tablet> tablets,
+                                                                      ComputeResource computeResource,
+                                                                      WarehouseManager warehouseManager,
+                                                                      List<Long> rebuildPindexTabletIds,
+                                                                      long baseVersion, long newVersion)
+                    throws NoAliveBackendException {
+                return Collections.singletonMap(node, tabletsInfo);
+            }
+        };
+
+        AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
+        Utils.createSubRequestForAggregatePublish(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()),
+                1L, 2L, null, WarehouseManager.DEFAULT_RESOURCE, request);
+
+        Assertions.assertEquals(1, request.getComputeNodes().size());
+        Assertions.assertEquals("10.0.0.7", request.getComputeNodes().get(0).getHost());
+        Assertions.assertEquals(9050, (int) request.getComputeNodes().get(0).getBrpcPort());
+        // The node id must still be the real id: FE matches PBs back to ComputeNode objects by id
+        // when choosing an aggregator.
+        Assertions.assertEquals(1001L, (long) request.getComputeNodes().get(0).getId());
     }
 }

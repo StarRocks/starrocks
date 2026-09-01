@@ -460,7 +460,7 @@ public class AggregationNode extends PlanNode implements RuntimeFilterBuildNode 
         Function<Expr, Boolean> couldBoundChecker = couldBound(description, descTbl);
         return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
                 candidatesOfSlotExpr(probeExpr, couldBoundChecker),
-                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr()), 0, true);
+                partitionByExprs, candidatesOfSlotExprs(partitionByExprs, couldBoundForPartitionExpr(descTbl)), 0, true);
     }
 
     @Override

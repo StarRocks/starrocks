@@ -24,6 +24,11 @@
 #include <vector>
 
 #include "base/types/int256.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "common/config_rowset_fwd.h"
+#include "storage/non_retryable_load_errors.h"
 #include "storage/seek_tuple.h"
 
 namespace starrocks {
@@ -38,6 +43,48 @@ FieldPtr make_field(ColumnId id, LogicalType type, bool nullable, int precision 
 
 std::string slice_to_string(const Slice& s) {
     return std::string(s.data, s.size);
+}
+
+ChunkUniquePtr make_chunk(const Schema& schema, const std::vector<std::vector<Datum>>& rows) {
+    auto chunk = ChunkFactory::new_chunk(schema, rows.size());
+    auto cols = chunk->columns();
+    for (const auto& row : rows) {
+        for (size_t c = 0; c < row.size(); ++c) {
+            cols[c]->as_mutable_ptr()->append_datum(row[c]);
+        }
+    }
+    return chunk;
+}
+
+// The encoded size of one row, obtained from the real encoder.
+size_t real_encoded_size(const Schema& schema, const std::vector<ColumnId>& idxes, const Chunk& chunk, size_t row) {
+    std::vector<Datum> values;
+    values.reserve(chunk.num_columns());
+    for (size_t c = 0; c < chunk.num_columns(); ++c) {
+        values.emplace_back(chunk.get_column_by_index(c)->get(row));
+    }
+    SeekTuple tuple(schema, values);
+    return tuple.full_sort_key_encode(idxes, 0).size();
+}
+
+// full_sort_key_exceed_limit() must agree with the real encoder at every threshold around the true
+// maximum, so an off-by-one in either implementation fails.
+void expect_agrees(const Schema& schema, const std::vector<ColumnId>& idxes, const Chunk& chunk) {
+    size_t max_size = 0;
+    for (size_t r = 0; r < chunk.num_rows(); ++r) {
+        max_size = std::max(max_size, real_encoded_size(schema, idxes, chunk, r));
+    }
+    ASSERT_GT(max_size, 0u);
+    for (size_t limit : {max_size - 1, max_size, max_size + 1}) {
+        EXPECT_EQ(max_size > limit, full_sort_key_exceed_limit(schema, idxes, chunk, 0, chunk.num_rows(), limit))
+                << "limit=" << limit << " true max=" << max_size;
+    }
+}
+
+Datum null_datum() {
+    Datum d;
+    d.set_null();
+    return d;
 }
 
 } // namespace
@@ -467,6 +514,158 @@ TEST_F(FullSortKeyCodecTest, SeededRandomOrderAndRoundTripFuzz) {
         EXPECT_EQ(v1, out1[0].value().get_int64());
         EXPECT_EQ(v2, out2[0].value().get_int64());
     }
+}
+
+// ---------------------------------------------------------------------------
+// full_sort_key_exceed_limit() sizes a row's encoded sort key without encoding it. It must match
+// SeekTuple::full_sort_key_encode byte for byte; any drift silently changes which loads are rejected.
+// ---------------------------------------------------------------------------
+TEST_F(FullSortKeyCodecTest, ExceedLimitAgreesWithEncoderFixedNonNullable) {
+    // All fixed and non-nullable: every row has the same size, which is the O(1) whole-chunk path.
+    Fields fields = {make_field(0, TYPE_INT, false), make_field(1, TYPE_BIGINT, false)};
+    Schema schema(fields);
+    auto chunk = make_chunk(schema,
+                            {{Datum(int32_t(1)), Datum(int64_t(2))}, {Datum(int32_t(-7)), Datum(int64_t(1LL << 40))}});
+    expect_agrees(schema, {0, 1}, *chunk);
+}
+
+TEST_F(FullSortKeyCodecTest, ExceedLimitAgreesWithEncoderNullableFixed) {
+    // A nullable fixed column contributes only its marker byte when NULL, so per-row sizes differ and
+    // the O(1) path must not be taken.
+    Fields fields = {make_field(0, TYPE_INT, true), make_field(1, TYPE_BIGINT, true)};
+    Schema schema(fields);
+    // No row has every nullable column populated, so the true maximum is strictly below the
+    // all-non-null size. A shortcut that ignored nullability would compute that larger size and
+    // disagree here, where one that only checked a fully-populated row would not notice.
+    auto chunk = make_chunk(
+            schema,
+            {{null_datum(), Datum(int64_t(2))}, {Datum(int32_t(1)), null_datum()}, {null_datum(), null_datum()}});
+    expect_agrees(schema, {0, 1}, *chunk);
+    // Every single-row range is also checked at its own exact boundary.
+    for (size_t r = 0; r < chunk->num_rows(); ++r) {
+        size_t exact = real_encoded_size(schema, {0, 1}, *chunk, r);
+        EXPECT_FALSE(full_sort_key_exceed_limit(schema, {0, 1}, *chunk, r, 1, exact));
+        EXPECT_TRUE(full_sort_key_exceed_limit(schema, {0, 1}, *chunk, r, 1, exact - 1));
+    }
+}
+
+TEST_F(FullSortKeyCodecTest, ExceedLimitAgreesWithEncoderStringsAndNulls) {
+    std::string embedded("a\0b\0c", 5); // embedded 0x00, escaped only when the column is not last
+    std::string char_padded(6, '\0');
+    std::memcpy(char_padded.data(), "ab", 2); // CHAR with writer-side NUL padding
+    Fields fields = {make_field(0, TYPE_VARCHAR, true), make_field(1, TYPE_CHAR, false),
+                     make_field(2, TYPE_VARBINARY, false)};
+    Schema schema(fields);
+    auto chunk = make_chunk(schema, {{Datum(Slice(embedded)), Datum(Slice(char_padded)), Datum(Slice(embedded))},
+                                     {null_datum(), Datum(Slice(char_padded)), Datum(Slice(embedded))},
+                                     {Datum(Slice("")), Datum(Slice(char_padded)), Datum(Slice(""))}});
+    // Every ordering: each column takes a turn as the last one, where escaping is skipped.
+    expect_agrees(schema, {0, 1, 2}, *chunk);
+    expect_agrees(schema, {2, 1, 0}, *chunk);
+    expect_agrees(schema, {1, 0, 2}, *chunk);
+    expect_agrees(schema, {0}, *chunk);
+    expect_agrees(schema, {2}, *chunk);
+}
+
+TEST_F(FullSortKeyCodecTest, ExceedLimitAgreesWithEncoderWideScalarTypes) {
+    Fields fields = {make_field(0, TYPE_LARGEINT, true), make_field(1, TYPE_DECIMAL128, false, 38, 9),
+                     make_field(2, TYPE_DATE, false), make_field(3, TYPE_VARCHAR, false)};
+    Schema schema(fields);
+    auto chunk = make_chunk(
+            schema,
+            {{Datum(int128_t(-1)), Datum(int128_t(123)), Datum(DateValue::create(2026, 8, 7)), Datum(Slice("tail"))},
+             {null_datum(), Datum(int128_t(0)), Datum(DateValue::create(1970, 1, 1)), Datum(Slice(""))}});
+    expect_agrees(schema, {0, 1, 2, 3}, *chunk);
+    expect_agrees(schema, {3, 2, 1, 0}, *chunk);
+}
+
+// The encoded size depends on column ORDER, so neither ordering bounds the other. This is why a
+// writer that indexes a different column order than the one validated at admission needs its own
+// check. Values from the design's worked example.
+TEST_F(FullSortKeyCodecTest, EncodedSizeIsOrderSensitive) {
+    std::string x("x");
+    std::string nuls(59, '\0');
+    Fields fields = {make_field(0, TYPE_VARCHAR, false), make_field(1, TYPE_VARCHAR, false)};
+    Schema schema(fields);
+    auto chunk = make_chunk(schema, {{Datum(Slice(x)), Datum(Slice(nuls))}});
+
+    // [c0, c1]: c0 is not last -> 1 + 1 + 0 NULs + 2; c1 is last -> 1 + 59, appended unescaped.
+    EXPECT_EQ(64u, real_encoded_size(schema, {0, 1}, *chunk, 0));
+    // [c1, c0]: c1 is not last -> 1 + 59 + 59 escaped NULs + 2; c0 is last -> 1 + 1.
+    EXPECT_EQ(123u, real_encoded_size(schema, {1, 0}, *chunk, 0));
+
+    expect_agrees(schema, {0, 1}, *chunk);
+    expect_agrees(schema, {1, 0}, *chunk);
+
+    // A limit between the two admits one ordering and rejects the other.
+    EXPECT_FALSE(full_sort_key_exceed_limit(schema, {0, 1}, *chunk, 0, 1, 64));
+    EXPECT_TRUE(full_sort_key_exceed_limit(schema, {1, 0}, *chunk, 0, 1, 64));
+}
+
+// ---------------------------------------------------------------------------
+// check_sort_key_size() wraps the size test with the gate every caller shares, so that no call site
+// can get the gate wrong. It is a no-op when no full sort key index could exist for the schema, or
+// when the limit is not positive -- but it deliberately does NOT consult enable_full_sort_key_index,
+// because admission and the segment writer would otherwise sample that mutable flag at different
+// moments and could disagree.
+// ---------------------------------------------------------------------------
+TEST_F(FullSortKeyCodecTest, CheckSortKeySizeGate) {
+    const int32_t saved_limit = config::sort_key_limit_size;
+    const bool saved_flag = config::enable_full_sort_key_index;
+    DeferOp restore([&] {
+        config::sort_key_limit_size = saved_limit;
+        config::enable_full_sort_key_index = saved_flag;
+    });
+
+    std::string wide(200, 'w');
+    Fields fields = {make_field(0, TYPE_VARCHAR, false), make_field(1, TYPE_INT, false)};
+    Schema schema(fields);
+    auto chunk = make_chunk(schema, {{Datum(Slice(wide)), Datum(int32_t(1))}});
+    const std::vector<ColumnId> idxes = {0, 1};
+    const size_t rows = chunk->num_rows();
+
+    config::sort_key_limit_size = 8;
+    config::enable_full_sort_key_index = true;
+    EXPECT_FALSE(check_sort_key_size(schema, idxes, *chunk, 0, rows).ok());
+
+    // An empty sort key means no index and nothing to bound.
+    EXPECT_TRUE(check_sort_key_size(schema, {}, *chunk, 0, rows).ok());
+
+    // The feature flag must not gate the check.
+    config::enable_full_sort_key_index = false;
+    EXPECT_FALSE(check_sort_key_size(schema, idxes, *chunk, 0, rows).ok());
+    config::enable_full_sort_key_index = true;
+
+    // A non-positive limit disables the guard, and a negative one must not become a huge size_t.
+    for (int32_t disabled : {0, -1}) {
+        config::sort_key_limit_size = disabled;
+        EXPECT_TRUE(check_sort_key_size(schema, idxes, *chunk, 0, rows).ok());
+    }
+
+    // A sort key that cannot be encoded produces no index, so there is nothing to bound.
+    config::sort_key_limit_size = 8;
+    Fields float_fields = {make_field(0, TYPE_FLOAT, false), make_field(1, TYPE_VARCHAR, false)};
+    Schema float_schema(float_fields);
+    auto float_chunk = make_chunk(float_schema, {{Datum(float(1.5)), Datum(Slice(wide))}});
+    EXPECT_TRUE(check_sort_key_size(float_schema, {0, 1}, *float_chunk, 0, float_chunk->num_rows()).ok());
+}
+
+TEST_F(FullSortKeyCodecTest, CheckSortKeySizeMessageIsNonRetryable) {
+    const int32_t saved_limit = config::sort_key_limit_size;
+    DeferOp restore([&] { config::sort_key_limit_size = saved_limit; });
+    config::sort_key_limit_size = 8;
+
+    std::string wide(200, 'w');
+    Fields fields = {make_field(0, TYPE_VARCHAR, false)};
+    Schema schema(fields);
+    auto chunk = make_chunk(schema, {{Datum(Slice(wide))}});
+
+    auto st = check_sort_key_size(schema, {0}, *chunk, 0, chunk->num_rows());
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(is_non_retryable_load_error(st.message()))
+            << "rejection must be non-retryable, got: " << st.to_string();
+    // The message names the config so an operator can act on it.
+    EXPECT_NE(std::string::npos, st.to_string().find("sort_key_limit_size"));
 }
 
 } // namespace starrocks

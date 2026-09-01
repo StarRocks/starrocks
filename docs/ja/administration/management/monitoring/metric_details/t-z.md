@@ -16,6 +16,71 @@ description: "Alphabetical t - z"
 - 単位: -
 - 説明: このBE内のタブレットの最高累積コンパクションスコア。
 
+## `tablet_merge_sstable_fallback_cohort_mismatch_total`
+
+- 単位: カウント
+- 説明: ソース SST コホートの数、順序、またはセマンティックメタデータが一致せず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
+
+- 単位: カウント
+- 説明: 候補 SST コホートに物理 SST ファイル名の重複があり、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_embedded_delvec_total`
+
+- 単位: カウント
+- 説明: SST の投影後に必要な埋め込み削除ベクターを解決できず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
+
+- 単位: カウント
+- 説明: ソースからターゲットへの RSSID マッピングまたは所有権がメタデータの安全な再利用に必要な一様性を満たさず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_projected_domain_total`
+
+- 単位: カウント
+- 説明: 投影後の SST 所有者、RSSID オフセット、またはウォーターマークが再利用可能なライブドメインまたはサポート対象ドメインを外れ、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
+
+- 単位: カウント
+- 説明: ソース rowset の物理レイアウトが一致せず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_shared_or_mixed_total`
+
+- 単位: カウント
+- 説明: ソース SST の所有権が共有または混在していてメタデータを安全に再利用できず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
+
+- 単位: カウント
+- 説明: ソース範囲または SST メタデータがサポート対象の再利用形式を満たさず、プライマリキーインデックスの遅延再構築を選択したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_meta_identical_total`
+
+- 単位: カウント
+- 説明: 完全かつ同一の継承 SST コホートをマージ後のタブレットメタデータで再利用したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_meta_lazy_rebuild_total`
+
+- 単位: カウント
+- 説明: ソース SST メタデータを省略し、次にプライマリキーインデックスをロードする処理または利用側がそのインデックスを再構築するタブレットマージの累計回数。
+
+## `tablet_merge_sstable_meta_private_total`
+
+- 単位: カウント
+- 説明: 完全なプライベートソース SST メタデータのコホートを投影して再利用したタブレットマージの累計回数。
+
+## `tablet_merge_sstable_omitted_bytes_total`
+
+- 単位: Bytes
+- 説明: 遅延再構築へのフォールバック時にマージ後のインデックスメタデータから省略され、孤立ファイルとして記録された一意なソース SST ファイルの累計サイズ。
+
+## `tablet_merge_sstable_omitted_file_total`
+
+- 単位: カウント
+- 説明: 遅延再構築へのフォールバック時にマージ後のインデックスメタデータから省略され、孤立ファイルとして記録された一意なソース SST ファイルの累計数。
+
 ## `tablet_metadata_mem_bytes`
 
 - 単位: バイト

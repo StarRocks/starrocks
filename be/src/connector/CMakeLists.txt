@@ -87,6 +87,16 @@ target_link_libraries(ConnectorHive PUBLIC
 
 target_link_libraries(ConnectorHive PRIVATE Formats)
 
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
+    target_sources(ConnectorHive PRIVATE
+            hive/paimon/paimon_predicate_converter.cpp
+            hive/paimon/paimon_file_system.cpp
+            hive/paimon/paimon_scanner.cpp
+    )
+    target_compile_definitions(ConnectorHive PRIVATE WITH_PAIMON_CPP)
+    target_link_libraries(ConnectorHive PRIVATE paimon)
+endif ()
+
 ADD_BE_LIB(ConnectorIceberg
         iceberg/iceberg_connector.cpp
         iceberg/iceberg_chunk_sink.cpp

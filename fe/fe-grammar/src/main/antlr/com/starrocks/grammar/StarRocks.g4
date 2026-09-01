@@ -252,6 +252,7 @@ statement
     | cancelRestoreStatement
     | showRestoreStatement
     | showSnapshotStatement
+    | dropSnapshotStatement
     | createRepositoryStatement
     | dropRepositoryStatement
 
@@ -934,7 +935,7 @@ setDefaultStorageVolumeStatement
 
 updateFailPointStatusStatement
     : ADMIN (DISABLE | ENABLE) FAILPOINT string
-      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY))?
+      (WITH (times=INTEGER_VALUE TIMES | prob=DECIMAL_VALUE PROBABILITY | PAUSE))?
       (ON (BACKEND string | FRONTEND))?
     ;
 
@@ -1006,6 +1007,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | alterTableDictColumnsClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
     | replacePartitionColumnClause
@@ -1170,6 +1172,10 @@ addColumnsClause
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+alterTableDictColumnsClause
+    : (ENABLE | DISABLE) DICTIONARY '(' identifier (',' identifier)* ')'
     ;
 
 dropPartitionColumnClause
@@ -2090,6 +2096,10 @@ createRepositoryStatement
 
 dropRepositoryStatement
     : DROP REPOSITORY identifier
+    ;
+
+dropSnapshotStatement
+    : DROP SNAPSHOT snapshotName=identifier ON repoName=identifier FORCE?
     ;
 
 // ------------------------------------ Sql BlackList And WhiteList Statement ------------------------------------------

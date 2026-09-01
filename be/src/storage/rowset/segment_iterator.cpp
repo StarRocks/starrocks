@@ -1421,16 +1421,19 @@ Status SegmentIterator::_init_ann_reader() {
     // _init_column_iterators runs (refine re-ranks above the scan, stays out).
     if (_vector_index_ctx->use_vector_index && !_vector_index_ctx->refine_distance) {
         // PRE picks the top-k inside the segment, so anything that drops rows above the iterator --
-        // an above-iterator predicate, or a runtime filter post-filtering the top-k -- makes it
-        // under-return; fall back to exact brute-force (the upper TopN cuts its k after the filter).
-        // A residual additionally needs index filtered-search support; no residual is a plain top-k.
+        // an above-iterator predicate, or a runtime filter evaluated after the per-segment ANN -- can
+        // make it under-return. When the underfill fallback is enabled, route those queries to exact
+        // brute-force (the upper TopN cuts its k after the filter). When it is disabled, keep the ANN
+        // physical plan and accept that evaluating those predicates later may return fewer than k
+        // rows. A residual additionally needs index filtered-search support; no residual is a plain
+        // top-k.
         const bool has_runtime_filter =
                 _opts.enable_join_runtime_filter_pushdown &&
                 (!_opts.runtime_filter_preds.empty() || _opts.runtime_range_pruner.has_runtime_filters());
-        const bool prefilter_allowed =
-                !_opts.has_predicate_above_iterator && !has_runtime_filter &&
-                (_opts.pred_tree.empty() || _vector_index_ctx->ann_reader->supports_efficient_filtered_search());
-        if (!prefilter_allowed) {
+        const bool must_fallback_for_post_ann_filter = config::enable_vector_index_topk_underfill_fallback &&
+                                                       (_opts.has_predicate_above_iterator || has_runtime_filter);
+        if (must_fallback_for_post_ann_filter ||
+            (!_opts.pred_tree.empty() && !_vector_index_ctx->ann_reader->supports_efficient_filtered_search())) {
             RETURN_IF_ERROR(_setup_brute_force_fallback(*tablet_index_meta));
         }
     }
@@ -2996,12 +2999,22 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         _context->_read_chunk->reset();
         Chunk* chunk = _context->_read_chunk.get();
-        size_t column_index = 0;
         for (size_t cid = 0; cid < _column_iterators.size(); ++cid) {
             if (_column_iterators[cid] == nullptr) {
                 continue;
             }
-            auto* col = chunk->get_column_raw_ptr_by_index(column_index++);
+            // The read chunk is built from `_context->_read_schema`, which may be reordered
+            // (predicate columns moved to the front by `reorder_schema` for late-materialization
+            // / low-cardinality handling). Its positional order therefore does NOT match the
+            // ascending-cid order of `_column_iterators`. Look up the scratch destination column
+            // by column id so the iterator and its `dst` stay type-aligned; pairing a complex-type
+            // iterator (array/map/struct/json) with a scalar column otherwise reinterprets the
+            // column and crashes inside `get_io_range_vec` (e.g. ArrayColumnIterator reading
+            // `offsets->get_data().back()` on a mistyped column).
+            if (!chunk->is_cid_exist(cid)) {
+                continue;
+            }
+            auto* col = chunk->get_column_raw_ptr_by_id(cid);
             if (!_scan_range.empty()) {
                 RETURN_IF_ERROR(_column_iterators[cid]->seek_to_ordinal(_scan_range.begin()));
             }
@@ -4011,10 +4024,15 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
     }
 
+    // The chunk source keeps delete-predicate columns out of the unused set, so they must reach the output.
+    for (ColumnId cid : delete_pred_columns) {
+        RETURN_IF(output_columns.count(cid) == 0,
+                  Status::InternalError(
+                          strings::Substitute("delete predicate column $0 is missing from the output schema", cid)));
+    }
+
     // build index map
     DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
-    DCHECK(!(output_schema().num_fields() < _schema.num_fields()) || _opts.delete_predicates.empty())
-            << "delete condition couldn't work with filter_unused_columns";
 
     // skip dict_decode column in _read_schema would not be mapping
     std::unordered_map<ColumnId, size_t> read_indexes;   // fid -> read schema index
@@ -4025,12 +4043,25 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         }
     }
 
-    // map output_schema[cid, index] to read_schema[cid index]
-    ctx->_read_index_map.resize(read_indexes.size());
-    for (size_t i = 0; i < read_indexes.size(); i++) {
-        ctx->_read_index_map[i] = read_indexes[output_schema().field(i)->id()];
-        output_indexes[output_schema().field(i)->id()] = i;
+    // |_read_index_map| is indexed by output schema position, so size and walk it by the output schema.
+    const size_t num_output_fields = output_schema().num_fields();
+    ctx->_read_index_map.reserve(num_output_fields);
+    for (size_t i = 0; i < num_output_fields; i++) {
+        const ColumnId ocid = output_schema().field(i)->id();
+        auto read_it = read_indexes.find(ocid);
+        if (read_it == read_indexes.end()) {
+            // Late-materialized output columns start here; _finish_late_materialization fills them.
+            break;
+        }
+        ctx->_read_index_map.emplace_back(read_it->second);
+        output_indexes[ocid] = i;
     }
+    // _finish_late_materialization resumes at |_read_index_map.size()|, so the walk must stop at the late tail.
+    RETURN_IF(ctx->_read_index_map.size() + num_fields - early_materialize_fields != num_output_fields,
+              Status::InternalError(strings::Substitute(
+                      "output schema is not an early-materialized prefix plus the late tail: mapped=$0 late=$1 "
+                      "output=$2",
+                      ctx->_read_index_map.size(), num_fields - early_materialize_fields, num_output_fields)));
 
     // convert the read schema index to output scheam index for subfield
     for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {

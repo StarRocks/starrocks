@@ -232,6 +232,12 @@ public:
                                                          const std::vector<ColumnId>& sort_key_idxes,
                                                          size_t num_key_columns);
 
+    // Maps the table's sort key columns, in their original order, onto positions in a partial update
+    // schema built from |referenced_column_ids|. Returns an empty vector if any sort key column is
+    // absent, i.e. the mapping is not total.
+    static std::vector<ColumnId> map_sort_key_to_partial_schema(const std::vector<ColumnId>& sort_key_idxes,
+                                                                const std::vector<int32_t>& referenced_column_ids);
+
     static const char* state_name(State state);
     static const char* replica_state_name(ReplicaState state);
 
@@ -300,6 +306,10 @@ private:
     // initial value is max value
     size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
     bool _partial_schema_with_sort_key_conflict = false;
+    // COLUMN_UPSERT_MODE only: the table's ORIGINAL sort key columns, in their original order,
+    // mapped to positions in the partial schema. Empty when that mapping is not total, which
+    // _check_partial_update_with_sort_key proves means the chunk carries no UPSERT row.
+    std::vector<ColumnId> _original_sort_key_idxes_in_partial_schema;
     std::atomic<bool> _is_immutable = false;
 
     int64_t _last_write_ts = 0;

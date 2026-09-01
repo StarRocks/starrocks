@@ -111,8 +111,8 @@ Status LakePrimaryKeyRecover::rowset_iterator(
             // so verify here before handing the handle over; it re-reads positionally from offset 0.
             // Only pays the extra read when a checksum was actually recorded.
             if (del.has_crc32c()) {
-                ASSIGN_OR_RETURN(auto buf, read_file->read_all());
-                RETURN_IF_ERROR(verify_del_file_crc32c(del, _metadata->id(), buf));
+                auto verified = read_and_verify_del_file(read_file.get(), del, _metadata->id());
+                RETURN_IF_ERROR(verified.status());
             }
             del_rfs.push_back(std::move(read_file));
         }

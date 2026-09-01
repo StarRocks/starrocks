@@ -214,6 +214,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Total number of bytes allocated by the application.
 
+## `jemalloc_dirty_bytes`
+
+- Unit: Bytes
+- Description: Total number of bytes in unused dirty pages, which have not yet been `madvise`d back to the operating system and can be reused for new allocations without a page fault.
+
 ## `jemalloc_mapped_bytes`
 
 - Unit: Bytes
@@ -228,6 +233,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Number of Transparent Huge Pages used for metadata.
+
+## `jemalloc_muzzy_bytes`
+
+- Unit: Bytes
+- Description: Total number of bytes in unused muzzy pages, an intermediate decay state between dirty and retained where the pages have been `madvise`d (for example with `MADV_FREE`) but the mapping is still retained.
 
 ## `jemalloc_resident_bytes`
 
@@ -554,7 +564,7 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Type: Counter
 - Unit: Count
-- Description: Total number of SST file read failures in the lake Primary Key persistent index. Incremented when SST multi-get (read) operations fail.
+- Description: Total number of SST file read failures in the lake Primary Key persistent index. Incremented when SST multi-get (read) operations fail, or when compaction detects data corruption while reading input SST files.
 
 ## `pk_index_sst_write_error_total`
 

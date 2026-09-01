@@ -287,7 +287,12 @@ StatusOr<Chunk> ProtobufChunkDeserializer::deserialize(std::string_view buff, in
     }
 
     if (deserialized_bytes != nullptr) *deserialized_bytes = cur - reinterpret_cast<const uint8_t*>(buff.data());
-    return Chunk(std::move(columns), _meta.slot_id_to_index, std::move(chunk_extra_data));
+    Chunk chunk(std::move(columns), _meta.slot_id_to_index, std::move(chunk_extra_data));
+    // The row-count loop above only sees Column::size(), which for a complex column is derived from its
+    // offsets or its first field, so a nested child the sender never materialized slips through it. This
+    // is the constructor that skips the check the other Chunk constructors run; do it here instead.
+    DCHECK_CHUNK(&chunk);
+    return chunk;
 }
 
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RecordDescriptor& record_desc, const ChunkPB& chunk_pb) {

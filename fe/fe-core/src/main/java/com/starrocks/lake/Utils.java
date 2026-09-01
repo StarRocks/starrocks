@@ -14,6 +14,7 @@
 
 package com.starrocks.lake;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
@@ -29,10 +30,12 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
+import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.TabletRangePB;
 import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
@@ -347,6 +350,29 @@ public class Utils {
         return computeNode;
     }
 
+    /**
+     * Whether this aggregate request publishes an UNSHARE compaction -- the publish that retires a
+     * split's parent view, and therefore the one that must not be handed parent metadata to build.
+     *
+     * <p>The marker comes from the persisted transaction attachment rather than the scheduler's
+     * in-memory job map, so it stays correct when a committed UNSHARE transaction is published by a new
+     * FE leader.
+     *
+     * <p>Read across every batch already in the request, not only the one being added. One request can
+     * be filled twice ({@code PublishVersionDaemon#aggregatePublishWithCarryForward}), both batches
+     * share a single {@code parentTabletPublishInfos} list, and the carry-forward batch carries
+     * synthetic {@code TXN_EMPTY} infos that do not repeat the marker -- so a per-batch answer would let
+     * the second batch re-attach the parent view the first one correctly withheld.
+     */
+    @VisibleForTesting
+    static boolean publishesUnshareCompaction(List<TxnInfoPB> txnInfos, List<PublishVersionRequest> publishReqs) {
+        return Optional.ofNullable(txnInfos).orElseGet(List::<TxnInfoPB>of).stream()
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()))
+                || Optional.ofNullable(publishReqs).orElseGet(List::<PublishVersionRequest>of).stream()
+                .flatMap(req -> Optional.ofNullable(req.getTxnInfos()).orElseGet(List::<TxnInfoPB>of).stream())
+                .anyMatch(txnInfo -> Boolean.TRUE.equals(txnInfo.isUnshareCompaction()));
+    }
+
     public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                                            long baseVersion, long newVersion,
                                                            Map<ComputeNode, List<Long>> nodeToTablets,
@@ -390,7 +416,14 @@ public class Utils {
                     publishTabletInfo.getTabletIds()));
 
             ComputeNodePB computeNodePB = new ComputeNodePB();
-            computeNodePB.setHost(entry.getKey().getHost());
+            // Send the resolved IP, not the hostname: the aggregator turns each entry into a brpc
+            // stub via LakeServiceBrpcStubCache::get_stub(), whose cache key is the resolved
+            // EndPoint, so a hostname there costs one getaddrinfo per sub-request per publish with
+            // no caching on the BE side. FE resolves through the JVM DNS cache instead. Same
+            // convention as the query/load path (see ExecutionDAG#getBrpcIpAddress, PR #32062).
+            // getIP() falls back to the hostname when resolution fails, so this only ever degrades
+            // to the previous behavior.
+            computeNodePB.setHost(entry.getKey().getIP());
             computeNodePB.setBrpcPort(entry.getKey().getBrpcPort());
             // Record the node id so that the aggregator-selection step later can prefer
             // an aggregator that already owns at least one tablet in the batch. Without
@@ -411,6 +444,47 @@ public class Utils {
 
         request.setComputeNodes(computeNodes);
         request.setPublishReqs(publishReqs);
+
+        boolean unsharePublish = publishesUnshareCompaction(txnInfos, publishReqs);
+        // Cheapest question first: building publishedTabletIds walks every tablet in the batch, and on a
+        // cluster with no split in flight there is nothing for it to answer. Finished jobs linger in the
+        // job map for three days and would otherwise make every publish pay for them.
+        if (!unsharePublish && GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().hasLiveSplitJob()) {
+            // Both halves are needed. A cross publish carries its children in reshardingTabletInfos and
+            // NOT in tabletIds (PublishTabletsInfo#addReshardingTablet only fills the former), so reading
+            // tabletIds alone would never see a split family complete -- and the version that installs
+            // the children is exactly the one a query pinned to the parent still has to be able to read.
+            Set<Long> publishedTabletIds = new HashSet<>();
+            for (PublishVersionRequest publishReq : publishReqs) {
+                if (publishReq == null) {
+                    continue;
+                }
+                publishedTabletIds.addAll(Optional.ofNullable(publishReq.getTabletIds()).orElseGet(List::of));
+                for (ReshardingTabletInfoPB reshardingInfo :
+                        Optional.ofNullable(publishReq.getReshardingTabletInfos()).orElseGet(List::of)) {
+                    if (reshardingInfo.splittingTabletInfo != null
+                            && reshardingInfo.splittingTabletInfo.getNewTabletIds() != null) {
+                        publishedTabletIds.addAll(reshardingInfo.splittingTabletInfo.getNewTabletIds());
+                    } else if (reshardingInfo.identicalTabletInfo != null) {
+                        publishedTabletIds.add(reshardingInfo.identicalTabletInfo.getNewTabletId());
+                    }
+                }
+            }
+            if (request.parentTabletPublishInfos == null) {
+                request.parentTabletPublishInfos = new ArrayList<>();
+            }
+            // aggregatePublishWithCarryForward fills one request from two batches, and a parent can be
+            // named by both, so later batches dedupe against what the earlier one already added.
+            Set<Long> existingParents = request.parentTabletPublishInfos.stream()
+                    .map(ParentTabletPublishInfoPB::getParentTabletId)
+                    .collect(java.util.stream.Collectors.toSet());
+            for (ParentTabletPublishInfoPB parentInfo : GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                    .collectParentPublishInfos(publishedTabletIds)) {
+                if (existingParents.add(parentInfo.getParentTabletId())) {
+                    request.parentTabletPublishInfos.add(parentInfo);
+                }
+            }
+        }
 
         if (nodeToTablets != null) {
             for (Map.Entry<ComputeNode, PublishTabletsInfo> entry : nodeToPublishTabletsInfo.entrySet()) {

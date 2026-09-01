@@ -200,6 +200,41 @@ Load Profiles 的结构与 Query Profiles 相同。有关详细说明，请参�
 
 配置文件提供了详细的操作符指标。关键组件包括 `OlapTableSink` 操作符和 `LoadChannel` 操作符。
 
+#### PreSplit 节点
+
+当 StarRocks 尝试为 INSERT、Broker Load 或增量物化视图刷新预分裂 Range 分布目标时，顶层 Load Profile 中会包含 `PreSplit` 节点。如果该导入没有尝试预分裂，则不会生成此节点。
+
+该节点包含以下时间指标：
+
+| 指标 | 说明 |
+| ---- | ---- |
+| TotalTime | 此次导入所有预分裂尝试消耗的总墙钟时间。 |
+| SourceSamplingTime | 读取源数据样本或文件元数据所花费的时间。`derived_tier` 的该值为 `0`。 |
+| PartitionAndBoundaryPlanningTime | 按目标分区对采样行进行分组并规划分裂边界所花费的时间。 |
+| JobSubmissionTime | 提交规划好的 Tablet reshard 作业所花费的时间。 |
+| ReshardWaitTime | 导入继续执行前，等待已提交的 reshard 作业进入终态所花费的时间。 |
+
+该节点还包含以下计数器：
+
+| 计数器 | 说明 |
+| ------ | ---- |
+| Attempts | 目标表预分裂尝试次数。 |
+| SampleRows | Data tier 采样保留的行数。Metadata tier 和 derived tier 不增加该值。 |
+| EstimatedInputBytes | 各次尝试的源数据估算字节数。同一目标表尝试中各索引重复报告的估算只计算一次。 |
+| TargetPartitions | 选中进行预分裂的目标分区数。 |
+| BoundariesPlanned | 在目标分区和索引上规划的分裂边界总数。 |
+
+以下信息字符串用于标识执行路径：
+
+| 字段 | 说明 |
+| ---- | ---- |
+| LoadKinds | 尝试预分裂的导入路径，例如 `INSERT-from-FILES`、`INSERT-from-table`、`Broker Load` 或 `incremental MV refresh`。 |
+| Tables | 尝试预分裂的目标表。 |
+| SourceTiers | 尝试过的边界来源层级：`meta_tier`、`data_tier` 或 `derived_tier`。出现多个值表示发生了回退或包含多个目标表尝试。 |
+| Outcomes | 预分裂过程中观察到的提交、完成、回退或跳过结果。 |
+| SampleQueryIds | Data tier 内部采样查询的 Query ID。 |
+| ReshardJobIds | 已提交的 Tablet reshard 作业 ID。 |
+
 #### OlapTableSink 操作符
 
 | 指标            | 描述                                                  |

@@ -385,7 +385,7 @@ public class AutovacuumDaemon extends LeaderDaemon {
         boolean fileBundling = table.isFileBundling();
         boolean rangeDistribution = table.isRangeDistribution();
         try {
-            for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
             }
             visibleVersion = partition.getVisibleVersion();

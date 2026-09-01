@@ -21,6 +21,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/statusor.h"
 #include "base/string/parse_util.h"
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
@@ -33,6 +34,8 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_llm_fwd.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "common/config_merge_commit_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_runtime_fwd.h"
@@ -45,6 +48,7 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/ai/ai_executor.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/workgroup/scan_executor.h"
@@ -52,6 +56,7 @@
 #include "data_workflows/load/batch_write/batch_write_mgr.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "runtime/runtime_env.h"
 #include "service/core_dump_resource_releaser.h"
 #include "storage/compaction_manager.h"
@@ -77,15 +82,87 @@
 #endif // USE_STAROS
 
 namespace starrocks {
+namespace {
+
+StatusOr<AIExecutor*> resolve_ai_executor(ExecEnv* exec_env) {
+    if (exec_env == nullptr) {
+        return Status::InternalError("AI config update requires an ExecEnv");
+    }
+    auto* compute_env = exec_env->compute_env();
+    if (compute_env == nullptr) {
+        return Status::InternalError("AI config update requires an initialized ComputeEnv");
+    }
+    auto* ai_executor = compute_env->ai_executor();
+    if (ai_executor == nullptr) {
+        return Status::InternalError("AI config update requires an initialized AIExecutor");
+    }
+    return ai_executor;
+}
+
+} // namespace
+
+void register_ai_config_update_hooks(ExecEnv* exec_env) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->register_callback("ai_function_request_timeout_ms", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_request_timeout_ms(config::ai_function_request_timeout_ms);
+    });
+    registry->register_callback("ai_function_connect_timeout_ms", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_connect_timeout_ms(config::ai_function_connect_timeout_ms);
+    });
+    registry->register_callback("ai_function_max_response_bytes", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_response_bytes(config::ai_function_max_response_bytes);
+    });
+    registry->register_callback("ai_function_worker_thread_num", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_worker_thread_num(config::ai_function_worker_thread_num);
+    });
+    registry->register_callback("ai_function_sub_chunk_size", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_sub_chunk_size(config::ai_function_sub_chunk_size);
+    });
+    registry->register_callback("ai_function_max_retries", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_retries(config::ai_function_max_retries);
+    });
+    registry->register_callback("ai_function_max_retries_on_throttle", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_retries_on_throttle(config::ai_function_max_retries_on_throttle);
+    });
+    registry->register_callback("ai_function_on_error", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_on_error(config::ai_function_on_error.value());
+    });
+    registry->register_callback("ai_function_rate_limit_qps_chat", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_rate_limit_qps_chat(config::ai_function_rate_limit_qps_chat);
+    });
+    registry->register_callback("ai_function_max_inflight", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_inflight(config::ai_function_max_inflight);
+    });
+}
 
 void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_env, LoadChannelMgr* load_channel_mgr,
                                   BatchWriteMgr* batch_write_mgr) {
     auto* registry = ConfigUpdateRegistry::instance();
     const auto* runtime_env_ptr = &runtime_env;
 
+    register_ai_config_update_hooks(exec_env);
+
     registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
         refresh_core_dump_resource_releaser_config();
         return Status::OK();
+    });
+
+    // jemalloc has already read JEMALLOC_CONF by the time we get here. init() takes the
+    // option string that actually took effect as the baseline, and republishes it as
+    // `jemalloc_conf` when the config claims something else.
+    JemallocConfUpdater::instance().init(config::jemalloc_conf.value());
+    registry->register_callback("jemalloc_conf", []() -> Status {
+        return JemallocConfUpdater::instance().update(config::jemalloc_conf.value());
     });
 
     registry->register_callback("scanner_thread_pool_thread_num", [=]() -> Status {

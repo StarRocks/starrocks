@@ -2024,8 +2024,6 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "  4:Decode\n"
                 + "  |  <dict id 38> : <string id 2>\n"
                 + "  |  cardinality: 1\n"
-                + "  |  probe runtime filters:\n"
-                + "  |  - filter_id = 1, probe_expr = (2: P_NAME)\n"
                 + "  |  column statistics: \n"
                 + "  |  * P_NAME-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"
                 + "  |  * P_BRAND-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n"
@@ -2066,6 +2064,25 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  order by: <slot 3> 3: S_ADDRESS ASC\n" +
                 "  |  pre agg functions: [, min(3: S_ADDRESS), ]\n" +
                 "  |  offset: 0");
+    }
+
+    // an ARRAY-returning expr must not define a dictionary: the BE reads the result as a BinaryColumn and crashes
+    @Test
+    public void testNoDictDefineForArrayResultOnScalarDictColumn() throws Exception {
+        String sql = "select upper(S_ADDRESS) as t from supplier limit 10";
+        assertContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select case S_ADDRESS when 'a' then ['123','1234'] end as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select case S_ADDRESS when 'a' then ['123','1234'] else ['x'] end as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select if(S_ADDRESS = 'a', ['123','1234'], null) as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select coalesce(if(S_ADDRESS = 'a', ['1'], null), ['2']) as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
     }
 
 }

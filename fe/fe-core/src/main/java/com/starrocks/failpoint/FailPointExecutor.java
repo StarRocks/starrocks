@@ -141,7 +141,11 @@ public class FailPointExecutor {
         if (!FailPoint.isEnabled()) {
             throw new DdlException("fail point is not enabled, please start fe with --failpoint option");
         }
-        if (updateStmt.getIsEnable()) {
+        // isArming(), not getIsEnable(): a pause is an ENABLE statement whose wire form carries
+        // is_enable = false, so the two disagree by design and only isArming() is safe at an
+        // arm-or-remove branch. The follower frontends decide the same way, via
+        // TriggerPolicy.isArming(request).
+        if (updateStmt.isArming()) {
             FailPoint.setTriggerPolicy(updateStmt.getName(), updateStmt.getTriggerPolicy());
         } else {
             FailPoint.removeTriggerPolicy(updateStmt.getName());

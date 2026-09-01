@@ -63,7 +63,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @AfterEach
     public void clear() {
         GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
-        Config.enable_online_optimize_table = true;
+        Config.enable_online_optimize_table = false;
     }
 
     @Test

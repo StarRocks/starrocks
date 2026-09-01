@@ -100,10 +100,19 @@ public final class BrokerLoadPreSplitHook {
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
             ComputeResource computeResource, BooleanSupplier shouldAbort) {
+        maybeRunPreSplit(context, database, targetTable, brokerDesc, fileGroups, fileStatuses,
+                computeResource, shouldAbort, null);
+    }
+
+    public static void maybeRunPreSplit(
+            ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
+            ComputeResource computeResource, BooleanSupplier shouldAbort, PreSplitProfile profile) {
         try {
             tryRunPreSplit(context, database, targetTable, brokerDesc, fileGroups, fileStatuses,
-                    computeResource, shouldAbort);
+                    computeResource, shouldAbort, profile);
         } catch (Throwable unexpected) {
+            PreSplitProfile.recordOutcome(profile, "FAILED_FALLBACK");
             LOG.warn("Sample-Based Tablet Pre-Split hook failed for Broker Load; proceeding without pre-split",
                     unexpected);
         }
@@ -112,7 +121,7 @@ public final class BrokerLoadPreSplitHook {
     private static void tryRunPreSplit(
             ConnectContext context, Database database, OlapTable targetTable, BrokerDesc brokerDesc,
             List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatuses,
-            ComputeResource computeResource, BooleanSupplier shouldAbort) {
+            ComputeResource computeResource, BooleanSupplier shouldAbort, PreSplitProfile profile) {
         Objects.requireNonNull(context, "context");
         if (!Config.enable_tablet_pre_split_for_broker_load) {
             // Record here: the coordinator's checkConfigAndSession is never
@@ -135,29 +144,35 @@ public final class BrokerLoadPreSplitHook {
         if (fileGroups == null || fileStatuses == null) {
             return;
         }
-        // Table-level eligibility: structural checks shared with the multi-partition
-        // coordinator's defensive re-check. Per-partition checks (single physical
-        // partition, single base tablet, empty partition) remain with the legacy
-        // single-partition path; the multi-partition path runs them per-bucket
-        // after pre-create under its own short READ lock.
-        SkipReason tableLevelSkip = PreSplitTargets.findEligibleTable(database, targetTable);
-        if (tableLevelSkip != null) {
-            PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
-            return;
+        try (PreSplitProfile.Scope ignored = profile == null
+                ? PreSplitProfile.startAttempt(context, LoadKind.BROKER_LOAD)
+                : PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+            PreSplitProfile.recordTable(targetTable.getName());
+            // Table-level eligibility: structural checks shared with the multi-partition
+            // coordinator's defensive re-check. Per-partition checks (single physical
+            // partition, single base tablet, empty partition) remain with the legacy
+            // single-partition path; the multi-partition path runs them per-bucket
+            // after pre-create under its own short READ lock.
+            SkipReason tableLevelSkip = PreSplitTargets.findEligibleTable(database, targetTable);
+            if (tableLevelSkip != null) {
+                PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
+                PreSplitProfile.recordOutcome("SKIPPED: " + tableLevelSkip);
+                return;
+            }
+            // The load session timezone. This same context feeds JobSpec.fromBrokerLoadJobSpec ->
+            // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
+            // a UTC-adjusted / TIMESTAMP_INSTANT value. A non-fixed zone -> the readers defer to data tier.
+            BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
+                    brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone());
+            PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
+                    scanContext,
+                    MetaUtils.getRangeDistributionColumns(targetTable),
+                    targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn()),
+                    sumFileBytes(fileStatuses),
+                    computeResource,
+                    SecondaryIndexSpec.forVisibleRollups(targetTable));
+            PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context);
         }
-        // The load session timezone. This same context feeds JobSpec.fromBrokerLoadJobSpec ->
-        // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
-        // a UTC-adjusted / TIMESTAMP_INSTANT value. A non-fixed zone -> the readers defer to data tier.
-        BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
-                brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone());
-        PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
-                scanContext,
-                MetaUtils.getRangeDistributionColumns(targetTable),
-                targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn()),
-                sumFileBytes(fileStatuses),
-                computeResource,
-                SecondaryIndexSpec.forVisibleRollups(targetTable));
-        PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context);
     }
 
     private static long sumFileBytes(List<List<TBrokerFileStatus>> fileStatuses) {

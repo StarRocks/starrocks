@@ -32,6 +32,9 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class PhysicalPartitionTest {
     private static final long BASE_INDEX_ID = 30000L;
@@ -455,10 +458,10 @@ public class PhysicalPartitionTest {
         List<MaterializedIndex> allIndices = partition.getAllMaterializedIndices(IndexExtState.VISIBLE);
         Assertions.assertEquals(4, allIndices.size());
 
-        List<MaterializedIndex> latestIndices = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
-        Assertions.assertEquals(2, latestIndices.size());
-        Assertions.assertTrue(latestIndices.contains(baseIndex2));
-        Assertions.assertTrue(latestIndices.contains(rollup2));
+        List<MaterializedIndex> writableIndices = partition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
+        Assertions.assertEquals(2, writableIndices.size());
+        Assertions.assertTrue(writableIndices.contains(baseIndex2));
+        Assertions.assertTrue(writableIndices.contains(rollup2));
     }
 
     @Test
@@ -599,5 +602,38 @@ public class PhysicalPartitionTest {
         Assertions.assertEquals(9, partition.getActualBucketNum(new RandomDistributionInfo(9)));
         Assertions.assertEquals(9, partition.getActualBucketNum(
                 new HashDistributionInfo(9, distributionColumns)));
+    }
+
+    @Test
+    public void testQueryableIndexPinnedUntilUnshareFinishes() {
+        long baseMetaId = 3100L;
+        MaterializedIndex parent = new MaterializedIndex(3001L, baseMetaId, IndexState.NORMAL, 100L);
+        PhysicalPartition partition = new PhysicalPartition(1000L, 2000L, parent);
+        MaterializedIndex children = new MaterializedIndex(3002L, baseMetaId, IndexState.NORMAL, 100L);
+
+        partition.pinQueryableIndex(baseMetaId, parent.getId());
+        partition.addMaterializedIndex(children, true);
+
+        Assertions.assertTrue(partition.isUnsharing());
+        Assertions.assertEquals(parent, partition.getQueryableBaseIndex());
+        Assertions.assertEquals(children, partition.getLatestBaseIndex());
+        Assertions.assertEquals(List.of(parent), partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE));
+        Assertions.assertEquals(Set.of(parent.getId(), children.getId()),
+                partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE).stream()
+                        .map(MaterializedIndex::getId).collect(Collectors.toSet()));
+
+        String json = GsonUtils.GSON.toJson(partition);
+        PhysicalPartition restored = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
+        Assertions.assertTrue(restored.isUnsharing());
+        Assertions.assertEquals(parent.getId(), restored.getQueryableBaseIndex().getId());
+        // The publish thread reads the pins without the table lock, so replay must not quietly hand
+        // the field back as the plain map GSON builds.
+        Assertions.assertInstanceOf(ConcurrentHashMap.class,
+                Deencapsulation.getField(restored, "queryIndexMetaIdToIndexId"));
+
+        Assertions.assertTrue(partition.finishUnshare());
+        Assertions.assertFalse(partition.finishUnshare());
+        Assertions.assertFalse(partition.isUnsharing());
+        Assertions.assertEquals(children, partition.getQueryableBaseIndex());
     }
 }

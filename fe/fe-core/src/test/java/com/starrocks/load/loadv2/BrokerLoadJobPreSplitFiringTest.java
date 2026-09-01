@@ -15,6 +15,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.alter.reshard.presplit.BrokerLoadPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.load.BrokerFileGroup;
@@ -45,6 +46,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
  */
 public class BrokerLoadJobPreSplitFiringTest {
 
+    private final PreSplitProfile preSplitProfile = new PreSplitProfile();
+
     @Test
     public void testEmptyInputsSkipsEverything() {
         ConnectContext context = Mockito.mock(ConnectContext.class);
@@ -55,7 +58,7 @@ public class BrokerLoadJobPreSplitFiringTest {
         try (MockedStatic<BrokerLoadPreSplitHook> hookStatic =
                      Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
             BrokerLoadJob.firePreSplitHooks(
-                    context, db, brokerDesc, computeResource, List.of(), Map.of(), () -> false);
+                    context, db, brokerDesc, computeResource, List.of(), Map.of(), () -> false, preSplitProfile);
 
             hookStatic.verifyNoInteractions();
             verifyNoInteractions(context);
@@ -82,7 +85,7 @@ public class BrokerLoadJobPreSplitFiringTest {
         try (MockedStatic<BrokerLoadPreSplitHook> hookStatic =
                      Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
             BrokerLoadJob.firePreSplitHooks(
-                    context, db, brokerDesc, computeResource, List.of(input), Map.of(), () -> false);
+                    context, db, brokerDesc, computeResource, List.of(input), Map.of(), () -> false, preSplitProfile);
 
             // No persisted opt-out → session variable left untouched.
             verify(sessionVariable, never()).setEnableTabletPreSplit(Mockito.anyBoolean());
@@ -90,7 +93,7 @@ public class BrokerLoadJobPreSplitFiringTest {
             verify(context, times(1)).bindScope();
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
                     eq(context), eq(db), eq(targetTable), eq(brokerDesc),
-                    eq(fileGroups), eq(fileStatuses), eq(computeResource), any()));
+                    eq(fileGroups), eq(fileStatuses), eq(computeResource), any(), eq(preSplitProfile)));
         }
     }
 
@@ -113,13 +116,13 @@ public class BrokerLoadJobPreSplitFiringTest {
             BrokerLoadJob.firePreSplitHooks(
                     context, db, brokerDesc, computeResource,
                     List.of(input),
-                    Map.of(SessionVariable.ENABLE_TABLET_PRE_SPLIT, "false"), () -> false);
+                    Map.of(SessionVariable.ENABLE_TABLET_PRE_SPLIT, "false"), () -> false, preSplitProfile);
 
             // Persisted opt-out should be re-applied to the recreated context
             // so the load's submit-time SET survives FE failover.
             verify(sessionVariable).setEnableTabletPreSplit(false);
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()));
+                    any(), any(), any(), any(), any(), any(), any(), any(), eq(preSplitProfile)));
         }
     }
 
@@ -143,10 +146,10 @@ public class BrokerLoadJobPreSplitFiringTest {
                      Mockito.mockStatic(BrokerLoadPreSplitHook.class)) {
             BrokerLoadJob.firePreSplitHooks(
                     context, db, brokerDesc, computeResource,
-                    List.of(firstInput, secondInput), Map.of(), () -> false);
+                    List.of(firstInput, secondInput), Map.of(), () -> false, preSplitProfile);
 
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()), times(2));
+                    any(), any(), any(), any(), any(), any(), any(), any(), eq(preSplitProfile)), times(2));
         }
     }
 
@@ -176,7 +179,7 @@ public class BrokerLoadJobPreSplitFiringTest {
             // After the first per-table hook fires, flip abort so the outer
             // loop short-circuits before invoking the second table's hook.
             hookStatic.when(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()))
+                    any(), any(), any(), any(), any(), any(), any(), any(), eq(preSplitProfile)))
                     .thenAnswer(invocation -> {
                         abort.set(true);
                         return null;
@@ -184,12 +187,12 @@ public class BrokerLoadJobPreSplitFiringTest {
 
             BrokerLoadJob.firePreSplitHooks(
                     context, db, brokerDesc, computeResource,
-                    List.of(firstInput, secondInput), Map.of(), abort::get);
+                    List.of(firstInput, secondInput), Map.of(), abort::get, preSplitProfile);
 
             // Only the first table's hook fires; the outer-loop guard prevents
             // the second table from invoking the hook at all.
             hookStatic.verify(() -> BrokerLoadPreSplitHook.maybeRunPreSplit(
-                    any(), any(), any(), any(), any(), any(), any(), any()), times(1));
+                    any(), any(), any(), any(), any(), any(), any(), any(), eq(preSplitProfile)), times(1));
         }
     }
 }

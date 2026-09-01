@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.cost.feature.FeatureExtractor;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -189,6 +190,18 @@ public class Explain {
         @Override
         public OperatorStr visitPhysicalProject(OptExpression optExpression, OperatorPrinter.ExplainContext context) {
             return visit(optExpression.getInputs().get(0), context);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalAIProject(OptExpression optExpression,
+                                                  OperatorPrinter.ExplainContext context) {
+            PhysicalAIProjectOperator aiProject = optExpression.getOp().cast();
+            String expressions = aiProject.getColumnRefMap().entrySet().stream()
+                    .map(entry -> EXPR_PRINTER.print(entry.getKey()) + " := " + EXPR_PRINTER.print(entry.getValue()))
+                    .collect(Collectors.joining(", "));
+            StringBuilder sb = new StringBuilder("- AI PROJECT [").append(expressions).append("]\n");
+            buildCommonProperty(sb, aiProject, context.step);
+            return new OperatorStr(sb.toString(), context.step, buildChildOperatorStr(optExpression, context.step));
         }
 
         @Override

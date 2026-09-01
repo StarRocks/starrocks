@@ -76,6 +76,7 @@ Usage: $0 <options>
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
      --without-tenann               build without tenann (vector index library); default is ON on Linux
+     --with-paimon-cpp              build with paimon-cpp library; default is OFF, not supported on macOS
      -j                             build parallel
 
   Eg.
@@ -129,10 +130,10 @@ OPTS=$(${GETOPT_BIN} \
   -l 'enable-shared-data' \
   -l 'build-target:' \
   -l 'without-starcache' \
-  -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
   -l 'without-tenann' \
+  -l 'with-paimon-cpp' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -171,6 +172,7 @@ if starrocks_is_darwin; then
 else
     WITH_TENANN=ON
 fi
+WITH_PAIMON_CPP=OFF
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
@@ -200,6 +202,7 @@ while true; do
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         --without-tenann) WITH_TENANN=OFF; shift ;;
+        --with-paimon-cpp) WITH_PAIMON_CPP=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -209,6 +212,11 @@ done
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
 fi
 
 if [ ${HELP} -eq 1 ]; then
@@ -323,6 +331,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_TENANN=${WITH_TENANN} \
+            -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
@@ -383,6 +392,7 @@ append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shar
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib"
 
 while IFS= read -r runtime_lib_dir; do
     append_runtime_library_path "${runtime_lib_dir}"

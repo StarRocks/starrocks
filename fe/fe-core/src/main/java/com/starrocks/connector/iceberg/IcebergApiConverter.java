@@ -568,6 +568,7 @@ public class IcebergApiConverter {
         TIcebergSchemaField tIcebergSchemaField = new TIcebergSchemaField();
         tIcebergSchemaField.setField_id(nestedField.fieldId());
         tIcebergSchemaField.setName(nestedField.name());
+        tIcebergSchemaField.setIs_optional(nestedField.isOptional());
         if (nestedField.type().isNestedType()) {
             List<TIcebergSchemaField> children = new ArrayList<>(nestedField.type().asNestedType().fields().size());
             for (Types.NestedField child : nestedField.type().asNestedType().fields()) {

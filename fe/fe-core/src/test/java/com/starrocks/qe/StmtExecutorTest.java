@@ -16,6 +16,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.LoadKind;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -66,6 +68,7 @@ import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TUniqueId;
@@ -347,7 +350,12 @@ public class StmtExecutorTest {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ConnectContext.threadLocalInfo.set(ctx);
         StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+        ConnectContext executorContext = new ConnectContext();
+        try (PreSplitProfile.Scope ignored =
+                     PreSplitProfile.startAttempt(executorContext, LoadKind.INSERT_FROM_TABLE)) {
+            // A completed attempt is enough to make the diagnostic node visible.
+        }
+        StmtExecutor executor = new StmtExecutor(executorContext, stmt);
         RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
 
         Assertions.assertNotNull(profile);
@@ -356,6 +364,7 @@ public class StmtExecutorTest {
         Assertions.assertNotNull(summaryProfile);
         Assertions.assertEquals("Running", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
         Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
+        Assertions.assertNotNull(profile.getChild(PreSplitProfile.PROFILE_NAME));
     }
 
     @Test
@@ -602,6 +611,94 @@ public class StmtExecutorTest {
 
         executor.handleDMLStmt(execPlan, stmt);
         Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+    }
+
+    @Test
+    public void testInsertFilteredRowsRecordSessionWarning(@Mocked DefaultCoordinator coordinator) throws Exception {
+        MetricRepo.init(); // handleDMLStmt bumps MetricRepo counters before the sink runs
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        // let the filtered rows pass the ratio check instead of failing the INSERT
+        ctx.getSessionVariable().setInsertMaxFilterRatio(1);
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        // A blackhole table skips FE transaction begin/commit entirely, keeping the harness on the
+        // shared load-counters tail where the 1265 warning is recorded.
+        Table targetTable = new Table(Table.TableType.BLACKHOLE);
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+
+        ExecPlan execPlan = buildMinimalExecPlan(1);
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void setLoadJobType(com.starrocks.thrift.TLoadJobType loadJobType) {
+            }
+
+            @Mock
+            public void setLoadJobId(Long jobId) {
+            }
+
+            @Mock
+            public void exec() {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return new Status();
+            }
+
+            @Mock
+            public java.util.Map<String, String> getLoadCounters() {
+                HashMap<String, String> counters = new HashMap<>();
+                counters.put(LoadEtlTask.DPP_NORMAL_ALL, "2");
+                counters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "3");
+                return counters;
+            }
+
+            @Mock
+            public String getTrackingUrl() {
+                return "http://be:8040/api/_load_error_log";
+            }
+        };
+
+        executor.handleDMLStmt(execPlan, stmt);
+
+        // The INSERT succeeds and the filtered rows are surfaced as a session 1265 warning so
+        // SHOW WARNINGS can read the detail back (the OK packet only carries the count).
+        Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning warning = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Warning", warning.getLevel());
+        Assertions.assertEquals("1265", warning.getCode());
+        Assertions.assertEquals("3 row(s) filtered or substituted to NULL during load; "
+                + "tracking_url=http://be:8040/api/_load_error_log", warning.getMessage());
     }
 
     @Test

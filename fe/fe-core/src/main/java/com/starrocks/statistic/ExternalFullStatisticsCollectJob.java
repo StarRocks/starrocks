@@ -104,6 +104,14 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
     private final String catalogName;
     protected List<String> partitionNames;
+    // Full partition list for the table, independent of which partitions this job actually scans data
+    // for (`partitionNames`, which for a SAMPLE job is only the sampled subset). Defaults to
+    // `partitionNames`: a FULL job's `partitionNames` already covers every partition (or the caller's
+    // explicit scope, which this job's own scan already matches). ExternalSampleStatisticsCollectJob
+    // overrides this to the table's true full partition list, so it can scan direct-value partition
+    // columns (see StatisticUtils#isDirectValuePartitionColumn) across every partition while other
+    // columns stay within the sampled subset - see its buildCollectSQLList override.
+    protected List<String> allPartitionNames;
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
     // Per-partition total row count from connector metadata (Iceberg PARTITIONS table), used to extrapolate a
@@ -128,6 +136,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties);
         this.catalogName = catalogName;
         this.partitionNames = partitionNames;
+        this.allPartitionNames = partitionNames;
     }
 
     @Override
@@ -217,32 +226,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String status = "SUCCESS";
         String failureReason = "";
         try {
-            long finishedSQLNum = 0;
-            int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-            List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
-            long totalCollectSQL = collectSQLList.size();
-
-            // Each element is one self-contained CTE query for a (partition, column-group): all columns in the
-            // group share a single partition scan. They cannot be merged (only one WITH per statement), so
-            // each runs on its own. The collect parallelism now drives per-query pipeline dop: a single-element
-            // group is given dop = parallelism to use enough cpu cores.
-            for (List<String> sqlUnion : collectSQLList) {
-                if (sqlUnion.size() < parallelism) {
-                    context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
-                } else {
-                    context.getSessionVariable().setPipelineDop(1);
-                }
-
-                String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
-
-                collectStatisticSync(sql, context, analyzeStatus);
-                finishedSQLNum++;
-                analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
-            }
-
-            flushInsertStatisticsData(context, true);
-            cleanupStaleRawKeyedRows(context, jobId);
+            runCollectPhases(context, analyzeStatus, jobId);
         } catch (Exception e) {
             status = "FAILED";
             failureReason = e.getMessage();
@@ -259,6 +243,49 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                     status, System.currentTimeMillis() - startMs,
                     partitionNames.size(), columnNames.size(), failureReason);
         }
+    }
+
+    // Runs the job's collection SQL to completion, force-flushing and cleaning up stale raw-keyed rows
+    // once every query succeeds. Extracted out of collect() so ExternalSampleStatisticsCollectJob can
+    // override it to run direct-value and sampled-partition columns as two independent phases (see its
+    // override) instead of one flat query list - each phase gets its own force-flush and, for the
+    // direct-value phase, an immediate ColumnStatsMeta commit, so a later phase's failure can't
+    // retroactively erase an earlier phase's already-successful results (see PR #60703 review
+    // discussion).
+    protected void runCollectPhases(ConnectContext context, AnalyzeStatus analyzeStatus, long jobId) throws Exception {
+        int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+        List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
+        executeCollectSQLList(collectSQLList, context, analyzeStatus, 0, collectSQLList.size(), parallelism);
+        flushInsertStatisticsData(context, true);
+        cleanupStaleRawKeyedRows(context, jobId);
+    }
+
+    // Runs every CTE query in `collectSQLList` (in order). `finishedSQLNum`/`totalCollectSQL` let a
+    // caller running multiple phases report smooth overall progress instead of resetting to 0% at the
+    // start of each phase. Returns the updated finishedSQLNum so the caller can chain further phases.
+    //
+    // Each element is one self-contained CTE query for a (partition, column-group): all columns in the
+    // group share a single partition scan. They cannot be merged (only one WITH per statement), so
+    // each runs on its own. The collect parallelism now drives per-query pipeline dop: a single-element
+    // group is given dop = parallelism to use enough cpu cores.
+    protected long executeCollectSQLList(List<List<String>> collectSQLList, ConnectContext context,
+                                         AnalyzeStatus analyzeStatus, long finishedSQLNum, long totalCollectSQL,
+                                         int parallelism) throws Exception {
+        for (List<String> sqlUnion : collectSQLList) {
+            if (sqlUnion.size() < parallelism) {
+                context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
+            } else {
+                context.getSessionVariable().setPipelineDop(1);
+            }
+
+            String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
+
+            collectStatisticSync(sql, context, analyzeStatus);
+            finishedSQLNum++;
+            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+        }
+        return finishedSQLNum;
     }
 
     // Resolves a scan cap: an explicit ANALYZE ... PROPERTIES value wins over the global Config default;
@@ -280,6 +307,14 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // sample can be extrapolated back to the full partition. Only meaningful when a budget is active and the
     // connector exposes exact per-partition row counts cheaply - currently Iceberg (PARTITIONS metadata table).
     // Other connectors / no-budget runs return empty, and statistics are then stored as raw sample values.
+    //
+    // Uses allPartitionNames, not partitionNames: for a SAMPLE job, direct-value partition columns (see
+    // StatisticUtils#isDirectValuePartitionColumn) are scanned across every partition in allPartitionNames,
+    // not just the sampled partitionNames subset - looking up only partitionNames here would leave every
+    // "extra" partition's total unknown, silently skipping extrapolation (and under-reporting row_count)
+    // for any of them that a scan-budget cap truncates. allPartitionNames always covers partitionNames too
+    // (it's a superset - see ExternalSampleStatisticsCollectJob's constructor), so this is a strict widening,
+    // never a behavior change for a plain FULL job where the two lists are already identical.
     private Map<String, Long> buildPartitionTotalRowCounts(long bytesCap, long filesCap, long rowsCap, long jobId) {
         boolean budgetActive = bytesCap > 0 || filesCap > 0 || rowsCap > 0;
         if (!budgetActive) {
@@ -288,7 +323,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         try {
             // Connector-agnostic: each PartitionTraits decides whether it can supply per-partition totals
             // (Iceberg does via the PARTITIONS metadata table; others return empty -> no extrapolation).
-            return ConnectorPartitionTraits.build(table).getPartitionRowCounts(partitionNames);
+            return ConnectorPartitionTraits.build(table).getPartitionRowCounts(allPartitionNames);
         } catch (Exception e) {
             // Never fail collection over missing extrapolation input: fall back to raw sample values.
             LOG.warn("[ExternalStats] failed to fetch partition row counts for extrapolation | jobId={} " +
@@ -356,7 +391,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // row is never double-counted even if this cleanup fails - it just wastes a bit of space until
     // the next collection retries it. Best-effort: must never fail a job whose actual stats write
     // already succeeded.
-    private void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
+    protected void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
         String rawTableUuid = table.getUUID();
         boolean ok = new StatisticExecutor().dropExternalStatRawPartitions(context, rawTableUuid, partitionNames, columnNames);
         if (!ok) {
@@ -366,34 +401,50 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     protected List<List<String>> buildCollectSQLList(int parallelism) {
-        // Collect a partition in a single scan by wrapping the read in a CTE (base_cte_table) shared by every
-        // column's aggregate branch. Columns are split into groups so a wide table does not build one CTE
-        // multicast to hundreds of consumers (inflating query/plan size and the memory held for the
-        // materialized partition); each group scans the partition once, so total scans are
-        // partitions x ceil(columns / columnsPerScan). The group size mirrors the internal sample path
-        // (ColumnSampleManager.splitPrimitiveTypeStats): max(2, statistic_collect_parallelism), i.e. at least
-        // two columns share a scan. Each group is a self-contained CTE query and two CTE queries cannot be
-        // UNION ALL'd (one WITH per statement), so the outer group size is fixed to 1; parallelism only sets
-        // per-query pipeline dop in the execute loop.
+        return buildCollectSQLListForColumns(partitionNames, columnNames, columnTypes, parallelism);
+    }
+
+    // Builds one CTE query per (partition, column-batch) for the given partitions/columns. Extracted out
+    // of buildCollectSQLList so ExternalSampleStatisticsCollectJob can independently scan direct-value
+    // partition columns (see StatisticUtils#isDirectValuePartitionColumn) across every partition while
+    // non-partition columns stay within the sampled subset - see its buildCollectSQLList override.
+    //
+    // Collect a partition in a single scan by wrapping the read in a CTE (base_cte_table) shared by every
+    // column's aggregate branch. Columns are split into groups so a wide table does not build one CTE
+    // multicast to hundreds of consumers (inflating query/plan size and the memory held for the
+    // materialized partition); each group scans the partition once, so total scans are
+    // partitions x ceil(columns / columnsPerScan). The group size mirrors the internal sample path
+    // (ColumnSampleManager.splitPrimitiveTypeStats): max(2, statistic_collect_parallelism), i.e. at least
+    // two columns share a scan. Each group is a self-contained CTE query and two CTE queries cannot be
+    // UNION ALL'd (one WITH per statement), so the outer group size is fixed to 1; parallelism only sets
+    // per-query pipeline dop in the execute loop.
+    protected List<List<String>> buildCollectSQLListForColumns(List<String> partitionsToScan,
+                                                               List<String> scanColumnNames,
+                                                               List<Type> scanColumnTypes, int parallelism) {
+        if (scanColumnNames.isEmpty()) {
+            return Collections.emptyList();
+        }
         int columnsPerScan = Math.max(2, parallelism);
         List<String> totalQuerySQL = new ArrayList<>();
-        for (String partitionName : partitionNames) {
+        for (String partitionName : partitionsToScan) {
             if (DO_NOT_COLLECT_PARTITIONS.contains(partitionName)) {
                 LOG.info("Skip collect full statistics for partition: {} in table: {}",
                         partitionName, table.getName());
                 continue;
             }
-            for (int start = 0; start < columnNames.size(); start += columnsPerScan) {
-                int end = Math.min(columnNames.size(), start + columnsPerScan);
-                totalQuerySQL.add(buildPartitionCTESQL(table, partitionName, start, end));
+            for (int start = 0; start < scanColumnNames.size(); start += columnsPerScan) {
+                int end = Math.min(scanColumnNames.size(), start + columnsPerScan);
+                totalQuerySQL.add(buildPartitionCTESQL(table, partitionName,
+                        scanColumnNames.subList(start, end), scanColumnTypes.subList(start, end)));
             }
         }
 
         return Lists.partition(totalQuerySQL, 1);
     }
 
-    // Builds one CTE query that collects columns [startCol, endCol) of a single partition in a shared scan.
-    private String buildPartitionCTESQL(Table table, String partitionName, int startCol, int endCol) {
+    // Builds one CTE query that collects `batchColumnNames` of a single partition in a shared scan.
+    private String buildPartitionCTESQL(Table table, String partitionName, List<String> batchColumnNames,
+                                        List<Type> batchColumnTypes) {
         Collection<String> nullValues = resolveNullValues(table);
         String partitionPredicate = table.isUnPartitioned() ? "1=1" :
                 Joiner.on(" AND ").join(generatePartitionPredicates(table, partitionName, nullValues));
@@ -402,12 +453,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         // non-collection). Non-statable columns emit constant sketches and need nothing beyond COUNT(1).
         List<String> projection = new ArrayList<>();
         List<String> unionSelects = new ArrayList<>();
-        for (int i = startCol; i < endCol; i++) {
-            Type columnType = columnTypes.get(i);
+        for (int i = 0; i < batchColumnNames.size(); i++) {
+            Type columnType = batchColumnTypes.get(i);
             if (columnType.canStatistic() && !columnType.isCollectionType()) {
-                projection.add(StatisticUtils.quoting(table, columnNames.get(i)));
+                projection.add(StatisticUtils.quoting(table, batchColumnNames.get(i)));
             }
-            unionSelects.add(buildColumnSelectFromCTE(table, partitionName, columnNames.get(i), columnType));
+            unionSelects.add(buildColumnSelectFromCTE(table, partitionName, batchColumnNames.get(i), columnType));
         }
 
         VelocityContext context = new VelocityContext();
@@ -590,7 +641,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         flushInsertStatisticsData(context, false);
     }
 
-    private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
+    protected void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
         // hll serialize to hex, about 32kb
         long bufferSize = 33L * 1024 * rowsBuffer.size();
         if (bufferSize < Config.statistic_full_collect_buffer && !force) {

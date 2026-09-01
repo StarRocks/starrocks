@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.google.common.base.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectListItem;
@@ -64,14 +65,18 @@ final class InsertSelectSourceColumns {
      */
     static Map<String, String> resolve(
             InsertStmt insertStmt, SelectRelation selectRelation,
-            OlapTable targetTable, OlapTable sourceTable,
+            OlapTable targetTable, Table sourceTable,
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
         List<Column> targetCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
         // Use VISIBLE columns: the base schema may include hidden columns that SELECT * does not output.
-        List<Column> sourceCols = sourceTable.getVisibleColumnsWithoutGeneratedColumn();
+        List<Column> sourceCols = sourceTable instanceof OlapTable olapTable
+                ? olapTable.getVisibleColumnsWithoutGeneratedColumn()
+                : sourceTable.getFullVisibleSchema().stream()
+                        .filter(column -> !column.isGeneratedColumn())
+                        .toList();
 
         // Existence is checked via this map, never OlapTable.getColumn (which falls back to VirtualColumnRegistry).
         Map<String, String> sourceColumnMap = new HashMap<>();
@@ -83,7 +88,10 @@ final class InsertSelectSourceColumns {
         Map<String, String> targetToSource = new HashMap<>();
         if (isStar) {
             // A visible generated source column would add an output this mapping cannot see.
-            if (sourceTable.hasGeneratedColumn()) {
+            boolean hasGeneratedColumn = sourceTable instanceof OlapTable olapTable
+                    ? olapTable.hasGeneratedColumn()
+                    : sourceTable.getFullVisibleSchema().stream().anyMatch(Column::isGeneratedColumn);
+            if (hasGeneratedColumn) {
                 return null;
             }
             if (byName) {

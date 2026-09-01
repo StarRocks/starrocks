@@ -70,6 +70,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.PartitionField;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -340,6 +341,41 @@ public class StatisticUtils {
             return false;
         }
         return table.getPartitions().stream().noneMatch(Partition::hasData);
+    }
+
+    // True when a partition's name/value directly and losslessly encodes `columnName`'s raw value for
+    // every row in that partition. For such a column, scanning every partition (not just a sampled
+    // subset) gives an exact NDV via the normal HLL merge - see
+    // ExternalSampleStatisticsCollectJob#buildCollectSQLList, which routes exactly these columns through
+    // every partition instead of the sampled ones, and StatisticExecutor, which then records the column's
+    // AnalyzeType as FULL so read-side estimation does not apply sample extrapolation to it.
+    //
+    // - Hive/Hudi/Delta: every partition column qualifies unconditionally - these formats only support
+    //   explicit-value partitioning, there's no transform concept to worry about.
+    // - Iceberg: only a column used as an IDENTITY-transform partition field qualifies. A composite spec
+    //   (e.g. identity(region), identity(dt)) is fine - every row in a partition still shares the same
+    //   value for each individual identity field, we just parse out the specific field for this column
+    //   rather than requiring the whole spec to be exactly one field. Non-identity transforms
+    //   (year/month/day/hour/bucket/truncate) do NOT qualify: the partition value is a function of the
+    //   raw value, not the raw value itself, so many distinct raw values can share one partition value.
+    //   Spec-evolved tables are excluded: partitions written under a different historical spec may not
+    //   carry this column as an identity field at all.
+    static boolean isDirectValuePartitionColumn(Table table, String columnName) {
+        if (table == null) {
+            return false;
+        }
+        if (table.isHiveTable() || table.isHudiTable() || table.isDeltalakeTable()) {
+            return table.getPartitionColumnNames().contains(columnName);
+        }
+        if (!(table instanceof IcebergTable)) {
+            return false;
+        }
+        IcebergTable icebergTable = (IcebergTable) table;
+        if (icebergTable.isUnPartitioned() || icebergTable.hasPartitionTransformedEvolution()) {
+            return false;
+        }
+        PartitionField field = icebergTable.getPartitionField(columnName);
+        return field != null && field.transform().isIdentity();
     }
 
     public static List<ColumnDef> buildStatsColumnDef(String tableName) {

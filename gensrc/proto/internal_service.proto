@@ -680,11 +680,37 @@ message PFailPointTriggerMode {
     optional FailPointTriggerModeType mode = 1;
     optional double probability = 2;
     optional int32 n_times = 3;
+    // STORED/REPORTED pause state, lifted out of PUpdateFailPointStatusRequest by
+    // trigger_mode_from_request (or set by the conf-file parser). A client never sets these on a
+    // request -- see the request message below for why.
+    optional bool pause = 4;
+    optional int32 pause_timeout_second = 5;
 }
 
 message PUpdateFailPointStatusRequest {
     optional string fail_point_name = 1;
     optional PFailPointTriggerMode trigger_mode = 2;
+    // Pause discriminator: block every thread that reaches the failpoint until the mode changes or
+    // pause_timeout_second elapses. A released pause NEVER injects -- the trigger evaluates to false
+    // and the caller continues normally.
+    //
+    // Two deliberate choices here.
+    //
+    // (1) A separate bool rather than a new FailPointTriggerModeType value: proto2 keeps an unknown
+    // enum value out of the field, so `mode` would read back as its default, the FIRST enum value
+    // ENABLE -- a backend that predates the pause would ARM the failpoint and inject the fault
+    // instead of pausing. A pause request therefore sets trigger_mode.mode = DISABLE alongside
+    // pause = true, so such a backend harmlessly disables the failpoint instead.
+    //
+    // (2) On the REQUEST rather than nested in trigger_mode: protobuf preserves unknown fields, so a
+    // discriminator inside trigger_mode would be copied into an old backend's stored _trigger_mode
+    // and echoed back by list_fail_point -- a new frontend would then display PAUSE for a failpoint
+    // that the old backend merely disabled. On the request it is discarded with the request.
+    optional bool pause = 3;
+    // Pause safety net, so a forgotten ADMIN DISABLE FAILPOINT cannot wedge a node until it is
+    // restarted. Carried in the request rather than read from a backend config because be/src/base
+    // must not depend on be/src/common. Absent or <= 0 means "use the failpoint layer's default".
+    optional int32 pause_timeout_second = 4;
 }
 
 message PUpdateFailPointStatusResponse {
@@ -694,6 +720,12 @@ message PUpdateFailPointStatusResponse {
 message PFailPointInfo {
     optional string name = 1;
     optional PFailPointTriggerMode trigger_mode = 2;
+    // Cumulative number of times this failpoint FIRED, not the number of times it was reached:
+    // every hit under ENABLE, only the winning draws under PROBABILITY_ENABLE, only while n > 0
+    // under ENABLE_N_TIMES, and every thread that actually parks under a pause.
+    optional int64 trigger_count = 3;
+    // Gauge: threads parked at this failpoint right now. Returns to 0 once they are released.
+    optional int64 paused_thread_count = 4;
 }
 
 message PListFailPointRequest {

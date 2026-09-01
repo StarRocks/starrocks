@@ -54,6 +54,7 @@ import java.util.Map;
  * Node that applies conjuncts and a limit clause. Has exactly one child.
  */
 public class SelectNode extends PlanNode {
+
     private static final Logger LOG = LogManager.getLogger(SelectNode.class);
     private Map<SlotId, Expr> commonSlotMap;
 

@@ -68,7 +68,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +76,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class MergeTabletJobTest {
@@ -333,6 +333,40 @@ public class MergeTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
     }
 
+    /**
+     * A publish that fails leaves the job retrying -- once the reshard transaction has committed there
+     * is no rollback path -- but the retry has to be paced. While the backoff runs, a publish pass must
+     * neither resubmit the doomed publish nor lose the reason it failed, which is what a job stuck in
+     * RUNNING reports as its ERROR_MESSAGE.
+     */
+    @Test
+    public void testRunRunningDefersRetryOfFailedPublish() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        mergeJob.setJobState(TabletReshardJob.JobState.RUNNING);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ReshardingPhysicalPartition reshardingPhysicalPartition =
+                mergeJob.getReshardingPhysicalPartitions().values().iterator().next();
+        reshardingPhysicalPartition.setCommitVersion(physicalPartition.getVisibleVersion() + 1);
+
+        CompletableFuture<Map<Long, TabletRange>> failedPublish = new CompletableFuture<>();
+        failedPublish.completeExceptionally(
+                new TabletReshardException("Segment id overflow during tablet merge"));
+        reshardingPhysicalPartition.setPublishFuture(failedPublish);
+
+        // The pass that observes the failure is already subject to the backoff it stamps, so this one
+        // pass covers what every later pass within the backoff does too.
+        mergeJob.runRunningJob();
+
+        // Still retrying, not wedged into a terminal state...
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
+        // ...and the failed attempt is still the one in place: the pass did not resubmit it.
+        Assertions.assertSame(failedPublish, reshardingPhysicalPartition.publishFuture);
+        Assertions.assertEquals(1, reshardingPhysicalPartition.consecutivePublishFailures);
+        Assertions.assertFalse(reshardingPhysicalPartition.isPublishRetryDue());
+        Assertions.assertEquals("Segment id overflow during tablet merge",
+                reshardingPhysicalPartition.getPublishFailureReason());
+    }
+
     @Test
     public void testRunRunningUnknownState() throws Exception {
         MergeTabletJob mergeJob = createMergeTabletReshardJob();
@@ -582,8 +616,9 @@ public class MergeTabletJobTest {
         // against the mocked synthetic warehouse and fail).
         new MockUp<StarOSAgent>() {
             @Mock
-            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
-                                             FileCacheInfo cacheInfo, long groupId, Map<String, String> properties,
+            public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, Map<String, String> properties,
                                              ComputeResource computeResource) {
             }
         };
@@ -734,6 +769,78 @@ public class MergeTabletJobTest {
     }
 
     @Test
+    public void testCleaningClearsPlacementPreferenceBeforeFinishing() throws Exception {
+        ensureTabletCount(3);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        List<Tablet> orderedTablets = new ArrayList<>(oldIndex.getTablets());
+        TabletGroupList tabletGroupList = new TabletGroupList(
+                List.of(List.of(orderedTablets.get(0).getId(), orderedTablets.get(1).getId())));
+        MergeTabletClause clause = new MergeTabletClause(null, tabletGroupList, null);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        mergeJob.init();   // reserves the table: NORMAL -> TABLET_RESHARD
+        try {
+            mergeJob.setJobState(TabletReshardJob.JobState.CLEANING);
+            mergeJob.endTransactionId = 5000L;
+
+            new MockUp<CompactionMgr>() {
+                @Mock
+                public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                        Set<Long> includePartitionIds) {
+                    return Set.of();
+                }
+            };
+            new MockUp<GlobalTransactionMgr>() {
+                @Mock
+                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                        List<Long> tableIds, Set<Long> excludeTransactionIds) {
+                    return true;
+                }
+            };
+
+            AtomicReference<List<List<Long>>> cleared = new AtomicReference<>();
+            AtomicReference<TabletReshardJob.JobState> stateAtCall = new AtomicReference<>();
+            AtomicInteger calls = new AtomicInteger();
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public void clearPlacementPreference(List<List<Long>> preferenceMembers) {
+                    calls.incrementAndGet();
+                    cleared.set(new ArrayList<>(preferenceMembers));
+                    stateAtCall.set(mergeJob.getJobState());
+                }
+            };
+
+            List<List<Long>> expected = new ArrayList<>();
+            for (ReshardingPhysicalPartition partition : mergeJob.getReshardingPhysicalPartitions().values()) {
+                for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                    for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                        for (long oldId : tablet.getOldTabletIds()) {
+                            for (long newId : tablet.getNewTabletIds()) {
+                                expected.add(List.of(oldId, newId));
+                            }
+                        }
+                    }
+                }
+            }
+            Assertions.assertFalse(expected.isEmpty(), "test fixture must produce preference members");
+
+            mergeJob.runCleaningJob();
+
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
+            Assertions.assertEquals(1, calls.get(), "the finish path must clear the pin exactly once");
+            Assertions.assertEquals(expected, cleared.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.CLEANING, stateAtCall.get(),
+                    "the pin must be cleared before the job is marked FINISHED");
+        } finally {
+            if (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD) {
+                mergeJob.replayAbortedJob();   // restores NORMAL on the shared table fixture
+            }
+        }
+    }
+
+    @Test
     public void testMergeTabletJobFactoryAutoMergeBySize() throws Exception {
         ensureTabletCount(3);
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
@@ -841,7 +948,17 @@ public class MergeTabletJobTest {
         MergeTabletClause clause = new MergeTabletClause();
         clause.setTabletReshardTargetSize(100L);
         MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
-        Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+        // An empty plan caused by STALE statistics is transient, not deterministic: a compaction
+        // publish advances visibleVersionTime without touching dataVersion, so the next statistics
+        // pass can make this very same plan non-empty. It must therefore NOT be an
+        // EmptyReshardPlanException, which TabletReshardJobMgr latches -- latching it would suppress
+        // the merge until the layout or configuration changed, which a stats refresh does not do.
+        StarRocksException thrown =
+                Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+        Assertions.assertFalse(thrown instanceof EmptyReshardPlanException,
+                "a stale-statistics empty plan must stay retriable, got: " + thrown);
+        Assertions.assertTrue(thrown.getMessage().contains("statistics are stale"),
+                "expected the stale-stats reason, got: " + thrown.getMessage());
     }
 
     /**
@@ -912,11 +1029,10 @@ public class MergeTabletJobTest {
         ensureTabletCount(5);
         // floor = parallelismFloor(4, 1024) = max(2, min(4, 1024)) = 4; 5 tiny fresh tablets
         // => budget = 5 - 4 = 1 => exactly one adjacent pair may merge, the rest must stay split.
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 4 matters.
-                return Collections.nCopies(4, 1L);
+            public static int computeNodeCount(ComputeResource computeResource) {
+                return 4;
             }
         };
 
@@ -955,11 +1071,10 @@ public class MergeTabletJobTest {
         ensureTabletCount(3);
         // floor = parallelismFloor(5, 1024) = max(2, min(5, 1024)) = 5 > 3 tablets
         // => budget = 3 - 5 <= 0 => nothing merges.
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                // computeNodeCount only reads .size(), so the id values are irrelevant — only count 5 matters.
-                return Collections.nCopies(5, 1L);
+            public static int computeNodeCount(ComputeResource computeResource) {
+                return 5;
             }
         };
 
@@ -983,9 +1098,9 @@ public class MergeTabletJobTest {
         ensureTabletCount(3);
         // Explicit tablet-group merges must NOT consult the warehouse CN count; even if the lookup
         // throws, the manual merge still succeeds (the floor only applies to size-based auto-merge).
-        new MockUp<WarehouseManager>() {
+        new MockUp<TabletReshardUtils>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+            public static int computeNodeCount(ComputeResource computeResource) {
                 throw new RuntimeException("CN lookup must not be called for manual tablet-group merge");
             }
         };
@@ -1187,11 +1302,15 @@ public class MergeTabletJobTest {
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartition.getId()));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(newIndex.getId()));
 
+        Map<Long, List<Long>> newTabletIdToGroupIds = new HashMap<>();
+        for (long newTabletId : newToOldTabletIds.keySet()) {
+            newTabletIdToGroupIds.put(newTabletId, List.of(newIndex.getShardGroupId()));
+        }
         GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForMerge(
                 newToOldTabletIds,
+                newTabletIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartition.getId()),
                 table.getPartitionFileCacheInfo(physicalPartition.getId()),
-                newIndex.getShardGroupId(),
                 properties, WarehouseManager.DEFAULT_RESOURCE);
     }
 
@@ -1206,9 +1325,9 @@ public class MergeTabletJobTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public void createShardsForMerge(Map<Long, List<Long>> newToOldTabletIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
                                              FilePathInfo pathInfo,
                                              FileCacheInfo cacheInfo,
-                                             long groupId,
                                              Map<String, String> properties,
                                              ComputeResource computeResource) throws DdlException {
                 throw new DdlException("simulated StarOS failure");

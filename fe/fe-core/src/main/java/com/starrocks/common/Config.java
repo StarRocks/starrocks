@@ -867,6 +867,18 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
+     * The amount of free space (in bytes) bdb-je tries to keep on the volume holding `meta_dir`.
+     * The same value gates FE startup: the FE refuses to start when the free space is below it.
+     * <p>
+     * The default equals the bdb-je default. Lowering it is the recovery path for an FE that cannot
+     * start on a nearly full metadata volume: it lets bdb-je open and reclaim its own reserved files.
+     * Note that bdb-je needs this headroom for its housekeeping, so a value far below the default
+     * leaves an FE that starts but may reject metadata writes. Takes effect after a restart.
+     */
+    @ConfField
+    public static long bdbje_free_disk_size = 5L * 1024 * 1024 * 1024;
+
+    /**
      * Timeout seconds for doing checkpoint
      */
     @ConfField(mutable = true)
@@ -1598,7 +1610,7 @@ public class Config extends ConfigBase {
      * Online optimize table allows to optimize a table without blocking write operations.
      */
     @ConfField(mutable = true)
-    public static boolean enable_online_optimize_table = true;
+    public static boolean enable_online_optimize_table = false;
 
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
@@ -1943,6 +1955,27 @@ public class Config extends ConfigBase {
     // default timeout of backup job
     @ConfField(mutable = true)
     public static int backup_job_default_timeout_ms = 86400 * 1000; // 1 day
+
+    /**
+     * Whether expired backup snapshots are deleted from their repository automatically.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_backup_snapshot_auto_clean = true;
+
+    /**
+     * How often expired backup snapshots are looked for.
+     */
+    @ConfField(mutable = true)
+    public static long backup_clean_check_interval_seconds = 3600;
+
+    /**
+     * How many consecutive failures automatic cleanup makes on one snapshot before leaving it alone.
+     * Only the cleaner's own failures are counted. The count is kept in memory, so a restart, a
+     * leader switch, or raising this limit lets cleanup try again; DROP SNAPSHOT deletes the
+     * snapshot regardless of it.
+     */
+    @ConfField(mutable = true)
+    public static int backup_clean_retry_limit = 3;
 
     // Set runtime locale when exec some cmds
     @ConfField
@@ -2688,6 +2721,26 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int low_cardinality_threshold = 255;
+
+    // Global-dictionary thrash guard.
+    // A "rolling low-cardinality" column (distinct values stay under low_cardinality_threshold at any
+    // instant but the value set keeps rotating, e.g. an id whose active set churns) never trips the
+    // cardinality blacklist, yet every load introduces values missing from the current global dict and
+    // invalidates it. Each invalidation forces a full MetaScan re-collection, wasting IO and, on
+    // shared-data, hammering the segment metadata cache lock. This guard detects a dictionary that is
+    // invalidated too often and forbids collecting it, so it stops thrashing.
+    @ConfField(mutable = true, comment = "Enable the global-dictionary thrash guard that forbids " +
+            "dictionaries which keep getting invalidated and re-collected.")
+    public static boolean enable_dict_thrash_guard = true;
+
+    @ConfField(mutable = true, comment = "Sliding time window (in seconds) used by the global-dictionary " +
+            "thrash guard to count how often a column dictionary is invalidated.")
+    public static int dict_thrash_guard_window_sec = 60;
+
+    @ConfField(mutable = true, comment = "If a column dictionary is invalidated at least this many times " +
+            "within dict_thrash_guard_window_sec, the thrash guard forbids collecting it. Set to 0 to " +
+            "disable the count check while keeping the guard enabled.")
+    public static int dict_thrash_guard_threshold = 5;
 
     /**
      * The column statistic cache update interval
@@ -4787,6 +4840,24 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = true;
 
     /**
+     * Whether to use range distribution as the default distribution of an asynchronous materialized
+     * view created without an explicit DISTRIBUTED BY clause. This is the materialized view half of
+     * enable_range_distribution, split off so that a cluster can adopt range-distributed tables
+     * without changing how its materialized views are distributed.
+     * <p>
+     * The default selects range distribution only when this config and enable_range_distribution are
+     * both true, in shared-data mode. Otherwise a materialized view created without a DISTRIBUTED BY
+     * clause uses the previous default distribution behavior (incrementally refreshed -> hash over
+     * its key columns, otherwise random), even where a table would be range-distributed. Range
+     * distribution has no DISTRIBUTED BY syntax, so with this config off the INVISIBLE session
+     * variable enable_range_distribution is the only remaining way to ask for it.
+     */
+    @ConfField(mutable = true, comment = "Whether to use range distribution as the default "
+            + "materialized view distribution in shared-data mode. Takes effect only when "
+            + "enable_range_distribution is also true. Has no effect in shared-nothing mode.")
+    public static boolean enable_mv_range_distribution = false;
+
+    /**
      * The default scheduler interval for tablet reshard jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs. "
@@ -4831,10 +4902,18 @@ public class Config extends ConfigBase {
      * The minimum size of a tablet produced by pre-split. Bounds the compute-node alignment
      * during pre-split so that splitting a small load across many compute nodes does not
      * carve tablets smaller than this value. Should be <= tablet_reshard_target_size.
+     *
+     * <p>Also the floor under the target an under-provisioned index splits at -- an index holding
+     * fewer tablets than the bound aims at one tablet per slot in it, but never at less than this --
+     * so raising this to tune pre-split also delays that split. The bound is the warehouse's
+     * compute-node count capped by tablet_reshard_max_split_count, so lowering that configuration
+     * lowers both the width this rule aims for and the tablet count at which it stops. The adaptive walk
+     * floors its child count and will not act until a tablet is worth two whole targets, so unlike
+     * the size rule it does not produce children below the target it aimed at.
      */
-    @ConfField(mutable = true, comment = "The minimum size of a tablet produced by tablet pre-split. "
-            + "Bounds compute-node alignment so a small load on a large cluster is not split into many tiny tablets. "
-            + "Should be no larger than tablet_reshard_target_size.")
+    @ConfField(mutable = true, comment = "Minimum size of a tablet produced by pre-split, and the lower "
+            + "bound on the target an under-provisioned index splits at. Should be no larger than "
+            + "tablet_reshard_target_size; setting it at or above that disables the adaptive split.")
     public static long tablet_reshard_min_split_size = 2L * 1024L * 1024L * 1024L;
 
     @ConfField(mutable = true, comment = "TTL in milliseconds for the range-colocate checker's "
@@ -4849,6 +4928,26 @@ public class Config extends ConfigBase {
             "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean tablet_reshard_enable_tablet_merge = false;
 
+    @ConfField(mutable = true, comment = "Max number of new tablets one source tablet may be split into when the "
+            + "split drags a full UNSHARE rewrite behind it -- a range-distributed primary-key table whose ORDER BY "
+            + "key differs from the primary key. Such a split cannot range-filter the parent's shared segments, so "
+            + "every child is rewritten wholesale; a wide fan-out multiplies that read amplification. Further "
+            + "clamped by tablet_reshard_max_split_count. Values <= 1 disable this extra clamp.")
+    public static int tablet_reshard_orderby_max_split_count = 2;
+
+    @ConfField(mutable = true, comment = "Max number of source tablets one split job may SPLIT when the split drags "
+            + "a full UNSHARE rewrite behind it. The largest tablets are chosen first. Note this bounds the split "
+            + "fan-out, not the rewrite: every untouched sibling still becomes an IdenticalTablet in the replacement "
+            + "index and the UNSHARE compaction is partition-wide, so it rewrites those too. Values <= 0 mean the "
+            + "warehouse's compute-node count.")
+    public static int tablet_reshard_orderby_max_split_tablets_per_job = 0;
+
+    @ConfField(mutable = true, comment = "Quiet period, in seconds, after the previous tablet reshard job on a table "
+            + "finishes before an auto split may trigger again, for tables whose split drags a full UNSHARE rewrite "
+            + "behind it. Gives size-tiered compaction a window to drain the small files that accumulated while the "
+            + "partition's compaction slot was held. Values <= 0 disable the wait.")
+    public static int tablet_reshard_orderby_split_interval_second = 180;
+
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
             + "INSERT INTO ... SELECT FROM FILES() loads. Default on as of v4.1.0 after the GA gate. "
             + "Set to false to disable cluster-wide. The session variable enable_tablet_pre_split "
@@ -4862,10 +4961,18 @@ public class Config extends ConfigBase {
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
-            + "INSERT INTO ... SELECT FROM <table> loads (INSERT-from-OLAP-table). Default on as of "
+            + "INSERT INTO ... SELECT FROM <table> loads with an internal OLAP or external Iceberg "
+            + "source, including explicit real/temp partitions and static/dynamic overwrite. Default on as of "
             + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
             + "enable_tablet_pre_split must also be true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
+
+    @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for the "
+            + "refresh of a range-distributed incremental materialized view. Such a view is keyed by a "
+            + "hidden row-id column whose value domain is known, so its boundaries are derived rather "
+            + "than sampled and no data is read. Set to false to disable cluster-wide. The session "
+            + "variable enable_tablet_pre_split must also be true for pre-split to run.")
+    public static boolean enable_tablet_pre_split_for_mv_refresh = true;
 
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
             + "Sample-Based Tablet Pre-Split (sample + plan boundaries + build reshard job). "
@@ -4920,6 +5027,24 @@ public class Config extends ConfigBase {
             + "with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to "
             + "zero or a negative value to disable the cap.")
     public static int tablet_pre_split_max_partitions_per_load = 32;
+
+    /**
+     * Target tablet size Sample-Based Tablet Pre-Split sizes a load's split count against, in bytes.
+     * Zero (the default) inherits tablet_reshard_target_size.
+     *
+     * <p>Exists so pre-split can be tuned independently of the background split/merge daemon.
+     * The daemon keeps every tablet in the cluster near tablet_reshard_target_size, so lowering
+     * that value to buy more write parallelism for one load would also shrink every unrelated
+     * tablet. Lowering this value instead only affects how finely a load's target partitions are
+     * pre-split; the daemon still converges them back toward tablet_reshard_target_size afterwards,
+     * so a load can be written in parallel without permanently raising the cluster's tablet count.
+     */
+    @ConfField(mutable = true, comment = "Target tablet size in bytes that Sample-Based Tablet "
+            + "Pre-Split sizes a load's split count against. Zero (default) inherits "
+            + "tablet_reshard_target_size. Lower it to give a load more write parallelism without "
+            + "shrinking every tablet in the cluster: the background split/merge daemon keeps using "
+            + "tablet_reshard_target_size, so it merges the finer tablets back afterwards.")
+    public static long tablet_pre_split_target_size = 0L;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale
@@ -4998,4 +5123,21 @@ public class Config extends ConfigBase {
             "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
             "or equal to 0 are treated as 0, which truncates the list entirely.")
     public static int explain_dict_column_size = 5;
+
+    @ConfField(mutable = true, comment = "Safety net for the failpoint pause mode. A thread parked " +
+            "at a failpoint armed with ADMIN ENABLE FAILPOINT ... WITH PAUSE resumes after this many " +
+            "seconds even if ADMIN DISABLE FAILPOINT is never issued, so a forgotten pause cannot " +
+            "wedge a node until it is restarted. Values below 1 are clamped to 1. The value is also " +
+            "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
+            "timeout.")
+    public static int failpoint_pause_timeout_second = 300;
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
+    public static String ai_default_chat_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    public static String ai_default_chat_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    public static String ai_default_chat_provider = "";
 }

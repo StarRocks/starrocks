@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
 import com.starrocks.catalog.ComplexTypeAccessPaths;
 import com.starrocks.common.FeConstants;
@@ -144,8 +145,56 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                     }
                 }
             }
-            physicalScanOperator.getColRefToColumnMetaMap().keySet().forEach(context::addScan);
+            for (Map.Entry<ColumnRefOperator, Column> entry : physicalScanOperator.getColRefToColumnMetaMap()
+                    .entrySet()) {
+                if (isPruneBoundary(physicalScanOperator, entry.getKey(), entry.getValue())) {
+                    context.addScan(entry.getKey());
+                }
+            }
             return visit(optExpression, context);
+        }
+
+        // A scan column is only a prune boundary if BE really materializes just the subfields we keep:
+        // pruneForComplexType() narrows such a column's declared type and canSafelyPruneUnnestOutput()
+        // narrows an UNNEST output down to it, and both end up in the descriptor the receiving side of
+        // an exchange decodes with.
+        //
+        // An OLAP scan builds its output columns from the TABLET schema and narrows them only in
+        // OlapChunkSource::_prune_schema_by_access_paths, i.e. when a ColumnAccessPath was pushed down
+        // for the column, has children and is not predicate-only - the same conditions BE checks. With
+        // no such path BE hands out the full struct while FE declares a narrower one; since the chunk
+        // encoding is positional and only the first chunk of an exchange carries the meta, that
+        // mismatch makes the receiver walk the wrong number of sub-columns.
+        //
+        // NOTE on ordering: EliminateOveruseColumnAccessPathRule runs AFTER this rule and can drop
+        // paths, so in principle a path seen here could be gone by the time the plan is executed.
+        // Today the two cannot overlap - a path is only "overuse" when the parent already consumes
+        // the whole column, and then the access group covers every subfield so nothing is narrowed
+        // in the first place - and this rule cannot simply be moved after it, because it must stay
+        // before ScalarOperatorsReuseRule (it walks Projection#getCommonSubOperatorMap). Should that
+        // invariant ever break, PlanValidator's PrunedComplexTypeChecker runs on the final plan and
+        // will reject the result rather than letting it reach the BE.
+        private static boolean isPruneBoundary(PhysicalScanOperator scanOperator, ColumnRefOperator ref,
+                                               Column column) {
+            if (!ref.getType().isComplexType() ||
+                    !OperatorType.PHYSICAL_OLAP_SCAN.equals(scanOperator.getOpType())) {
+                return true;
+            }
+            for (ColumnAccessPath path : scanOperator.getColumnAccessPaths()) {
+                if (path.isFromPredicate() || !path.hasChildPath()) {
+                    continue;
+                }
+                // Match on the column id, not the name: a path is rooted at the storage-side id
+                // (PruneSubfieldRule and computeAllColumnAccessPath both name it after
+                // Column#getColumnId), and a renamed column keeps that id while its name changes.
+                // Matching the name would stop recognising the path after a rename, leaving the
+                // declared type full while BE still prunes by the path - the same width disagreement
+                // as before, just the other way round.
+                if (path.getPath().equalsIgnoreCase(column.getColumnId().getId())) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

@@ -1,0 +1,95 @@
+-- name: test_lowcard_late_materialize
+CREATE TABLE `lm_dict` (
+  `k1` bigint NULL,
+  `v1` varchar(255) NULL,
+  `v2` varchar(255) NULL,
+  `v3` varchar(255) NULL,
+  `v9` varchar(255) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO lm_dict VALUES
+(1, 'a1', 'x', 'c1', 'm1'),
+(2, 'a2', 'x', 'c2', 'm2'),
+(3, 'a3', 'y', 'c3', 'm3'),
+(4, 'a4', 'y', 'c4', 'm4'),
+(5, 'a5', 'x', 'c5', 'm5'),
+(6, 'a6', 'z', 'c6', 'm6'),
+(7, 'a7', 'z', 'c7', 'm7'),
+(8, 'a8', 'x', 'c8', 'm8'),
+(9, 'a9', 'y', 'c9', 'm9'),
+(10, 'a10', 'z', 'c10', 'm10');
+-- result:
+-- !result
+select v1, count(*) from lm_dict group by v1 order by v1;
+-- result:
+a1	1
+a10	1
+a2	1
+a3	1
+a4	1
+a5	1
+a6	1
+a7	1
+a8	1
+a9	1
+-- !result
+select v2, count(*) from lm_dict group by v2 order by v2;
+-- result:
+x	4
+y	3
+z	3
+-- !result
+select v3, count(*) from lm_dict group by v3 order by v3;
+-- result:
+c1	1
+c10	1
+c2	1
+c3	1
+c4	1
+c5	1
+c6	1
+c7	1
+c8	1
+c9	1
+-- !result
+set cbo_cte_reuse_rate = 0;
+-- result:
+-- !result
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
+with c as (select k1, v1, v2, v3 from lm_dict),
+     d as (select count(*) as n from c where v2 = 'x')
+select a.k1, a.v1, d.n from c a cross join d order by a.k1 limit 5;
+-- result:
+1	a1	4
+2	a2	4
+3	a3	4
+4	a4	4
+5	a5	4
+-- !result
+with c as (select k1, v1, v3 from lm_dict)
+select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
+-- result:
+1	a1	c1
+2	a2	c2
+3	a3	c3
+4	a4	c4
+5	a5	c5
+-- !result
+with c as (select k1, v1 from lm_dict)
+select x.k1, x.v1, y.v1 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
+-- result:
+1	a1	a1
+2	a2	a2
+3	a3	a3
+4	a4	a4
+5	a5	a5
+-- !result

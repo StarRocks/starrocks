@@ -32,4 +32,14 @@ TEST(NonRetryableLoadErrorsTest, testRetryableErrors) {
     ASSERT_FALSE(is_non_retryable_load_error("some random error"));
 }
 
+TEST(NonRetryableLoadErrorsTest, sort_key_size_exceed_is_non_retryable) {
+    ASSERT_TRUE(is_non_retryable_load_error(kSortKeySizeExceedError));
+    ASSERT_TRUE(is_non_retryable_load_error("sort key size exceed the limit."));
+    // The error site appends the limit and config name after the registered constant, so the
+    // substring match must still hit.
+    ASSERT_TRUE(
+            is_non_retryable_load_error("sort key size exceed the limit. limit: 1024 (BE config sort_key_limit_size)"));
+    ASSERT_FALSE(is_non_retryable_load_error("sort key is fine"));
+}
+
 } // namespace starrocks

@@ -332,6 +332,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データタイプ**: long
 * **導入バージョン**: v3.4.0, v3.5.0
 
+### cbo_push_down_count_aggregate
+
+* **説明**: `count(*)`/`count(col)` 集約が、既に下方プッシュ可能な `sum`/`max`/`min`/`hll_union`/`bitmap_union`/`percentile_union` と同様に、`PushDownAggregateRule` の Join 配下へのプッシュダウン最適化に参加するかどうかを制御します。有効（デフォルト）の場合、オプティマイザは `count` を `INNER`/`CROSS` Join の片側（Join を跨ぐ count は本質的に直積であり、両側の部分結果の合計からは復元できないため、左側/child-0 側のみ）にある、Join キーのみでグループ化されたより狭い集約へプッシュダウンし、その後既存の `COUNT -> SUM` rollup ロジックで最上位の集約を再構築します。実際に特定のクエリでプッシュダウンが適用されるかどうかは、他のプッシュダウン可能な関数と同様に `cbo_push_down_aggregate_mode` のコストヒューリスティックに依存します。`col` が `CASE WHEN`/`IF()` 分岐に由来する場合、`count(col)` はプッシュダウンされません。これは、`count` にとっては一度も実行されない分岐は `NULL`（`sum` の場合）ではなく `0` に集約される必要があるためです。この変数を無効にすると、`count` を常に Join の上に留める従来の動作に戻ります。
+* **スコープ**: Session
+* **デフォルト**: `true`
+* **データタイプ**: boolean
+
 ### cbo_use_correlated_predicate_estimate
 
 * **説明**: セッションフラグ。オプティマイザが、複数列にまたがる結合された等価述語の選択率を推定する際に相関を考慮したヒューリスティックを適用するかを制御します。有効（デフォルト）の場合、推定器はプライマリのマルチカラム統計や最も選択的な述語を除く追加列に対して指数減衰重みを適用し、追加述語の乗算的影響を軽減します（重み：追加最大3列に対して 0.5、0.25、0.125）。無効の場合、減衰は適用されず（減衰係数 = 1）、これらの列の完全な選択率を乗算します（より強い独立仮定）。このフラグは StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity により確認され、マルチカラム統計経路とフォールバック経路の両方で減衰係数を選択するため、CBO が使用するカーディナリティ推定に影響します。
@@ -396,6 +403,33 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: グループバイカウントディスティンクトクエリでの COUNT DISTINCT 列のバケット数。この変数は `enable_distinct_column_bucketization` が `true` に設定されている場合にのみ有効です。
 * **デフォルト**: 1024
 * **導入バージョン**: v2.5
+
+### count_distinct_implementation
+
+* **説明**: `COUNT(DISTINCT expr)` にパラメータが 1 つだけ含まれる場合の関数実装を制御します。使用できる値（大文字と小文字は区別されません）:
+  * `default`: `COUNT(DISTINCT expr)` の実装をデフォルトのままにします。オプティマイザは、クエリ形式、統計情報、およびコストに基づいて適切な集計プランを選択します。
+  * `multi_count_distinct`: `COUNT(DISTINCT expr)` の実装を `multi_distinct_count` に変更し、正確なカウントを行います。カーディナリティが低い列または中程度の列をカウントする場合、この実装によってシャッフルおよび重複排除のフェーズを 1 つ削減でき、クエリの速度を向上させられる場合があります。ただし、distinct 値を HashSet に保持するため、カーディナリティが高い列を重複排除するとメモリ使用量が過剰になり、OOM が発生する可能性があります。代表的なワークロードで事前に検証せず、この値をグローバルに設定しないでください。
+  * `ndv`: `COUNT(DISTINCT expr)` の実装を `ndv(expr)` に変更します。この関数は HyperLogLog を使用するため、メモリ使用量を抑えながら近似結果を返します。
+* **デフォルト**: `default`
+* **導入バージョン**: v3.3.6、v3.4.0
+
+:::note[`multi_distinct_count` の使用上の注意事項]
+`multi_distinct_count()` は正確な結果を返します。
+
+ほとんどのクエリでは、`COUNT(DISTINCT expr)` の使用を推奨します。オプティマイザが適切な集計プランを選択できるように、`count_distinct_implementation` を `default` に設定してください。
+
+カーディナリティが低い列または中程度の列を重複排除する場合は、`multi_distinct_count()` をテストして使用できます。この関数は 2 フェーズの集計を使用するため、シャッフルおよび重複排除のフェーズを 1 つ削減し、パフォーマンスを向上させられる場合があります。ただし、HashSet の状態保持と最終マージによってメモリ使用量が過剰になり、カーディナリティが高い列を重複排除すると OOM が発生する可能性があります。
+
+セッション全体ではなく、特定の `COUNT(DISTINCT expr)` に対してこの実装をテストする場合は、クエリヒントで `count_distinct_implementation` を設定できます。
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+この値をヒントで設定した場合、適用対象はパラメータが 1 つの `COUNT(DISTINCT)` のみに限定されます。`COUNT(DISTINCT expr1, expr2)` のような複数列の重複排除式には影響しません。
+:::
 
 ### custom_query_id (session)
 
@@ -1259,6 +1293,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: StarRocks が Hive から ORC ファイルを読み取る際に列がどのように一致するかを指定するために使用されます。デフォルト値は `false` で、ORC ファイル内の列は Hive テーブル定義内の順序位置に基づいて読み取られます。この変数が `true` に設定されている場合、列は名前に基づいて読み取られます。
 * **デフォルト**: false
 * **導入バージョン**: v3.1.10
+
+### paimon_reader_mode
+
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
+* **デフォルト**: AUTO
+* **データ型**: String
+* **導入バージョン**: v4.2
 
 ### parallel_exchange_instance_num
 

@@ -33,7 +33,12 @@ Status CloudNativeIndexCompactionTask::execute(CancelFunc cancel_func, ThreadPoo
         op_compaction->set_compact_version(_tablet.metadata()->version());
     }
     RETURN_IF_ERROR(cancel_func());
-    RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
+    // An empty UNSHARE pick means this sibling already owns only private files.
+    // It must still contribute a successful no-op txn log to the all-sibling
+    // aggregate transaction, but it must not opportunistically rewrite SSTs.
+    if (!_context->is_unshare) {
+        RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
+    }
     _context->progress.update(100);
     TEST_ERROR_POINT("CloudNativeIndexCompactionTask::execute::1");
     if (_context->skip_write_txnlog) {

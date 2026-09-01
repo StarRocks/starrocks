@@ -436,8 +436,9 @@ struct TMaterializedViewStatus {
     35: optional string refresh_policy
     36: optional string resource_group
     37: optional string query_rewrite_status_reason
-    38: optional string last_freshness_confirmed_at
-    39: optional string base_table_refresh_version_times
+    // Ids 38/39 must stay as branch-4.1 shipped them in 4.1.4: rolling upgrade runs new BEs against old FEs.
+    38: optional string base_table_refresh_version_times
+    39: optional string last_freshness_confirmed_at
 }
 
 struct TListPipesParams {
@@ -2341,6 +2342,15 @@ struct TUpdateFailPointRequest {
     2: optional bool is_enable;
     3: optional i32 times;
     4: optional double probability;
+    // Pause mode: park threads reaching this failpoint until it is disabled. A pause request also
+    // sets is_enable = false, so a frontend that predates this field disables the failpoint instead
+    // of enabling it. Readers must check `pause` before `is_enable`.
+    5: optional bool pause;
+    // Pause timeout, snapshotted by the arming frontend and carried with the request, exactly as
+    // PUpdateFailPointStatusRequest.pause_timeout_second is for backends. Receivers must NOT re-read
+    // their own config at park time: that would let ADMIN SET FRONTEND CONFIG between arming and
+    // parking desynchronize the frontends from each other and from the backends.
+    6: optional i32 pause_timeout_second;
 }
 
 struct TUpdateFailPointResponse {
@@ -2441,6 +2451,14 @@ struct TGetTabletMetadataRequest {
     5: optional i64 version;
 }
 
+// Extension point for TCloudTabletMeta. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TCloudTabletMeta
+// fields belong on TCloudTabletMeta itself, whose remaining numbers are free.
+struct TCloudTabletMetaExt {
+}
+
 // Subset of tablet metadata fields needed to construct a version-1 TabletMetadataPB
 // on CN. The shape currently overlaps with AgentService.TCreateTabletReq; the two
 // must be kept in sync per the NOTE on TCreateTabletReq. Higher versions will need
@@ -2457,6 +2475,7 @@ struct TCloudTabletMeta {
     8: optional i64 gtid;
     9: optional Types.TCompressionType compression_type;
     10: optional i32 compression_level;
+    11: optional TCloudTabletMetaExt ext;
 }
 
 struct TGetTabletMetadataResponse {

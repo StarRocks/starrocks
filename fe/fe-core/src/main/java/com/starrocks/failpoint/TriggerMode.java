@@ -16,5 +16,10 @@ package com.starrocks.failpoint;
 public enum TriggerMode {
     ENABLE,
     PROBABILITY_ENABLE,
-    ENABLE_N_TIMES
+    ENABLE_N_TIMES,
+    // Park the thread that reaches the failpoint until the policy is released (ADMIN DISABLE
+    // FAILPOINT, or the policy being replaced) or the pause times out. A released pause never
+    // injects: shouldTrigger returns false and the Byteman rule's DO action is skipped.
+    // Java-internal only -- it never crosses the wire; see PFailPointTriggerMode.pause.
+    PAUSE
 }

@@ -765,6 +765,29 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         }
     }
 
+    // `lag ... IGNORE NULLS` supports streaming eviction. Once at least one non-null value has
+    // been seen, `target_not_null_index` is the oldest buffered row the function may still read.
+    std::optional<int64_t> get_min_retained_position(FunctionContext* ctx,
+                                                     ConstAggDataPtr __restrict state) const override {
+        if constexpr (ignoreNulls && isLag) {
+            const int64_t idx = this->data(state).target_not_null_index;
+            if (idx >= 0) {
+                return idx;
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Shift the index after eviction so it stays in the operator's (post-eviction) local indices.
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        if constexpr (ignoreNulls && isLag) {
+            if (this->data(state).target_not_null_index >= 0) {
+                this->data(state).target_not_null_index -= count;
+                DCHECK_GE(this->data(state).target_not_null_index, 0);
+            }
+        }
+    }
+
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         this->get_values_helper(state, dst, start, end);

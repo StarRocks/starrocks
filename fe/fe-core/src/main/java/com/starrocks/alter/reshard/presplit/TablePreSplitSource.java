@@ -18,12 +18,14 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -35,21 +37,26 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * INSERT-from-OLAP-table pre-split source. Matches a single plain OLAP
- * {@link TableRelation} — rejecting FILES() sources and any source-slice
+ * INSERT-from-table pre-split source. Matches a single plain internal OLAP or
+ * external Iceberg {@link TableRelation} — rejecting FILES() sources and any source-slice
  * modifier (partition / tablet / replica / hint / sample / time-travel / GTID).
  * {@link #prepare} resolves the OLAP source, re-checks the user's SELECT
  * privilege and rejects row-access / column-masking policies, gates the WHERE
  * predicate, maps the projection onto the target, and builds an
- * {@link InsertFromTableScanContext}. An OLAP source has no Parquet/ORC footer,
- * so the data tier is forced downstream.
+ * {@link InsertFromTableScanContext}. The flow uses a data-tier sample for both source kinds;
+ * Iceberg snapshot totals seed the sampling rate and the observed predicate hit ratio sizes the
+ * target tablet count.
  */
 final class TablePreSplitSource implements InsertPreSplitSource {
+
+    private static final Logger LOG = LogManager.getLogger(TablePreSplitSource.class);
 
     @Override
     public boolean configEnabled() {
@@ -109,8 +116,9 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
                 resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
                 targetToSource,
-                wherePredicateSql, context.getCurrentComputeResource());
-        long estimatedBytes = Math.max(0L, resolvedSource.sourceTable().getDataSize());
+                wherePredicateSql, context.getCurrentComputeResource(),
+                resolvedSource.totalBytes(), resolvedSource.totalRows());
+        long estimatedBytes = resolvedSource.totalBytes();
         List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
         for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
             // A rollup sort-key column with no source mapping (e.g. a range DUP rollup whose ORDER BY
@@ -189,7 +197,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
      * AST's own {@code TableName} is never mutated in place.
      *
      * @return the resolved source bundle, or {@code null} when the source db /
-     *         table cannot be resolved or the source is not an OLAP table.
+     *         table cannot be resolved or the source is not an internal OLAP or Iceberg table.
      */
     private static ResolvedSource resolveSourceTable(TableRelation sourceRelation, ConnectContext context) {
         TableName sourceName = sourceRelation.getName();
@@ -202,26 +210,76 @@ final class TablePreSplitSource implements InsertPreSplitSource {
             return null;
         }
         Table table = MetaUtils.getSessionAwareTable(context, sourceDb, normalized);
-        if (!(table instanceof OlapTable sourceTable)) {
+        if (!isSupportedSourceTable(table)) {
             return null;
         }
         // The sampler runs as UserIdentity.ROOT in a fresh statistics ConnectContext that cannot see
         // the user's session temporary tables. A temp-table source would be re-resolved by ROOT to the
         // shadowed permanent table (or fail), so the sample would observe different rows than the load
         // writes — skip pre-split entirely when the resolved source is a temporary table.
-        if (sourceTable.isTemporaryTable()) {
+        if (table instanceof OlapTable sourceTable && sourceTable.isTemporaryTable()) {
             return null;
         }
         String sourceAlias = sourceRelation.getAlias() == null ? null : sourceRelation.getAlias().getTbl();
-        String sourceFromSql = SqlUtils.getIdentSql(normalized.getDb())
-                + "." + SqlUtils.getIdentSql(normalized.getTbl())
+        String sourceFromSql = (CatalogMgr.isInternalCatalog(normalized.getCatalog())
+                ? "" : SqlUtils.getIdentSql(normalized.getCatalog()) + ".")
+                + SqlUtils.getIdentSql(normalized.getDb()) + "." + SqlUtils.getIdentSql(normalized.getTbl())
                 + (sourceAlias != null ? " " + SqlUtils.getIdentSql(sourceAlias) : "");
-        return new ResolvedSource(sourceTable, normalized, sourceAlias, sourceFromSql);
+        Estimates estimates = sourceEstimates(table);
+        return new ResolvedSource(table, normalized, sourceAlias, sourceFromSql,
+                estimates.totalBytes(), estimates.totalRows());
     }
 
-    /** Resolved OLAP source + the qualifier / SQL bits the sampler needs. */
-    private record ResolvedSource(OlapTable sourceTable, TableName normalizedName,
-                                  String sourceAlias, String sourceFromSql) { }
+    static boolean isSupportedSourceTable(Table sourceTable) {
+        return sourceTable instanceof OlapTable || sourceTable instanceof IcebergTable;
+    }
+
+    static Estimates sourceEstimates(Table sourceTable) {
+        if (sourceTable instanceof OlapTable olapTable) {
+            return new Estimates(Math.max(0L, olapTable.getDataSize()), Math.max(0L, olapTable.getRowCount()));
+        }
+        if (!(sourceTable instanceof IcebergTable icebergTable)) {
+            return Estimates.ZERO;
+        }
+        org.apache.iceberg.Snapshot snapshot = icebergTable.getNativeTable().currentSnapshot();
+        if (snapshot == null || snapshot.summary() == null) {
+            LOG.info("Pre-split: Iceberg source {} exposes no current snapshot summary, so the load's "
+                    + "input size is unknown", sourceTable.getName());
+            return Estimates.ZERO;
+        }
+        Estimates estimates = new Estimates(parseNonNegativeLong(snapshot.summary().get("total-files-size")),
+                parseNonNegativeLong(snapshot.summary().get("total-records")));
+        if (estimates.totalBytes() == 0L || estimates.totalRows() == 0L) {
+            // These summary keys are written by whichever engine produced the snapshot, so a writer
+            // that omits them leaves the sampler with no size at all. That degrades silently and in
+            // two directions at once: pickSamplingRate falls back to 1.0, so every predicate-matching
+            // row reaches the ORDER BY rand() LIMIT instead of a small Bernoulli sample, and
+            // selectPreSplitTabletCount sizes zero bytes down to the minimum two tablets. Log it so
+            // an unsplit load is attributable rather than looking like a successful pre-split.
+            LOG.warn("Pre-split: Iceberg source {} snapshot {} reports total-files-size={} and "
+                            + "total-records={}, so the load cannot be sized from the snapshot; "
+                            + "sampling will not be rate-limited and the split count falls to the minimum",
+                    sourceTable.getName(), snapshot.snapshotId(),
+                    snapshot.summary().get("total-files-size"), snapshot.summary().get("total-records"));
+        }
+        return estimates;
+    }
+
+    private static long parseNonNegativeLong(String value) {
+        if (value == null) {
+            return 0L;
+        }
+        try {
+            return Math.max(0L, Long.parseLong(value));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    /** Resolved source + the qualifier / SQL bits and snapshot estimates the sampler needs. */
+    private record ResolvedSource(Table sourceTable, TableName normalizedName,
+                                  String sourceAlias, String sourceFromSql,
+                                  long totalBytes, long totalRows) { }
 
     /**
      * Re-checks the user's SELECT privilege on the source and rejects sources

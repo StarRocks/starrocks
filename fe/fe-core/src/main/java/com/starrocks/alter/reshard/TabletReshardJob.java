@@ -29,6 +29,8 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -426,10 +428,11 @@ public abstract class TabletReshardJob implements Writable {
      * record is parked. A split reuses the parent's shard group for the child, so the group is never
      * orphaned; keeping the old index installed is what protects its shards, because
      * {@code StarMgrMetaSyncer.syncTableMetaInternal} reaps a group's shards per-shard by subtracting
-     * the tablets of every index still on the partition. Reads/writes never pick the old index: every
-     * scan/load resolves the partition via {@code getLatestIndex}/{@code getLatestMaterializedIndices},
-     * which return only the new child. On erase, the recycle bin detaches the old index and drops its
-     * tablets, and {@code StarMgrMetaSyncer} then reclaims the now-unreferenced shards per-shard --
+     * the tablets of every index still on the partition. New writes resolve through the writable APIs
+     * and use only the child layout. Queries resolve through the queryable APIs: an ORDER BY != PK split
+     * deliberately pins them to the old parent until UNSHARE finishes, while other reshard operations
+     * switch immediately. On erase, the recycle bin detaches the old index and drops its tablets, and
+     * {@code StarMgrMetaSyncer} then reclaims the now-unreferenced shards per-shard --
      * never a partition-directory delete, which for a split would destroy the live child tablets that
      * share the parent's object-storage directory.
      *
@@ -457,6 +460,48 @@ public abstract class TabletReshardJob implements Writable {
                 GlobalStateMgr.getCurrentState().getRecycleBin().recycleMaterializedIndex(
                         new RecycleMaterializedIndexInfo(dbId, olapTable.getId(), physicalPartitionId, oldIndexId));
             }
+        }
+    }
+
+    /**
+     * Shared reshard-completion step for split and merge: drop the creation-time placement pin on
+     * every new shard, so the background balancer can spread them right away. StarOS only drops the
+     * pin on its own once the superseded (old / source) shards are reclaimed, which happens a
+     * recycle-bin retention plus a {@code StarMgrMetaSyncer} cycle later -- and for the whole of
+     * that window the new shards cannot be moved off the source worker at all.
+     *
+     * <p>Best-effort by design: a failure only degrades to that old behavior, so it must never
+     * interrupt the job. The caller is the leader-only cleaning path; replay paths do not call this.
+     */
+    protected void clearPlacementPreference(
+            Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
+        // Name the members of each preference group rather than just the new shards: StarOS needs to
+        // know which preference is meant, since a new shard here becomes the pin target of the next
+        // reshard on the same tablet. Every (superseded, new) combination of a resharding tablet is
+        // exactly one preference, which reproduces what createShardsForSplit/ForMerge established --
+        // a split pins each child to its one parent, a merge pins the one output to each source.
+        List<List<Long>> preferenceMembers = new ArrayList<>();
+        for (ReshardingPhysicalPartition partition : reshardingPhysicalPartitions.values()) {
+            for (ReshardingMaterializedIndex index : partition.getReshardingIndexes().values()) {
+                for (ReshardingTablet tablet : index.getReshardingTablets()) {
+                    for (long oldTabletId : tablet.getOldTabletIds()) {
+                        for (long newTabletId : tablet.getNewTabletIds()) {
+                            preferenceMembers.add(List.of(oldTabletId, newTabletId));
+                        }
+                    }
+                }
+            }
+        }
+        if (preferenceMembers.isEmpty()) {
+            return;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().clearPlacementPreference(preferenceMembers);
+        } catch (Exception e) {
+            // Log the throwable, not just its message: this catch is broad enough to swallow a
+            // programming error (an NPE would otherwise be recorded as a bare "null"), and the job
+            // goes on to FINISHED either way, so the stack trace is the only trace left.
+            LOG.warn("Failed to clear placement preference for reshard job {}", jobId, e);
         }
     }
 }

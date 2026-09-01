@@ -80,6 +80,15 @@ Status init_global_dicts_for_scan_node(RuntimeState* state, ObjectPool* pool, co
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
             dicts->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        } else if (slot->type().type == TYPE_INT && is_string_type(tablet_schema->column(index).type())) {
+            // The plan typed this slot as the dictionary code while storage holds the string, so the
+            // caller is asking to read it dictionary-encoded. Skipping quietly leaves the reader to
+            // return the raw string into an int column, which surfaces far away as a decode failure
+            // against a "key" that is really string bytes, or as an out-of-bounds access.
+            return Status::InternalError(
+                    fmt::format("no global dict for slot {} ({}), which the plan reads as a dictionary code; "
+                                "query_global_dicts carries {} entries",
+                                slot->id(), slot->col_name(), global_dict_map.size()));
         }
     }
     *global_dicts = dicts;
