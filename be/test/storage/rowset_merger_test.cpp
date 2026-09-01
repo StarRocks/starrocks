@@ -254,7 +254,7 @@ TEST_F(RowsetMergerTest, chunk_size_estimation_loads_unloaded_rowset) {
 
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    ASSERT_OK(PrimaryKeyEncoder::create_column(schema, &writer.all_pks, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+    ASSERT_OK(PrimaryKeyEncoder::create_column(schema, &writer.all_pks));
     MergeConfig cfg;
     ASSERT_OK(compaction_merge_rowsets(*_tablet, 2, {unloaded_rowset}, &writer, cfg));
     ASSERT_EQ(pks.size(), writer.all_pks->size());
