@@ -471,6 +471,66 @@ TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycl
                                      configure_resolved_size(0));
 }
 
+TEST_F(MetaFileTest, test_compacted_delvec_reader_lifecycle_resets_across_serialized_page) {
+    const int64_t source_tablet = next_id();
+    const int64_t target_tablet = next_id();
+    constexpr std::string_view source_name = "reader-lifecycle-source.delvec";
+
+    DelVector raw_delvec;
+    const uint32_t raw_deleted[] = {2, 7};
+    raw_delvec.init(/*version=*/3, raw_deleted, std::size(raw_deleted));
+    const std::string raw_bytes = raw_delvec.save();
+    write_file(_tablet_manager->delvec_location(source_tablet, std::string(source_name)), raw_bytes);
+
+    DelVector serialized_delvec;
+    const uint32_t serialized_deleted[] = {1, 9, 14};
+    serialized_delvec.init(/*version=*/4, serialized_deleted, std::size(serialized_deleted));
+    const std::string serialized_bytes = serialized_delvec.save();
+    const auto raw = raw_output_page(source_tablet, std::string(source_name), 0, raw_bytes.size());
+
+    int active_readers = 0;
+    int peak_readers = 0;
+    int copy_opens = 0;
+    int source_size_lookups = 0;
+    int source_option_uses = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+        const int delta = *static_cast<int*>(arg);
+        active_readers += delta;
+        peak_readers = std::max(peak_readers, active_readers);
+        if (delta == 1) ++copy_opens;
+    });
+    sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_size_lookups; });
+    sync->SetCallBack("write_compacted_delvec_pages:source_options", [&](void* arg) {
+        ++source_option_uses;
+        EXPECT_TRUE(static_cast<RandomAccessFileOptions*>(arg)->skip_fill_local_cache);
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    FileMetaPB output;
+    std::vector<uint64_t> offsets;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(),
+                                           {raw, DelvecOutputPage{.serialized_page = serialized_bytes}, raw},
+                                           target_tablet, next_id(), &output, &offsets));
+    EXPECT_EQ(std::vector<uint64_t>({0, raw_bytes.size(), raw_bytes.size() + serialized_bytes.size()}), offsets);
+    ASSIGN_OR_ABORT(auto reader,
+                    fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+    ASSIGN_OR_ABORT(auto actual, reader->read_all());
+    EXPECT_EQ(raw_bytes + serialized_bytes + raw_bytes, actual);
+    EXPECT_EQ(static_cast<int64_t>(actual.size()), output.size());
+    EXPECT_EQ(1, source_size_lookups);
+    EXPECT_EQ(3, source_option_uses);
+    EXPECT_EQ(2, copy_opens);
+    EXPECT_EQ(1, peak_readers);
+    EXPECT_EQ(0, active_readers);
+}
+
 TEST_F(MetaFileTest, test_compacted_delvec_serialized_output_uses_bounded_appends) {
     const std::string expected(3 * (1UL << 20) + 17, 's');
     const int64_t target_tablet = next_id();

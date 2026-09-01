@@ -1484,6 +1484,7 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
 
     for (const auto& output_page : pages) {
         if (!output_page.raw_page.has_value()) {
+            close_reader();
             RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(output_page.serialized_page)));
             continue;
         }
