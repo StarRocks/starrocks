@@ -427,14 +427,15 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
 //   * a segment's file is opened once per column iterator, and a scan builds many, so the
 //     same range was re-warmed repeatedly (68 calls where 1 sufficed).
 // touch_cache() made each repeat cheap, but cheap-and-pointless is still pointless.
-bool Segment::small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
-                                                        uint64_t block_size) {
+bool Segment::small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size, uint64_t block_size,
+                                                        uint64_t bundle_file_offset) {
     if (block_size == 0 || file_size == 0) {
         // No block cache to reason about; let the prefetch run as before.
         return false;
     }
-    const uint64_t last_block_start = ((file_size - 1) / block_size) * block_size;
-    return region_offset >= last_block_start;
+    const uint64_t footer_byte = bundle_file_offset + file_size - 1;
+    const uint64_t last_block_start = (footer_byte / block_size) * block_size;
+    return bundle_file_offset + region_offset >= last_block_start;
 }
 
 void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache) {
@@ -476,9 +477,11 @@ void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool
         file_size = static_cast<uint64_t>(*size_or);
     }
     if (file_size > 0) {
+        const uint64_t bundle_file_offset =
+                static_cast<uint64_t>(std::max<int64_t>(0, _segment_file_info.bundle_file_offset.value_or(0)));
         if (small_index_region_covered_by_footer_read(
                     _small_index_region_offset, file_size,
-                    static_cast<uint64_t>(config::starlet_star_cache_block_size_bytes))) {
+                    static_cast<uint64_t>(config::starlet_star_cache_block_size_bytes), bundle_file_offset)) {
             g_small_index_prefetch_covered << 1;
             VLOG(2) << "skip small index region prefetch of " << _small_index_region_size
                     << " bytes (already covered by the footer read) for " << read_file->filename();

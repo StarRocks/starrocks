@@ -256,10 +256,12 @@ public:
     // Whether the file's last cache block already holds the whole small index region. The footer
     // sits at the very end of the file and is always read before anything else, and a block cache
     // serves that read by fetching the whole block it falls in -- so a region starting inside that
-    // block is warm before any prefetch could run. Takes the block size rather than reading the
-    // config so it stays a pure function, testable without a cache.
+    // block is warm before any prefetch could run. A bundled segment's offsets are relative to
+    // its slice, so bundle_file_offset must participate in the physical cache-block boundary.
+    // Takes the block size rather than reading the config so it stays a pure function, testable
+    // without a cache.
     static bool small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
-                                                          uint64_t block_size);
+                                                          uint64_t block_size, uint64_t bundle_file_offset);
 
     // Extent of the small index region, zero when the segment predates the layout. Non-zero means
     // every column's ordinal index and page zone map are contiguous here -- which is what lets one

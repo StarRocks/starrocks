@@ -339,24 +339,31 @@ TEST_F(SegmentTailIndexRegionTest, FooterReadCoversASmallRegion) {
     constexpr uint64_t kBlock = 1024 * 1024;
 
     // Region wholly inside the last block: 74 KB before a 40 MB file's end.
-    EXPECT_TRUE(
-            Segment::small_index_region_covered_by_footer_read(40 * 1024 * 1024 - 74 * 1024, 40 * 1024 * 1024, kBlock));
+    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(40 * 1024 * 1024 - 74 * 1024, 40 * 1024 * 1024,
+                                                                   kBlock, 0));
     // Region reaching back past the block boundary: 1.8 MB before the same end.
     EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(40 * 1024 * 1024 - 1800 * 1024, 40 * 1024 * 1024,
-                                                                    kBlock));
+                                                                    kBlock, 0));
 
     // Exactly on the boundary: the last block of a 2 MB file starts at 1 MB, so a region starting
     // there is covered and one byte earlier is not.
-    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(kBlock, 2 * kBlock, kBlock));
-    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(kBlock - 1, 2 * kBlock, kBlock));
+    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(kBlock, 2 * kBlock, kBlock, 0));
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(kBlock - 1, 2 * kBlock, kBlock, 0));
 
     // A file that does not fill one block has only that block, so anything in it is covered.
-    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(0, 4096, kBlock));
+    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(0, 4096, kBlock, 0));
+
+    // A small bundled slice can straddle two physical cache blocks. Its footer warms the second
+    // block, not necessarily the whole slice: 896 KB base + 256 KB segment crosses at 1 MB.
+    constexpr uint64_t kBundleOffset = 896 * 1024;
+    constexpr uint64_t kSegmentSize = 256 * 1024;
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(64 * 1024, kSegmentSize, kBlock, kBundleOffset));
+    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(128 * 1024, kSegmentSize, kBlock, kBundleOffset));
 
     // Degenerate inputs must not skip the prefetch: with no block size there is no cache to
     // reason about, and an unknown file size tells us nothing.
-    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 4096, 0));
-    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 0, kBlock));
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 4096, 0, 0));
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 0, kBlock, 0));
 }
 
 // A real segment written by this test is far smaller than one cache block, so its region must be
@@ -370,7 +377,7 @@ TEST_F(SegmentTailIndexRegionTest, RealSmallSegmentRegionIsCovered) {
     ASSERT_LT(result.file_size, 1024 * 1024) << "test segment outgrew a cache block; pick smaller data";
 
     EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(result.footer.small_index_region_offset(),
-                                                                   result.file_size, 1024 * 1024));
+                                                                   result.file_size, 1024 * 1024, 0));
 }
 
 // Small index reads are routed to a shared stream only when one was supplied; everything else
