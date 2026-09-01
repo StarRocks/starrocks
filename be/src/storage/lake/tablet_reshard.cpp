@@ -600,8 +600,7 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                 g_tablet_reshard_failed << 1;
                 return st;
             }
-            tablet_manager->metacache()->cache_aggregation_partition(
-                    tablet_manager->tablet_metadata_root_location(tablet_id), true);
+            tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
         }
         // Deliberately at the END of the body: one tablet is now switched to the new version and the
         // rest are not, which is the partial-switch state a reshard has to recover from. At the top of
