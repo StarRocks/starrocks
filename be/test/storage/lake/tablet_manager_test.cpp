@@ -81,6 +81,19 @@ public:
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
 
+namespace {
+
+class MappedCacheKeyLocationProvider final : public lake::LocationProvider {
+public:
+    std::string root_location(int64_t tablet_id) const override { return fmt::format("virtual://{}", tablet_id); }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        return fmt::format("physical/{}", virtual_path);
+    }
+};
+
+} // namespace
+
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
     starrocks::TabletMetadata metadata;
@@ -1112,6 +1125,42 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     auto path = _tablet_manager->tablet_metadata_location(tablet_id, 2);
     ASSERT_TRUE(_tablet_manager->metacache()->lookup_tablet_metadata(path) != nullptr);
     ASSERT_TRUE(_tablet_manager->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
+}
+
+TEST_F(LakeTabletManagerTest, bundled_metadata_partition_marker_uses_real_location) {
+    auto location_provider = std::make_shared<MappedCacheKeyLocationProvider>();
+    auto old_location_provider = _tablet_manager->TEST_set_location_provider(location_provider);
+    DeferOp restore_location_provider(
+            [&]() { _tablet_manager->TEST_set_location_provider(std::move(old_location_provider)); });
+
+    auto tablet_id = next_id();
+    auto virtual_key = location_provider->metadata_root_location(tablet_id);
+    ASSIGN_OR_ABORT(auto real_key, location_provider->real_location(virtual_key));
+
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    EXPECT_TRUE(_tablet_manager->lookup_cached_bundled_metadata_partition_marker(tablet_id));
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(real_key));
+    EXPECT_FALSE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(virtual_key));
+}
+
+TEST_F(LakeTabletManagerTest, bundled_metadata_not_found_reads_bundle_once) {
+    auto tablet_id = next_id();
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    int bundle_read_attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_single_tablet_metadata",
+                                          [&](void*) { ++bundle_read_attempts; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_single_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto metadata = _tablet_manager->get_tablet_metadata(tablet_id, 2, false);
+
+    EXPECT_TRUE(metadata.status().is_not_found()) << metadata.status();
+    EXPECT_EQ(1, bundle_read_attempts);
 }
 
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
