@@ -16870,7 +16870,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         });
         sync->EnableProcessing();
         std::unordered_map<int64_t, TabletMetadataPtr> published;
-        const Status status = publish(target, next_id(), &published);
+        const int64_t failed_txn = next_id();
+        const Status status = publish(target, failed_txn, &published);
         sync->ClearAllCallBacks();
         sync->DisableProcessing();
         EXPECT_EQ(message, status.message()) << status;
@@ -16880,8 +16881,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         EXPECT_EQ(meta_b_before, meta_b->SerializeAsString());
         ASSIGN_OR_ABORT(const auto inventory_a_after, delvec_inventory(child_a));
         ASSIGN_OR_ABORT(const auto inventory_b_after, delvec_inventory(child_b));
-        for (const auto& filename : inventory_a_before) EXPECT_TRUE(inventory_a_after.contains(filename));
-        for (const auto& filename : inventory_b_before) EXPECT_TRUE(inventory_b_after.contains(filename));
+        auto without_target_outputs = [](std::set<std::string> inventory) {
+            std::erase_if(inventory, [](const std::string& filename) {
+                return filename.size() > 17 && filename[16] == '_' && filename.ends_with(".delvec") &&
+                       std::all_of(filename.begin(), filename.begin() + 16,
+                                   [](unsigned char c) { return std::isxdigit(c); });
+            });
+            return inventory;
+        };
+        EXPECT_EQ(inventory_a_before, without_target_outputs(inventory_a_after));
+        EXPECT_EQ(inventory_b_before, without_target_outputs(inventory_b_after));
 
         std::unordered_map<int64_t, TabletMetadataPtr> retried;
         ASSERT_OK(publish(target, next_id(), &retried));
@@ -16930,6 +16939,9 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     DelVector delvec_b;
     const uint32_t deleted_b = 7;
     delvec_b.init(/*version=*/kBaseVersion, &deleted_b, 1);
+    DelVector expected_merged_delvec;
+    const uint32_t expected_deleted[] = {deleted_a};
+    expected_merged_delvec.init(/*version=*/kNewVersion, expected_deleted, std::size(expected_deleted));
     auto meta_a = build(tablet_a, 10, 1001, "delvec-a", delvec_a.save());
     auto meta_b = build(tablet_b, 1, 2002, "delvec-b", delvec_b.save());
     ASSERT_OK(put_tablet_metadata(meta_a));
@@ -16981,6 +16993,7 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     LakeIOOptions options;
     ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, retry_metadata->rowsets(0).id(), false, options,
                           &loaded));
+    EXPECT_EQ(expected_merged_delvec.save(), loaded.save());
 
     VacuumFullRequest request;
     request.set_partition_id(1);
@@ -16995,11 +17008,16 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     EXPECT_EQ(0, response.status().status_code());
     for (const auto& failed : failed_files) EXPECT_FALSE(delvec_inventory(target_tablet).value().contains(failed));
     for (const auto& retried : retry_files) EXPECT_TRUE(delvec_inventory(target_tablet).value().contains(retried));
-    EXPECT_TRUE(_tablet_manager->get_tablet_metadata(target_tablet, kNewVersion).ok());
+    ASSIGN_OR_ABORT(auto post_vacuum_metadata, _tablet_manager->get_tablet_metadata(target_tablet, kNewVersion));
+    ASSERT_TRUE(post_vacuum_metadata->delvec_meta().version_to_file().contains(kNewVersion));
+    const auto& post_vacuum_file = post_vacuum_metadata->delvec_meta().version_to_file().at(kNewVersion);
+    EXPECT_EQ(retry_file.name(), post_vacuum_file.name());
+    EXPECT_TRUE(post_vacuum_file.name().starts_with("0000000000000003_"));
+    for (const auto& failed : failed_files) EXPECT_NE(failed, post_vacuum_file.name());
     DelVector reloaded;
-    ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, retry_metadata->rowsets(0).id(), false, options,
-                          &reloaded));
-    EXPECT_EQ(loaded.save(), reloaded.save());
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *post_vacuum_metadata, post_vacuum_metadata->rowsets(0).id(), false,
+                          options, &reloaded));
+    EXPECT_EQ(expected_merged_delvec.save(), reloaded.save());
 }
 
 // The .cols rebuild only runs when two DCG entries claim the SAME column id for the same target
