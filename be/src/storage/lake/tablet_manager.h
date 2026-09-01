@@ -84,11 +84,6 @@ public:
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
-<<<<<<< HEAD
-=======
-    // Compact with pre-selected rowsets (for parallel compaction)
-    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context, std::vector<RowsetPtr> input_rowsets);
-
     // Durable tablet-metadata layout contract:
     //
     // When file_bundling is disabled:
@@ -121,7 +116,6 @@ public:
     // legacy data, or a specialized creation path can make the version-1 layout differ from the
     // table's current file_bundling property. Readers must therefore retain both version-1
     // fallbacks. The version-2+ bundled-metadata marker does not change the version-1 file encoding.
->>>>>>> 2ac2e7d ([BugFix] Avoid redundant lake metadata 404 probes (#78466))
     Status put_tablet_metadata(const TabletMetadata& metadata);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);
@@ -167,16 +161,15 @@ public:
     // Reads the tablet metadata named by |path|, but resolves it through this TabletManager's own
     // LocationProvider: the tablet id comes from the filename, and a bundled partition is then read via
     // bundle_tablet_metadata_location(tablet_id, version). The bundle path, the
-    // _bundle_tablet_metadata_group singleflight key, the metacache key, and the cn-free version-1
-    // fallback therefore all derive from the local provider, not from |path|.
+    // _bundle_tablet_metadata_group singleflight key, and the metacache key therefore all derive from
+    // the local provider, not from |path|.
     //
     // Precondition: |path| must resolve into the same physical partition as that tablet id's metadata
     // root. Paths obtained by listing a metadata root satisfy this, including sibling tablets' files:
     // their virtual roots differ (staros://<shard>/meta) but real_location() maps them to one physical
     // partition. A path under a different physical partition does not qualify -- it would be served the
     // local partition's bundle on a tablet-id collision. Reads against storage this provider does not
-    // describe belong in a reader that takes its root explicitly; see build_source_tablet_meta() in
-    // lake_replication_txn_manager.cpp.
+    // describe belong in a reader that takes its root explicitly.
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true,
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);

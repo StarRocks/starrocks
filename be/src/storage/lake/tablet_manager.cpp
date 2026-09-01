@@ -576,17 +576,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
         return tablet_metadata_or.status();
     }
 
-<<<<<<< HEAD
-=======
     // The path-based lookup may resolve this request through a partition-shared metadata object,
     // especially the shared version-1 object. The serialized PB in that object can carry the id of
     // the tablet that originally wrote it rather than |tablet_id|, but this tablet-id overload must
     // always return metadata whose id identifies the requested tablet. Do not normalize the returned
-    // PB in place because it may be shared through the metacache; copy only when the id differs.
-    if (tablet_metadata_or.value()->id() == tablet_id) {
-        return std::move(tablet_metadata_or).value();
-    }
->>>>>>> 2ac2e7d ([BugFix] Avoid redundant lake metadata 404 probes (#78466))
+    // PB in place because it may be shared through the metacache; copy before setting the id.
     auto tablet_metadata = std::make_shared<TabletMetadata>(*tablet_metadata_or.value());
     tablet_metadata->set_id(tablet_id);
     return tablet_metadata;
@@ -638,26 +632,6 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         }
     }
 
-<<<<<<< HEAD
-=======
-    // CN-Free Tablet Creation fallback: when cn_free_tablet_creation is enabled, DDL skips
-    // writing version 1 metadata to object storage. When a consumer first needs version 1
-    // metadata, we fetch the tablet's initial configuration from FE and construct the
-    // TabletMetadataPB on demand.
-    //
-    // The fs == nullptr check excludes cross-cluster replication reads, where |fs| points to
-    // the source cluster's object storage. Without this check, a source tablet_id that
-    // coincidentally matches a local tablet_id would cause us to fetch the wrong metadata
-    // from the local FE. Other local callers that pass non-null fs (e.g. LakeDelvecLoader)
-    // do not request version 1 in practice, since version 1 has no rowsets or delvecs.
-    //
-    // TODO: splitting this overload into a local id-addressed reader and one that takes its root
-    // explicitly would make that exclusion structural instead of inferred from |fs|.
-    if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion && fs == nullptr) {
-        metadata_or = construct_initial_metadata(tablet_id);
-    }
-
->>>>>>> 2ac2e7d ([BugFix] Avoid redundant lake metadata 404 probes (#78466))
     if (!metadata_or.ok()) {
         return metadata_or.status();
     }
