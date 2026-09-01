@@ -16979,7 +16979,8 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     ASSERT_EQ(1, retry_files.size());
     DelVector loaded;
     LakeIOOptions options;
-    ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, retry_metadata->rowsets(0).id(), false, options, &loaded));
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, retry_metadata->rowsets(0).id(), false, options,
+                          &loaded));
 
     VacuumFullRequest request;
     request.set_partition_id(1);
@@ -16996,7 +16997,8 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     for (const auto& retried : retry_files) EXPECT_TRUE(delvec_inventory(target_tablet).value().contains(retried));
     EXPECT_TRUE(_tablet_manager->get_tablet_metadata(target_tablet, kNewVersion).ok());
     DelVector reloaded;
-    ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, retry_metadata->rowsets(0).id(), false, options, &reloaded));
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, retry_metadata->rowsets(0).id(), false, options,
+                          &reloaded));
     EXPECT_EQ(loaded.save(), reloaded.save());
 }
 

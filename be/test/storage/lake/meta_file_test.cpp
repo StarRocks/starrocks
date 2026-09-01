@@ -688,7 +688,8 @@ TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
         EXPECT_EQ(offsets_before, offsets);
         expect_source_unchanged();
 
-        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), pages, target_tablet, next_id(), &output, &offsets));
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), pages, target_tablet, next_id(), &output,
+                                               &offsets));
         EXPECT_EQ(std::vector<uint64_t>({0, source_bytes.size()}), offsets);
         ASSIGN_OR_ABORT(auto reader,
                         fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
@@ -715,7 +716,7 @@ TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
         });
         sync->EnableProcessing();
         const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {absent_size_raw}, target_tablet,
-                                                            next_id(), &output, &offsets);
+                                                           next_id(), &output, &offsets);
         sync->ClearAllCallBacks();
         sync->DisableProcessing();
         EXPECT_EQ("injected actual-size", status.message()) << status;
@@ -758,8 +759,8 @@ TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
             *static_cast<Status*>(arg) = Status::InternalError("injected near-limit writer");
         });
         sync->EnableProcessing();
-        const Status status =
-                write_compacted_delvec_pages(_tablet_manager.get(), {near_limit}, target_tablet, next_id(), &output, &offsets);
+        const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {near_limit}, target_tablet,
+                                                           next_id(), &output, &offsets);
         sync->ClearAllCallBacks();
         sync->DisableProcessing();
         EXPECT_EQ("injected near-limit writer", status.message()) << status;
