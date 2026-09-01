@@ -44,6 +44,7 @@
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "cache/block_cache/block_cache.h"
+#include "common/config.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -55,6 +56,7 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/txn_state_cache.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/load_spill_block_manager.h"
@@ -88,6 +90,12 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
             return Status::OK();
+        });
+        // jemalloc has already read JEMALLOC_CONF by the time we get here. The baseline is
+        // seeded by JemallocConfUpdater::init() at startup with the option string that actually
+        // took effect, and only the runtime-mutable options are re-applied here.
+        _config_callback.emplace("jemalloc_conf", []() -> Status {
+            return JemallocConfUpdater::instance().update(config::jemalloc_conf.value());
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() -> Status {
             int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
