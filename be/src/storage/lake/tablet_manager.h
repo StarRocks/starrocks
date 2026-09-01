@@ -144,6 +144,21 @@ public:
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
                                                                           const std::string& serialized_string);
 
+    // A lake tablet's metadata lives in exactly one of two remote locations, never in
+    // both: its own metadata object, or a bundle file shared with the other tablets of
+    // an aggregated partition. The two `_with_meter` helpers below are the only
+    // sanctioned way to read either location; both record NotFound outcomes into
+    // lake_tablet_metadata_get_not_found_total. Reading a tablet metadata file through
+    // anything else makes that metric silently under-report.
+    //
+    // Note that txn logs deliberately do NOT go through these: they share the underlying
+    // protobuf loader but are not tablet metadata, so they must stay unmetered.
+    static Status load_tablet_metadata_file_with_meter(const std::string& path, TabletMetadataPB* metadata,
+                                                       bool fill_cache, const std::shared_ptr<FileSystem>& fs);
+
+    static StatusOr<std::string> read_bundle_metadata_file_with_meter(FileSystem* fs, const std::string& path,
+                                                                      bool skip_fill_local_cache);
+
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
 
