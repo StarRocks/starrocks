@@ -18,6 +18,7 @@
 #include <queue>
 
 #include "column/binary_column.h"
+#include "common/statusor.h"
 #include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
@@ -145,13 +146,16 @@ struct MergeEntryCmp {
     }
 };
 
-static int32_t calculate_chunk_size_for_column_group(const Schema& column_group_schema,
-                                                     const vector<RowsetSharedPtr>& rowsets) {
+static StatusOr<int32_t> calculate_chunk_size_for_column_group(const Schema& column_group_schema,
+                                                               const vector<RowsetSharedPtr>& rowsets) {
     int64_t total_num_rows = 0;
     int64_t total_mem_footprint = 0;
     // TODO: using actual merge element count after fixing merge bug for non-overlapping rowset
     int64_t total_input_segs = 0;
     for (const auto& rowset : rowsets) {
+        RowsetReleaseGuard guard(rowset);
+        RETURN_IF_ERROR(rowset->load());
+
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->num_segments();
         const auto& segments = rowset->segments();
@@ -341,7 +345,7 @@ private:
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
             sort_column = BinaryColumn::create();
         }
-        _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
+        ASSIGN_OR_RETURN(_chunk_size, calculate_chunk_size_for_column_group(schema, rowsets));
         if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
             _chunk_size = config::update_compaction_chunk_size_for_row_store;
         }
@@ -522,7 +526,7 @@ private:
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
             Schema schema = ChunkHelper::convert_schema(tablet_schema, column_groups[i]);
-            _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
+            ASSIGN_OR_RETURN(_chunk_size, calculate_chunk_size_for_column_group(schema, rowsets));
             if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
                 _chunk_size = config::update_compaction_chunk_size_for_row_store;
             }
