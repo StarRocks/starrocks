@@ -112,6 +112,12 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: 読み取られた有効な行数（無効な形式の行を除く）。ラベル: `file_format`, `scan_type`。
 
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 共有データモード専用。Lake tablet metadata をリモートストレージから読み取り、`NotFound` が返された試行の総数。tablet の metadata は個別の metadata ファイルか bundle metadata ファイルのいずれか一方にのみ存在し、両方に存在することはありません。いずれの読み取りもカウント対象で、vacuum が発行する bundle 読み取りも含まれます。失敗したフォールバック読み取りはそれぞれ個別にカウントされます。キャッシュミスおよび読み取り成功時には、このメトリクスは増加しません。レプリケーションでのソースクラスタ metadata の読み取り、およびリストアでのスナップショット metadata の読み取りはカウントされません。
+
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
 - 単位: バイト

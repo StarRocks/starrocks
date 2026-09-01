@@ -40,6 +40,7 @@
 #include "util/bthreads/util.h"
 #include "util/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
+#include "util/starrocks_metrics.h"
 
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
@@ -1160,6 +1161,39 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
     // Same contract on the single-tablet (bundle) read path.
     res = _tablet_manager->get_single_tablet_metadata(tablet_id, 2, skip_cache_opts);
     EXPECT_TRUE(res.status().is_not_found()) << res.status();
+}
+
+// Each remote metadata read that returns NotFound is counted, including
+// fallback reads; hits must leave the metric alone.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    // A missing version 2 probes both the per-tablet metadata object and the
+    // bundled metadata fallback in remote storage.
+    auto res = _tablet_manager->get_tablet_metadata(next_id(), 2);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    EXPECT_OK(_tablet_manager->get_tablet_metadata(tablet_id, 2).status());
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+}
+
+// The bundle file is the other location a tablet's metadata can live in, so the
+// bulk bundle reader used by vacuum shares the same accounting.
+TEST_F(LakeTabletManagerTest, get_metas_from_bundle_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    auto missing_bundle = _tablet_manager->bundle_tablet_metadata_location(next_id(), 2);
+    auto res = lake::TabletManager::get_metas_from_bundle_tablet_metadata(missing_bundle);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 1, not_found_metric.value());
 }
 
 // With a durable copy present, skip_meta_cache reads it from storage (not the
