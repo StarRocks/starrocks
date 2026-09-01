@@ -796,6 +796,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+                case OperationType.OP_MODIFY_NO_DICT_COLUMNS:
                 case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
@@ -1968,6 +1969,10 @@ public class EditLog {
 
     public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info, walApplier);
+    }
+
+    public void logModifyNoDictColumns(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_NO_DICT_COLUMNS, info, walApplier);
     }
 
     public void logSetHasDelete(ModifyTablePropertyOperationLog info, WALApplier walApplier) {

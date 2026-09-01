@@ -237,6 +237,7 @@ public class HttpServer {
         ColocateMetaService.MarkGroupUnstableAction.registerAction(controller);
         ColocateMetaService.UpdateGroupAction.registerAction(controller);
         GlobalDictMetaService.ForbitTableAction.registerAction(controller);
+        GlobalDictMetaService.ListNoDictColumnsAction.registerAction(controller);
         ProfileAction.registerAction(controller);
         ProfileActionV2.registerAction(controller);
         QueryProgressAction.registerAction(controller);

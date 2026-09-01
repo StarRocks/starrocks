@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -529,6 +530,22 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
+    }
+
+    @Override
+    public Void visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, ConnectContext context) {
+        // Pure FE metadata change: add/remove columns from the persisted no-dict forbid set.
+        Set<String> cols = new java.util.HashSet<>(clause.getColumns());
+        long dbId = db.getId();
+        long tableId = table.getId();
+        if (clause.isEnable()) {
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .updateNoDictColumns(dbId, tableId, java.util.Collections.emptySet(), cols);
+        } else {
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .updateNoDictColumns(dbId, tableId, cols, java.util.Collections.emptySet());
+        }
+        return null;
     }
 
     @Override

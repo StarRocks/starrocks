@@ -35,6 +35,11 @@ public interface IDictManager {
 
     void enableGlobalDict(long tableId);
 
+    // Clear the in-memory forbid state for specific columns (used by ALTER TABLE ... ENABLE DICTIONARY
+    // and its edit-log replay, so an explicit ENABLE takes effect immediately on every FE).
+    default void clearForbiddenColumns(long tableId, java.util.Set<String> columnNames) {
+    }
+
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
     Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName);
 

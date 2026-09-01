@@ -182,6 +182,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_SET_REPLICA_STATUS, SetReplicaStatusOperationLog.class)
             .put(OperationType.OP_DYNAMIC_PARTITION, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, ModifyTablePropertyOperationLog.class)
+            .put(OperationType.OP_MODIFY_NO_DICT_COLUMNS, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_HAS_DELETE, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_REPLICATION_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_WRITE_QUORUM, ModifyTablePropertyOperationLog.class)

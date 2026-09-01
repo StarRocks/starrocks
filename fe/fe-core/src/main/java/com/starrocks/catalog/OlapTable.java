@@ -2474,6 +2474,18 @@ public class OlapTable extends Table {
         tableProperty.setHasForbiddenGlobalDict(hasForbiddenGlobalDict);
     }
 
+    public boolean isNoDictColumn(String columnName) {
+        return tableProperty != null && tableProperty.isNoDictColumn(columnName);
+    }
+
+    public java.util.Set<String> getNoDictColumns() {
+        return tableProperty == null ? java.util.Collections.emptySet() : tableProperty.getNoDictColumns();
+    }
+
+    public void setNoDictColumns(java.util.Set<String> noDictColumns) {
+        tableProperty.setNoDictColumns(noDictColumns);
+    }
+
     // return true if partition with given name already exist, both in partitions
     // and temp partitions.
     // return false otherwise
@@ -3066,6 +3078,13 @@ public class OlapTable extends Table {
         String colocateGroup = getColocateGroup();
         if (colocateGroup != null) {
             properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
+        }
+
+        // columns whose low-cardinality global dict collection is forbidden (auto-set by the dict thrash
+        // guard, or set manually). Rendered so SHOW CREATE TABLE surfaces the forbidden columns.
+        Set<String> noDictColumns = getNoDictColumns();
+        if (noDictColumns != null && !noDictColumns.isEmpty()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_NO_DICT_COLUMNS, Joiner.on(",").join(noDictColumns));
         }
 
         // dynamic partition
