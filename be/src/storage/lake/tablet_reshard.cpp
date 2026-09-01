@@ -567,8 +567,7 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                 g_tablet_reshard_failed << 1;
                 return st;
             }
-            tablet_manager->metacache()->cache_aggregation_partition(
-                    tablet_manager->tablet_metadata_root_location(tablet_id), true);
+            tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
         }
     }
 

@@ -218,7 +218,7 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) 
     }
 }
 
-bool Metacache::lookup_aggregation_partition(std::string_view key) {
+bool Metacache::lookup_bundled_metadata_marker(std::string_view key) {
     auto handle = _cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_aggregate_partition_cache_miss << 1;
@@ -228,9 +228,9 @@ bool Metacache::lookup_aggregation_partition(std::string_view key) {
 
     try {
         auto value = static_cast<CacheValue*>(_cache->value(handle));
-        auto is_aggregation = std::get<bool>(*value);
+        auto is_bundled_metadata = std::get<bool>(*value);
         g_aggregate_partition_cache_hit << 1;
-        return is_aggregation;
+        return is_bundled_metadata;
     } catch (const std::bad_variant_access& e) {
         return false;
     }
@@ -301,8 +301,8 @@ void Metacache::cache_tablet_schema(std::string_view key, std::shared_ptr<const 
     insert(key, cache_value.release(), size);
 }
 
-void Metacache::cache_aggregation_partition(std::string_view key, bool is_aggregation) {
-    auto cache_value = std::make_unique<CacheValue>(is_aggregation);
+void Metacache::cache_bundled_metadata_marker(std::string_view key) {
+    auto cache_value = std::make_unique<CacheValue>(true);
     insert(key, cache_value.release(), sizeof(bool));
 }
 
