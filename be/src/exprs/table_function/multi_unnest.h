@@ -45,9 +45,6 @@ public:
         struct ArrayView {
             const Column* nullable_column;
             const Column* elements;
-            // immutable_data() rather than get_data(): the non-const get_data() materializes a
-            // ContainerResource-backed column into its own buffer and drops the resource, which
-            // the Datum path this replaced did not do.
             UInt32Column::ImmContainer offsets;
         };
         std::vector<ArrayView> array_views;
@@ -57,9 +54,13 @@ public:
         unnested_array_list.reserve(column_count);
         for (auto& col : state->get_columns()) {
             Column* column = col->as_mutable_raw_ptr();
-            auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            array_views.emplace_back(ArrayView{column, col_array->elements_column_raw_ptr(),
-                                               col_array->offsets_column_raw_ptr()->immutable_data()});
+            // const: every ArrayColumn accessor then resolves to its const overload, which keeps the
+            // offsets read on immutable_data(). The non-const FixedLengthColumnBase::get_data()
+            // materializes a ContainerResource-backed column into its own buffer and drops the
+            // resource, and nothing here may mutate the input column.
+            const ArrayColumn* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
+            array_views.emplace_back(
+                    ArrayView{column, &col_array->elements(), col_array->offsets().immutable_data()});
             unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());
         }
 
