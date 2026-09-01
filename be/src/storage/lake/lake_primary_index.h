@@ -26,10 +26,7 @@
 
 namespace starrocks {
 
-class ParallelPublishContext;
-// Declared here rather than included: persistent_index_parallel_publish_context.h is not
-// self-contained (it needs MutableColumnPtr and a complete Buffer<Slice>), so pulling it in from a
-// header breaks the include order. The .cpp has it.
+class ParallelUpsertContext;
 struct ParallelPublishSlot;
 
 namespace lake {
@@ -152,9 +149,9 @@ public:
     //
     // The slot belongs to the caller: it also carries the encoded column, whose bytes the index
     // keeps referencing after this returns when the upsert runs asynchronously. Both call sites hand
-    // over a freshly extended slot, so the append-only scratch inside it always starts empty.
+    // over a fresh slot, so the append-only scratch inside it always starts empty.
     Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
-                        ParallelPublishContext* context);
+                        ParallelUpsertContext* context);
 
     Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
                            DeletesMap* new_deletes);

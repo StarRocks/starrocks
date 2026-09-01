@@ -19,6 +19,7 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
@@ -26,7 +27,7 @@
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
-#include "storage/persistent_index_parallel_publish_context.h"
+#include "storage/parallel_upsert_context.h"
 
 namespace starrocks::lake {
 
@@ -232,30 +233,11 @@ int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
     return index != nullptr ? index->publish_sst_flush_bytes() : 0;
 }
 
-// Query index for existing rows matching primary keys from all segments.
-// This is used during read-only publish when index files already exist.
-//
-// Parameters:
-// - token: Thread pool token for parallel execution. If null, executes serially.
-// - segment_pk_iterator: Iterator over all segments containing primary keys to query.
-// - new_deletes: Output map to store rows that need to be marked as deleted.
-//
-// Parallel Execution:
-// - If token is set, submits each segment as a separate task to the thread pool
-// - Otherwise, processes each segment inline (serial mode)
-// - Waits for all tasks to complete before returning
-//
-// The function performs for each segment:
-// 1. Get encoded primary keys for the segment
-// 2. Query index to find existing row IDs (old_values)
-// 3. Add found row IDs to the deletes map (rows to be marked as deleted)
-//
-// Thread Safety:
-// - Each task allocates its own slot to avoid data races during parallel execution
-// - Shared state (deletes, status) is protected by mutex when updated
-// - Errors are accumulated and checked after all tasks complete
+// Upsert only the rows this tablet owns, each keyed to the rowid it has in the SOURCE segment
+// rather than its position among the survivors. Cross publish only -- an ordinary publish carries an
+// empty mask and takes the plain overload in parallel_upsert.
 Status LakePrimaryIndex::upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
-                                      ParallelPublishContext* context) {
+                                      ParallelUpsertContext* context) {
     DCHECK(!current.owned.empty());
     // Off the mask before filtering: filtering renumbers what survives, and these have to stay the
     // rows' positions in the source segment.
@@ -267,14 +249,9 @@ Status LakePrimaryIndex::upsert_owned(uint32_t rssid, const SegmentPKChunkRef& c
     // One call for the whole chunk, never one per contiguous run of owned rows: ownership of a
     // segment ordered by a separate sort key is scattered row by row, so runs degenerate towards one
     // per row and each call redoes the inactive-memtable and SST lookup and the flush check.
-    RETURN_IF_ERROR(upsert(rssid, owned_rowids, *slot->pk_column, nullptr /* stat */, context));
-    if (context->token == nullptr) {
-        // With no token LakePersistentIndex::upsert resolves the replaced locations inline but does
-        // not drain them into context->deletes -- in the parallel case that is the submitted lambda's
-        // job, so it only happens there.
-        old_values_to_deletes(slot->old_values, context->deletes);
-    }
-    return Status::OK();
+    // Whether the replaced rowids reach `context` from here or from the deferred lookup task is
+    // LakePersistentIndex::upsert's business, keyed on ParallelUpsertContext::defers_lookup().
+    return upsert(rssid, owned_rowids, *slot->pk_column, slot, context);
 }
 
 Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
@@ -420,99 +397,55 @@ Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
     return Status::OK();
 }
 
-// Update index with new primary keys from all segments.
-// This is used during write operations (non-read-only publish) to insert/update index entries.
+// Insert or update this rowset's primary keys, collecting the rowids they replace into
+// `new_deletes`. Used by every non-read-only publish.
 //
-// Parameters:
-// - token: Thread pool token for parallel execution. If null, executes serially.
-// - rssid: RowSet Segment ID, identifies the rowset being processed.
-// - segment_pk_iterator: Iterator over all segments containing primary keys to upsert.
-// - new_deletes: Output map to store rows that need to be marked as deleted.
-//
-// Parallel Execution:
-// - If token is set, submits each segment as a separate task to the thread pool
-// - Otherwise, processes each segment inline (serial mode)
-// - Waits for all tasks to complete before returning
-// - After all tasks finish, flushes accumulated updates to sstable file
-//
-// Thread Safety:
-// - Each parallel task gets its own slot with independent pk_column storage
-// - Errors are accumulated in shared status under mutex protection
-// - Function returns error status after checking all tasks have completed
-//
-// Note: Unlike parallel_get which is read-only, this writes to the index memtable
+// Unlike parallel_get this writes to the index memtable, so the two halves split: the memtable write
+// stays on this thread (it is not safe for concurrent writes, and it fixes the upsert's order
+// against the deletes around it), and only the read half -- resolving what those keys previously
+// mapped to -- is deferred. See LakePersistentIndex::upsert.
 Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
                                          DeletesMap* new_deletes) {
-    // Prepare parallel execution infrastructure if enabled
-    std::mutex mutex; // Protects shared state (deletes, status) during parallel execution
-    Status status = Status::OK();
+    // A null token means no runner in the context, which makes each upsert resolve and flush inline.
+    // That is deliberate: a large serial upsert would otherwise grow the memtable unbounded, since
+    // nobody would be joining and flushing at the end.
+    ParallelTaskRunner runner(token);
+    ParallelUpsertContext context(token != nullptr ? &runner : nullptr, new_deletes);
+    // One slot per chunk. The slot owns the encoded key bytes the index keeps referencing until the
+    // deferred lookup has run, so they all stay alive until the join below.
+    std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
 
-    // Setup context shared across all parallel tasks
-    ParallelPublishContext context{.token = token, .mutex = &mutex, .deletes = new_deletes, .status = &status};
+    // Every exit from this function has to join first. The deferred lookups hold pointers into
+    // `slots` and `context`, and those are destroyed BEFORE `runner` on scope exit -- reverse
+    // declaration order -- so the runner destructor's own join would come too late. `context` needs
+    // `runner` to exist before it, so the cycle is broken here instead: declared last, this runs
+    // first. Covers the RETURN_IF_ERROR paths inside the loop below.
+    DeferOp join_before_unwind([&] { (void)runner.join(); });
 
-    // Process each segment in the iterator. Each chunk's absolute physical
-    // rowid is current.physical_rowid_offset + i_in_chunk (see SegmentPKChunkRef).
+    // Each chunk's absolute physical rowid is current.physical_rowid_offset + i_in_chunk (see
+    // SegmentPKChunkRef).
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
         auto current = segment_pk_iterator->current();
-        if (token) {
-            // Parallel mode: Allocate a slot for this task to store its pk_column
-            context.extend_slots();
-            auto slot = context.slots.back().get();
+        slots.push_back(std::make_unique<ParallelPublishSlot>());
+        auto* slot = slots.back().get();
+        ASSIGN_OR_RETURN(slot->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
 
-            // We can't return error directly, because we need to wait all previous tasks finish.
-            // Instead, we accumulate errors in context->status for later checking.
-            Status st = Status::OK();
-            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.chunk.get());
-            if (pk_column_st.ok()) {
-                // Store pk_column in this task's slot to avoid data races
-                slot->pk_column = std::move(pk_column_st.value());
-
-                if (!current.owned.empty()) {
-                    st = upsert_owned(rssid, current, slot, &context);
-                } else {
-                    // Submit upsert task to thread pool. Pass nullptr for deletes since we collect
-                    // them in the context (not used for upsert, only for parallel_get)
-                    st = upsert(rssid, current.physical_rowid_offset, *slot->pk_column, nullptr /* stat */, &context);
-                }
-                TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
-            } else {
-                st = pk_column_st.status();
-            }
-
-            // Update shared status under mutex if error occurred
-            if (!st.ok()) {
-                std::lock_guard<std::mutex> l(*context.mutex);
-                context.status->update(st);
-            }
+        if (current.owned.empty()) {
+            RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *slot->pk_column, slot, &context));
         } else {
-            // Serial mode: Execute inline with direct error propagation
-            ASSIGN_OR_RETURN(MutableColumnPtr pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
-            if (current.owned.empty()) {
-                // No slot here, unlike the branch below: this overload takes the DeletesMap directly
-                // and knows nothing about a context, so it buffers internally. Only the rowid-vector
-                // overload needs one -- it was written for the parallel path, where the scratch has
-                // to outlive the call in storage the context owns.
-                RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *pk_column, context.deletes));
-            } else {
-                // A fresh slot per chunk, as in the parallel branch. The scratch inside it is
-                // append-only (build_persistent_keys and _build_persistent_values both emplace_back,
-                // and old_values is resized without re-initialising what is already there), so
-                // reusing one would need explicit clearing; a new slot is simply always empty.
-                context.extend_slots();
-                auto* slot = context.slots.back().get();
-                slot->pk_column = std::move(pk_column);
-                RETURN_IF_ERROR(upsert_owned(rssid, current, slot, &context));
-            }
+            RETURN_IF_ERROR(upsert_owned(rssid, current, slot, &context));
+        }
+        if (token != nullptr) {
+            TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
         }
     }
-    // Synchronize parallel execution if enabled
-    if (token) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
-        token->wait(); // Wait for all submitted tasks to complete
 
-        // Check for errors from parallel tasks
-        RETURN_IF_ERROR(status);
-        // Flush accumulated updates to sstable file (batch optimization)
+    if (context.defers_lookup()) {
+        {
+            TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
+            RETURN_IF_ERROR(runner.join());
+        }
+        // Batched: one flush for the whole rowset instead of one per chunk.
         RETURN_IF_ERROR(flush_memtable());
     }
     return segment_pk_iterator->status();
