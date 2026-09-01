@@ -605,17 +605,23 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     tCloudConfiguration.__set_cloud_properties(test_properties);
     auto cloud_config = CloudConfigurationFactory::create_aws(tCloudConfiguration);
 
-    config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    Aws::Client::ClientConfiguration tcloud_client_config = S3ClientFactory::getClientConfig();
+    tcloud_client_config.scheme = Aws::Http::Scheme::HTTPS;
+    tcloud_client_config.maxConnections = config::object_storage_max_connection;
+    if (config::object_storage_connect_timeout_ms > 0) {
+        tcloud_client_config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    tcloud_client_config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
     (void)S3ClientFactory::instance().new_client(tCloudConfiguration, S3ClientFactory::OperationType::RENAME_FILE);
-    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(tcloud_client_config, &cloud_config));
 
     old_object_storage_rename_file_request_timeout_ms = config::object_storage_rename_file_request_timeout_ms;
     old_object_storage_request_timeout_ms = config::object_storage_request_timeout_ms;
     config::object_storage_rename_file_request_timeout_ms = -1;
     config::object_storage_request_timeout_ms = 1000;
     (void)S3ClientFactory::instance().new_client(tCloudConfiguration, S3ClientFactory::OperationType::RENAME_FILE);
-    config.requestTimeoutMs = config::object_storage_request_timeout_ms;
-    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
+    tcloud_client_config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(tcloud_client_config, &cloud_config));
     config::object_storage_rename_file_request_timeout_ms = default_value;
     config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
 }
