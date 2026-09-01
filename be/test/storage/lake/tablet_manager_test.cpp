@@ -30,13 +30,8 @@
 #include "storage/lake/options.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
-<<<<<<< HEAD
 #include "storage/olap_define.h"
 #include "storage/options.h"
-=======
-#include "storage/rowset/segment.h"
-#include "storage/storage_metrics.h"
->>>>>>> d36d1a8 ([BugFix] metric: Add a BE metric for NotFound lake tablet metadata reads (#78451))
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -44,6 +39,7 @@
 #include "util/bthreads/util.h"
 #include "util/failpoint/fail_point.h"
 #include "util/filesystem_util.h"
+#include "util/starrocks_metrics.h"
 
 // NOTE: intend to put the following header to the end of the include section
 // so that our `gutil/dynamic_annotations.h` takes precedence of the absl's.
@@ -980,7 +976,7 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
 // Each remote metadata read that returns NotFound is counted, including
 // fallback reads; hits must leave the metric alone.
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_not_found_metric) {
-    auto& not_found_metric = StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto& not_found_metric = StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total;
     auto not_found_before = not_found_metric.value();
 
     // A missing version 2 probes both the per-tablet metadata object and the
@@ -1001,7 +997,7 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_not_found_metric) {
 // The bundle file is the other location a tablet's metadata can live in, so the
 // bulk bundle reader used by vacuum shares the same accounting.
 TEST_F(LakeTabletManagerTest, get_metas_from_bundle_tablet_metadata_not_found_metric) {
-    auto& not_found_metric = StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto& not_found_metric = StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total;
     auto not_found_before = not_found_metric.value();
 
     auto missing_bundle = _tablet_manager->bundle_tablet_metadata_location(next_id(), 2);

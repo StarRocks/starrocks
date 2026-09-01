@@ -874,13 +874,7 @@ static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& stat
 
 static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
         const std::string& meta_path, const std::vector<int64_t>& to_delete_tablet_ids) {
-<<<<<<< HEAD
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
-    ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, meta_path));
-=======
-    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_path));
->>>>>>> d36d1a8 ([BugFix] metric: Add a BE metric for NotFound lake tablet metadata reads (#78451))
     // Read the entire file content into a string.
     ASSIGN_OR_RETURN(auto serialized_string, TabletManager::read_bundle_metadata_file_with_meter(
                                                      fs.get(), meta_path, /*skip_fill_local_cache=*/true));
