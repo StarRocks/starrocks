@@ -555,6 +555,33 @@ This topic introduces the following types of BE configurations:
 - Description: Connection timeout (in seconds) used when creating Thrift clients. ClientCacheHelper::_create_client multiplies this value by 1000 and passes it to ThriftClientImpl::set_conn_timeout(), so it controls the TCP/connect handshake timeout for new Thrift connections opened by the BE client cache. This setting affects only connection establishment; send/receive timeouts are configured separately. Very small values can cause spurious connection failures on high-latency networks, while large values delay detection of unreachable peers.
 - Introduced in: v3.2.0
 
+### thrift_max_frame_size
+
+- Default: 16384000
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum frame size (in bytes) that the BE Thrift layer allows for a single `TFramedTransport` frame. It maps to thrift's `TConfiguration` and applies to both the client-side (de)serialization path and the server-side transport that accepts incoming RPCs. Note that this limit only takes effect when `TFramedTransport` is used (the BE Thrift server runs in `THREADED` mode with `TBufferedTransport` by default, so it is mainly relevant to the `NON_BLOCKING` server path); when it conflicts with `thrift_max_message_size`, the smaller of the two values is used. Because this is a mutable config, a runtime change only takes effect on connections established after the change; connections that are already open keep the value they were created with, and a full effect on all connections may require reconnection.
+- Introduced in: -
+
+### thrift_max_message_size
+
+- Default: 1073741824
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum message size (in bytes) that the BE Thrift layer allows for a single RPC message. Since thrift 0.16, `TTransport` enforces this limit (thrift's own default is 100 MB) by counting the bytes consumed per message. This value maps to thrift's `TConfiguration` and applies to both the client-side (de)serialization path and the server-side transport that accepts incoming RPCs. In particular, creating a wide table with many buckets can produce a single `BackendService.submit_tasks` message larger than 100 MB; if the limit is too small the server throws `TTransportException("MaxMessageSize reached")` and closes the connection, which surfaces on the FE side as "Socket is closed by peer" / "Broken pipe" and fails `CREATE TABLE`. Because this is a mutable config, a runtime change only takes effect on connections established after the change; connections that are already open keep the value they were created with, so raising the limit to unblock a failing request applies to subsequent connections rather than in-flight ones. The maximum configurable value is 2 GB (`INT32_MAX`).
+- Introduced in: -
+
+### thrift_max_recursion_depth
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum depth of nested structures that the BE Thrift layer allows when (de)serializing a message. It maps to thrift's `TConfiguration` and applies to both the client-side path and the server-side transport that accepts incoming RPCs. Because this is a mutable config, a runtime change only takes effect on connections established after the change; connections that are already open keep the value they were created with.
+- Introduced in: -
+
 ### thrift_port
 
 - Default: 0

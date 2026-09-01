@@ -341,7 +341,7 @@ Status ThriftServer::start() {
                 BackendOptions::get_service_bind_address_without_bracket(), _port);
 
         if (transport_factory == nullptr) {
-            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
+            transport_factory = std::make_shared<ConfigurableBufferedTransportFactory>();
         }
 
         _server = std::make_unique<apache::thrift::server::TThreadPoolServer>(
@@ -356,7 +356,7 @@ Status ThriftServer::start() {
         server_socket->setKeepAlive(true);
 
         if (transport_factory == nullptr) {
-            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
+            transport_factory = std::make_shared<ConfigurableBufferedTransportFactory>();
         }
 
         // Use non-detached thread mode, so the ThreadedServer can correctly wait for all client threads done and exits cleanly.
