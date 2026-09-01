@@ -383,6 +383,17 @@ public class TypeCompatibilityMatrix {
             COMPATIBILITY_MATRIX[scalar.ordinal()][VarbinaryType.VARBINARY.ordinal()] = PrimitiveType.INVALID_TYPE;
         }
 
+        // GEOMETRY supports assignment only to itself. Populate the remaining entries explicitly so
+        // generic function overload resolution treats other pairs as incompatible instead of seeing null.
+        for (PrimitiveType type : PrimitiveType.values()) {
+            if (type == PrimitiveType.GEOMETRY) {
+                continue;
+            }
+            int smallerOrdinal = Math.min(type.ordinal(), PrimitiveType.GEOMETRY.ordinal());
+            int largerOrdinal = Math.max(type.ordinal(), PrimitiveType.GEOMETRY.ordinal());
+            COMPATIBILITY_MATRIX[smallerOrdinal][largerOrdinal] = PrimitiveType.INVALID_TYPE;
+        }
+
         // Check all the necessary entries that should be filled.
         for (int i = 0; i < PrimitiveType.values().length - 2; ++i) {
             for (int j = i; j < PrimitiveType.values().length - 2; ++j) {

@@ -526,6 +526,7 @@ Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExpr
     LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedIfNullExpr);
+        CASE_TYPE(TYPE_GEOMETRY, VectorizedIfNullExpr);
     default:
         LOG(WARNING) << "vectorized engine not support type: " << resultType;
         return nullptr;
@@ -547,6 +548,7 @@ Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node) {
 
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedIfExpr);
+        CASE_TYPE(TYPE_GEOMETRY, VectorizedIfExpr);
     default:
         LOG(WARNING) << "vectorized engine not support type: " << resultType;
         return nullptr;
@@ -557,6 +559,7 @@ Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node
     LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedCoalesceExpr);
+        CASE_TYPE(TYPE_GEOMETRY, VectorizedCoalesceExpr);
     default:
         LOG(WARNING) << "vectorized engine not support type: " << resultType;
         return nullptr;

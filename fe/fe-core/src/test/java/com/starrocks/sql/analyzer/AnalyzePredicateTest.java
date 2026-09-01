@@ -52,6 +52,16 @@ public class AnalyzePredicateTest {
         analyzeFail("select " + point + " in (" + otherPoint + ")", error);
     }
 
+    @Test
+    public void testGeometryNonComparingConditionals() {
+        String point = "ST_GeomFromText('POINT (0 0)')";
+        String otherPoint = "ST_GeomFromText('POINT (1 1)')";
+
+        analyzeSuccess("select if(true, " + point + ", " + otherPoint + ")");
+        analyzeSuccess("select ifnull(" + point + ", " + otherPoint + ")");
+        analyzeSuccess("select coalesce(" + point + ", " + otherPoint + ")");
+        analyzeFail("select nullif(" + point + ", " + otherPoint + ")");
+    }
 
     @Test
     public void testInPredicate() {
