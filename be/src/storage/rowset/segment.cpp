@@ -694,7 +694,7 @@ void Segment::turn_off_batch_update_cache_size() {
         if (_dirty_cache_counter.exchange(0) > 0) {
             if (_tablet_manager != nullptr) {
                 auto mem_cost = mem_usage();
-                _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+                _tablet_manager->update_segment_cache_size(file_name(), mem_cost, this);
             }
         }
     }
@@ -705,7 +705,7 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+            _tablet_manager->update_segment_cache_size(file_name(), mem_cost, this);
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);
