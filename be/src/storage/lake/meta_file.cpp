@@ -1482,6 +1482,7 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
     };
     DeferOp close_current_reader(close_reader);
 
+    std::string buffer;
     for (const auto& output_page : pages) {
         if (!output_page.raw_page.has_value()) {
             close_reader();
@@ -1502,7 +1503,6 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
         }
         uint64_t copied = 0;
-        std::string buffer;
         buffer.resize(kDelvecIoChunkSize);
         while (copied < raw.page.size()) {
             const size_t chunk_size =

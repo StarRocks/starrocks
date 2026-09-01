@@ -113,12 +113,6 @@ protected:
         return DelvecOutputPage{.raw_page = std::move(raw)};
     }
 
-    void expect_untouched_output(const FileMetaPB& before_file, const std::vector<uint64_t>& before_offsets,
-                                 const FileMetaPB& after_file, const std::vector<uint64_t>& after_offsets) {
-        EXPECT_EQ(before_file.SerializeAsString(), after_file.SerializeAsString());
-        EXPECT_EQ(before_offsets, after_offsets);
-    }
-
     enum class RejectionStatus { kInvalidArgument, kNotSupported, kCorruption };
 
     void expect_compacted_delvec_rejected(const std::vector<DelvecOutputPage>& pages, RejectionStatus expected_status,
