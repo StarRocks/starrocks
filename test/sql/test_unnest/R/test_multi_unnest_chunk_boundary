@@ -1,0 +1,184 @@
+-- name: test_multi_unnest_chunk_boundary
+CREATE TABLE mu_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `a` ARRAY<int> NULL COMMENT "",
+    `b` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO mu_${uuid0}
+SELECT g,
+       CASE WHEN g % 7 = 0 THEN [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+            WHEN g % 5 = 0 THEN [g, g + 1, g + 2]
+            WHEN g % 5 = 1 THEN [g]
+            WHEN g % 5 = 2 THEN [g, g + 1]
+            WHEN g % 5 = 3 THEN NULL
+            ELSE [] END,
+       CASE WHEN g % 5 = 0 THEN [g]
+            WHEN g % 5 = 1 THEN [g, g + 1, g + 2]
+            WHEN g % 5 = 2 THEN [g, g + 1]
+            WHEN g % 5 = 3 THEN [g]
+            ELSE [] END
+FROM TABLE(generate_series(1, 2000)) t(g);
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- result:
+8787	7758	2800	2120082	2800600
+-- !result
+SET chunk_size = 7;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- result:
+8787	7758	2800	2120082	2800600
+-- !result
+SET chunk_size = 13;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- result:
+8787	7758	2800	2120082	2800600
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- result:
+8787	7758	2800	2120082	2800600
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+-- result:
+9130	7758	2800	2120082	2800600
+-- !result
+SET chunk_size = 13;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+-- result:
+9130	7758	2800	2120082	2800600
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+-- result:
+9130	7758	2800	2120082	2800600
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- result:
+8787
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- result:
+8787
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+-- result:
+9130
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT count(1) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+-- result:
+9130
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2)
+WHERE (v1 IS NOT NULL AND NOT array_contains(a, v1)) OR (v2 IS NOT NULL AND NOT array_contains(b, v2));
+-- result:
+0
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2)
+WHERE (v1 IS NOT NULL AND NOT array_contains(a, v1)) OR (v2 IS NOT NULL AND NOT array_contains(b, v2));
+-- result:
+0
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT id, v1, v2 FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2) WHERE id = 7 ORDER BY v1, v2;
+-- result:
+7	1	7
+7	2	8
+7	3	None
+7	4	None
+7	5	None
+7	6	None
+7	7	None
+7	8	None
+7	9	None
+7	10	None
+7	11	None
+7	12	None
+7	13	None
+7	14	None
+7	15	None
+7	16	None
+7	17	None
+7	18	None
+7	19	None
+7	20	None
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT id, a, b, v1, v2 FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE WHERE id <= 5 ORDER BY id, v1, v2;
+-- result:
+1	[1]	[1,2,3]	None	2
+1	[1]	[1,2,3]	None	3
+1	[1]	[1,2,3]	1	1
+2	[2,3]	[2,3]	2	2
+2	[2,3]	[2,3]	3	3
+3	None	[3]	None	3
+4	[]	[]	None	None
+5	[5,6,7]	[5]	5	5
+5	[5,6,7]	[5]	6	None
+5	[5,6,7]	[5]	7	None
+-- !result
+SET chunk_size = 4096;
+-- result:
+-- !result
+SELECT id, a, b, v1, v2 FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE WHERE id <= 5 ORDER BY id, v1, v2;
+-- result:
+1	[1]	[1,2,3]	None	2
+1	[1]	[1,2,3]	None	3
+1	[1]	[1,2,3]	1	1
+2	[2,3]	[2,3]	2	2
+2	[2,3]	[2,3]	3	3
+3	None	[3]	None	3
+4	[]	[]	None	None
+5	[5,6,7]	[5]	5	5
+5	[5,6,7]	[5]	6	None
+5	[5,6,7]	[5]	7	None
+-- !result
+DROP TABLE mu_${uuid0};
+-- result:
+-- !result

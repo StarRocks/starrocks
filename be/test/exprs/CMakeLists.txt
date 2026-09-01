@@ -74,6 +74,7 @@ set(EXPR_TEST_FILES
     generate_series_core_test.cpp
     if_expr_test.cpp
     json_each_core_test.cpp
+    table_function/multi_unnest_core_test.cpp
     like_test.cpp
     math_functions_test.cpp
     min_max_predicate_test.cpp
