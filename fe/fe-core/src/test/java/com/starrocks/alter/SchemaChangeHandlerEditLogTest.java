@@ -31,6 +31,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
@@ -64,7 +65,9 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 public class SchemaChangeHandlerEditLogTest {
     private static final String DB_NAME = "test_schema_change_handler_editlog";
@@ -699,6 +702,39 @@ public class SchemaChangeHandlerEditLogTest {
             Assertions.assertEquals("EditLog write failed", exception.getMessage());
             Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, lakeTable.getState());
             Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(lakeTable.getId()).isEmpty());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testProcessLakeTableAlterMetaRejectsReservedTableBeforeWritingEditLog() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        Assertions.assertNotNull(db);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
+        ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            for (OlapTable.OlapTableState reservedState : List.of(OlapTable.OlapTableState.SCHEMA_CHANGE,
+                    OlapTable.OlapTableState.TABLET_RESHARD)) {
+                LakeTable lakeTable = createHashLakeTable(GlobalStateMgr.getCurrentState().getNextId(),
+                        "lake_table_reserved_" + reservedState.name(), 3);
+                db.registerTableUnlocked(lakeTable);
+                lakeTable.setState(reservedState);
+
+                Assertions.assertThrows(DdlException.class,
+                        () -> handler.processLakeTableAlterMeta(clause, db, lakeTable));
+                Assertions.assertEquals(reservedState, lakeTable.getState());
+                Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(lakeTable.getId()).isEmpty());
+                verify(spyEditLog, never()).logAlterJob(any(AlterJobV2.class), any());
+            }
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
