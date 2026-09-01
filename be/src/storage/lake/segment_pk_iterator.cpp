@@ -81,11 +81,7 @@ Status SegmentPKIterator::_load() {
     // durably written the sstable.
     if (_row_selector != nullptr) {
         ASSIGN_OR_RETURN(_owned, _row_selector->select(*_pk_column_chunk));
-        // Record where the siblings' rows physically are while the mask is still in hand. current()
-        // moves the mask out and the consumer loop drops it one chunk later, but a rewrite of this
-        // segment needs every one of them at the end of the loop, not chunk by chunk. The arithmetic
-        // is current()'s: this chunk starts at logical offset _current_rows, which the physical base
-        // shifts to the row's position in the segment file.
+        // A rewritten segment needs the physical rowids of every unowned source row for its delvec.
         const auto physical_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(_current_rows);
         const size_t unowned = std::count(_owned.begin(), _owned.end(), 0);
         if (unowned > 0) {
