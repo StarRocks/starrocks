@@ -414,6 +414,56 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
+// Write-time gate for the segment "small index region" layout. When true, a horizontally
+// written segment (one column group covering all columns) emits every column's ordinal index
+// and page zone map as one contiguous run immediately before the short key index and the
+// footer, instead of interleaving each column's indexes after that column's data pages. Both
+// layouts are readable by any binary -- indexes are always located through absolute
+// PagePointers -- so this can be flipped at any time and mixed within a tablet.
+//
+// The point is cold-read latency on shared-data: the reader must load the ordinal index of
+// every accessed column, and the page zone map of every predicate column, before it can read
+// any data. In the legacy layout those live at N scattered offsets, so they cost N serial
+// round trips to remote storage, each pulling a whole cache block. Gathered at the tail they
+// cost one. Vertical compaction and partial-update rewrites call finalize_columns() once per
+// column group and so cannot form a tail region; they keep the legacy layout regardless.
+CONF_mBool(enable_segment_tail_index_region, "false");
+
+// Read-time gate for the matching prefetch. When true, opening a segment whose footer carries
+// a small index region issues ONE read covering the whole region, so that the per-column index
+// loads that immediately follow are served from the block cache instead of going remote one at
+// a time. Segments without the footer fields are unaffected. Set false to measure the layout
+// change without the prefetch, or as a rollback valve.
+CONF_mBool(enable_segment_tail_index_prefetch, "true");
+
+// Upper bound on the small index region prefetch. A very wide table can produce a region far
+// larger than any query needs, and reading it whole would trade the round trips back for
+// wasted bytes. Regions above this size are not prefetched; their indexes are read per column
+// as in the legacy layout.
+CONF_mInt64(segment_tail_index_prefetch_max_bytes, "16777216");
+
+// Read-time gate for the concurrent data page prefetch. Once a segment's tail index region has
+// been parsed, the ordinal index of every accessed column is already in memory, so the absolute
+// byte range of every data page the scan is about to read is known before the first one is
+// fetched. When true, those ranges are folded onto the cache blocks behind them and the blocks
+// are filled several at a time through a dedicated pool, instead of the read loop discovering
+// them one at a time and waiting out a full remote round trip for each. The block set is
+// exactly the one the read loop would have fetched, so this changes when the blocks are fetched
+// and how many at once, not how many.
+CONF_mBool(enable_segment_data_page_concurrent_prefetch, "false");
+
+// How many cache blocks of one segment the prefetch above fills at the same time. The effective
+// value is capped by the number of independent file handles the scan holds on that segment (one
+// per non-DCG column it reads): a cachefs handle serializes on its own persist stream, so two
+// blocks can only be fetched concurrently through two handles.
+CONF_mInt32(segment_data_page_prefetch_concurrency, "8");
+
+// Size of the pool that runs the prefetch above. Its threads spend their time blocked on remote
+// reads rather than on CPU, so this is sized after the scan instances a node runs concurrently,
+// not after its cores. The pool is built on first use, so a node with the prefetch off never
+// creates it.
+CONF_Int32(segment_data_page_prefetch_thread_num, "256");
+
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
 // deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish

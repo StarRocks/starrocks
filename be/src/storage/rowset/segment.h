@@ -245,6 +245,19 @@ public:
     // the brute-force distance-computation fallback.
     bool skip_vector_index() const { return _skip_vector_index; }
 
+    // Warm the block cache with this segment's small index region, at most once per
+    // Segment object. Deliberately NOT done during open(): open() runs before any
+    // pruning, so a selective scan would pay for the region of every segment in the scan
+    // set and then throw most of them away. Called from the column-iterator setup
+    // instead, which only runs for segments that survived segment-level zone map pruning
+    // and are actually about to load their per-column indexes.
+    void prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache);
+
+    // Size of that region, 0 on the legacy layout. Non-zero means the per-column indexes were
+    // already in memory once the footer was read, so a reader can plan the segment's data page
+    // IO without paying for the plan.
+    uint64_t small_index_region_size() const { return _small_index_region_size; }
+
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status load_index(const LakeIOOptions& lake_io_opts = {});
@@ -373,6 +386,11 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
+    // Byte range of the small index region, from the footer; zero size means the segment
+    // was written in the legacy interleaved layout.
+    uint64_t _small_index_region_offset = 0;
+    uint64_t _small_index_region_size = 0;
+    std::once_flag _small_index_prefetch_once;
     // Presence + page pointer for the optional full sort key index page (footer field 11). Set at
     // open(); the page itself is loaded lazily by ensure_full_sort_key_index_usable().
     bool _has_full_sort_key_index_page = false;

@@ -118,6 +118,8 @@ public:
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
 
+    bool supports_io_range_planning() const override { return true; }
+
     std::string name() const override { return "ScalarColumnIterator"; }
 
     void reserve_col(size_t n, Column* column) override {

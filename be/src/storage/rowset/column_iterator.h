@@ -138,6 +138,13 @@ public:
         return Status::NotSupported("Not Implemented");
     }
 
+    // Whether get_io_range_vec() may be called with a null |dst| purely to learn which bytes this
+    // column would read, without reading any of them. Only true where the answer comes out of the
+    // ordinal index alone: the complex-type and cast iterators derive their element ranges by
+    // decoding the offsets/source column, so they need a real |dst| and would fetch data pages to
+    // answer. Callers that plan IO ahead of the read loop must skip those columns.
+    virtual bool supports_io_range_planning() const { return false; }
+
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
         if (auto sharedBufferStream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
             sharedBufferStream == nullptr) {

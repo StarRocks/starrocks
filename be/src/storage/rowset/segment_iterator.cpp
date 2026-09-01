@@ -24,6 +24,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/concurrency/countdown_latch.h"
 #include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
@@ -42,6 +43,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/config_vector_index_fwd.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "compute_env/runtime_range_pruner.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "fs/fs.h"
@@ -431,6 +433,7 @@ private:
     Status _init_internal();
     Status _init_reused_scan();
     Status _init_scan_range_and_context();
+    Status _prefetch_data_pages_concurrently();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -611,6 +614,11 @@ private:
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
+    // cids whose `_column_files` entry is a handle on the segment file itself rather than on a
+    // delta column group file, i.e. the handles _prefetch_data_pages_concurrently may fetch
+    // through. A cachefs handle serializes on its own persist stream, so these also bound how
+    // many blocks that prefetch can fetch at once.
+    std::vector<ColumnId> _segment_file_column_index;
     ColumnDecoders _column_decoders;
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
@@ -1171,6 +1179,175 @@ Status SegmentIterator::_init_scan_range_and_context() {
     for (auto column_index : _io_coalesce_column_index) {
         RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
     }
+    // Last, so it sees the final _scan_range: everything above only ever shrinks it, and
+    // prefetching pages that pruning already dropped would read bytes the scan never asks for.
+    RETURN_IF_ERROR(_prefetch_data_pages_concurrently());
+    return Status::OK();
+}
+
+namespace {
+
+// Runs the block fills of _prefetch_data_pages_concurrently. Built on first use -- a node that
+// leaves the prefetch off never creates it -- and never torn down, so it cannot be destroyed
+// out from under a scan during shutdown. It is deliberately not one of the shared pools: its
+// threads sit blocked on a remote read for tens of milliseconds at a time, which is exactly the
+// occupancy pattern that starves a pool shared with short CPU-bound work.
+ThreadPool* data_page_prefetch_pool() {
+    static ThreadPool* pool = [] {
+        std::unique_ptr<ThreadPool> built;
+        Status st = ThreadPoolBuilder("seg_page_prefetch")
+                            .set_min_threads(0)
+                            .set_max_threads(std::max(1, config::segment_data_page_prefetch_thread_num))
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .set_idle_timeout(MonoDelta::FromSeconds(60))
+                            .build(&built);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to build the segment data page prefetch pool: " << st;
+            return static_cast<ThreadPool*>(nullptr);
+        }
+        return built.release();
+    }();
+    return pool;
+}
+
+} // namespace
+
+// Fetch the cache blocks holding this segment's data pages several at a time, before the read
+// loop asks for the first one.
+//
+// On the tail layout the plan is free: parsing the footer already brought in the ordinal index
+// of every accessed column, so the absolute byte range of every page the (fully pruned)
+// _scan_range will read is known here, without a single data page having been read. Folded onto
+// cache blocks that is the exact block set the read loop is about to fetch -- the same set, not
+// a guess -- so fetching it up front cannot read a byte the scan did not need.
+//
+// What it changes is the shape of the wait. Left alone, the read loop meets those blocks one at
+// a time and a cachefs miss is one whole remote round trip, so a segment's blocks cost their
+// count times that round trip, serially. Here they cost ceil(count / fanout) of it.
+//
+// The fan-out is bounded by the file handles the scan already holds on this segment, one per
+// non-DCG column: a cachefs handle serializes on its single persist stream, so two blocks are
+// only fetched at once if they go through two handles. Every task therefore gets its own
+// handle, and blocks are deduplicated in file space so no two tasks ever race for one block --
+// a race would miss twice and turn into a genuinely extra remote read.
+Status SegmentIterator::_prefetch_data_pages_concurrently() {
+    if (!config::enable_segment_data_page_concurrent_prefetch) {
+        return Status::OK();
+    }
+    // Only free on the tail layout. On the legacy layout the per-column indexes sit at N
+    // scattered offsets, so learning what to prefetch costs N serial remote round trips -- the
+    // very chain this exists to collapse.
+    if (_segment == nullptr || _segment->small_index_region_size() == 0) {
+        return Status::OK();
+    }
+    // The fills pay off only through the reads that follow hitting the block cache. With the
+    // fill disabled they would go remote and still leave every one of those reads to go remote.
+    if (!_opts.lake_io_opts.fill_data_cache) {
+        return Status::OK();
+    }
+    if (_scan_range.empty() || _segment_file_column_index.empty()) {
+        return Status::OK();
+    }
+    ThreadPool* pool = data_page_prefetch_pool();
+    if (pool == nullptr) {
+        return Status::OK();
+    }
+
+    int64_t block_size = config::starlet_fs_stream_buffer_size_bytes;
+    if (block_size <= 0) {
+        block_size = 1024 * 1024;
+    }
+    // Page offsets are relative to the segment; when it is a slice of a bundle file the cache
+    // blocks are cut in the enclosing file's address space. Plan in that space, or the block
+    // boundaries land mid-block and two tasks end up sharing one.
+    const int64_t file_base = _segment->file_info().bundle_file_offset.value_or(0);
+
+    std::vector<int64_t> blocks;
+    std::vector<io::SeekableInputStream*> handles;
+    for (ColumnId cid : _segment_file_column_index) {
+        auto file_iter = _column_files.find(cid);
+        if (file_iter == _column_files.end() || file_iter->second == nullptr) {
+            continue;
+        }
+        handles.emplace_back(file_iter->second.get());
+        // Complex-type and cast iterators answer get_io_range_vec by decoding offsets out of a
+        // destination column, which needs one and reads data pages to fill it. Their blocks stay
+        // for the read loop; the columns that can be planned still get prefetched.
+        if (cid >= _column_iterators.size() || _column_iterators[cid] == nullptr ||
+            !_column_iterators[cid]->supports_io_range_planning()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(auto ranges, _column_iterators[cid]->get_io_range_vec(_scan_range, nullptr));
+        for (const auto& [offset, size] : ranges) {
+            if (size <= 0) {
+                continue;
+            }
+            const int64_t first = (file_base + offset) / block_size;
+            const int64_t last = (file_base + offset + size - 1) / block_size;
+            for (int64_t block = first; block <= last; ++block) {
+                blocks.emplace_back(block);
+            }
+        }
+    }
+    std::sort(blocks.begin(), blocks.end());
+    blocks.erase(std::unique(blocks.begin(), blocks.end()), blocks.end());
+
+    const int configured = std::max(1, config::segment_data_page_prefetch_concurrency);
+    const size_t fanout = std::min({static_cast<size_t>(configured), handles.size(), blocks.size()});
+    if (fanout <= 1) {
+        // One handle, or one block: there is nothing to overlap and the read loop fetches on its
+        // own just as fast, without a round trip through the pool.
+        return Status::OK();
+    }
+
+    // Contiguous slices rather than round-robin, so each task walks blocks that are next to each
+    // other and any block a touch_cache call overreaches into is one its own task fetches next.
+    const size_t per_task = (blocks.size() + fanout - 1) / fanout;
+    auto fill_slice = [&](size_t task) {
+        const size_t begin = task * per_task;
+        const size_t end = std::min(blocks.size(), begin + per_task);
+        io::SeekableInputStream* handle = handles[task];
+        for (size_t i = begin; i < end; ++i) {
+            // Back to segment-relative bytes, clipped to the block so the call cannot spill into
+            // a neighbour that another task owns.
+            const int64_t start = std::max<int64_t>(0, blocks[i] * block_size - file_base);
+            const int64_t stop = (blocks[i] + 1) * block_size - file_base;
+            if (stop <= start) {
+                continue;
+            }
+            // Best effort: a block left unfetched is one the read loop fetches itself, as before.
+            if (Status st = handle->touch_cache(start, stop - start); !st.ok()) {
+                VLOG(2) << "data page prefetch failed for " << _segment->file_name() << " at " << start << ": " << st;
+                break;
+            }
+        }
+    };
+
+    MonotonicStopWatch watch;
+    watch.start();
+    CountDownLatch latch(static_cast<int>(fanout) - 1);
+    size_t running = 1;
+    for (size_t task = 1; task < fanout; ++task) {
+        Status st = pool->submit_func([&, task]() {
+            CountDownOnScopeExit<CountDownLatch> counted(&latch);
+            fill_slice(task);
+        });
+        if (st.ok()) {
+            ++running;
+        } else {
+            // Pool saturated. Run the slice here instead of leaving its blocks to the read loop,
+            // so the block set stays whole; it just does not overlap with the rest.
+            latch.count_down();
+            fill_slice(task);
+        }
+    }
+    fill_slice(0);
+    latch.wait();
+
+    _opts.stats->data_page_prefetch_ns += watch.elapsed_time();
+    _opts.stats->data_page_prefetch_blocks += static_cast<int64_t>(blocks.size());
+    _opts.stats->data_page_prefetch_tasks += static_cast<int64_t>(running);
+    _opts.stats->data_page_prefetch_segments += 1;
     return Status::OK();
 }
 
@@ -2058,6 +2235,11 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
+        // Warm the segment's small index region before its first per-column index load. Doing
+        // it here rather than in Segment::open() means only segments that survived
+        // segment-level zone map pruning pay for it, and the once_flag inside collapses the
+        // repeat calls this site would otherwise make -- one per column.
+        _segment->prefetch_small_index_region_once(rfile.get(), _opts.lake_io_opts.fill_data_cache);
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
@@ -2074,6 +2256,9 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         } else {
             iter_opts.read_file = rfile.get();
             _column_files[cid] = std::move(rfile);
+            // Only the plain handle can be prefetched through: touch_cache on the coalescing
+            // stream is a no-op, that path plans its own IO via convert_sparse_range_to_io_range.
+            _segment_file_column_index.emplace_back(cid);
         }
     } else {
         // create delta column iterator

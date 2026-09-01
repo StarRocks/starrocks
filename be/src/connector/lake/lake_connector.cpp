@@ -1374,6 +1374,13 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _block_load_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockFetchCount", TUnit::UNIT, segment_read_name);
     _block_seek_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockSeek", segment_read_name);
     _block_seek_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockSeekCount", TUnit::UNIT, segment_read_name);
+    _data_page_prefetch_timer = ADD_CHILD_TIMER(_runtime_profile, "DataPagePrefetch", segment_read_name);
+    _data_page_prefetch_block_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "DataPagePrefetchBlocks", TUnit::UNIT, segment_read_name);
+    _data_page_prefetch_task_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "DataPagePrefetchTasks", TUnit::UNIT, segment_read_name);
+    _data_page_prefetch_segment_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "DataPagePrefetchSegments", TUnit::UNIT, segment_read_name);
     _pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PredFilter", segment_read_name);
     _pred_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT, segment_read_name);
     _rf_pred_filter_timer = ADD_TIMER(_runtime_profile, "RuntimeFilterEvalTime");
@@ -1511,6 +1518,10 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_block_load_counter, _reader->stats().blocks_load);
     COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
     COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
+    COUNTER_UPDATE(_data_page_prefetch_timer, _reader->stats().data_page_prefetch_ns);
+    COUNTER_UPDATE(_data_page_prefetch_block_counter, _reader->stats().data_page_prefetch_blocks);
+    COUNTER_UPDATE(_data_page_prefetch_task_counter, _reader->stats().data_page_prefetch_tasks);
+    COUNTER_UPDATE(_data_page_prefetch_segment_counter, _reader->stats().data_page_prefetch_segments);
 
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
     COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
