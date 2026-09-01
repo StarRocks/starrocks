@@ -36,6 +36,7 @@
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/segment_metadata_filter.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -864,6 +865,36 @@ std::vector<SegmentSharedPtr> Rowset::get_segments() {
     // that must not proceed on failure use get_segments_checked() and check the Status.
     auto res = get_segments_checked();
     return res.ok() ? std::move(res).value() : std::vector<SegmentSharedPtr>{};
+}
+
+void Rowset::release_held_segments() {
+    std::vector<SegmentPtr> released;
+    std::shared_ptr<CompactionDelvecHolder> released_delvecs;
+    {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        released.swap(_held_segments);
+        released_delvecs.swap(_held_delvecs);
+        // Deliberately NOT clearing the get_segments_checked() memo: TabletReader::
+        // init_compaction_column_paths keeps raw ColumnReader pointers into those segments while the
+        // shared_ptr vector it read them from is already gone, so the memo is what keeps them alive
+        // -- and a range-split sibling subtask may be in exactly that window when this runs. In the
+        // normal order the memo is empty here anyway: the chunk-size phase (which calls this) runs
+        // before the reader is opened.
+    }
+    // Hand them to the shared metadata cache on the way out rather than dropping them: the task is
+    // switching to cache-backed reuse, and its next read would otherwise re-read and re-parse every
+    // footer this task just parsed -- leaving the fallback worse than the pre-hold behaviour it
+    // restores. Under the LRU they are evictable again, which is the whole point of giving up the
+    // hold. cache_segment_if_absent keeps whatever is already cached under the same key.
+    // Outside the lock: the metacache takes its own, and dropping the last reference to a wide
+    // input set is not cheap while segments() waits on this (non-recursive) mutex.
+    if (auto* metacache = _tablet_mgr != nullptr ? _tablet_mgr->metacache() : nullptr; metacache != nullptr) {
+        for (const auto& seg : released) {
+            if (seg != nullptr) {
+                (void)metacache->cache_segment_if_absent(seg->file_info().cache_key(), seg);
+            }
+        }
+    }
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {

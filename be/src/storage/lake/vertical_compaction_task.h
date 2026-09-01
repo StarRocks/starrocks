@@ -60,10 +60,6 @@ private:
     int64_t _total_num_rows = 0;
     int64_t _total_data_size = 0;
     int64_t _total_input_segs = 0;
-    // Snapshot of config::lake_compaction_hold_input_segments, taken once at the top of execute().
-    // The config is mutable, and every column-group pass must agree on it: a flip mid-task would
-    // leave the remaining passes with neither the held segments nor a filled metadata cache.
-    bool _hold_input_segments = false;
 };
 
 } // namespace starrocks::lake

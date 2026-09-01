@@ -37,6 +37,10 @@ class TabletWriter;
 
 class CompactionTask {
 public:
+    // Holding the input set is worth at most this factor of read-chunk shrink; past it the task
+    // stops holding. See chunk_size_with_held_segments().
+    static constexpr int32_t kMaxHeldChunkShrink = 8;
+
     // CancelFunc is a function that used to tell the compaction task whether the task
     // should be cancelled.
     using CancelFunc = std::function<Status()>;
@@ -78,9 +82,25 @@ public:
     int64_t sst_output_bytes() const { return _sst_output_bytes; }
 
 protected:
+    // Read chunk size for this phase, deciding at the same time whether the held input set may stay.
+    // The held set is resident for the whole task, so it comes out of the same per-worker budget the
+    // read buffers are sized from -- but only up to a point: past it, holding starves the chunk
+    // sizing (get_read_chunk_size divides what is left by the per-row footprint, so an exhausted
+    // budget yields a one-row chunk and the task crawls) while pinning memory the metadata-cache LRU
+    // cannot reclaim. When holding would shrink the chunk that far, this releases the held sets and
+    // clears `_hold_input_segments`, so the shared metadata cache carries cross-pass reuse again --
+    // the behaviour from before hold_segments existed -- and returns the un-held chunk size.
+    int32_t chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
+                                          int64_t total_mem_footprint, size_t source_num);
+
     int64_t _txn_id;
     VersionedTablet _tablet;
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
+    // Snapshot of config::lake_compaction_hold_input_segments, taken once at the top of execute().
+    // The config is mutable, and every phase of the task must agree on it: a flip mid-task would
+    // leave the remaining phases with neither the held segments nor a filled metadata cache.
+    // chunk_size_with_held_segments() may clear it -- see there.
+    bool _hold_input_segments = false;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
     std::shared_ptr<const TabletSchema> _tablet_schema;

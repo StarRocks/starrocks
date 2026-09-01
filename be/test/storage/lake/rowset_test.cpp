@@ -37,6 +37,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
+#include "storage/compaction_utils.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/metacache.h"
@@ -581,12 +582,70 @@ TEST_F(LakeRowsetTest, test_get_read_iterator_num_from_metadata) {
     }
 }
 
-// The held input set stays resident for the whole task, so calculate_chunk_size_for_column_group
-// must size the read chunks from what is left of compaction_memory_limit_per_worker after the held
-// set, and only when holding -- the kill-switch leg keeps the pre-hold sizing. The budget is set to
-// half the held set's measured size, so the subtraction must clamp the holding leg to the minimum
-// chunk size while the non-holding leg still sizes from the full budget.
-TEST_F(LakeRowsetTest, test_chunk_size_budget_subtracts_held_segments) {
+// The held input set stays resident for the whole task, so it is charged against the same
+// compaction_memory_limit_per_worker the read chunks are sized from -- but only up to a point: past
+// the point where holding would shrink the read chunk by more than kMaxHeldChunkShrink, the task
+// stops holding and sizes from the full budget instead. Driven with synthetic sizing inputs so the
+// arithmetic (including the non-positive remainder, which get_read_chunk_size would read as "no
+// memory cap") is pinned independently of what the test segments happen to measure.
+TEST_F(LakeRowsetTest, test_chunk_size_charges_held_segments) {
+    create_rowsets_for_testing();
+
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+
+    auto rs = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    CompactionTaskContext context(next_id(), _tablet_metadata->id(), 456, false, false, nullptr);
+    VersionedTablet vt(nullptr, _tablet_metadata);
+    VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
+
+    // Synthetic sizing inputs, so the arithmetic is exercised without depending on what the tiny
+    // test segments happen to measure.
+    const int64_t kLimit = 1000000;
+    const int64_t kRows = 1000;
+    const int64_t kFootprint = 100000;
+    const size_t kSources = 10;
+    const int32_t kCfgChunk = config::lake_compaction_chunk_size;
+    config::compaction_memory_limit_per_worker = kLimit;
+
+    const int32_t unheld = CompactionUtils::get_read_chunk_size(kLimit, kCfgChunk, kRows, kFootprint, kSources);
+
+    // Half the budget held: charged against the sizing, and holding continues.
+    task._hold_input_segments = true;
+    const int64_t half = kLimit / 2;
+    EXPECT_EQ(CompactionUtils::get_read_chunk_size(kLimit - half, kCfgChunk, kRows, kFootprint, kSources),
+              task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+    EXPECT_TRUE(task._hold_input_segments);
+
+    // Not holding: the held measurement must not touch the sizing at all.
+    task._hold_input_segments = false;
+    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+
+    // Nearly the whole budget held: the read chunk would shrink by more than kMaxHeldChunkShrink,
+    // so the task stops holding and sizes from the full budget instead.
+    task._hold_input_segments = true;
+    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(kLimit - kLimit / 100, kRows, kFootprint, kSources));
+    EXPECT_FALSE(task._hold_input_segments);
+
+    // At or over budget: get_read_chunk_size() must never see the non-positive remainder (it reads
+    // that as "no memory cap" and would answer with the largest chunk of all).
+    task._hold_input_segments = true;
+    EXPECT_EQ(unheld, task.chunk_size_with_held_segments(kLimit, kRows, kFootprint, kSources));
+    EXPECT_FALSE(task._hold_input_segments);
+
+    // A non-positive limit means "no memory cap" and must stay that way, holding or not.
+    config::compaction_memory_limit_per_worker = -1;
+    task._hold_input_segments = true;
+    EXPECT_EQ(kCfgChunk, task.chunk_size_with_held_segments(half, kRows, kFootprint, kSources));
+    EXPECT_TRUE(task._hold_input_segments);
+}
+
+// When the input set does not fit the per-worker budget, holding it is worse than not holding:
+// get_read_chunk_size() divides what is left by the per-row footprint, so a starved budget collapses
+// the read chunk to a single row and the task crawls -- while pinning a set the metadata-cache LRU
+// cannot reclaim. The task must stop holding instead: release the held sets, clear the flag (so the
+// remaining passes fill the shared metadata cache again), and size the chunks from the full budget.
+TEST_F(LakeRowsetTest, test_chunk_size_falls_back_when_held_segments_do_not_fit) {
     create_rowsets_for_testing();
 
     const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
@@ -602,7 +661,6 @@ TEST_F(LakeRowsetTest, test_chunk_size_budget_subtracts_held_segments) {
     VersionedTablet vt(nullptr, _tablet_metadata);
     VerticalCompactionTask task(vt, {rs}, &context, _tablet_schema);
 
-    // Measure what the held set will cost, the same way the implementation does.
     int64_t held_bytes = 0;
     {
         ASSIGN_OR_ABORT(auto segments, rs->segments(false));
@@ -611,18 +669,33 @@ TEST_F(LakeRowsetTest, test_chunk_size_budget_subtracts_held_segments) {
         }
     }
     ASSERT_GT(held_bytes, 4);
-    // Half the held set: safely below whatever the implementation measures on its own instances,
-    // so the subtraction clamps the remaining budget to its floor.
+
+    // Half the held set: whatever the implementation measures on its own instances cannot fit.
+    // Both legs run at this same budget, so the sizing is comparable: falling back must produce
+    // exactly the not-holding chunk size, never the starved one the subtraction would have given.
     config::compaction_memory_limit_per_worker = held_bytes / 2;
 
     task._hold_input_segments = false;
     ASSIGN_OR_ABORT(auto chunk_no_hold, task.calculate_chunk_size_for_column_group({0}));
 
+    // Empty the cache the non-holding leg just filled, so the handoff assertion below can only be
+    // satisfied by the fallback itself.
+    _tablet_mgr->metacache()->prune();
+
     task._hold_input_segments = true;
     ASSIGN_OR_ABORT(auto chunk_hold, task.calculate_chunk_size_for_column_group({0}));
 
-    EXPECT_LT(chunk_hold, chunk_no_hold);
-    EXPECT_LE(chunk_hold, 2); // 1 byte of remaining budget: the minimum chunk size
+    EXPECT_EQ(chunk_no_hold, chunk_hold);
+    // Flag cleared, so the remaining passes fill the shared metadata cache again; nothing pinned.
+    EXPECT_FALSE(task._hold_input_segments);
+    EXPECT_TRUE(rs->_held_segments.empty());
+    EXPECT_TRUE(rs->_held_delvecs == nullptr);
+    // The released set was handed to the shared cache rather than dropped: the read pass must not
+    // have to re-parse the footers this task just parsed.
+    for (const auto& seg_meta : _tablet_metadata->rowsets(0).segment_metas()) {
+        EXPECT_TRUE(_tablet_mgr->metacache()->lookup_segment(
+                            _tablet_mgr->segment_location(_tablet_metadata->id(), seg_meta.filename())) != nullptr);
+    }
 }
 
 TEST_F(LakeRowsetTest, test_segment_update_cache_size) {

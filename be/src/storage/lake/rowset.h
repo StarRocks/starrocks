@@ -246,6 +246,12 @@ public:
     // Those rowsets keep the original load-per-read path (and therefore the metadata cache).
     [[nodiscard]] bool can_hold_segments() const { return !partial_segments_compaction() && !is_segment_range_mode(); }
 
+    // Drop the held input segments and the task-scoped delvec store, so a compaction task that
+    // decided its input set does not fit the per-worker memory budget stops pinning them (see
+    // CompactionTask::chunk_size_with_held_segments). Callers already holding a set returned by
+    // segments() keep their own references, so this is safe while a read is in flight.
+    void release_held_segments();
+
     // Get segment range [start, end), only valid when is_segment_range_mode() returns true
     [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
     [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }

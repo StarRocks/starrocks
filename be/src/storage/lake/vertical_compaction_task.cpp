@@ -214,17 +214,20 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // With hold_segments the task keeps its input Segment objects alive on the Rowset instance,
         // so the cross-pass reuse above no longer needs the shared metadata cache. Filling it would
         // only push soon-to-be-deleted input segments into a node-wide cache, evicting neighbors'
-        // entries. `_hold_input_segments` is the task-wide snapshot taken at the top of execute(), so
-        // fill and hold never disagree mid-task.
+        // entries. Holding and cache-filling are the two alternative reuse mechanisms, never both:
+        // whichever is active must carry every pass, so `_hold_input_segments` is the task-wide
+        // snapshot taken at the top of execute() (chunk_size_with_held_segments may clear it, but then
+        // it clears it for the remaining passes too).
+        const bool reuse_via_shared_cache = !_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = !_hold_input_segments,
+                                   .fill_metadata_cache = reuse_via_shared_cache,
                                    .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         // Only a rowset that actually holds pins its set for the task; one that cannot (segment-range
         // mode) had its holding downgraded inside segments() and stays on the evictable shared cache,
         // so it must not be charged against the read-buffer budget below.
-        const bool rowset_holds = rowset->can_hold_segments();
+        const bool rowset_holds = _hold_input_segments && rowset->can_hold_segments();
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
             // experimental_lake_ignore_lost_segment). This chunk-size estimate is position-agnostic, so
@@ -248,17 +251,13 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         }
     }
     // The held input set stays resident across every column-group pass, so it comes out of the same
-    // per-worker budget the read buffers are sized from; without the subtraction the chunk sizing
-    // would plan as if that memory were still free. mem_usage() covers the whole segment (all
-    // columns), which is exactly what stays resident regardless of this group's width. Only when
-    // holding: the kill-switch leg re-loads per pass and keeps the pre-hold sizing. A non-positive
-    // limit means "no memory cap" and must stay that way.
-    int64_t mem_limit = config::compaction_memory_limit_per_worker;
-    if (_hold_input_segments && mem_limit > 0) {
-        mem_limit = std::max<int64_t>(1, mem_limit - held_segments_bytes);
-    }
-    return CompactionUtils::get_read_chunk_size(mem_limit, config::lake_compaction_chunk_size, _total_num_rows,
-                                                total_mem_footprint, _total_input_segs);
+    // per-worker budget the read buffers are sized from; charging it is what keeps the chunk sizing
+    // honest. mem_usage() covers the whole segment (all columns), which is exactly what stays
+    // resident regardless of this group's width -- and it grows as later passes touch more column
+    // indexes, so this re-decides every pass: once holding would starve the budget the task stops
+    // holding, for this pass and every later one. See there.
+    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint,
+                                         _total_input_segs);
 }
 
 Status VerticalCompactionTask::compact_column_group(bool is_key, int column_group_index, size_t column_group_size,

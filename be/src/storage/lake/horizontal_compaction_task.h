@@ -40,11 +40,6 @@ public:
 
 private:
     StatusOr<int32_t> calculate_chunk_size();
-
-    // Snapshot of config::lake_compaction_hold_input_segments, taken once at the top of execute().
-    // The config is mutable, and the chunk-size pass and the read pass must agree on it: a flip in
-    // between would leave the read pass with neither the held segments nor a filled metadata cache.
-    bool _hold_input_segments = false;
 };
 
 } // namespace starrocks::lake
