@@ -16,14 +16,6 @@
 
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/debug/trace.h"
-#include "base/testutil/sync_point.h"
-#include "base/time/time.h"
-#include "column/chunk_factory.h"
-#include "column/chunk_schema_helper.h"
->>>>>>> 2e754f3 ([BugFix] Fix compaction read chunk size estimation (#78192))
 #include "column/schema.h"
 #include "common/statusor.h"
 #include "runtime/current_thread.h"
@@ -34,6 +26,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
+#include "testutil/sync_point.h"
 #include "util/time.h"
 #include "util/trace.h"
 
