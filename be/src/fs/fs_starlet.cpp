@@ -692,6 +692,12 @@ static Cache* get_shard_fs_cache() {
     return g_shard_fs_cache.get();
 }
 
+#ifdef BE_TEST
+void TEST_clear_shard_fs_cache() {
+    get_shard_fs_cache()->prune();
+}
+#endif
+
 std::shared_ptr<FileSystem> new_fs_starlet(int64_t shard_id, bool use_raw_path) {
     // The cache here is used to store fslib's shard fs which is used for cross cluster migration,
     // where each shard fs correspond to one storage volume on source cluster.

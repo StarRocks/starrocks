@@ -1928,6 +1928,11 @@ protected:
     void TearDown() override {
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
+        // Clearing the callbacks is not enough: new_fs_starlet() caches the filesystem this test
+        // injected, keyed by shard id, for the life of the process. A later test using the same shard
+        // id gets a cache HIT and returns before its own callback runs, so it silently inherits this
+        // test's mock. Drop the cache with the callbacks that populated it.
+        TEST_clear_shard_fs_cache();
 
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         ASSERT_OK(fs::remove_all(_test_dir));
