@@ -25,8 +25,10 @@ import com.starrocks.sql.ast.expression.LimitElement;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * AnalyzeState is used to record some temporary variables that may be used during translate.
@@ -76,6 +78,9 @@ public class AnalyzeState {
      * whether two expressions come from the same column
      */
     private final Map<Expr, FieldId> columnReferences = new HashMap<>();
+    private final Set<RelationId> localRelationIds = new HashSet<>();
+    private final List<Expr> joinOnPredicates = new ArrayList<>();
+    private boolean hasOuterColumnReferenceFromRelation;
 
     /**
      * Non-deterministic functions should be mapped multiple times in the project,
@@ -110,6 +115,27 @@ public class AnalyzeState {
 
     public void setUsesBm25Score(boolean usesBm25Score) {
         this.usesBm25Score = usesBm25Score;
+    }
+
+    void registerLocalScope(Scope scope) {
+        localRelationIds.add(scope.getRelationId());
+    }
+
+    boolean hasOuterColumnReference() {
+        return hasOuterColumnReferenceFromRelation || columnReferences.values().stream()
+                .anyMatch(fieldId -> !localRelationIds.contains(fieldId.getRelationId()));
+    }
+
+    void mergeOuterColumnReference(boolean hasOuterColumnReference) {
+        hasOuterColumnReferenceFromRelation |= hasOuterColumnReference;
+    }
+
+    void addJoinOnPredicate(Expr predicate) {
+        joinOnPredicates.add(predicate);
+    }
+
+    List<Expr> getJoinOnPredicates() {
+        return joinOnPredicates;
     }
 
     public Scope getOrderScope() {

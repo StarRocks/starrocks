@@ -62,10 +62,13 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.common.Pair;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.type.Type;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 
 import java.util.List;
+import java.util.Set;
 import java.util.Vector;
 
 import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
@@ -115,6 +118,8 @@ import static com.starrocks.type.VarcharType.VARCHAR;
 import static com.starrocks.type.VariantType.VARIANT;
 
 public class VectorizedBuiltinFunctions {
+    public static final Set<String> AI_FUNCTION_NAMES = ImmutableSet.of(${ai_function_names});
+
     public static void initBuiltins(FunctionSet functionSet) {
         ${functions}
   }
@@ -190,6 +195,16 @@ def add_function(fn_data):
         entry["named_args"] = fn_data[-1]['named_args']
 
     function_list.append(entry)
+    return entry
+
+
+def add_ai_function(fn_data):
+    if len(fn_data) != 8:
+        raise ValueError("AI function entries must declare a model source: " + repr(fn_data))
+
+    entry = add_function(fn_data[:7])
+    entry["binary_type"] = "AI"
+    entry["model_source"] = fn_data[7]
 
 
 def generate_default_value(param, fn_id):
@@ -223,6 +238,10 @@ def generate_fe(path):
     fn_template = Template(
         'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, ${ret}${args_types});'
     )
+    ai_fn_template = Template(
+        'functionSet.addVectorizedAIScalarBuiltin(${id}, "${name}", ${has_vargs}, '
+        'TAIModelSource.${model_source}, ${ret}${args_types});'
+    )
 
     fn_named_template = Template('''{
             List<Type> argTypes${id} = Lists.newArrayList(${args_types_list});
@@ -240,6 +259,9 @@ ${default_values}
             [i for i in fnm["args"] if i != "..."]
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
+
+        if fnm.get("binary_type") == "AI":
+            return ai_fn_template.substitute(fnm)
 
         # Check if function has named arguments
         if fnm.get("named_args"):
@@ -265,6 +287,8 @@ ${default_values}
     value = dict()
     value["license"] = license_string
     value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS])
+    ai_function_names = sorted({fn["name"] for fn in function_list if fn.get("binary_type") == "AI"})
+    value["ai_function_names"] = ", ".join('"%s"' % name for name in ai_function_names)
 
     content = java_template.substitute(value)
 
@@ -304,7 +328,8 @@ def generate_cpp(path):
 
     value = dict()
     value["license"] = license_string
-    value["functions"] = ", \n        ".join([gen_be_fn(i) for i in function_list])
+    builtin_functions = [fn for fn in function_list if fn.get("binary_type") != "AI"]
+    value["functions"] = ", \n        ".join([gen_be_fn(i) for i in builtin_functions])
 
     modules = [
         "MathFunctions",
@@ -339,7 +364,7 @@ def generate_cpp(path):
     for module in modules:
         modules_contents[module] = ""
 
-    for fnm in function_list:
+    for fnm in builtin_functions:
         target = "Unknown"
         if fnm["fn"] == "nullptr":
             continue
@@ -417,6 +442,9 @@ if __name__ == "__main__":
     # Read the function metadata inputs
     for function in functions.vectorized_functions:
         add_function(function)
+
+    for function in functions.ai_vectorized_functions:
+        add_ai_function(function)
 
     generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
     generate_cpp(be_functions_dir + "/")

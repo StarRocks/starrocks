@@ -296,6 +296,16 @@
     {
       "path": "be/src/common/config_llm_fwd.h",
       "configs": [
+        "ai_function_request_timeout_ms",
+        "ai_function_connect_timeout_ms",
+        "ai_function_max_response_bytes",
+        "ai_function_worker_thread_num",
+        "ai_function_sub_chunk_size",
+        "ai_function_max_retries",
+        "ai_function_max_retries_on_throttle",
+        "ai_function_on_error",
+        "ai_function_rate_limit_qps_chat",
+        "ai_function_max_inflight",
         "llm_cache_size",
         "llm_max_concurrent_queries",
         "llm_max_queue_size"

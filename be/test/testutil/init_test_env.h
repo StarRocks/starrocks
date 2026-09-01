@@ -16,6 +16,7 @@
 
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
+#include <curl/curl.h>
 
 #include <algorithm>
 #include <memory>
@@ -24,6 +25,7 @@
 #include "agent/agent_server.h"
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_env_fwd.h"
@@ -78,6 +80,12 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+    const CURLcode curl_status = curl_global_init(CURL_GLOBAL_ALL);
+    if (curl_status != CURLE_OK) {
+        fprintf(stderr, "failed to initialize libcurl, curl_status=%d\n", static_cast<int>(curl_status));
+        return -1;
+    }
+    DeferOp curl_cleanup([] { curl_global_cleanup(); });
     auto fs_registry_status = fs::install_builtin_file_system_providers();
     CHECK(fs_registry_status.ok()) << fs_registry_status;
     butil::FilePath curr_dir(std::filesystem::current_path());

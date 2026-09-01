@@ -41,6 +41,106 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## クエリ
 
+### ai_function_request_timeout_ms
+
+- デフォルト: 600000
+- タイプ: Int
+- 単位: ミリ秒
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: admission、最初の HTTP attempt、すべての retry と backoff、および completion の分類を含む、1 つの AI task の独立した最大存続時間です。これらの段階は 1 つの絶対 request deadline を共有し、attempt ごとにタイムアウトが再開されることはありません。各非同期境界では、この不変の request deadline とクエリの現在の deadline のうち早い方が実際の deadline になります。クエリのキャンセルと deadline の更新は task の存続期間中、常にリアルタイムで反映されます。`0` を指定すると独立した request 上限が無効になり、動的なクエリ lifecycle のみが適用されます。遅いモデル呼び出しを早く失敗させるには値を小さくします。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_connect_timeout_ms
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: ミリ秒
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: AI HTTP attempt が接続を確立するまでの最大時間です。独立した request deadline が有効な場合、transport は残りの request 存続時間でも接続確立を制限し、その deadline 自体は延長しません。`0` を指定すると独立した接続上限が無効になります。両方の独立した上限が `0` の場合、transport は静的な connection timeout と request timeout を設定しませんが、クエリのキャンセルと deadline は引き続きリアルタイムで確認されます。到達不能なモデル endpoint を早く検出するには値を小さくし、接続確立が遅いネットワークでは値を大きくします。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_response_bytes
+
+- デフォルト: 8388608
+- タイプ: Int
+- 単位: バイト
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: 1 回の AI HTTP attempt から受け付ける response body の最大サイズです。この上限を超えたレスポンスは Provider による解析前に拒否され、BE のメモリ消費を制限します。モデルが正当に大きなレスポンスを返す場合にのみ値を増やしてください。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_worker_thread_num
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: スレッド
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: AI HTTP completion とレスポンス分類を処理する worker の数です。completion 処理が滞留する場合は増やし、CPU とメモリのオーバーヘッドを抑える場合は減らします。この値を変更しても、BE 起動時に確定した AI completion queue の固定容量は変わりません。実行時の変更は worker pool のリサイズとして即時反映され、BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_sub_chunk_size
+
+- デフォルト: 64
+- タイプ: Int
+- 単位: 行
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: AI 実行の sub-chunk にまとめる最大行数です。小さい値はスケジューリングとキャンセルの粒度を細かくしますが、スケジューリングのオーバーヘッドが増えます。大きい値はそのオーバーヘッドを減らしますが、タスクごとに保持する行数が増えます。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_retries
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: 回
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: 直前の失敗が再試行可能な転送エラーまたは Provider エラーの場合に許可される、共有 retry ordinal の上限です。最初の HTTP attempt は含みません。通常の retry と throttle retry は同じ retry ordinal を消費し、この上限が throttle の上限に加算されることはありません。`0` を指定すると通常の再試行可能エラー後の retry が無効になります。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_retries_on_throttle
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: 回
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: 直前の失敗が HTTP 429 などの Provider スロットリングの場合に許可される、共有 retry ordinal の上限です。最初の HTTP attempt は含みません。通常の retry と throttle retry は同じ retry ordinal を消費するため、これは現在の失敗種別に適用する別の上限であり、独立した retry budget ではありません。`0` を指定するとスロットリング後の retry が無効になります。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_on_error
+
+- デフォルト: ignore
+- タイプ: String
+- 単位: -
+- 有効な値: `ignore`、`fail`
+- 変更可能: はい
+- 説明: AI 関数の行単位エラー処理を制御します。`ignore` は失敗した行に NULL を返してクエリを続行し、`fail` はクエリを中止します。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_rate_limit_qps_chat
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: リクエスト/秒
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: endpoint、credential、capability ごとに分けられた chat/text bucket に対する、BE 単位のリクエスト admission rate です。Provider のクォータに合わせる、または送信負荷を抑える場合は値を小さくし、Provider と BE の両方に十分な容量がある場合にのみ増やします。実行時の変更は即時反映され、待機中の admission を起動します。BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_inflight
+
+- デフォルト: 512
+- タイプ: Int
+- 単位: リクエスト
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: プロセス全体で同時に in-flight admission permit を保持できる AI HTTP attempt の上限です。値を小さくすると HTTP と response memory の負荷を制限できます。これはグローバルな admission 制限であり、クエリごとのクォータではありません。実行時の変更は即時反映され、待機中の admission を起動します。BE の再起動は不要です。BE 起動時に確定した completion queue の固定容量は変わりません。
+- 導入バージョン: -
+
 ### agg_hash_map_prefetch_dist
 
 - デフォルト: 16

@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
@@ -276,6 +277,17 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitLogicalAIProject(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            LogicalAIProjectOperator project = optExpression.getOp().cast();
+            return new OperatorStr("logical AI project (" +
+                    project.getColumnRefMap().values().stream().map(scalarOperatorStringFunction::apply)
+                            .collect(Collectors.joining(",")) + ")",
+                    step, Collections.singletonList(child));
+        }
+
+        @Override
         public OperatorStr visitLogicalFilter(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
@@ -499,6 +511,11 @@ public class LogicalPlanPrinter {
         }
 
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {
+            return visit(optExpression.getInputs().get(0), step);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalAIProject(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
         }
 

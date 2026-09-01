@@ -19,6 +19,13 @@
 namespace starrocks {
 
 class AgentServer;
+class AIAdmissionController;
+class AIClock;
+class AICompletionExecutor;
+class AIHttpClient;
+class AIMetrics;
+class AIRandom;
+class AIRuntimeConfigSource;
 class BackendServiceClient;
 class BrokerMgr;
 class BrpcStubCache;
@@ -138,10 +145,22 @@ struct AgentServices {
     AgentServer* agent_server = nullptr;
 };
 
+// Stable, non-owning query-execution view over the process AI runtime owned by ComputeEnv.
+struct AIServices {
+    const AIRuntimeConfigSource* config_source = nullptr;
+    AIAdmissionController* admission_controller = nullptr;
+    AIHttpClient* http_client = nullptr;
+    AICompletionExecutor* completion_executor = nullptr;
+    const AIClock* clock = nullptr;
+    AIRandom* random = nullptr;
+    AIMetrics* metrics = nullptr;
+};
+
 struct QueryExecutionServices {
     const ExecutionEnv* execution = nullptr;
     const RpcServices* rpc = nullptr;
     const RuntimeServices* runtime = nullptr;
+    const AIServices* ai = nullptr;
     MetricRegistry* process_metrics = nullptr;
 };
 

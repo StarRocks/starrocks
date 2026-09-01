@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -138,6 +139,9 @@ public class Function implements Writable {
 
     @SerializedName(value = "binaryType")
     private TFunctionBinaryType binaryType;
+
+    @SerializedName(value = "aiModelSource")
+    private TAIModelSource aiModelSource;
 
     // Absolute path in HDFS for the binary that contains this function.
     // e.g. /udfs/udfs.jar
@@ -246,6 +250,7 @@ public class Function implements Writable {
         userVisible = other.userVisible;
         location = other.location;
         binaryType = other.binaryType;
+        aiModelSource = other.aiModelSource;
         checksum = other.checksum;
         functionId = other.functionId;
         isPolymorphic = other.isPolymorphic;
@@ -319,6 +324,18 @@ public class Function implements Writable {
 
     public void setBinaryType(TFunctionBinaryType type) {
         binaryType = type;
+    }
+
+    public boolean isAi() {
+        return binaryType == TFunctionBinaryType.AI;
+    }
+
+    public TAIModelSource getAiModelSource() {
+        return aiModelSource;
+    }
+
+    public void setAiModelSource(TAIModelSource aiModelSource) {
+        this.aiModelSource = aiModelSource;
     }
 
     public void setArgNames(List<String> names) {
@@ -808,6 +825,9 @@ public class Function implements Writable {
             fn.setInput_type(inputType);
         }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
+        if (aiModelSource != null) {
+            fn.setAi_model_source(aiModelSource);
+        }
         return fn;
     }
 

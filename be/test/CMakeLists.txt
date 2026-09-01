@@ -218,6 +218,7 @@ endif ()
 # Tests that link against ServiceBE / Cache. Append before add_library so the
 # object library actually picks them up (CMake evaluates EXEC_FILES by value
 # at add_library call time).
+list(APPEND EXEC_FILES ./service/ai_config_update_hooks_test.cpp)
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
     list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)

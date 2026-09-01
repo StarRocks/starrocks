@@ -37,6 +37,106 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 查询引擎
 
+### ai_function_request_timeout_ms
+
+- 默认值：600000
+- 类型：Int
+- 单位：毫秒
+- 有效值：非负整数
+- 是否动态：是
+- 描述：单个 AI task 的最长独立生命周期，覆盖准入、首次 HTTP attempt、所有重试与 backoff，以及 completion 分类。这些阶段共用一个绝对 request deadline，不会在每次 attempt 时重新计时。在每个异步边界，实际 deadline 取该不可变 request deadline 与 Query 当前 deadline 中较早者；Query 取消和 deadline 更新在 task 的整个生命周期内始终实时生效。`0` 表示禁用独立的 request 限制，仅使用实时 Query 生命周期。需要更快终止慢模型调用时可调小该值。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_connect_timeout_ms
+
+- 默认值：10000
+- 类型：Int
+- 单位：毫秒
+- 有效值：非负整数
+- 是否动态：是
+- 描述：AI HTTP attempt 建立连接所允许的最长时间。启用独立 request deadline 时，transport 还会以剩余 request 生命周期限制连接建立时间，且不会延长该 deadline。`0` 表示禁用独立的连接限制。如果两个独立限制都为 `0`，transport 不设置静态 connection 或 request timeout，但仍会实时检查 Query 取消和 deadline。调小可更快发现无法访问的模型 endpoint；连接建立较慢的网络可适当调大。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_response_bytes
+
+- 默认值：8388608
+- 类型：Int
+- 单位：字节
+- 有效值：正整数
+- 是否动态：是
+- 描述：单次 AI HTTP attempt 可接受的 response body 最大大小。超过限制的响应会在 Provider 解析前被拒绝，以限制 BE 内存消耗。仅在模型确实会返回更大响应时调高。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_worker_thread_num
+
+- 默认值：16
+- 类型：Int
+- 单位：线程
+- 有效值：正整数
+- 是否动态：是
+- 描述：处理 AI HTTP completion 和响应分类的 worker 数量。completion 处理出现积压时可调大；需要限制 CPU 和内存开销时可调小。该参数不会改变 BE 启动时确定的 AI completion queue 固定容量。运行时修改会实时调整 worker pool，无需重启 BE。
+- 引入版本：-
+
+### ai_function_sub_chunk_size
+
+- 默认值：64
+- 类型：Int
+- 单位：行
+- 有效值：正整数
+- 是否动态：是
+- 描述：AI 执行 sub-chunk 中分组的最大行数。较小的值提供更细的调度和取消粒度，但会增加调度开销；较大的值可减少调度开销，但每个任务会保留更多行。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_retries
+
+- 默认值：3
+- 类型：Int
+- 单位：次
+- 有效值：非负整数
+- 是否动态：是
+- 描述：当最近一次失败为可重试的传输或 Provider 错误时，允许的最大共享 retry ordinal，不包含首次 HTTP attempt。普通重试与 throttle 重试消耗同一个 retry ordinal；该上限不会与 throttle 上限相加。设置为 `0` 可禁用普通可重试错误后的重试。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_retries_on_throttle
+
+- 默认值：5
+- 类型：Int
+- 单位：次
+- 有效值：非负整数
+- 是否动态：是
+- 描述：当最近一次失败为 Provider 限流（例如 HTTP 429）时，允许的最大共享 retry ordinal，不包含首次 HTTP attempt。普通重试与 throttle 重试消耗同一个 retry ordinal，因此该参数是当前失败类型使用的不同上限，不是独立重试预算。设置为 `0` 可禁用限流后的重试。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_on_error
+
+- 默认值：ignore
+- 类型：String
+- 单位：-
+- 有效值：`ignore`、`fail`
+- 是否动态：是
+- 描述：控制 AI 函数的行级错误处理。`ignore` 对失败行返回 NULL 并继续查询；`fail` 会终止查询。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_rate_limit_qps_chat
+
+- 默认值：128
+- 类型：Int
+- 单位：请求/秒
+- 有效值：正整数
+- 是否动态：是
+- 描述：每个 BE 中按 endpoint、credential 和 capability 分桶的 chat/text AI HTTP attempt 请求准入速率。为遵守 Provider 配额或降低出站负载可调小；仅在 Provider 与 BE 均有足够容量时调大。运行时修改会实时生效并唤醒等待中的准入请求，无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_inflight
+
+- 默认值：512
+- 类型：Int
+- 单位：请求
+- 有效值：正整数
+- 是否动态：是
+- 描述：进程级可同时持有 in-flight 准入许可的 AI HTTP attempt 上限。调小可限制 HTTP 与 response memory 压力。该参数是全局准入限制，不是每 Query 配额。运行时修改会实时生效并唤醒等待中的准入请求，无需重启 BE；BE 启动时确定的 completion queue 固定容量不会改变。
+- 引入版本：-
+
 ### agg_hash_map_prefetch_dist
 
 - 默认值：16
