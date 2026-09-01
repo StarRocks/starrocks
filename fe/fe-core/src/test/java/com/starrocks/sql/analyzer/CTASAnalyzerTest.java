@@ -579,4 +579,17 @@ public class CTASAnalyzerTest {
         CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assertions.assertEquals("olap", stmt.getCreateTableStmt().getEngineName());
     }
+
+    @Test
+    public void testCTASOlapListPartitionColumnStaysNotNull() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_olap_list_part (a, c) partition by (c) "
+                + "distributed by hash(a) buckets 1 as select 1 as a, null as c;";
+
+        CreateTableAsSelectStmt stmt = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        List<ColumnDef> columnDefs = stmt.getCreateTableStmt().getColumnDefs();
+        // An OLAP list partition column is forced NOT NULL even when the query derives it as
+        // nullable. Only external engines keep the derived nullability.
+        Assertions.assertFalse(columnDefs.get(1).isAllowNull());
+    }
 }
