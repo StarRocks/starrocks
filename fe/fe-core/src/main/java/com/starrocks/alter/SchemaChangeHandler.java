@@ -2471,11 +2471,15 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void runAlterJobV2() {
-        for (AlterJobV2 alterJob : alterJobsV2.values()) {
-            if (alterJob.jobState.isFinalState()) {
-                continue;
+        runAlterJobV2(alterJobsV2.values());
+    }
+
+    @VisibleForTesting
+    void runAlterJobV2(Iterable<AlterJobV2> jobs) {
+        for (AlterJobV2 alterJob : jobs) {
+            if (!alterJob.jobState.isFinalState()) {
+                runAlterJobV2Safely(alterJob);
             }
-            alterJob.run();
         }
     }
 
