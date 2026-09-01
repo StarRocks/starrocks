@@ -442,12 +442,16 @@ if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
 
-# paimon-cpp smoke test, a standalone binary that exists only with
-# --with-paimon-cpp, so starrocks_test never depends on libpaimon.so.
+# paimon-cpp tests live in a standalone binary that exists only with
+# --with-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
+    target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_predicate_converter_test.cpp
+        connector/paimon/paimon_file_system_test.cpp
+    )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()
 
