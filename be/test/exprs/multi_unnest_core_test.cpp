@@ -126,18 +126,18 @@ TEST_F(MultiUnnestCoreTest, zips_arrays_of_unequal_length) {
     ASSERT_EQ(7, result.columns[1]->size());
 
     const std::vector<std::pair<int64_t, bool>> expected_a{
-            {10, false}, {20, false},                 // row 0
-            {0, true},   {0, true},                   // row 1, padded to b's length
-            {0, true},                                // row 2, NULL array
-            {30, false},                              // row 3
-            {0, true},                                // row 4, LEFT JOIN placeholder
+            {10, false}, {20, false}, // row 0
+            {0, true},   {0, true},   // row 1, padded to b's length
+            {0, true},                // row 2, NULL array
+            {30, false},              // row 3
+            {0, true},                // row 4, LEFT JOIN placeholder
     };
     const std::vector<std::pair<int64_t, bool>> expected_b{
-            {100, false}, {0, true},                  // row 0, padded to a's length
-            {200, false}, {201, false},               // row 1
-            {300, false},                             // row 2
-            {0, true},                                // row 3, NULL array
-            {0, true},                                // row 4, LEFT JOIN placeholder
+            {100, false}, {0, true},    // row 0, padded to a's length
+            {200, false}, {201, false}, // row 1
+            {300, false},               // row 2
+            {0, true},                  // row 3, NULL array
+            {0, true},                  // row 4, LEFT JOIN placeholder
     };
 
     const auto actual_a = read_column<TYPE_INT>(result.columns[0]);
@@ -193,8 +193,8 @@ GROUP_SLOW_TEST_F(MultiUnnestCoreTest, offsets_across_int32_boundary) {
     for (uint32_t i = 0; i <= kRowCount; ++i) {
         big_offsets->append(kFirstOffset + i);
     }
-    auto big_array = ArrayColumn::create(
-            NullableColumn::create(std::move(big_elements), std::move(big_element_nulls)), std::move(big_offsets));
+    auto big_array = ArrayColumn::create(NullableColumn::create(std::move(big_elements), std::move(big_element_nulls)),
+                                         std::move(big_offsets));
     ASSERT_EQ(kRowCount, big_array->size());
 
     Columns args;
@@ -211,9 +211,9 @@ GROUP_SLOW_TEST_F(MultiUnnestCoreTest, offsets_across_int32_boundary) {
     for (uint32_t i = 0; i <= kRowCount; ++i) {
         small_offsets->append(i);
     }
-    args.emplace_back(ArrayColumn::create(
-            NullableColumn::create(std::move(small_elements), std::move(small_element_nulls)),
-            std::move(small_offsets)));
+    args.emplace_back(
+            ArrayColumn::create(NullableColumn::create(std::move(small_elements), std::move(small_element_nulls)),
+                                std::move(small_offsets)));
 
     auto result = run_one_batch(std::move(args), /*is_left_join=*/false);
 
