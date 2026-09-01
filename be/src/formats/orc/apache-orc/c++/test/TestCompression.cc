@@ -335,4 +335,33 @@ TEST(Compression, seekDecompressionStream) {
     testSeekDecompressionStream(CompressionKind_ZLIB);
     testSeekDecompressionStream(CompressionKind_LZ4);
 }
+
+TEST(TestCompression, zlib_corrupted_stream_throws_error) {
+    MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
+    MemoryPool* pool = getDefaultPool();
+    char testData[] = "test data for corruption detection in libdeflate";
+    compressAndVerify(CompressionKind_ZLIB, &memStream, CompressionStrategy_COMPRESSION, 1024, 128, *pool, testData,
+                      sizeof(testData));
+
+    // Corrupt compressed payload bytes
+    char* raw = const_cast<char*>(memStream.getData());
+    if (memStream.getLength() > 5) {
+        raw[memStream.getLength() - 3] ^= 0xFF;
+    }
+
+    std::unique_ptr<SeekableInputStream> inputStream(
+            new SeekableArrayInputStream(memStream.getData(), memStream.getLength()));
+    std::unique_ptr<SeekableInputStream> decompressStream =
+            createDecompressor(CompressionKind_ZLIB, std::move(inputStream), 128, *pool, nullptr);
+
+    const char* decompressedBuffer;
+    int decompressedSize;
+    EXPECT_THROW(
+            {
+                while (decompressStream->Next(reinterpret_cast<const void**>(&decompressedBuffer), &decompressedSize)) {
+                }
+            },
+            ParseError);
+}
+
 } // namespace orc

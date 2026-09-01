@@ -763,9 +763,13 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         breakpad
-        libdeflate
     )
 endif()
+
+set(STARROCKS_DEPENDENCIES
+    ${STARROCKS_DEPENDENCIES}
+    libdeflate
+)
 
 if (${WITH_TENANN} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
