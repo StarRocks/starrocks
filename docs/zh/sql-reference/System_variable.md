@@ -412,8 +412,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1024
 * 引入版本：v2.5
 
-<<<<<<< HEAD
-=======
 ### count_distinct_implementation
 
 * 描述：控制 `COUNT(DISTINCT expr)` 仅包含一个参数时所使用的函数实现。有效值（不区分大小写）：
@@ -463,7 +461,6 @@ FROM test;
 * **类型**: String
 * **引入版本**: -
 
->>>>>>> 2669313 ([Doc] Doc for `count_distinct_implementation` (#78424))
 ### default_rowset_type (global)
 
 全局变量，仅支持全局生效。用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。
