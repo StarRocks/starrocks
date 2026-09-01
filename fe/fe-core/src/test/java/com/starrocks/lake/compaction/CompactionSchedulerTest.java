@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.util.DnsCache;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -551,6 +552,79 @@ public class CompactionSchedulerTest {
 
         Assertions.assertTrue(foundNode1);
         Assertions.assertTrue(foundNode2);
+    }
+
+    // The aggregator feeds every ComputeNodePB straight into LakeServiceBrpcStubCache::get_stub(),
+    // which must resolve the host before it can look up its EndPoint-keyed cache -- so a hostname
+    // there is one uncached getaddrinfo per sub-request per compaction on the CN. Pin that FE ships
+    // the resolved IP. Note the aggregator's own address stays a hostname: that call goes through
+    // BrpcProxy, which resolves on the FE side.
+    @Test
+    public void testCreateAggregateCompactionTaskResolvesHostnameToIp() throws Exception {
+        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        beToTablets.put(1001L, Lists.newArrayList(101L));
+
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        ComputeNode node1 = new ComputeNode(1001L, "cn-0.starrocks-cn.svc.cluster.local", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode aggregatorNode = new ComputeNode(1003L, "cn-2.starrocks-cn.svc.cluster.local", 9040);
+        aggregatorNode.setBrpcPort(9050);
+
+        new MockUp<DnsCache>() {
+            @Mock
+            public String tryLookup(String hostname) {
+                return hostname.startsWith("cn-0.") ? "10.0.0.7" : hostname;
+            }
+        };
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1001L);
+                result = node1;
+            }
+        };
+
+        new MockUp<LakeAggregator>() {
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return aggregatorNode;
+            }
+        };
+
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("cn-2.starrocks-cn.svc.cluster.local", 9050);
+                result = lakeService;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        // A real LakeTable with an injected TableProperty rather than Mockito.mock(OlapTable.class):
+        // createAggregateCompactionTask only reads getTableProperty(), and inline-mocking OlapTable
+        // fails under JDK 21 ("Could not modify all classes") once JMockit has instrumented it.
+        LakeTable table = new LakeTable();
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+
+        Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, ComputeResource.class,
+                long.class, OlapTable.class);
+        method.setAccessible(true);
+        CompactionTask task = (CompactionTask) method.invoke(scheduler, 1000L, beToTablets, 2000L,
+                PartitionStatistics.CompactionPriority.DEFAULT, WarehouseManager.DEFAULT_RESOURCE, 99L, table);
+
+        Field requestField = AggregateCompactionTask.class.getDeclaredField("request");
+        requestField.setAccessible(true);
+        AggregateCompactRequest aggRequest = (AggregateCompactRequest) requestField.get(task);
+
+        Assertions.assertEquals(1, aggRequest.computeNodes.size());
+        ComputeNodePB nodePB = aggRequest.computeNodes.get(0);
+        Assertions.assertEquals("10.0.0.7", nodePB.getHost());
+        Assertions.assertEquals(9050, (int) nodePB.getBrpcPort());
+        Assertions.assertEquals(1001L, (long) nodePB.getId());
     }
 
     @Test

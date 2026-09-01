@@ -500,7 +500,10 @@ public class CompactionScheduler extends Daemon {
             }
             candidateAggregatorNodes.add(node);
             ComputeNodePB nodePB = new ComputeNodePB();
-            nodePB.setHost(node.getHost());
+            // Resolved IP rather than hostname, for the same reason as the aggregate publish path:
+            // the aggregator feeds this straight into LakeServiceBrpcStubCache::get_stub(), which
+            // must resolve before it can even look up its cache. See Utils#createSubRequestForAggregatePublish.
+            nodePB.setHost(node.getIP());
             nodePB.setBrpcPort(node.getBrpcPort());
             nodePB.setId(entry.getKey());
 
