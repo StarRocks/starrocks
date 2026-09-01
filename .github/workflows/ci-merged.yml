@@ -138,6 +138,38 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           python3 lib/backport_fanout_run.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER} --dry-run
 
+  # After a NATIVE main PR merges, snapshot the AI backport recommendation (advisory comment's
+  # <!-- backport-affected-json -->) vs the author's final ticked version boxes into CI Metrics,
+  # one row per PR. Accuracy (agreement / over- / under-recommend) is computed later in SQL over
+  # the two stored arrays. Best-effort + continue-on-error: this NEVER affects the merge. Sync /
+  # backport copies are excluded here AND re-guarded in the recorder (their backport decision
+  # belongs to the source PR, and only native PRs carry an advisory + author checkbox).
+  record-backport-recommendation:
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'CelerData/celerdata-enterprise' &&
+      !contains(github.head_ref, '-sync-pr-') &&
+      !startsWith(github.head_ref, 'mergify/bp/') &&
+      (startsWith(github.event.pull_request.title, '[BugFix]') ||
+       startsWith(github.event.pull_request.title, '[Enhancement]') ||
+       startsWith(github.event.pull_request.title, '[Doc]') ||
+       startsWith(github.event.pull_request.title, '[UT]'))
+    continue-on-error: true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+      # Ingest target (ci-api on ciu). If the secret is unset the recorder logs the record and
+      # no-ops the POST, so the job stays green even before the endpoint/secret are provisioned.
+      BACKPORT_METRICS_INGEST_URL: ${{ secrets.BACKPORT_METRICS_INGEST_URL }}
+      BACKPORT_METRICS_INGEST_TOKEN: ${{ secrets.CI_METRICS_INGEST_TOKEN }}
+    steps:
+      - name: record AI backport recommendation vs author selection
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          python3 lib/backport_record.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER}
+
   thirdparty-filter:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true
