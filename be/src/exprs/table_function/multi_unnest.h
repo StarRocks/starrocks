@@ -49,6 +49,7 @@ public:
         auto copy_count_column = UInt32Column::create();
         uint32_t offset = 0;
         copy_count_column->append(offset);
+        const bool fn_result_required = state->is_required();
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
             uint32_t max_length_array_size = 0;
             for (auto& col_idx : state->get_columns()) {
@@ -72,6 +73,15 @@ public:
             } else {
                 offset += max_length_array_size;
                 copy_count_column->append(offset);
+            }
+
+            // The expanded values only need materializing when something upstream actually reads them.
+            // When fn_result_required is false the copy-count column built above is all the operator
+            // uses (it drives outer-column replication), so the whole zip - including the NULL padding,
+            // which is the bulk of the work for arrays of unequal length - can be skipped. Unnest
+            // already does this at unnest.h:50/60/67; MultiUnnest was missing it.
+            if (!fn_result_required) {
+                continue;
             }
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {

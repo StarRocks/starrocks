@@ -106,6 +106,19 @@ public:
 
     void fill_default(const Filter& filter) override;
 
+    // Whether every row marked NULL by `nulls` occupies an empty element range here, i.e. the offsets
+    // already say "this row has no elements". fill_default() is the operation that establishes that
+    // for a set of rows; this is the check for whether it already holds.
+    //
+    // It has to be checked rather than assumed: the null flag lives in the wrapping NullableColumn
+    // while the payload lives here, and nothing enforces that a row marked NULL was also cleared
+    // here - which is exactly why fill_default() exists. Callers that hand this column's offsets
+    // downstream as a per-row output row count (the zero-copy path in UNNEST) must verify it first.
+    //
+    // `nulls` is num_rows bytes, non-zero meaning NULL. Cost is O(num_rows), against O(elements) for
+    // rebuilding the column. Returns false if num_rows does not match this column's row count.
+    bool null_rows_are_empty(const uint8_t* nulls, size_t num_rows) const;
+
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
     void remove_first_n_values(size_t count) override;

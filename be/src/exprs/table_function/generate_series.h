@@ -52,6 +52,10 @@ public:
         return Status::OK();
     }
 
+    // Output is already bounded by chunk_size, so the wrapper is inert here; declared anyway so that
+    // every implementation states its answer explicitly rather than inheriting the unsafe default.
+    bool is_exception_safe() const override { return true; }
+
     std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                   TableFunctionState* base_state) const override {
         using NumericType = RunTimeCppType<Type>;
