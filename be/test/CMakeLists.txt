@@ -226,6 +226,7 @@ set(EXEC_FILES
         ./exprs/time_functions_test.cpp
         ./exprs/es_functions_test.cpp
         ./exprs/utility_functions_test.cpp
+        ./exprs/unnest_core_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./exprs/variant_path_parser_test.cpp
