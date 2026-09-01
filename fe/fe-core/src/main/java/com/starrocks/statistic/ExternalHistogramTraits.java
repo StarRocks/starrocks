@@ -14,13 +14,13 @@
 
 package com.starrocks.statistic;
 
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,7 +30,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.statistic.ExternalHistogramSql.UNSAMPLED_RATIO;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBaseContext;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsLiteral;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBucketsSql;
@@ -40,14 +39,30 @@ import static com.starrocks.statistic.HistogramStatisticsUtils.quoteSqlString;
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 
 /**
- * The external half of the batched strategy: every column's buckets are queried into the FE and
- * written back as one buffered INSERT ... VALUES, followed by a best-effort cleanup of the rows they
- * superseded.
+ * Histogram collection for an external table: the rows are keyed by a hashed table UUID plus the
+ * catalog/db/table names, and the write is followed by a best-effort cleanup of the raw-keyed rows
+ * it superseded.
  *
- * @see BatchedHistogramCollector
+ * @see HistogramCollector
  */
-final class ExternalHistogramBatchedTarget implements BatchedStatsCollectionUtils {
-    private static final Logger LOG = LogManager.getLogger(ExternalHistogramBatchedTarget.class);
+final class ExternalHistogramTraits extends HistogramCollectTraits {
+    private static final Logger LOG = LogManager.getLogger(ExternalHistogramTraits.class);
+
+    /**
+     * The MCV and default-bucket queries scan the whole table - unlike the histogram query they
+     * carry no sample clause - so their counts are already full-table counts and must not be scaled.
+     */
+    private static final double UNSAMPLED_RATIO = 1.0;
+
+    private static final String MCV_STATISTIC_TEMPLATE =
+            "select cast(version as INT), " +
+                    "cast(column_key as varchar), cast(column_value as varchar) from (" +
+                    "select " + StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as version, " +
+                    "$columnName as column_key, " +
+                    "count($columnName) as column_value " +
+                    "from `$catalogName`.`$dbName`.`$tableName` where $columnName is not null " +
+                    "group by $columnName " +
+                    "order by column_value desc limit $topN ) t";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT)," +
@@ -63,59 +78,56 @@ final class ExternalHistogramBatchedTarget implements BatchedStatsCollectionUtil
                     " '$columnNameStr', $bucketExpr" +
                     " FROM `$catalogName`.`$dbName`.`$tableName`";
 
-    private final ExternalHistogramStatisticsCollectJob job;
-    private final Database db;
-    private final Table table;
-    private final String catalogName;
-
-    ExternalHistogramBatchedTarget(ExternalHistogramStatisticsCollectJob job) {
-        this.job = job;
-        this.db = job.getDb();
-        this.table = job.getTable();
-        this.catalogName = job.getCatalogName();
+    ExternalHistogramTraits(StatisticsCollectJob job, HistogramCollectParams params) {
+        super(job, params);
     }
 
     @Override
-    public StatisticsCollectJob job() {
-        return job;
-    }
-
-    @Override
-    public String statsTableName() {
+    String statsTableName() {
         return EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
     }
 
     @Override
-    public String statisticsDescription() {
+    String statisticsDescription() {
         return "external histogram";
     }
 
     @Override
-    public String buildMcvQuery(HistogramCollectParams params, String columnName) {
-        return ExternalHistogramSql.buildMcvQuery(db, table, catalogName, params.mcvSize(), columnName);
+    String buildMcvQuery(String columnName) {
+        VelocityContext context = new VelocityContext();
+        context.put("columnName", StatisticUtils.quoting(table, columnName));
+        context.put("catalogName", catalogName);
+        context.put("dbName", db.getOriginName());
+        context.put("tableName", table.getName());
+        context.put("topN", params.mcvSize());
+
+        return StatisticsCollectJob.build(context, MCV_STATISTIC_TEMPLATE);
     }
 
     @Override
-    public double mcvCountScaleRatio(HistogramCollectParams params) {
-        return UNSAMPLED_RATIO;
+    Map<String, String> buildMostCommonValues(List<TStatisticData> mcv) {
+        return HistogramStatisticsUtils.buildMostCommonValues(mcv, UNSAMPLED_RATIO);
     }
 
     @Override
-    public String buildSqlCmd(ConnectContext context, AnalyzeStatus analyzeStatus,
-                                             HistogramCollectParams params, String columnName, Type columnType,
-                                             Map<String, String> mostCommonValues) {
+    String buildBucketsQuery(ConnectContext context, AnalyzeStatus analyzeStatus, String columnName,
+                             Type columnType, Map<String, String> mostCommonValues) {
+        // Skipping the buckets leaves one tail bucket holding all values - sum(MCVs).
         return StatisticsCollectJob.shouldSkipHistogramBuckets(columnType)
                 ? buildDefaultBucketSql(db, table, catalogName, columnName, mostCommonValues,
-                UNSAMPLED_RATIO, QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE)
-                : buildQueryHistogram(params.sampleRatio(), params.bucketNum(), mostCommonValues,
-                columnName, columnType);
+                        UNSAMPLED_RATIO, QUERY_DEFAULT_BUCKET_STATISTIC_TEMPLATE)
+                : buildHistogramQuery(params.sampleRatio(), params.bucketNum(), mostCommonValues,
+                        columnName, columnType);
     }
 
     @Override
-    public void afterCollection(ConnectContext context, List<String> insertedColumns) {
+    void afterCollection(ConnectContext context, List<String> insertedColumns) {
         if (insertedColumns.isEmpty()) {
             return;
         }
+        // Best-effort: remove the stale raw-keyed rows the fresh hashed-keyed rows just superseded.
+        // The read side no longer depends on this for correctness (it dedups by update_time), so
+        // this is purely storage hygiene - failures are logged, not fatal.
         try {
             StatisticExecutor statisticExecutor = new StatisticExecutor();
             if (!statisticExecutor.dropExternalHistogramRawColumns(context, table.getUUID(), insertedColumns)) {
@@ -131,7 +143,7 @@ final class ExternalHistogramBatchedTarget implements BatchedStatsCollectionUtil
     }
 
     @Override
-    public List<Expr> buildBatchInsertRow(String columnName, String buckets, String mcvJson) {
+    List<Expr> buildInsertRow(String columnName, String buckets, String mcvJson) {
         List<Expr> row = new ArrayList<>();
         row.add(new StringLiteral(StatisticUtils.hashTableUuidForPkStorage(table.getUUID())));
         row.add(new StringLiteral(columnName));
@@ -145,7 +157,7 @@ final class ExternalHistogramBatchedTarget implements BatchedStatsCollectionUtil
     }
 
     @Override
-    public String buildBatchInsertRowSql(String columnName, String buckets, String mcvJson) {
+    String buildInsertRowSql(String columnName, String buckets, String mcvJson) {
         List<String> values = new ArrayList<>();
         values.add(quoteSqlString(StatisticUtils.hashTableUuidForPkStorage(table.getUUID())));
         values.add(quoteSqlString(columnName));
@@ -158,7 +170,8 @@ final class ExternalHistogramBatchedTarget implements BatchedStatsCollectionUtil
         return "(" + String.join(", ", values) + ")";
     }
 
-    String buildQueryHistogram(double sampleRatio, Long bucketNum, Map<String, String> mostCommonValues,
+    @VisibleForTesting
+    String buildHistogramQuery(double sampleRatio, Long bucketNum, Map<String, String> mostCommonValues,
                                String columnName, Type columnType) {
         VelocityContext context = buildBaseContext(db, table, catalogName, columnName);
         putMcvExclude(context, mostCommonValues, StatisticUtils.quoting(table, columnName), columnType);

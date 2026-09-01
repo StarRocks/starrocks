@@ -30,38 +30,36 @@ import java.util.Map;
 import static com.starrocks.statistic.HistogramStatisticsUtils.batchInsertPrefixSize;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildBatchInsertPrefix;
 import static com.starrocks.statistic.HistogramStatisticsUtils.buildMcvJson;
-import static com.starrocks.statistic.HistogramStatisticsUtils.buildMostCommonValues;
 import static com.starrocks.statistic.HistogramStatisticsUtils.createInsertStmt;
-import static com.starrocks.statistic.HistogramStatisticsUtils.getSingleHistogramResult;
 import static com.starrocks.statistic.HistogramStatisticsUtils.utf8Length;
 
 /**
- * Collects histograms by querying each column's buckets into the FE, then writing the rows back as
- * one buffered INSERT ... VALUES per Config#histogram_batch_insert_buffer_size worth of SQL.
+ * Collects a histogram per column: query the column's most common values, query its buckets, then
+ * write the rows back as one buffered INSERT ... VALUES per
+ * {@link Config#histogram_batch_insert_buffer_size} worth of SQL. Anything that differs between
+ * native and external tables comes from the {@link HistogramCollectTraits}.
  *
- * @see LegacyHistogramCollector
+ * <p>Single use: the buffers are instance state, so one collector serves one collect() call.
  */
-final class BatchedHistogramCollector {
-    private static final Logger LOG = LogManager.getLogger(BatchedHistogramCollector.class);
+final class HistogramCollector {
+    private static final Logger LOG = LogManager.getLogger(HistogramCollector.class);
 
-    private final BatchedStatsCollectionUtils target;
-    private final HistogramCollectParams params;
+    private final HistogramCollectTraits traits;
 
     private final List<List<Expr>> rowsBuffer = new ArrayList<>();
     private final List<String> sqlBuffer = new ArrayList<>();
     private final List<String> columnsBuffer = new ArrayList<>();
     private final List<String> insertedColumns = new ArrayList<>();
 
-    BatchedHistogramCollector(BatchedStatsCollectionUtils target, HistogramCollectParams params) {
-        this.target = target;
-        this.params = params;
+    HistogramCollector(HistogramCollectTraits traits) {
+        this.traits = traits;
     }
 
     void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
-        StatisticsCollectJob job = target.job();
+        StatisticsCollectJob job = traits.job;
         List<String> columnNames = job.getColumnNames();
         List<Type> columnTypes = job.getColumnTypes();
-        String statsTableName = target.statsTableName();
+        String statsTableName = traits.statsTableName();
 
         long bufferSize = batchInsertPrefixSize(statsTableName);
         long bufferLimit = Math.max(1, Config.histogram_batch_insert_buffer_size);
@@ -75,19 +73,17 @@ final class BatchedHistogramCollector {
                 long rowSize;
                 try {
                     List<TStatisticData> mcv = job.queryStatisticSync(
-                            target.buildMcvQuery(params, columnName), context, analyzeStatus);
-                    Map<String, String> mostCommonValues =
-                            buildMostCommonValues(mcv, target.mcvCountScaleRatio(params));
+                            traits.buildMcvQuery(columnName), context, analyzeStatus);
+                    Map<String, String> mostCommonValues = traits.buildMostCommonValues(mcv);
 
-                    String histogramQuery = target.buildSqlCmd(
-                            context, analyzeStatus, params, columnName, columnType, mostCommonValues);
+                    String bucketsQuery = traits.buildBucketsQuery(
+                            context, analyzeStatus, columnName, columnType, mostCommonValues);
+                    String buckets = traits.singleResult(
+                            job.queryStatisticSync(bucketsQuery, context, analyzeStatus), columnName).histogram;
 
-                    String buckets = getSingleHistogramResult(
-                            job.queryStatisticSync(histogramQuery, context, analyzeStatus), columnName,
-                            target.statisticsDescription()).histogram;
                     String mcvJson = buildMcvJson(mostCommonValues);
-                    row = target.buildBatchInsertRow(columnName, buckets, mcvJson);
-                    rowSql = target.buildBatchInsertRowSql(columnName, buckets, mcvJson);
+                    row = traits.buildInsertRow(columnName, buckets, mcvJson);
+                    rowSql = traits.buildInsertRowSql(columnName, buckets, mcvJson);
                     rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
                 } catch (Exception collectionFailure) {
                     flushOnCollectionFailure(context, analyzeStatus, columnName, collectionFailure);
@@ -115,7 +111,7 @@ final class BatchedHistogramCollector {
 
             flush(context, analyzeStatus);
         } finally {
-            target.afterCollection(context, insertedColumns);
+            traits.afterCollection(context, insertedColumns);
         }
 
         analyzeStatus.setProgress(100);
@@ -135,7 +131,7 @@ final class BatchedHistogramCollector {
                 collectionFailure.addSuppressed(flushFailure);
             }
             LOG.warn("Failed to flush buffered {} statistics after collection failed for column {}",
-                    target.statisticsDescription(), columnName, flushFailure);
+                    traits.statisticsDescription(), columnName, flushFailure);
         }
     }
 
@@ -144,9 +140,9 @@ final class BatchedHistogramCollector {
             return;
         }
 
-        String statsTableName = target.statsTableName();
+        String statsTableName = traits.statsTableName();
         String sql = buildBatchInsertPrefix(statsTableName) + String.join(", ", sqlBuffer) + ";";
-        target.job().collectStatisticSync(() -> createInsertStmt(statsTableName, rowsBuffer, sql),
+        traits.job.collectStatisticSync(() -> createInsertStmt(statsTableName, rowsBuffer, sql),
                 context, analyzeStatus);
         insertedColumns.addAll(columnsBuffer);
         rowsBuffer.clear();

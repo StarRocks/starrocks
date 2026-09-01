@@ -202,18 +202,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
     }
 
     @Test
-    public void testUsesLegacyInsertWhenBatchDisabled() throws Exception {
-        try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
-            fixture.disableBatch();
-
-            fixture.collect();
-
-            Assertions.assertTrue(fixture.batchInsertSql().isEmpty());
-            Assertions.assertEquals(2, fixture.legacyInsertCount(), "one legacy INSERT per column");
-        }
-    }
-
-    @Test
     public void testBatchInsertCreatesFreshStatementForRetry() throws Exception {
         try (NativeHistogramBatchFixture fixture = new NativeHistogramBatchFixture(connectContext)) {
             fixture.enableBatch(20L * 1024 * 1024);
@@ -233,8 +221,8 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         String ndvModeProperty = "none";
         StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
 
-        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
-                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
 
         Assertions.assertEquals(expectedNdvMode, actualNdvMode);
     }
@@ -249,8 +237,8 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode =
                 StatsConstants.HistogramCollectBucketNdvMode.SAMPLE;
 
-        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
-                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
 
         Assertions.assertEquals(expectedNdvMode, actualNdvMode);
     }
@@ -264,8 +252,8 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         String ndvModeProperty = "hll";
         StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.HLL;
 
-        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
-                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
 
         Assertions.assertEquals(expectedNdvMode, actualNdvMode);
     }
@@ -279,8 +267,8 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         String ndvModeProperty = "HLL";
         StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.HLL;
 
-        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
-                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
 
         Assertions.assertEquals(expectedNdvMode, actualNdvMode);
     }
@@ -294,8 +282,24 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         String ndvModeProperty = "bogus";
         StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
 
-        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode = HistogramStatisticsCollectJob.parseBucketNdvMode(
-                Map.of(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE, ndvModeProperty));
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
+
+        Assertions.assertEquals(expectedNdvMode, actualNdvMode);
+    }
+
+    @Test
+    public void testParseNdvModeAbsent() {
+        // Given analyze properties that carry no histogram_collect_bucket_ndv_mode at all, so the
+        // raw property value is null
+        // CASE WHEN the mode matches a known name ignoring case THEN that mode
+        //      ELSE warn and fall back to NONE, so a missing property cannot fail the analyze job END
+
+        String ndvModeProperty = null;
+        StatsConstants.HistogramCollectBucketNdvMode expectedNdvMode = StatsConstants.HistogramCollectBucketNdvMode.NONE;
+
+        StatsConstants.HistogramCollectBucketNdvMode actualNdvMode =
+                HistogramCollectParams.parseBucketNdvMode(ndvModeProperty);
 
         Assertions.assertEquals(expectedNdvMode, actualNdvMode);
     }
@@ -316,8 +320,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
         private final List<StatementBase> batchInsertStatements = new ArrayList<>();
         private final List<StatementBase> retryBatchInsertStatements = new ArrayList<>();
         private final List<String> capturedBatchInsertSql = new ArrayList<>();
-        private final List<String> legacyInsertSql = new ArrayList<>();
-        private final boolean originalEnableBatch = Config.enable_batch_insert_histogram_statistics;
         private final long originalBufferSize = Config.histogram_batch_insert_buffer_size;
 
         private NativeHistogramBatchFixture(ConnectContext context) {
@@ -371,21 +373,11 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
                     retryBatchInsertStatements.add(statementSupplier.get());
                     capturedBatchInsertSql.add(statement.getOrigStmt().getOrigStmt());
                 }
-
-                @Mock
-                public void collectStatisticSync(String sql, ConnectContext ctx, AnalyzeStatus status) {
-                    legacyInsertSql.add(sql);
-                }
             };
         }
 
         private void enableBatch(long bufferSize) {
-            Config.enable_batch_insert_histogram_statistics = true;
             Config.histogram_batch_insert_buffer_size = bufferSize;
-        }
-
-        private void disableBatch() {
-            Config.enable_batch_insert_histogram_statistics = false;
         }
 
         private void returnEmptyV2Histogram() {
@@ -422,10 +414,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
             return statisticsQueries;
         }
 
-        private int legacyInsertCount() {
-            return legacyInsertSql.size();
-        }
-
         private StatementBase firstBatchInsertStatement() {
             return batchInsertStatements.get(0);
         }
@@ -436,7 +424,6 @@ public class HistogramStatisticsCollectJobTest extends HistogramStatisticsCollec
 
         @Override
         public void close() {
-            Config.enable_batch_insert_histogram_statistics = originalEnableBatch;
             Config.histogram_batch_insert_buffer_size = originalBufferSize;
         }
     }

@@ -16,7 +16,6 @@ package com.starrocks.statistic;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.Type;
 
@@ -48,13 +47,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
-        HistogramCollectParams params = new HistogramCollectParams(properties);
-        if (Config.enable_batch_insert_histogram_statistics && columnNames.size() > 1) {
-            new BatchedHistogramCollector(new ExternalHistogramBatchedTarget(this), params)
-                    .collect(context, analyzeStatus);
-        } else {
-            new LegacyHistogramCollector(new ExternalHistogramLegacyTarget(this), params)
-                    .collect(context, analyzeStatus);
-        }
+        new HistogramCollector(new ExternalHistogramTraits(this, new HistogramCollectParams(properties)))
+                .collect(context, analyzeStatus);
     }
 }

@@ -14,22 +14,32 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Map;
 
 /**
- * The analyze properties a histogram collection needs, parsed once per collect() call.
- * Deliberately excludes the bucket-NDV mode: that is a native-only concept, so
- * HistogramStatisticsCollectJob derives it itself rather than exposing it to shared code.
+ * The analyze properties one histogram collection runs under, parsed once per collect() call.
+ *
+ * <p>All four are filled in together by AnalyzeStmtAnalyzer while analyzing the ANALYZE statement,
+ * so they share a lifetime and are parsed as a unit. Only {@link NativeHistogramTraits} reads the
+ * bucket-NDV mode; the external flavour carries it unused.
  */
 final class HistogramCollectParams {
+    private static final Logger LOG = LogManager.getLogger(HistogramCollectParams.class);
+
     private final double sampleRatio;
     private final long bucketNum;
     private final long mcvSize;
+    private final StatsConstants.HistogramCollectBucketNdvMode bucketNdvMode;
 
     HistogramCollectParams(Map<String, String> properties) {
         this.sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         this.bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
         this.mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
+        this.bucketNdvMode = parseBucketNdvMode(properties.get(StatsConstants.HISTOGRAM_COLLECT_BUCKET_NDV_MODE));
     }
 
     double sampleRatio() {
@@ -42,5 +52,27 @@ final class HistogramCollectParams {
 
     long mcvSize() {
         return mcvSize;
+    }
+
+    StatsConstants.HistogramCollectBucketNdvMode bucketNdvMode() {
+        return bucketNdvMode;
+    }
+
+    /**
+     * Resolved once per collection, so an unusable mode is reported once rather than once per
+     * column, and never fails the analyze job.
+     */
+    @VisibleForTesting
+    static StatsConstants.HistogramCollectBucketNdvMode parseBucketNdvMode(String mode) {
+        if ("none".equalsIgnoreCase(mode)) {
+            return StatsConstants.HistogramCollectBucketNdvMode.NONE;
+        } else if ("sample".equalsIgnoreCase(mode)) {
+            return StatsConstants.HistogramCollectBucketNdvMode.SAMPLE;
+        } else if ("hll".equalsIgnoreCase(mode)) {
+            return StatsConstants.HistogramCollectBucketNdvMode.HLL;
+        } else {
+            LOG.warn("Invalid histogram collect bucket ndv mode {}.", mode);
+            return StatsConstants.HistogramCollectBucketNdvMode.NONE;
+        }
     }
 }
