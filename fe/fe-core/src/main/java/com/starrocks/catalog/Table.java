@@ -744,7 +744,26 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     /**
-     * onCreate is called when this table is created
+     * Called when this table's in-memory state has to be (re)derived from the rest of the catalog: from
+     * {@link #onCreate}, when replaying a create-table journal entry, when loading an image, and when an
+     * alter job swaps in a new schema. Implementations rebuild derived state only -- see
+     * {@link OlapTable#onReload} (partition info, rollup index meta, constraints) and
+     * {@link MaterializedView#onReload}, which resolves every base table and may reach external catalogs.
+     *
+     * <p>The lock context is caller-specific, so an implementation must not rely on any lock being held, and
+     * must not take the database lock itself:
+     * <ul>
+     *   <li>{@link com.starrocks.server.LocalMetastore#replayCreateTable} calls this with no lock held: the
+     *   table is not visible to anyone yet, and for an MV the reload is slow and remote, so holding the
+     *   database write lock across it would stall every query on that database.</li>
+     *   <li>The alter jobs (e.g. {@link com.starrocks.alter.SchemaChangeJobV2}) call this under the
+     *   database/table write lock and from inside the edit-log applier, because there the table is already
+     *   visible and the schema flip plus this reload must land as one atomic step.</li>
+     * </ul>
+     *
+     * <p>Where it does run unlocked, a reload can be observed half-done -- an MV is transiently inactive
+     * while reloading -- so a consumer that cannot tolerate that must wait for it explicitly, see
+     * {@link MaterializedView#waitForReloaded}.
      */
     public void onReload() {
         // Do nothing by default.
