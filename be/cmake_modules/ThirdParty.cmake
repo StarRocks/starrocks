@@ -508,14 +508,41 @@ if (${WITH_PAIMON_CPP} STREQUAL "ON")
         message(FATAL_ERROR "libpaimon.so not found under ${PAIMON_CPP_DIR}, "
                             "run thirdparty/build-thirdparty.sh paimon_cpp first")
     endif()
+    # paimon-cpp ships its file formats, file/global indexes, and the local
+    # filesystem as plugin shared libraries that register themselves into
+    # libpaimon's FactoryCreator via load-time constructors. Nothing references
+    # their symbols, so they must be linked explicitly (as DT_NEEDED of
+    # starrocks_be) or FileFormatFactory finds no parquet/orc/avro at runtime.
+    set(PAIMON_CPP_PLUGINS
+        paimon_parquet_file_format
+        paimon_orc_file_format
+        paimon_avro_file_format
+        paimon_blob_file_format
+        paimon_file_index
+        paimon_global_index
+        paimon_local_file_system)
+    foreach(PAIMON_PLUGIN ${PAIMON_CPP_PLUGINS})
+        find_library(${PAIMON_PLUGIN}_SHARED_LIBRARY NAMES ${PAIMON_PLUGIN}
+                     PATHS ${PAIMON_CPP_DIR}/lib ${PAIMON_CPP_DIR}/lib64 NO_DEFAULT_PATH)
+        if (NOT ${PAIMON_PLUGIN}_SHARED_LIBRARY)
+            message(FATAL_ERROR "lib${PAIMON_PLUGIN}.so not found under ${PAIMON_CPP_DIR}, "
+                                "run thirdparty/build-thirdparty.sh paimon_cpp first")
+        endif()
+        add_library(${PAIMON_PLUGIN} SHARED IMPORTED GLOBAL)
+        set_target_properties(${PAIMON_PLUGIN} PROPERTIES
+            IMPORTED_LOCATION ${${PAIMON_PLUGIN}_SHARED_LIBRARY})
+    endforeach()
     add_library(paimon SHARED IMPORTED GLOBAL)
     # Headers install under <prefix>/include/paimon/..., so consumers write
     # #include <paimon/predicate/literal.h>. The include path rides on the
     # imported target (treated as SYSTEM by default) instead of the global
     # include path, so only targets that link `paimon` can see the headers.
+    # The plugins ride on INTERFACE_LINK_LIBRARIES so every consumer of
+    # `paimon` links them without listing them itself.
     set_target_properties(paimon PROPERTIES
         IMPORTED_LOCATION ${PAIMON_SHARED_LIBRARY}
-        INTERFACE_INCLUDE_DIRECTORIES "${PAIMON_CPP_DIR}/include")
+        INTERFACE_INCLUDE_DIRECTORIES "${PAIMON_CPP_DIR}/include"
+        INTERFACE_LINK_LIBRARIES "${PAIMON_CPP_PLUGINS}")
     message(STATUS "link paimon-cpp from ${PAIMON_SHARED_LIBRARY}")
 endif()
 

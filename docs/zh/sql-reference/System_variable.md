@@ -1330,6 +1330,13 @@ FROM test;
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
 * 引入版本：v3.1.10
 
+### paimon_reader_mode
+
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 默认值：AUTO
+* 类型：String
+* 引入版本：v4.2
+
 ### parallel_exchange_instance_num
 
 用于设置执行计划中，一个上层节点接收下层节点数据所使用的 exchange node 数量。默认为 -1，即表示 exchange node 数量等于下层节点执行实例的个数（默认行为）。当设置大于 0，并且小于下层节点执行实例的个数，则 exchange node 数量等于设置值。

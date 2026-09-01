@@ -1562,6 +1562,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.1.10
 
+### paimon_reader_mode
+
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Default**: AUTO
+* **Data type**: String
+* **Introduced in**: v4.2
+
 ### parallel_exchange_instance_num
 
 Used to set the number of exchange nodes that an upper-level node uses to receive data from a lower-level node in the execution plan. The default value is -1, meaning the number of exchange nodes is equal to the number of execution instances of the lower-level node. When  this variable is set to be greater than 0 but smaller than the number of execution instances of the lower-level node, the number of exchange nodes equals the set value.
