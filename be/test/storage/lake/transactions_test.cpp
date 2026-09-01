@@ -166,6 +166,50 @@ TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {
     ASSERT_EQ(st.value()->size(), 1);
 }
 
+// Backport note: upstream drives this through no_op_publish, which branch-4.0
+// does not have. Here the equivalent no-txnlog publish path is selected by the
+// EMPTY_TXNLOG_TXNID sentinel (-1), defined in transactions.cpp.
+constexpr int64_t kEmptyTxnLogTxnId = -1;
+
+class AggregatePublishMarkerTest : public TestBase {
+public:
+    AggregatePublishMarkerTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_aggregate_publish_marker";
+    std::shared_ptr<TabletMetadataPB> _tablet_metadata;
+};
+
+// An aggregate publish keeps the new metadata in the metacache instead of
+// writing a per-tablet object, so later reads must be told the partition uses
+// bundled metadata. Without the marker every such read first probes the
+// per-tablet path and takes a 404 before falling back to the bundle.
+TEST_F(AggregatePublishMarkerTest, aggregate_publish_caches_bundled_metadata_marker) {
+    const int64_t tablet_id = _tablet_metadata->id();
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(kEmptyTxnLogTxnId);
+    txn_info.set_txn_type(TXN_NORMAL);
+    txn_info.set_combined_txn_log(false);
+    txn_info.set_commit_time(time(nullptr));
+
+    std::vector<TxnInfoPB> txns{txn_info};
+    auto result = publish_version(_tablet_mgr.get(), tablet_id, 1, 2, txns,
+                                  /*skip_write_tablet_metadata=*/true);
+    ASSERT_OK(result.status());
+
+    EXPECT_TRUE(_tablet_mgr->lookup_cached_bundled_metadata_partition_marker(tablet_id));
+}
+
 // ===========================================================================
 // Tests for cal_new_base_version — the helper that decides which version a
 // (possibly retried) publish uses as its base when the in-memory primary
@@ -245,16 +289,16 @@ TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted) {
     ASSERT_EQ(0, _update_mgr->get_primary_index_data_version(tablet_id));
 }
 
-// Same as above but with the partition marked as an aggregation (file
-// bundling) partition, so the read goes through get_single_tablet_metadata
-// first — the exact metacache lookup the original bug hit.
-TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted_on_aggregation_partition) {
+// Same as above but with the partition marked as using bundled metadata, so
+// the read goes through get_single_tablet_metadata
+// first -- the exact metacache lookup the original bug hit.
+TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted_on_bundled_metadata_partition) {
     const int64_t tablet_id = _tablet_metadata->id();
 
     auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
     meta_v2->set_version(2);
     _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2), meta_v2);
-    _tablet_mgr->metacache()->cache_aggregation_partition(_tablet_mgr->tablet_metadata_root_location(tablet_id), true);
+    _tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
     set_primary_index_data_version(tablet_id, 2);
 
     auto txns = make_txns();
@@ -291,7 +335,7 @@ TEST_F(CalNewBaseVersionTest, durable_bundle_version_adopted) {
     tablet_metas.emplace(tablet_id, meta_v2);
     CHECK_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas));
     _tablet_mgr->metacache()->prune();
-    _tablet_mgr->metacache()->cache_aggregation_partition(_tablet_mgr->tablet_metadata_root_location(tablet_id), true);
+    _tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
     set_primary_index_data_version(tablet_id, 2);
 
     auto txns = make_txns();
