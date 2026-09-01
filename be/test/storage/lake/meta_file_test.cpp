@@ -141,7 +141,6 @@ protected:
         int range_reads = 0;
         int writer_opens = 0;
         int append_chunks = 0;
-        int append_attempts = 0;
         auto* sync = SyncPoint::GetInstance();
         sync->ClearAllCallBacks();
         sync->DisableProcessing();
@@ -151,7 +150,6 @@ protected:
         sync->SetCallBack("write_compacted_delvec_pages:read_chunk_size", [&](void*) { ++range_reads; });
         sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
         sync->SetCallBack("append_delvec_bytes_bounded:chunk_size", [&](void*) { ++append_chunks; });
-        sync->SetCallBack("write_delvec_output:append", [&](void*) { ++append_attempts; });
         if (configure) configure(sync);
         sync->EnableProcessing();
         DeferOp cleanup([&] {
@@ -181,7 +179,6 @@ protected:
         EXPECT_EQ(0, range_reads);
         EXPECT_EQ(0, writer_opens);
         EXPECT_EQ(0, append_chunks);
-        EXPECT_EQ(0, append_attempts);
     }
 
     std::shared_ptr<TabletMetadataPB> make_shared_delvec_source(int64_t tablet_id, int segment_count) {
@@ -647,10 +644,137 @@ TEST_F(MetaFileTest, test_compacted_delvec_serialized_page_writes_plaintext) {
     EXPECT_EQ(std::vector<uint64_t>({0}), offsets);
 }
 
+TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
+    constexpr std::string_view kPrefix = "injected compacted delvec ";
+    const int64_t source_tablet = next_id();
+    const int64_t target_tablet = next_id();
+    const std::string source_name = "failure-atomic-source.delvec";
+    const std::string source_bytes((1UL << 20) + 17, 'r');
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), source_bytes);
+    auto raw = raw_output_page(source_tablet, source_name, 0, source_bytes.size(), source_bytes.size());
+    const std::vector<DelvecOutputPage> pages = {raw, DelvecOutputPage{.serialized_page = "serialized"}};
+
+    auto expect_source_unchanged = [&] {
+        ASSIGN_OR_ABORT(auto reader,
+                        fs::new_random_access_file(_tablet_manager->delvec_location(source_tablet, source_name)));
+        ASSIGN_OR_ABORT(auto actual, reader->read_all());
+        EXPECT_EQ(source_bytes, actual);
+    };
+    auto run_phase = [&](std::string_view seam, int fail_on_call, int expected_calls) {
+        SCOPED_TRACE(seam);
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        output.set_size(123);
+        output.set_shared(true);
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string output_before = output.SerializeAsString();
+        const auto offsets_before = offsets;
+        const std::string message = std::string(kPrefix) + std::string(seam);
+        int calls = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack(std::string(seam), [&](void* arg) {
+            if (++calls == fail_on_call) *static_cast<Status*>(arg) = Status::InternalError(message);
+        });
+        sync->EnableProcessing();
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), pages, target_tablet, next_id(), &output, &offsets);
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        EXPECT_EQ(message, status.message()) << status;
+        EXPECT_EQ(expected_calls, calls);
+        EXPECT_EQ(output_before, output.SerializeAsString());
+        EXPECT_EQ(offsets_before, offsets);
+        expect_source_unchanged();
+
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), pages, target_tablet, next_id(), &output, &offsets));
+        EXPECT_EQ(std::vector<uint64_t>({0, source_bytes.size()}), offsets);
+        ASSIGN_OR_ABORT(auto reader,
+                        fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+        ASSIGN_OR_ABORT(auto actual, reader->read_all());
+        EXPECT_EQ(source_bytes + "serialized", actual);
+    };
+
+    // The actual-size seam is a preflight failure: no destination writer may have been created.
+    {
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string output_before = output.SerializeAsString();
+        const auto offsets_before = offsets;
+        int calls = 0;
+        auto absent_size_raw = raw;
+        absent_size_raw.raw_page->delvec_file.clear_size();
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [&](void* arg) {
+            ++calls;
+            *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = Status::InternalError("injected actual-size");
+        });
+        sync->EnableProcessing();
+        const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {absent_size_raw}, target_tablet,
+                                                            next_id(), &output, &offsets);
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        EXPECT_EQ("injected actual-size", status.message()) << status;
+        EXPECT_EQ(1, calls);
+        EXPECT_EQ(output_before, output.SerializeAsString());
+        EXPECT_EQ(offsets_before, offsets);
+        expect_source_unchanged();
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {absent_size_raw}, target_tablet, next_id(),
+                                               &output, &offsets));
+    }
+
+    run_phase("write_compacted_delvec_pages:before_writer_open", 1, 1);
+    run_phase("write_compacted_delvec_pages:before_read_chunk", 1, 1);
+    run_phase("write_compacted_delvec_pages:before_read_chunk", 2, 2);
+    run_phase("append_delvec_bytes_bounded:before_chunk", 1, 1);
+    run_phase("append_delvec_bytes_bounded:before_chunk", 2, 2);
+    run_phase("write_compacted_delvec_pages:before_close", 1, 1);
+    run_phase("write_compacted_delvec_pages:before_apply_offsets", 1, 1);
+
+    // This source does not exist at INT64_MAX; the injected actual size and writer failure prove
+    // that the valid near-limit declaration is preflighted without allocating or reading its range.
+    {
+        auto near_limit = raw_output_page(source_tablet, source_name, std::numeric_limits<int64_t>::max() - 7, 7);
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string output_before = output.SerializeAsString();
+        const auto offsets_before = offsets;
+        int override_calls = 0;
+        int writer_calls = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [&](void* arg) {
+            ++override_calls;
+            *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = std::numeric_limits<int64_t>::max();
+        });
+        sync->SetCallBack("write_compacted_delvec_pages:before_writer_open", [&](void* arg) {
+            ++writer_calls;
+            *static_cast<Status*>(arg) = Status::InternalError("injected near-limit writer");
+        });
+        sync->EnableProcessing();
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), {near_limit}, target_tablet, next_id(), &output, &offsets);
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        EXPECT_EQ("injected near-limit writer", status.message()) << status;
+        EXPECT_EQ(1, override_calls);
+        EXPECT_EQ(1, writer_calls);
+        EXPECT_EQ(output_before, output.SerializeAsString());
+        EXPECT_EQ(offsets_before, offsets);
+        expect_source_unchanged();
+    }
+}
+
 TEST_F(MetaFileTest, test_delvec_output_append_failure_is_atomic) {
     constexpr std::string_view kInjectedError = "injected delvec append failure";
     int injection_count = 0;
-    SyncPoint::GetInstance()->SetCallBack("write_delvec_output:append", [&](void* arg) {
+    SyncPoint::GetInstance()->SetCallBack("append_delvec_bytes_bounded:before_chunk", [&](void* arg) {
         ++injection_count;
         *static_cast<Status*>(arg) = Status::InternalError(kInjectedError);
     });
@@ -699,7 +823,7 @@ TEST_F(MetaFileTest, test_delvec_output_append_failure_is_atomic) {
 TEST_F(MetaFileTest, test_delvec_output_close_failure_is_atomic) {
     constexpr std::string_view kInjectedError = "injected delvec close failure";
     int injection_count = 0;
-    SyncPoint::GetInstance()->SetCallBack("write_delvec_output:close", [&](void* arg) {
+    SyncPoint::GetInstance()->SetCallBack("write_compacted_delvec_pages:before_close", [&](void* arg) {
         ++injection_count;
         *static_cast<Status*>(arg) = Status::InternalError(kInjectedError);
     });

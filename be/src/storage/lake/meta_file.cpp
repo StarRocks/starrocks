@@ -1331,7 +1331,7 @@ Status append_delvec_bytes_bounded(WritableFile* writer, Slice bytes) {
         size_t observed_chunk_size = chunk_size;
         TEST_SYNC_POINT_CALLBACK("append_delvec_bytes_bounded:chunk_size", &observed_chunk_size);
         Status append_status;
-        TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
+        TEST_SYNC_POINT_CALLBACK("append_delvec_bytes_bounded:before_chunk", &append_status);
         RETURN_IF_ERROR(append_status);
         RETURN_IF_ERROR(writer->append(Slice(bytes.data, chunk_size)));
         bytes.remove_prefix(chunk_size);
@@ -1465,6 +1465,9 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
     WritableFileOptions options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:writer_open", nullptr);
+    Status writer_open_status;
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_writer_open", &writer_open_status);
+    RETURN_IF_ERROR(writer_open_status);
     ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(options, new_file_path));
 
     std::unique_ptr<RandomAccessFile> current_reader;
@@ -1505,6 +1508,9 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
                     static_cast<size_t>(std::min<uint64_t>(kDelvecIoChunkSize, raw.page.size() - copied));
             size_t observed_chunk_size = chunk_size;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:read_chunk_size", &observed_chunk_size);
+            Status read_status;
+            TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_read_chunk", &read_status);
+            RETURN_IF_ERROR(read_status);
             RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
                                                           buffer.data(), static_cast<int64_t>(chunk_size)));
             RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(buffer.data(), chunk_size)));
@@ -1514,7 +1520,7 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
 
     close_reader();
     Status close_status;
-    TEST_SYNC_POINT_CALLBACK("write_delvec_output:close", &close_status);
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_close", &close_status);
     RETURN_IF_ERROR(close_status);
     RETURN_IF_ERROR(writer->close());
 
@@ -1523,6 +1529,9 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
     output.set_size(static_cast<int64_t>(total_size));
     output.clear_encryption_meta();
     output.set_shared(false);
+    Status apply_offsets_status;
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_apply_offsets", &apply_offsets_status);
+    RETURN_IF_ERROR(apply_offsets_status);
     *new_delvec_file = std::move(output);
     *page_offsets = std::move(offsets);
     return Status::OK();
