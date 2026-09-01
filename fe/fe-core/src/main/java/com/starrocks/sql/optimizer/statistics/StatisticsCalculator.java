@@ -25,6 +25,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -2164,30 +2165,46 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitLogicalAnalytic(LogicalWindowOperator node, ExpressionContext context) {
         PredicateColumnsMgr.getInstance().recordWindowPartitionBy(node.getPartitionExpressions(),
                 optimizerContext.getColumnRefFactory(), context.getOptExpression());
-        return computeAnalyticNode(context, node.getWindowCall());
+        return computeAnalyticNode(context, node.getPartitionExpressions(), node.getWindowCall());
     }
 
     @Override
     public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
         PredicateColumnsMgr.getInstance().recordWindowPartitionBy(node.getPartitionExpressions(),
                 optimizerContext.getColumnRefFactory(), context.getOptExpression());
-        return computeAnalyticNode(context, node.getAnalyticCall());
+        return computeAnalyticNode(context, node.getPartitionExpressions(), node.getAnalyticCall());
     }
 
-    private Void computeAnalyticNode(ExpressionContext context, Map<ColumnRefOperator, CallOperator> analyticCall) {
+    private Void computeAnalyticNode(ExpressionContext context, List<ScalarOperator> partitionExpressions,
+                                     Map<ColumnRefOperator, CallOperator> analyticCall) {
         Preconditions.checkState(context.arity() == 1);
 
         Statistics.Builder builder = Statistics.builder();
         Statistics inputStatistics = context.getChildStatistics(0);
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
 
-        analyticCall.forEach((key, value) -> builder
-                .addColumnStatistic(key, ExpressionStatisticCalculator.calculate(value, inputStatistics)));
+        analyticCall.forEach((key, value) -> builder.addColumnStatistic(
+                key, estimateWindowCall(value, inputStatistics, partitionExpressions)));
 
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
 
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);
+    }
+
+    private static ColumnStatistic estimateWindowCall(CallOperator call, Statistics inputStatistics,
+                                                      List<ScalarOperator> partitionExpressions) {
+        if (!partitionExpressions.isEmpty() || !FunctionSet.ROW_NUMBER.equals(call.getFnName())) {
+            return ExpressionStatisticCalculator.calculate(call, inputStatistics);
+        }
+        double rowCount = inputStatistics.getOutputRowCount();
+        return ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(rowCount)
+                .setDistinctValuesCount(rowCount)
+                .setNullsFraction(0)
+                .setAverageRowSize(call.getType().getTypeSize())
+                .build();
     }
 
     public Statistics estimateStatistics(List<ScalarOperator> predicateList, Statistics statistics) {
