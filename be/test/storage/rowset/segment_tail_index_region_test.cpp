@@ -93,11 +93,17 @@ protected:
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _saved_region = config::enable_segment_tail_index_region;
         _saved_shared_stream = config::enable_segment_shared_small_index_stream;
+        _saved_data_page_prefetch = config::enable_segment_data_page_concurrent_prefetch;
+        _saved_data_page_prefetch_concurrency = config::segment_data_page_prefetch_concurrency;
+        _saved_segment_lookahead = config::segment_iterator_lookahead;
     }
 
     void TearDown() override {
         config::enable_segment_tail_index_region = _saved_region;
         config::enable_segment_shared_small_index_stream = _saved_shared_stream;
+        config::enable_segment_data_page_concurrent_prefetch = _saved_data_page_prefetch;
+        config::segment_data_page_prefetch_concurrency = _saved_data_page_prefetch_concurrency;
+        config::segment_iterator_lookahead = _saved_segment_lookahead;
     }
 
     static std::shared_ptr<TabletSchema> make_schema() {
@@ -201,6 +207,9 @@ protected:
     std::shared_ptr<MemoryFileSystem> _fs;
     bool _saved_region = false;
     bool _saved_shared_stream = false;
+    bool _saved_data_page_prefetch = false;
+    int32_t _saved_data_page_prefetch_concurrency = 0;
+    int32_t _saved_segment_lookahead = 0;
 };
 
 // With the region on, every small index sits between the last data page and the footer, and the
@@ -243,6 +252,47 @@ TEST_F(SegmentTailIndexRegionTest, RegionCoversEverySmallIndex) {
     EXPECT_GT(region_begin, 0u);
 
     verify_all_rows(file_name, tablet_schema);
+}
+
+// A narrow scan has only one segment-file handle and often only one cache block. It cannot
+// overlap page fills within the segment, but its one fill can overlap the fills of other
+// segments prepared by UnionIterator.
+TEST_F(SegmentTailIndexRegionTest, SingleTaskDataPagePrefetchRequiresLookaheadPrepare) {
+    auto tablet_schema = make_schema();
+    config::enable_segment_tail_index_region = true;
+    config::enable_segment_data_page_concurrent_prefetch = true;
+    config::segment_data_page_prefetch_concurrency = 8;
+    config::segment_iterator_lookahead = 2;
+
+    const std::string file_name = kSegmentDir + "/single_task_data_page_prefetch";
+    write_horizontal(file_name, tablet_schema);
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema));
+    auto read_schema = ChunkHelper::convert_schema(tablet_schema, {0});
+
+    auto read_once = [&](bool prepare, OlapReaderStatistics* stats) {
+        SegmentReadOptions options;
+        options.fs = _fs;
+        options.stats = stats;
+        ASSIGN_OR_ABORT(auto iter, segment->new_iterator(read_schema, options));
+        if (prepare) {
+            ASSERT_OK(iter->prepare_for_read());
+        }
+        auto chunk = ChunkFactory::new_chunk(read_schema, config::vector_chunk_size);
+        ASSERT_OK(iter->get_next(chunk.get()));
+        ASSERT_GT(chunk->num_rows(), 0);
+    };
+
+    OlapReaderStatistics direct_stats;
+    read_once(false, &direct_stats);
+    EXPECT_EQ(0, direct_stats.data_page_prefetch_segments);
+    EXPECT_EQ(0, direct_stats.data_page_prefetch_tasks);
+
+    OlapReaderStatistics prepared_stats;
+    read_once(true, &prepared_stats);
+    EXPECT_EQ(1, prepared_stats.data_page_prefetch_segments);
+    EXPECT_EQ(1, prepared_stats.data_page_prefetch_tasks);
+    EXPECT_EQ(1, prepared_stats.data_page_prefetch_lookahead_segments);
+    EXPECT_GT(prepared_stats.data_page_prefetch_blocks, 0);
 }
 
 // With the region off nothing changes: no footer fields, and the small indexes stay spread across

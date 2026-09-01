@@ -1359,9 +1359,10 @@ Status SegmentIterator::_prefetch_data_pages_concurrently() {
 
     const int configured = std::max(1, config::segment_data_page_prefetch_concurrency);
     const size_t fanout = std::min({static_cast<size_t>(configured), handles.size(), blocks.size()});
-    if (fanout <= 1) {
-        // One handle, or one block: there is nothing to overlap and the read loop fetches on its
-        // own just as fast, without a round trip through the pool.
+    if (fanout == 0 || (fanout == 1 && !_prepared)) {
+        // A single task cannot overlap work inside this segment, so the ordinary read path avoids
+        // a round trip through the pool. During lookahead preparation it can still overlap with
+        // the other prepared segments, which is the common shape for narrow small-segment scans.
         return Status::OK();
     }
 
@@ -1369,7 +1370,7 @@ Status SegmentIterator::_prefetch_data_pages_concurrently() {
     state->block_size = block_size;
     state->file_base = file_base;
     state->per_task = (blocks.size() + fanout - 1) / fanout;
-    state->lookahead = config::segment_iterator_lookahead > 0;
+    state->lookahead = _prepared;
     state->file_name = _segment->file_name();
     state->blocks = std::move(blocks);
     state->handles = std::move(handles);
