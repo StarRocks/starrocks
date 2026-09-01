@@ -228,7 +228,112 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### cbo_prune_subfield
 
+<<<<<<< HEAD
 * 描述：是否开启 JSON 子列裁剪。需要配合 BE 动态参数 `enable_json_flat` 一起使用，单独使用可能会导致 JSON 性能变慢。
+=======
+* 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。该参数只在以下情况生效：
+  * Hive 表中未指定 `compression_codec` 属性。
+  * Iceberg 表中未包含`write.parquet.compression-codec` 属性。
+  * `INSERT INTO FILES` 时未设置 `compression` 属性。
+* 默认值：uncompressed
+* 类型：String
+* 引入版本：v3.2.3
+
+### connector_sink_target_max_file_size
+
+* 描述: 指定将数据写入 Hive 表或 Iceberg 表或使用 Files() 导出数据时目标文件的最大大小。该限制并不一定精确，只作为尽可能的保证。
+* 单位：Bytes
+* 默认值: 1073741824
+* 类型: Long
+* 引入版本: v3.3.0
+
+### count_distinct_column_buckets
+
+* 描述：group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。
+* 默认值：1024
+* 引入版本：v2.5
+
+### count_distinct_implementation
+
+* 描述：控制 `COUNT(DISTINCT expr)` 仅包含一个参数时所使用的函数实现。有效值（不区分大小写）：
+  * `default`：保留 `COUNT(DISTINCT expr)` 的默认实现。优化器会根据查询形式、统计信息和成本选择合适的聚合执行计划。
+  * `multi_count_distinct`：将 `COUNT(DISTINCT expr)` 的实现方式更改为 `multi_distinct_count`，以进行精确计数。对于低基数和中等基数列的计数，该实现可以减少一次 Shuffle 和去重阶段，从而提升查询速度。但是，该实现会将 distinct 值保存在 HashSet 中，因此对于高基数列进行去重时，可能导致过高的内存消耗，甚至引发 OOM。在通过具有代表性的负载进行验证之前，请勿全局设置此值。
+  * `ndv`：将 `COUNT(DISTINCT expr)` 的实现方式更改为 `ndv(expr)`。该函数使用 HyperLogLog，以较低的内存开销返回近似结果。
+* 默认值：`default`
+* 引入版本：v3.3.6、v3.4.0
+
+:::note[`multi_distinct_count` 的使用说明]
+`multi_distinct_count()` 返回精确结果。
+
+对于大多数查询，建议使用 `COUNT(DISTINCT expr)`。将 `count_distinct_implementation` 设置为 `default`，以允许优化器选择合适的聚合执行计划。
+
+对低基数和中等基数的列进行去重时，可以测试并使用 `multi_distinct_count()`。该函数使用两阶段聚合，可以减少一次 Shuffle 和去重阶段，从而提升性能。但是，在对高基数列进行去重时，其 HashSet 状态以及最终合并过程可能导致过高的内存消耗，甚至引发 OOM。
+
+如果希望针对单个 `COUNT(DISTINCT expr)` 测试此实现，而不是更改整个 Session 的设置，可以在查询 Hint 中设置 `count_distinct_implementation`：
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+通过 Hint 设置此值时，仅对包含单个参数的 `COUNT(DISTINCT)` 生效。对于 `COUNT(DISTINCT expr1, expr2)` 等多列去重表达式，该设置不会产生影响。
+:::
+
+### custom_query_id (session)
+
+* **描述**: 用于将某些外部标识绑定到当前查询。在执行查询前可以使用 `SET SESSION custom_query_id = 'my-query-id';` 进行设置。查询结束后该值会被重置。该值可以传递给 `KILL QUERY 'my-query-id'`。在审计日志中可以作为 `customQueryId` 字段找到该值。
+* **默认值**: ""
+* **类型**: String
+* **引入版本**: v3.4.0
+
+### datacache_sharing_work_period
+
+- 描述：Cache Sharing 功能的生效时长。每次群集扩展操作后，如果启用了缓存共享功能，只有在这段时间内的请求才会尝试访问其他节点的缓存数据。
+- 默认值：600
+- 单位：秒
+- 引入版本：v3.5.1
+
+### default_authentication_plugin
+
+* **范围**: Session
+* **描述**: 会话范围的变量，指定本会话的默认 MySQL 认证插件名称。它以 SessionVariable.defaultAuthenticationPlugin 的形式存储，并由 StarRocks 的 MySQL 协议兼容层在服务器需要通告或使用默认认证插件时使用（例如在握手期间或未指定插件时）。接受服务器支持的标准 MySQL 认证插件标识（例如 `mysql_native_password`、`caching_sha2_password`）。此变量仅影响会话行为；持久化的用户账号认证配置由其他机制单独管理。参见相关会话变量 `authentication_policy`。
+* **默认值**: `mysql_native_password`
+* **类型**: String
+* **引入版本**: -
+
+### default_rowset_type (global)
+
+全局变量，仅支持全局生效。用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。
+
+### default_table_compression
+
+* 描述：存储表格数据时使用的默认压缩算法，支持 LZ4、Zstandard（或 zstd）、zlib 和 Snappy。如果您建表时在 PROPERTIES 设置了 `compression`，则 `compression` 指定的压缩算法生效。
+* 默认值：lz4_frame
+* 类型：String
+* 引入版本：v3.0
+
+### default_tmp_storage_engine
+
+* **描述**: 会话变量，用于控制临时表的默认存储引擎（包括显式的 `CREATE TEMPORARY TABLE` 以及引擎创建的内部/隐式临时表）。在 `SessionVariable.java` 中以 `@VariableMgr.VarAttr` 注解声明，主要用于 MySQL 8.0 的兼容性，以便期望 MySQL 行为的客户端和工具可以在每个会话级别查看或更改临时表引擎。更改此值会影响在不同引擎下（例如基于内存 vs 基于磁盘的引擎）如何在存储层上存放/管理临时表数据。
+* **范围**: Session
+* **默认值**: `InnoDB`
+* **类型**: String
+* **引入版本**: v3.4.2, v3.5.0
+
+### default_view_sql_security
+
+* **描述**: 创建视图时，如果 `CREATE VIEW` 语句未显式指定 `SECURITY` 子句，则使用该变量作为默认的 SQL SECURITY 特性。`NONE`（等价于显式的 `SECURITY NONE` 子句）表示查询视图时只需要执行者拥有该视图本身的 `SELECT` 权限，不会针对执行者校验视图所引用的表的权限；`INVOKER`（等价于 `SECURITY INVOKER`）表示执行者还必须拥有视图所引用的表的 `SELECT` 权限。语句中显式指定的 `SECURITY NONE` 或 `SECURITY INVOKER` 子句始终优先于该变量。该变量仅影响 `CREATE VIEW`，不影响 `ALTER VIEW`。
+* **范围**: Session
+* **默认值**: `NONE`
+* **类型**: String
+* **取值范围**: `NONE`, `INVOKER`
+* **引入版本**: v4.1.1
+
+### disable_colocate_join
+
+* 描述：控制是否启用 Colocate Join 功能。默认值为 false，表示启用该功能。true 表示禁用该功能。当该功能被禁用后，查询规划将不会尝试执行 Colocate Join。
+>>>>>>> 2669313 ([Doc] Doc for `count_distinct_implementation` (#78424))
 * 默认值：false
 * 引入版本：v3.3.0
 
