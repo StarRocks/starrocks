@@ -575,6 +575,7 @@ public abstract class AlterJobV2 implements Writable {
                 try {
                     return publishVersionFuture.get();
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                     return false;
                 } catch (ExecutionException e) {
                     LOG.warn("failed to publish version for job: {}", jobId, e.getCause());

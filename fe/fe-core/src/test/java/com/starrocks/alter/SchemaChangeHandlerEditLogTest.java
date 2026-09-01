@@ -708,7 +708,7 @@ public class SchemaChangeHandlerEditLogTest {
     }
 
     @Test
-    public void testProcessLakeTableAlterMetaRejectsReservedTableBeforeWritingEditLog() throws Exception {
+    public void testProcessLakeTableAlterMetaRejectsReservedTableBeforeWritingEditLog() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         Assertions.assertNotNull(db);
 

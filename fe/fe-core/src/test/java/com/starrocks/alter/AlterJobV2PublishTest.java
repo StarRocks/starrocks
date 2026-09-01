@@ -26,7 +26,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-public class AlterJobV2PublishTest {
+class AlterJobV2PublishTest {
     private static final class TestJob extends LakeTableAddIndexJob {
         @Override
         protected boolean lakePublishVersion() {
@@ -59,7 +59,7 @@ public class AlterJobV2PublishTest {
     }
 
     @Test
-    public void testRejectedPublishIsRetryable() throws Exception {
+    void testRejectedPublishIsRetryable() throws Exception {
         SwitchableExecutor executor = new SwitchableExecutor();
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -76,19 +76,16 @@ public class AlterJobV2PublishTest {
 
             executor.setReject(false);
             Assertions.assertFalse(job.pollPublish());
-            boolean published = false;
-            for (int i = 0; i < 100 && !published; i++) {
-                Thread.sleep(10L);
-                published = job.pollPublish();
-            }
-            Assertions.assertTrue(published);
+            executor.shutdown();
+            Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+            Assertions.assertTrue(job.pollPublish());
         } finally {
             executor.shutdownNow();
         }
     }
 
     @Test
-    public void testFailedPublishFutureIsCleared() {
+    void testFailedPublishFutureIsCleared() {
         TestJob job = new TestJob();
         job.publishVersionFuture = CompletableFuture.failedFuture(new RuntimeException("publish failed"));
 
@@ -97,7 +94,31 @@ public class AlterJobV2PublishTest {
     }
 
     @Test
-    public void testLakeAlterPublishExecutorRejectsSaturatedSubmissions() {
+    void testInterruptedPublishFutureRestoresInterrupt() {
+        TestJob job = new TestJob();
+        job.publishVersionFuture = new CompletableFuture<>() {
+            @Override
+            public boolean isDone() {
+                return true;
+            }
+
+            @Override
+            public Boolean get() throws InterruptedException {
+                throw new InterruptedException("injected interrupt");
+            }
+        };
+
+        try {
+            Assertions.assertFalse(job.pollPublish());
+            Assertions.assertTrue(Thread.currentThread().isInterrupted());
+            Assertions.assertNull(job.publishVersionFuture);
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    void testLakeAlterPublishExecutorRejectsSaturatedSubmissions() {
         ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
 
         Assertions.assertInstanceOf(ThreadPoolExecutor.AbortPolicy.class, executor.getRejectedExecutionHandler());
