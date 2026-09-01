@@ -108,11 +108,11 @@ protected:
 // still yields one all-NULL row under LEFT JOIN.
 TEST_F(MultiUnnestCoreTest, zips_arrays_of_unequal_length) {
     //        a              b
-    //  row 0 [10, 20]       [100]
-    //  row 1 []             [200, 201]
-    //  row 2 NULL           [300]
-    //  row 3 [30]           NULL
-    //  row 4 []             NULL
+    //  row 0 [10, 20]       [100]        zip pads b to 2
+    //  row 1 []             [200, 201]   zip pads a to 2
+    //  row 2 NULL           [300]        a is a NULL array
+    //  row 3 [30]           NULL         b is a NULL array
+    //  row 4 []             []           both empty, so LEFT JOIN keeps the row
     Columns args;
     args.emplace_back(make_int_array({10, 20, 30}, {0, 2, 2, 2, 3, 3}, {0, 0, 1, 0, 0}));
     args.emplace_back(make_int_array({100, 200, 201, 300}, {0, 1, 3, 4, 4, 4}, {0, 0, 0, 1, 0}));
