@@ -108,22 +108,8 @@ public:
     // in lazy mode _owned describes only the piece currently loaded.
     const Filter& standalone_owned() const { return _owned; }
 
-    // The physical rowids, in the SOURCE SEGMENT FILE, of the rows a sibling owns -- accumulated
-    // across every chunk this iterator has emitted so far, so it is complete only once the consumer
-    // loop has run the iterator to done(). Empty without a selector, which is every publish but a
-    // SPLIT child's cross publish.
-    //
-    // Exists for the one consumer that must name those rows rather than merely skip them: a publish
-    // that REWRITES the segment (row-mode partial update, which a SQL UPDATE downgrades to on a
-    // separate-sort-key table, and the auto-increment rewrite). The rewrite copies every source row
-    // into a file private to this tablet, filling the siblings' rows with values this tablet never
-    // resolved, and the private file is exactly what stops the tablet range from clipping them back
-    // out (see UpdateManager::publish_primary_key_tablet). Masking them in the segment's delete
-    // vector is what makes them unreadable.
-    //
-    // Handed over rather than lent: the delete vector is the only consumer, and a publish holds one
-    // iterator per segment of the rowset at once, so leaving a copy behind while the caller builds
-    // its own would double the peak for rows nobody reads again.
+    // Physical rowids of unowned source rows. Complete after the iterator reaches done().
+    // Ownership is transferred to avoid copying the delvec input.
     std::vector<uint32_t> take_unowned_rowids() { return std::move(_unowned_rowids); }
 
 private:
@@ -134,9 +120,7 @@ private:
     // Ownership of the chunk _load() just produced, moved out by current(). Empty when no selector
     // is set, which every consumer reads as "own every row".
     Filter _owned;
-    // Physical rowids of the rows a sibling owns, accumulated over every chunk (see
-    // unowned_rowids()). Ascending by construction: _load() walks each chunk in order and the
-    // chunks themselves advance through the segment.
+    // Accumulated in ascending order across chunks.
     std::vector<uint32_t> _unowned_rowids;
 
     // Iterator of this segment file.

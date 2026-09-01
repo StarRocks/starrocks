@@ -559,30 +559,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
                                                           state.upserts(local_id), index, &new_deletes));
             }
-            // A segment this publish REWROTE has nothing left clipping it. The rewrite copies every
-            // source row into a file private to this tablet -- SegmentRewriter reads the source
-            // wholesale -- and MetaFileBuilder::apply_opwrite then clears `shared` on that file and
-            // mints a fresh rowset uid, both correctly, because the file really is this tablet's
-            // alone. The rows in it are not: on a SPLIT cross publish the source segment carries the
-            // siblings' rows too, and this tablet resolved none of them, so their non-updated columns
-            // hold whatever "no old row" produces (see _widen_rewrite_columns_for_cross_publish).
-            //
-            // Both of the restrictions that used to keep those rows out of a read went with `shared`.
-            // CrossPublishRowSelector kept them out of this tablet's primary index but left them in
-            // the segment, and Rowset::set_segment_tablet_range withholds the rowset's range on a
-            // primary-key tablet ordered by a separate sort key, because a primary-key range is no
-            // rowid interval in sort-key space. A lake primary-key scan is segment rows minus delete
-            // vector, so with no entry here the rows are served: once by the sibling that owns them,
-            // and again from this file carrying default values. The query-parent alias a split pins
-            // reads to until its UNSHARE lands (SplitTabletJob#addNewMaterializedIndexes ->
-            // PhysicalPartition#pinQueryableIndex) merges both children, so that is where the pair
-            // shows up -- as duplicate primary keys for the whole transaction that was in flight.
-            //
-            // Only a rewrite needs this. A cross-published rowset this publish did NOT rewrite keeps
-            // the parent's shared segments and the op_write's write-time uid, which is identical
-            // across the children: the UNSHARE compaction rewrites it, and the parent alias
-            // deduplicates the children's copies of it by that uid. An entry here would then be
-            // ORed into the parent view against the sibling's opposite verdict -- deleting every row.
+            // A rewrite makes the segment private but can retain sibling rows from its shared source.
+            // Mask them here; the parent view must merge unchanged shared segments from both children.
             if (replace_segments.count(static_cast<int>(local_id)) > 0) {
                 auto unowned_rowids = state.upserts(local_id)->take_unowned_rowids();
                 if (!unowned_rowids.empty()) {
