@@ -112,6 +112,12 @@ CONF_mInt32(segment_data_page_prefetch_concurrency, "8");
 // creates it.
 CONF_Int32(segment_data_page_prefetch_thread_num, "256");
 
+// Number of consecutive segment iterators whose data-page prefetch may be in flight at once.
+// 0 disables cross-segment lookahead. Positive values are bounded to [2, 4] by UnionIterator;
+// the current segment is included in the window. This only takes effect when concurrent data-page
+// prefetch is enabled and the segment uses the tail-index layout.
+CONF_mInt32(segment_iterator_lookahead, "0");
+
 // Read-time gate for serving a segment's small index reads from one shared buffered stream.
 // The prefetch above pays off only through a block cache: it warms the region so the per-column
 // index loads that follow hit the cache. A scan that bypasses the cache -- skip_local_disk_cache,

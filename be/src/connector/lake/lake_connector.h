@@ -223,9 +223,11 @@ private:
     // PeakIOTasks cannot show it, that counter tracks the morsel-driven chunk sources of the
     // scan operator, not IO issued underneath one of them.
     RuntimeProfile::Counter* _data_page_prefetch_timer = nullptr;
+    RuntimeProfile::Counter* _data_page_prefetch_wait_timer = nullptr;
     RuntimeProfile::Counter* _data_page_prefetch_block_counter = nullptr;
     RuntimeProfile::Counter* _data_page_prefetch_task_counter = nullptr;
     RuntimeProfile::Counter* _data_page_prefetch_segment_counter = nullptr;
+    RuntimeProfile::Counter* _data_page_prefetch_lookahead_segment_counter = nullptr;
     RuntimeProfile::Counter* _block_load_timer = nullptr;
     RuntimeProfile::Counter* _block_load_counter = nullptr;
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;

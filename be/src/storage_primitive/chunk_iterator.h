@@ -90,6 +90,11 @@ public:
     // This routine can be called at most once.
     virtual void close() = 0;
 
+    // Start any bounded read-ahead work this iterator supports. The default is a no-op.
+    // Calls must be idempotent: UnionIterator may prepare a child before it becomes current,
+    // then call this again when it reaches that child to surface a stored preparation error.
+    virtual Status prepare_for_read();
+
     virtual std::size_t merged_rows() const { return 0; }
 
     const Schema& schema() const { return _schema; }

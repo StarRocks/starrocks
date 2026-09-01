@@ -28,6 +28,7 @@
 #include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "base/simd/simd.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/array_column.h"
@@ -207,6 +208,7 @@ public:
     ~SegmentIterator() override = default;
 
     void close() override;
+    Status prepare_for_read() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
 
     // Public entry point used by the segment_seek_range_to_rowid_range() /
@@ -434,6 +436,7 @@ private:
     Status _init_reused_scan();
     Status _init_scan_range_and_context();
     Status _prefetch_data_pages_concurrently();
+    void _wait_for_data_page_prefetch();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -609,6 +612,8 @@ private:
     void _build_column_oriented_rf(ScanContext* ctx);
 
 private:
+    struct DataPagePrefetchState;
+
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
 
@@ -682,6 +687,9 @@ private:
 
     bool _inited = false;
     bool _one_time_setup_done = false;
+    bool _prepared = false;
+    Status _prepare_status = Status::OK();
+    std::shared_ptr<DataPagePrefetchState> _data_page_prefetch_state;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -693,6 +701,31 @@ private:
     std::unique_ptr<InvertedIndexContext> _inverted_index_ctx;
 
     bool _enable_predicate_col_late_materialize;
+};
+
+struct SegmentIterator::DataPagePrefetchState {
+    explicit DataPagePrefetchState(size_t task_count)
+            : done(static_cast<int>(task_count)), remaining(task_count), start_ns(MonotonicNanos()) {}
+
+    void finish_task() {
+        if (remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            finish_ns.store(MonotonicNanos(), std::memory_order_release);
+        }
+        done.count_down();
+    }
+
+    CountDownLatch done;
+    std::atomic<size_t> remaining;
+    std::atomic<int64_t> finish_ns{0};
+    int64_t start_ns;
+    int64_t block_size = 0;
+    int64_t file_base = 0;
+    size_t per_task = 0;
+    int64_t submitted_tasks = 0;
+    bool lookahead = false;
+    std::string file_name;
+    std::vector<int64_t> blocks;
+    std::vector<io::SeekableInputStream*> handles;
 };
 
 // ScanContext method implementations
@@ -1048,7 +1081,29 @@ Status SegmentIterator::_init() {
     return st;
 }
 
+Status SegmentIterator::prepare_for_read() {
+    if (_prepared) {
+        return _prepare_status;
+    }
+
+    // Initializing future legacy segments would only move their serial index reads earlier and
+    // delay the current segment. Lookahead is useful only when initialization can launch the
+    // tail-layout data-page prefetch and return while those exact cache fills remain in flight.
+    if (config::segment_iterator_lookahead <= 0 || !config::enable_segment_data_page_concurrent_prefetch ||
+        _segment == nullptr || _segment->small_index_region_size() == 0 || !_opts.lake_io_opts.fill_data_cache) {
+        return Status::OK();
+    }
+
+    _prepared = true;
+    _prepare_status = _init();
+    if (_prepare_status.ok()) {
+        _inited = true;
+    }
+    return _prepare_status;
+}
+
 Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    _wait_for_data_page_prefetch();
     _opts.pred_tree = options.pred_tree;
     _opts.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     _opts.runtime_filter_preds = options.runtime_filter_preds;
@@ -1076,6 +1131,8 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
     _reserve_chunk_size =
             static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
+    _prepared = false;
+    _prepare_status = Status::OK();
     return Status::OK();
 }
 
@@ -1238,6 +1295,7 @@ ThreadPool* data_page_prefetch_pool() {
 // handle, and blocks are deduplicated in file space so no two tasks ever race for one block --
 // a race would miss twice and turn into a genuinely extra remote read.
 Status SegmentIterator::_prefetch_data_pages_concurrently() {
+    _wait_for_data_page_prefetch();
     if (!config::enable_segment_data_page_concurrent_prefetch) {
         return Status::OK();
     }
@@ -1307,55 +1365,81 @@ Status SegmentIterator::_prefetch_data_pages_concurrently() {
         return Status::OK();
     }
 
+    auto state = std::make_shared<DataPagePrefetchState>(fanout);
+    state->block_size = block_size;
+    state->file_base = file_base;
+    state->per_task = (blocks.size() + fanout - 1) / fanout;
+    state->lookahead = config::segment_iterator_lookahead > 0;
+    state->file_name = _segment->file_name();
+    state->blocks = std::move(blocks);
+    state->handles = std::move(handles);
+
     // Contiguous slices rather than round-robin, so each task walks blocks that are next to each
     // other and any block a touch_cache call overreaches into is one its own task fetches next.
-    const size_t per_task = (blocks.size() + fanout - 1) / fanout;
-    auto fill_slice = [&](size_t task) {
-        const size_t begin = task * per_task;
-        const size_t end = std::min(blocks.size(), begin + per_task);
-        io::SeekableInputStream* handle = handles[task];
+    auto fill_slice = [](const std::shared_ptr<DataPagePrefetchState>& state, size_t task) {
+        const size_t begin = task * state->per_task;
+        const size_t end = std::min(state->blocks.size(), begin + state->per_task);
+        io::SeekableInputStream* handle = state->handles[task];
         for (size_t i = begin; i < end; ++i) {
             // Back to segment-relative bytes, clipped to the block so the call cannot spill into
             // a neighbour that another task owns.
-            const int64_t start = std::max<int64_t>(0, blocks[i] * block_size - file_base);
-            const int64_t stop = (blocks[i] + 1) * block_size - file_base;
+            const int64_t start = std::max<int64_t>(0, state->blocks[i] * state->block_size - state->file_base);
+            const int64_t stop = (state->blocks[i] + 1) * state->block_size - state->file_base;
             if (stop <= start) {
                 continue;
             }
             // Best effort: a block left unfetched is one the read loop fetches itself, as before.
             if (Status st = handle->touch_cache(start, stop - start); !st.ok()) {
-                VLOG(2) << "data page prefetch failed for " << _segment->file_name() << " at " << start << ": " << st;
+                VLOG(2) << "data page prefetch failed for " << state->file_name << " at " << start << ": " << st;
                 break;
             }
         }
     };
 
-    MonotonicStopWatch watch;
-    watch.start();
-    CountDownLatch latch(static_cast<int>(fanout) - 1);
-    size_t running = 1;
-    for (size_t task = 1; task < fanout; ++task) {
-        Status st = pool->submit_func([&, task]() {
-            CountDownOnScopeExit<CountDownLatch> counted(&latch);
-            fill_slice(task);
+    int64_t submitted = 0;
+    for (size_t task = 0; task < fanout; ++task) {
+        Status st = pool->submit_func([state, task, fill_slice]() {
+            fill_slice(state, task);
+            state->finish_task();
         });
         if (st.ok()) {
-            ++running;
+            ++submitted;
         } else {
             // Pool saturated. Run the slice here instead of leaving its blocks to the read loop,
             // so the block set stays whole; it just does not overlap with the rest.
-            latch.count_down();
-            fill_slice(task);
+            fill_slice(state, task);
+            state->finish_task();
         }
     }
-    fill_slice(0);
-    latch.wait();
+    state->submitted_tasks = submitted;
+    _data_page_prefetch_state = std::move(state);
 
-    _opts.stats->data_page_prefetch_ns += watch.elapsed_time();
-    _opts.stats->data_page_prefetch_blocks += static_cast<int64_t>(blocks.size());
-    _opts.stats->data_page_prefetch_tasks += static_cast<int64_t>(running);
-    _opts.stats->data_page_prefetch_segments += 1;
+    // With lookahead, UnionIterator initializes the next few children now and each child waits
+    // only when it becomes current. Without it, retain the old submit-and-wait behavior.
+    if (config::segment_iterator_lookahead <= 0) {
+        _wait_for_data_page_prefetch();
+    }
     return Status::OK();
+}
+
+void SegmentIterator::_wait_for_data_page_prefetch() {
+    if (_data_page_prefetch_state == nullptr) {
+        return;
+    }
+    auto state = std::move(_data_page_prefetch_state);
+    const int64_t wait_start_ns = MonotonicNanos();
+    state->done.wait();
+    const int64_t wait_ns = MonotonicNanos() - wait_start_ns;
+    const int64_t finish_ns = state->finish_ns.load(std::memory_order_acquire);
+
+    _opts.stats->data_page_prefetch_ns += std::max<int64_t>(0, finish_ns - state->start_ns);
+    _opts.stats->data_page_prefetch_wait_ns += wait_ns;
+    _opts.stats->data_page_prefetch_blocks += static_cast<int64_t>(state->blocks.size());
+    _opts.stats->data_page_prefetch_tasks += state->submitted_tasks;
+    _opts.stats->data_page_prefetch_segments += 1;
+    if (state->lookahead) {
+        _opts.stats->data_page_prefetch_lookahead_segments += 1;
+    }
 }
 
 Status SegmentIterator::_init_reused_scan() {
@@ -3137,10 +3221,14 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk) {
+    if (_prepared && !_prepare_status.ok()) {
+        return _prepare_status;
+    }
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
+    _wait_for_data_page_prefetch();
 
     RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
@@ -3165,10 +3253,14 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    if (_prepared && !_prepare_status.ok()) {
+        return _prepare_status;
+    }
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
+    _wait_for_data_page_prefetch();
 
     RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
@@ -3182,10 +3274,14 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids) {
+    if (_prepared && !_prepare_status.ok()) {
+        return _prepare_status;
+    }
     if (!_inited) {
         RETURN_IF_ERROR(_init());
         _inited = true;
     }
+    _wait_for_data_page_prefetch();
 
     RETURN_IF_ERROR(_try_to_update_ranges_by_runtime_filter());
 
@@ -5218,6 +5314,9 @@ void SegmentIterator::_update_stats(io::SeekableInputStream* rfile) {
 }
 
 void SegmentIterator::close() {
+    // Future children may be closed before they become current (LIMIT, cancellation, error).
+    // Their tasks hold raw pointers to the column streams, so join them before releasing files.
+    _wait_for_data_page_prefetch();
     if (_del_vec) {
         _del_vec.reset();
     }
@@ -5252,6 +5351,8 @@ void SegmentIterator::close() {
     }
     _one_time_setup_done = false;
     _inited = false;
+    _prepared = false;
+    _prepare_status = Status::OK();
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late
