@@ -9017,6 +9017,68 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_compacts_only_live_page
     LakeIOOptions io_options;
     ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *merged, target_rssid, false, io_options, &loaded));
     EXPECT_EQ(live_bytes, loaded.save());
+
+    // Feed the compact output through the real SPLIT then MERGE publish path. The
+    // second output must stay page-sized; a whole-object copy would reintroduce
+    // the dead prefix/suffix on every remerge.
+    auto split_parent = std::make_shared<TabletMetadataPB>(*merged);
+    set_two_column_pk_schema(split_parent.get(), /*schema_id=*/1001);
+    split_parent->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+    split_parent->mutable_range()->set_lower_bound_included(true);
+    split_parent->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+    split_parent->mutable_range()->set_upper_bound_included(false);
+    ASSERT_EQ(1, split_parent->rowsets_size());
+    auto* split_rowset = split_parent->mutable_rowsets(0);
+    split_rowset->set_num_rows(100);
+    split_rowset->mutable_range()->CopyFrom(split_parent->range());
+    ASSERT_EQ(1, split_rowset->segment_metas_size());
+    auto* split_segment = split_rowset->mutable_segment_metas(0);
+    split_segment->set_num_rows(100);
+    split_segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    split_segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    ASSERT_OK(put_tablet_metadata(split_parent));
+    const int64_t split_left = next_id();
+    const int64_t split_right = next_id();
+    const int64_t remerged_tablet = next_id();
+    for (int64_t tablet_id : {split_left, split_right, remerged_tablet}) prepare_tablet_dirs(tablet_id);
+    ReshardingTabletInfoPB split_info;
+    auto& splitting = *split_info.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(merged_tablet);
+    splitting.add_new_tablet_ids(split_left);
+    splitting.add_new_tablet_ids(split_right);
+    auto set_external_range = [&](TabletRangePB* range, int lower, int upper) {
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        range->set_upper_bound_included(false);
+    };
+    set_external_range(splitting.add_new_tablet_ranges(), 0, 50);
+    set_external_range(splitting.add_new_tablet_ranges(), 50, 100);
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> split_published;
+    std::unordered_map<int64_t, TabletRangePB> split_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), split_info, kNewVersion, kNewVersion + 1,
+                                              split_txn, false, split_published, split_ranges));
+    ASSERT_TRUE(split_published.contains(split_left));
+    ASSERT_TRUE(split_published.contains(split_right));
+    std::unordered_map<int64_t, TabletMetadataPtr> remerge_published;
+    ASSERT_OK(publish_resharding_merge({split_published.at(split_left), split_published.at(split_right)},
+                                       remerged_tablet, kNewVersion + 1, kNewVersion + 2, next_id(),
+                                       remerge_published));
+    const auto& remerged = remerge_published.at(remerged_tablet);
+    ASSERT_EQ(1, remerged->delvec_meta().version_to_file_size());
+    const auto& remerged_file = remerged->delvec_meta().version_to_file().at(kNewVersion + 2);
+    EXPECT_EQ(static_cast<int64_t>(live_bytes.size()), remerged_file.size());
+    const uint32_t remerged_rssid = remerged->rowsets(0).id();
+    const auto& remerged_page = remerged->delvec_meta().delvecs().at(remerged_rssid);
+    EXPECT_EQ(0, remerged_page.offset());
+    EXPECT_EQ(live_bytes.size(), remerged_page.size());
+    DelVector reloaded;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *remerged, remerged_rssid, false, io_options, &reloaded));
+    EXPECT_EQ(live_bytes, reloaded.save());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_output_follows_target_rssid_order) {
@@ -9308,52 +9370,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_union_rejecte
         EXPECT_EQ(0, source_opens);
         EXPECT_EQ(0, writer_opens);
     }
-}
-
-TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_gap_promotion_rejected_before_read) {
-    // The consumed source is encrypted before synthesized-gap processing can
-    // promote it from a raw page to a union page.  A normal two-source merge
-    // supplies the same externally observable no-read boundary on this base;
-    // the dedicated gap path is covered by the merge implementation's fourth
-    // before_get_del_vec seam.
-    const int64_t child_a = next_id();
-    const int64_t child_b = next_id();
-    const int64_t merged_tablet = next_id();
-    for (int64_t tablet_id : {child_a, child_b, merged_tablet}) prepare_tablet_dirs(tablet_id);
-    auto encrypted = make_shared_delvec_source(child_a, {"encrypted-gap.dat"});
-    auto sibling = make_shared_delvec_source(child_b, {"encrypted-gap.dat"});
-    DelVector delvec;
-    const uint32_t deleted = 1;
-    delvec.init(/*version=*/10, &deleted, 1);
-    add_delvec(encrypted.get(), child_a, 10, 1, "encrypted-gap.delvec", delvec.save());
-    (*encrypted->mutable_delvec_meta()->mutable_version_to_file())[10].set_encryption_meta("encrypted");
-    ASSERT_OK(put_tablet_metadata(encrypted));
-    ASSERT_OK(put_tablet_metadata(sibling));
-    ReshardingTabletInfoPB resharding;
-    auto& merging = *resharding.mutable_merging_tablet_info();
-    merging.add_old_tablet_ids(child_a);
-    merging.add_old_tablet_ids(child_b);
-    merging.set_new_tablet_id(merged_tablet);
-    TxnInfoPB txn_info;
-    txn_info.set_txn_id(next_id());
-    txn_info.set_commit_time(1);
-    txn_info.set_gtid(1);
-    int get_del_vec_calls = 0;
-    auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("merge_delvecs:before_get_del_vec", [&](void*) { ++get_del_vec_calls; });
-    sync->EnableProcessing();
-    DeferOp cleanup([&] {
-        sync->ClearAllCallBacks();
-        sync->DisableProcessing();
-    });
-    std::unordered_map<int64_t, TabletMetadataPtr> published;
-    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-    const Status status = lake::publish_resharding_tablet(_tablet_manager.get(), resharding, 1, 2, txn_info, false,
-                                                          published, tablet_ranges);
-    EXPECT_TRUE(status.is_not_supported()) << status;
-    EXPECT_EQ("encrypted delvec input is unsupported; delvec must be plaintext: encrypted-gap.delvec",
-              status.message());
-    EXPECT_EQ(0, get_del_vec_calls);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_duplicate_source_metadata_mismatch_is_rejected) {
@@ -14973,6 +14989,88 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
         EXPECT_GT(delvec_it->second.size(), 0u) << "synthesized delvec page is empty";                             \
         EXPECT_EQ(2, (MERGED)->version()) << "merged tablet version mismatch";                                     \
     } while (0)
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_gap_promotion_rejected_before_read) {
+    using namespace pr1_helpers;
+    constexpr int64_t kBaseVersion = 1;
+    constexpr int64_t kNewVersion = 2;
+    constexpr uint32_t kSharedRssid = 10;
+
+    auto build_sources = [&](bool encrypted, int64_t merged_tablet) {
+        const int64_t child_left = next_id();
+        const int64_t child_gap = next_id();
+        const int64_t child_right = next_id();
+        for (int64_t tablet_id : {child_left, child_gap, child_right, merged_tablet}) {
+            prepare_tablet_dirs(tablet_id);
+        }
+        const uint64_t segment_size =
+                write_two_column_segment(merged_tablet, "shared_seg.dat", 30, [](int value) { return value * 10; });
+        auto left = make_pk_shared_child_with_real_segment(child_left, kBaseVersion, kSharedRssid, 0, 10, segment_size);
+        auto compacted =
+                make_pk_compacted_child(child_gap, kBaseVersion, /*compacted_id=*/11, 10, 20, "compacted_gap.dat");
+        auto right =
+                make_pk_shared_child_with_real_segment(child_right, kBaseVersion, kSharedRssid, 20, 30, segment_size);
+        DelVector source_delvec;
+        const uint32_t deleted = 0;
+        source_delvec.init(/*version=*/10, &deleted, 1);
+        const std::string source_name = encrypted ? "encrypted-gap-promotion.delvec" : "plain-gap-promotion.delvec";
+        add_delvec(left.get(), child_left, /*version=*/10, kSharedRssid, source_name, source_delvec.save());
+        if (encrypted) {
+            (*left->mutable_delvec_meta()->mutable_version_to_file())[10].set_encryption_meta("unsupported");
+        }
+        return std::vector<TabletMetadataPtr>{left, compacted, right};
+    };
+
+    // First prove this exact three-child layout reaches synthesized-gap promotion when plaintext:
+    // two canonical shared contributors cover [0,10) and [20,30), while the compacted child leaves
+    // [10,20) as a real Phase-0 gap. The single raw delvec on the left must be promoted and unioned.
+    const int64_t plain_merged_tablet = next_id();
+    int plaintext_promotions = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("merge_delvecs:before_gap_promotion", [&](void*) { ++plaintext_promotions; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    std::unordered_map<int64_t, TabletMetadataPtr> plaintext_published;
+    ASSERT_OK(publish_resharding_merge(build_sources(false, plain_merged_tablet), plain_merged_tablet, kBaseVersion,
+                                       kNewVersion, next_id(), plaintext_published));
+    ASSERT_EQ(1, plaintext_promotions);
+    const auto& plaintext_merged = plaintext_published.at(plain_merged_tablet);
+    const uint32_t canonical_rssid = plaintext_merged->rowsets(0).id();
+    ASSERT_TRUE(plaintext_merged->delvec_meta().delvecs().contains(canonical_rssid));
+    DelVector promoted;
+    LakeIOOptions io_options;
+    ASSERT_OK(
+            lake::get_del_vec(_tablet_manager.get(), *plaintext_merged, canonical_rssid, false, io_options, &promoted));
+    ASSERT_NE(nullptr, promoted.roaring());
+    EXPECT_TRUE(promoted.roaring()->contains(0));
+    EXPECT_TRUE(promoted.roaring()->contains(10));
+
+    const int64_t encrypted_merged_tablet = next_id();
+    int encrypted_promotions = 0;
+    int get_del_vec_calls = 0;
+    int preflight_opens = 0;
+    int writer_opens = 0;
+    sync->ClearAllCallBacks();
+    sync->SetCallBack("merge_delvecs:before_gap_promotion", [&](void*) { ++encrypted_promotions; });
+    sync->SetCallBack("merge_delvecs:before_get_del_vec", [&](void*) { ++get_del_vec_calls; });
+    sync->SetCallBack("write_compacted_delvec_pages:preflight_source_open", [&](void*) { ++preflight_opens; });
+    sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
+    std::unordered_map<int64_t, TabletMetadataPtr> encrypted_published;
+    const Status status =
+            publish_resharding_merge(build_sources(true, encrypted_merged_tablet), encrypted_merged_tablet,
+                                     kBaseVersion, kNewVersion, next_id(), encrypted_published);
+    EXPECT_TRUE(status.is_not_supported()) << status;
+    EXPECT_EQ("encrypted delvec input is unsupported; delvec must be plaintext: encrypted-gap-promotion.delvec",
+              status.message());
+    EXPECT_EQ(0, encrypted_promotions);
+    EXPECT_EQ(0, get_del_vec_calls);
+    EXPECT_EQ(0, preflight_opens);
+    EXPECT_EQ(0, writer_opens);
+    EXPECT_FALSE(encrypted_published.contains(encrypted_merged_tablet));
+}
 
 // A synthesized gap delvec remains authoritative when divergent rowset layouts force lazy index rebuild, even when
 // the inherited index metadata carries no delvec. Cold first-writer recovery must rebuild from rowsets, honor the

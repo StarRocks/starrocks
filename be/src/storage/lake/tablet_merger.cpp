@@ -2015,6 +2015,7 @@ Status inject_synthesized_gaps_into_target_states(TabletManager* tablet_manager,
             DelVector dv_prev;
             const auto& ref = *state.single_source;
             LakeIOOptions io_opts;
+            TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_gap_promotion", nullptr);
             TEST_SYNC_POINT_CALLBACK("merge_delvecs:before_get_del_vec", nullptr);
             RETURN_IF_ERROR(get_del_vec(tablet_manager, *ref.ctx->metadata(), ref.page, false, io_opts, &dv_prev));
             auto merged_dv = std::make_unique<DelVector>();
