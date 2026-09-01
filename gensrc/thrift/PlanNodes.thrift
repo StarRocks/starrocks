@@ -90,9 +90,13 @@ enum TPlanNodeType {
   LOOKUP_NODE,
   BENCHMARK_SCAN_NODE,
   LAKE_CACHE_STATS_SCAN_NODE,
-  CHANGES_SCAN_NODE,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE,
-  STARROCKS_SCAN_NODE
+
+  // Enterprise-only values start at 300, reserve some values for upstream StarRocks so a sync
+  // never collides on ordinals. Keep this block last: an implicit value after an explicit one
+  // continues from it.
+  CHANGES_SCAN_NODE = 300,
+  STARROCKS_SCAN_NODE = 301
 }
 
 // phases of an execution node
