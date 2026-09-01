@@ -164,6 +164,7 @@ TEST(WkbCodecTest, RejectsMalformedWkb) {
             from_hex("0101000000000000000000f03f"),                   // truncated POINT
             from_hex("0101000020"),                                   // EWKB SRID flag
             from_hex("010200000041420f00"),                           // element count exceeds safety limit
+            from_hex("010300000040420f00"),                           // polygon ring count exceeds input size
             from_hex("010700000040420f00"),                           // collection count exceeds input size
             from_hex("010400000001000000010200000000000000"),         // MULTIPOINT containing LINESTRING EMPTY
             from_hex("0101000000000000000000f03f000000000000004000"), // trailing byte

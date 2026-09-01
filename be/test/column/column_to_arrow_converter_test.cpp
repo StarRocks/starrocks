@@ -72,7 +72,8 @@ void compare_arrow_value(const RunTimeCppType<LT>& datum, const ArrowTypeIdToArr
         ASSERT_EQ(data_array->Value(i), datum);
     } else if constexpr (lt_is_largeint<LT>) {
         ASSERT_EQ(data_array->GetString(i), int128_to_string(datum));
-    } else if constexpr (lt_is_string<LT> || lt_is_date_or_datetime<LT>) {
+    } else if constexpr (lt_is_string<LT> || lt_is_binary<LT> || lt_is_geometry<LT> ||
+                         lt_is_date_or_datetime<LT>) {
         ASSERT_EQ(data_array->GetString(i), datum.to_string());
     } else if constexpr (lt_is_hll<LT>) {
         std::string s;
@@ -289,6 +290,20 @@ TEST_F(StarRocksColumnToArrowTest, testStringColumn) {
     auto type_desc = TypeDescriptor::create_varchar_type(10000);
     NotNullableColumnTester<TYPE_VARCHAR, ArrowTypeId::STRING>::apply(997, data, type_desc);
     NotNullableColumnTester<TYPE_CHAR, ArrowTypeId::STRING>::apply(997, data, type_desc);
+}
+
+TEST_F(StarRocksColumnToArrowTest, testGeometryColumn) {
+    std::vector<std::string> wkbs{std::string("\x01\x01\x00\x00\x00", 5),
+                                  std::string("\x01\x07\x00\x00\x00\x00\x00\x00\x00", 9)};
+    std::vector<Slice> data;
+    for (auto& wkb : wkbs) {
+        data.emplace_back(wkb);
+    }
+    TypeDescriptor type_desc(TYPE_GEOMETRY);
+    NotNullableColumnTester<TYPE_GEOMETRY, ArrowTypeId::BINARY>::apply(17, data, type_desc);
+
+    std::set<size_t> null_index{1, 5, 13};
+    NullableColumnTester<TYPE_GEOMETRY, ArrowTypeId::BINARY>::apply(17, null_index, data, type_desc);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testLargeIntColumn) {

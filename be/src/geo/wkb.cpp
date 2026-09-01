@@ -470,6 +470,10 @@ private:
             output->empty = true;
             return Status::OK();
         }
+        constexpr size_t kMinimumRingWkbSize = sizeof(uint32_t) + 4 * 2 * sizeof(double);
+        if (ring_count > (_size - _position) / kMinimumRingWkbSize) {
+            return invalid_wkb("polygon ring count exceeds input size");
+        }
         output->rings.reserve(ring_count);
         for (uint32_t i = 0; i < ring_count; ++i) {
             uint32_t point_count = 0;

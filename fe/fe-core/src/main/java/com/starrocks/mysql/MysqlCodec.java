@@ -266,8 +266,9 @@ public class MysqlCodec {
             case VARCHAR:
                 return MysqlColType.MYSQL_TYPE_VAR_STRING;
             case VARBINARY:
-            case GEOMETRY:
                 return MysqlColType.MYSQL_TYPE_BLOB;
+            case GEOMETRY:
+                return MysqlColType.MYSQL_TYPE_GEOMETRY;
             default:
                 return MysqlColType.MYSQL_TYPE_STRING;
         }

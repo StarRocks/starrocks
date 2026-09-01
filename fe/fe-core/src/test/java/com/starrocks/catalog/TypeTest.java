@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.mysql.MysqlCodec;
+import com.starrocks.mysql.MysqlColType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PStructField;
@@ -212,6 +213,14 @@ public class TypeTest {
         Assertions.assertEquals(60, MysqlCodec.getMysqlResultSetFieldLength(structType));
         Assertions.assertEquals(0, MysqlCodec.getMysqlResultSetFieldDecimals(structType));
         Assertions.assertEquals(33, MysqlCodec.getMysqlResultSetFieldCharsetIndex(structType));
+    }
+
+    @Test
+    public void testGeometryMysqlType() {
+        Assertions.assertEquals(MysqlColType.MYSQL_TYPE_GEOMETRY,
+                MysqlCodec.toMysqlType(PrimitiveType.GEOMETRY));
+        Assertions.assertEquals(MysqlColType.MYSQL_TYPE_BLOB,
+                MysqlCodec.toMysqlType(PrimitiveType.VARBINARY));
     }
 
     @Test

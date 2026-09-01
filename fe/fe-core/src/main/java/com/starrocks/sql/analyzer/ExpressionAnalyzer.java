@@ -757,6 +757,11 @@ public class ExpressionAnalyzer {
         public Void visitBinaryPredicate(BinaryPredicate node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
+            if (type1.isGeometryType() || type2.isGeometryType()) {
+                throw new SemanticException(
+                        "GEOMETRY type does not support predicate operations; use spatial predicate functions",
+                        node.getPos());
+            }
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
@@ -994,6 +999,11 @@ public class ExpressionAnalyzer {
             node.setType(BooleanType.BOOLEAN);
 
             for (Expr expr : node.getChildren()) {
+                if (expr.getType().isGeometryType() && !(node instanceof IsNullPredicate)) {
+                    throw new SemanticException(
+                            "GEOMETRY type does not support predicate operations; use spatial predicate functions",
+                            node.getPos());
+                }
                 if (expr.getType().isOnlyMetricType() ||
                         (expr.getType().isComplexType() && !(node instanceof IsNullPredicate) &&
                                 !(node instanceof InPredicate))) {

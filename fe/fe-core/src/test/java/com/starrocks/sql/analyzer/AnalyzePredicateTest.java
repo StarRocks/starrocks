@@ -40,6 +40,18 @@ public class AnalyzePredicateTest {
         analyzeSuccess("select * from tarray where v3 in ([1,2,3], [4,5,6])");
     }
 
+    @Test
+    public void testGeometryPredicate() {
+        String point = "ST_GeomFromText('POINT (0 0)')";
+        String otherPoint = "ST_GeomFromText('POINT (1 1)')";
+        String error = "GEOMETRY type does not support predicate operations";
+
+        analyzeSuccess("select " + point + " is null");
+        analyzeFail("select " + point + " = " + otherPoint, error);
+        analyzeFail("select " + point + " between " + point + " and " + otherPoint, error);
+        analyzeFail("select " + point + " in (" + otherPoint + ")", error);
+    }
+
 
     @Test
     public void testInPredicate() {
