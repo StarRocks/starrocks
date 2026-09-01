@@ -60,6 +60,7 @@ set(EXPR_TEST_FILES
     map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
+    multi_unnest_core_test.cpp
     ngram_search_test.cpp
     percentile_functions_test.cpp
     condition_expr_core_test.cpp
