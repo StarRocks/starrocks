@@ -189,6 +189,12 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
 
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Total number of remote storage read attempts for lake tablet metadata that return `NotFound`. A tablet's metadata lives either in its own metadata object or inside a bundled metadata file, never in both, and reads of either location are counted, including the bundle reads issued by vacuum. Each failed fallback read is counted separately. Cache misses and successful reads do not increment this metric. Reads of a source cluster's metadata during replication and of snapshot metadata during restore are not counted.
+
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
 - Unit: Bytes
