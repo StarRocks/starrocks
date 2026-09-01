@@ -34,17 +34,19 @@ public:
             return {};
         }
         Column* arg0 = state->get_columns()[0]->as_mutable_raw_ptr();
-        auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
+        // const: every ArrayColumn accessor then resolves to its const overload, which keeps the
+        // offsets read on immutable_data(). The non-const FixedLengthColumnBase::get_data()
+        // materializes a ContainerResource-backed column into its own buffer and drops the
+        // resource, and nothing here may mutate the input column.
+        const ArrayColumn* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         state->set_processed_rows(arg0->size());
         Columns result;
         if (arg0->has_null() || state->get_is_left_join()) {
-            // Read the offsets buffer directly. Going through Datum::get_int32() would reinterpret
-            // any offset in [2^31, 2^32) as a negative value, because Datum keeps unsigned values in
-            // the matching signed slot. immutable_data() rather than get_data(): the non-const
-            // get_data() materializes a ContainerResource-backed column into its own buffer and
-            // drops the resource, which the Datum path did not do.
-            const auto offsets = col_array->offsets_column_raw_ptr()->immutable_data();
-            const Column* elements = col_array->elements_column_raw_ptr();
+            // Read the offsets buffer directly: Datum::get_int32() would reinterpret any offset in
+            // [2^31, 2^32) as a negative value, because Datum keeps unsigned values in the matching
+            // signed slot.
+            const auto offsets = col_array->offsets().immutable_data();
+            const Column& elements = col_array->elements();
             const size_t row_count = arg0->size();
 
             auto copy_count_column = UInt32Column::create();
@@ -71,7 +73,7 @@ public:
                     } else {
                         const uint32_t length = offsets[row_idx + 1] - offsets[row_idx];
                         if (state->is_required()) {
-                            unnested_array_elements->append(*elements, offsets[row_idx], length);
+                            unnested_array_elements->append(elements, offsets[row_idx], length);
                         }
                         offset += length;
                     }
