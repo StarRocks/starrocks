@@ -176,4 +176,18 @@ public class CacheDictManagerThrashGuardTest {
         assertFalse(invalidationHistory().containsKey(enableMe), "named column's history should be cleared");
         assertTrue(noDictColumns().contains(keepMe), "other column's forbid must remain");
     }
+
+    // isColumnForbidden reflects the in-memory NO_DICT set; used to coordinate a pending async guard
+    // write with a concurrent ENABLE (LocalMetastore.updateNoDictColumns).
+    @Test
+    public void testIsColumnForbidden() {
+        CacheDictManager mgr = CacheDictManager.getInstance();
+        ColumnIdentifier id = col("forbid_probe");
+        assertFalse(mgr.isColumnForbidden(TABLE_ID, "forbid_probe"));
+        noDictColumns().add(id);
+        assertTrue(mgr.isColumnForbidden(TABLE_ID, "forbid_probe"));
+        assertFalse(mgr.isColumnForbidden(TABLE_ID, "other_col"));
+        mgr.clearForbiddenColumns(TABLE_ID, Set.of("forbid_probe"));
+        assertFalse(mgr.isColumnForbidden(TABLE_ID, "forbid_probe"));
+    }
 }

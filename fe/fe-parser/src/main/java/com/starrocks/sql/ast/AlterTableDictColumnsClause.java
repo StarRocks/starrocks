@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -29,7 +30,7 @@ public class AlterTableDictColumnsClause extends AlterTableClause {
     public AlterTableDictColumnsClause(boolean enable, List<String> columns, NodePosition pos) {
         super(pos);
         this.enable = enable;
-        this.columns = columns;
+        this.columns = columns == null ? ImmutableList.of() : ImmutableList.copyOf(columns);
     }
 
     public boolean isEnable() {

@@ -22,6 +22,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -161,8 +163,16 @@ public class GlobalDictMetaService {
                     return;
                 }
                 Table table = globalStateMgr.getLocalMetastore().getTable(dbName, tableName);
-                if (table instanceof OlapTable olapTable && !olapTable.getNoDictColumns().isEmpty()) {
-                    result.add(entry(dbName, tableName, olapTable.getNoDictColumns()));
+                if (table instanceof OlapTable olapTable) {
+                    Locker locker = new Locker();
+                    locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    try {
+                        if (!olapTable.getNoDictColumns().isEmpty()) {
+                            result.add(entry(dbName, tableName, olapTable.getNoDictColumns()));
+                        }
+                    } finally {
+                        locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                    }
                 }
             } else {
                 // global scan: enumerate all olap tables that have at least one forbidden column
@@ -171,10 +181,16 @@ public class GlobalDictMetaService {
                     if (db == null) {
                         continue;
                     }
-                    for (Table table : db.getTables()) {
-                        if (table instanceof OlapTable olapTable && !olapTable.getNoDictColumns().isEmpty()) {
-                            result.add(entry(db.getFullName(), table.getName(), olapTable.getNoDictColumns()));
+                    Locker locker = new Locker();
+                    locker.lockDatabase(db.getId(), LockType.READ);
+                    try {
+                        for (Table table : db.getTables()) {
+                            if (table instanceof OlapTable olapTable && !olapTable.getNoDictColumns().isEmpty()) {
+                                result.add(entry(db.getFullName(), table.getName(), olapTable.getNoDictColumns()));
+                            }
                         }
+                    } finally {
+                        locker.unLockDatabase(db.getId(), LockType.READ);
                     }
                 }
             }

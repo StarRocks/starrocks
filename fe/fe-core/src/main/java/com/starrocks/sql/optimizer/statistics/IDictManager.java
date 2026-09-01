@@ -40,6 +40,12 @@ public interface IDictManager {
     default void clearForbiddenColumns(long tableId, java.util.Set<String> columnNames) {
     }
 
+    // True if the column currently has an in-memory low-cardinality dict forbid (thrash guard or
+    // cardinality blacklist). Used to coordinate a pending async guard write with a concurrent ENABLE.
+    default boolean isColumnForbidden(long tableId, String columnName) {
+        return false;
+    }
+
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
     Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName);
 

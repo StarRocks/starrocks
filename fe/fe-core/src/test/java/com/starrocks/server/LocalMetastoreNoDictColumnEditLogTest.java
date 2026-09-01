@@ -54,7 +54,7 @@ import java.util.Set;
 // Runtime/persistence coverage for the column-level "no dict" forbid (the dictionary thrash guard's
 // persistent output, also the target of ALTER TABLE ... DISABLE/ENABLE DICTIONARY):
 //   1. LocalMetastore.updateNoDictColumns add/drop semantics (what the ALTER executor and the guard call).
-//   2. SHOW CREATE TABLE rendering (AstToStringBuilder.getDdlStmt surfaces no_dict_columns).
+//   2. SHOW CREATE TABLE does NOT render no_dict_columns (auto-managed guard property).
 //   3. Leader edit-log write + follower replay (survives FE restart / failover).
 public class LocalMetastoreNoDictColumnEditLogTest {
     private static final String DB_NAME = "test_no_dict_editlog";
@@ -129,11 +129,11 @@ public class LocalMetastoreNoDictColumnEditLogTest {
         Assertions.assertTrue(table.isNoDictColumn("c1"));
         Assertions.assertTrue(table.isNoDictColumn("c2"));
 
-        // SHOW CREATE TABLE surfaces the forbidden columns.
+        // no_dict_columns is an auto-managed guard property and is intentionally NOT rendered in
+        // SHOW CREATE TABLE (it would not round-trip through CREATE).
         String ddl = showCreateTable(table);
-        Assertions.assertTrue(ddl.contains("\"no_dict_columns\""),
-                "SHOW CREATE TABLE should render no_dict_columns, got:\n" + ddl);
-        Assertions.assertTrue(ddl.contains("c1") && ddl.contains("c2"));
+        Assertions.assertFalse(ddl.contains("no_dict_columns"),
+                "SHOW CREATE TABLE must not render no_dict_columns, got:\n" + ddl);
 
         // Drain the DISABLE journal.
         ModifyTablePropertyOperationLog disableLog = (ModifyTablePropertyOperationLog) UtFrameUtils
@@ -256,6 +256,30 @@ public class LocalMetastoreNoDictColumnEditLogTest {
 
         Assertions.assertFalse(noDictMemory().contains(c1),
                 "replay of ENABLE must clear the in-memory NO_DICT forbid");
+        Assertions.assertTrue(table.getNoDictColumns().isEmpty());
+    }
+
+    // Race the codex review flagged: the thrash guard marked a column in memory and queued an async
+    // persist, but an operator runs ENABLE before that persist writes the property. The persisted set is
+    // still empty, so updateNoDictColumns makes no journal change -- yet ENABLE must clear the in-memory
+    // forbid anyway, otherwise hasGlobalDict keeps short-circuiting and the column stays disabled.
+    @Test
+    public void testEnableClearsInMemoryForbidWhenPersistedUnchanged() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID, DB_NAME);
+        metastore.unprotectCreateDb(db);
+        OlapTable table = createStringOlapTable(TABLE_ID, TABLE_NAME);
+        db.registerTableUnlocked(table);
+
+        // Guard marked c1 in memory only; the async persist has not run, so the persisted set is empty.
+        ColumnIdentifier c1 = colId("c1");
+        noDictMemory().add(c1);
+        Assertions.assertTrue(table.getNoDictColumns().isEmpty());
+
+        // ENABLE c1: the persisted set does not change (already empty), but the in-memory forbid must clear.
+        metastore.updateNoDictColumns(DB_ID, TABLE_ID, Collections.emptySet(), Set.of("c1"));
+        Assertions.assertFalse(noDictMemory().contains(c1),
+                "ENABLE must clear the in-memory forbid even when the persisted set is unchanged");
         Assertions.assertTrue(table.getNoDictColumns().isEmpty());
     }
 }

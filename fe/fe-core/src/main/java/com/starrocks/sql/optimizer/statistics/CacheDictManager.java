@@ -479,6 +479,12 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
+    public boolean isColumnForbidden(long tableId, String columnName) {
+        return NO_DICT_STRING_COLUMNS.stream()
+                .anyMatch(ci -> ci.getTableId() == tableId && ci.getColumnName().getId().equals(columnName));
+    }
+
+    @Override
     public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectVersion, long versionTime) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {

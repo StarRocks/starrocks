@@ -3080,13 +3080,6 @@ public class OlapTable extends Table {
             properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
         }
 
-        // columns whose low-cardinality global dict collection is forbidden (auto-set by the dict thrash
-        // guard, or set manually). Rendered so SHOW CREATE TABLE surfaces the forbidden columns.
-        Set<String> noDictColumns = getNoDictColumns();
-        if (noDictColumns != null && !noDictColumns.isEmpty()) {
-            properties.put(PropertyAnalyzer.PROPERTIES_NO_DICT_COLUMNS, Joiner.on(",").join(noDictColumns));
-        }
-
         // dynamic partition
         if (dynamicPartitionExists()) {
             properties.putAll(tableProperty.getDynamicPartitionProperty().getProperties());

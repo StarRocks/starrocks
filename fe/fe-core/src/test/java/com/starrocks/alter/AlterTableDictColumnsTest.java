@@ -66,11 +66,12 @@ public class AlterTableDictColumnsTest {
         Assertions.assertEquals(Set.of("c1", "c2"), table.getNoDictColumns());
         Assertions.assertTrue(table.isNoDictColumn("c1"));
 
-        // SHOW CREATE TABLE surfaces the forbidden columns.
+        // no_dict_columns is an auto-managed guard property and is intentionally NOT rendered in
+        // SHOW CREATE TABLE (it would not round-trip through CREATE); it is surfaced via the
+        // GET /api/global_dict/table/no_dict_columns endpoint instead.
         String ddl = starRocksAssert.showCreateTable("SHOW CREATE TABLE test_dict.t");
-        Assertions.assertTrue(ddl.contains("\"no_dict_columns\""),
-                "SHOW CREATE TABLE should render no_dict_columns, got:\n" + ddl);
-        Assertions.assertTrue(ddl.contains("c1") && ddl.contains("c2"));
+        Assertions.assertFalse(ddl.contains("no_dict_columns"),
+                "SHOW CREATE TABLE must not render no_dict_columns, got:\n" + ddl);
 
         // DISABLE a third column: union semantics, existing ones preserved.
         starRocksAssert.alterTable("ALTER TABLE test_dict.t DISABLE DICTIONARY (c3)");
@@ -100,5 +101,20 @@ public class AlterTableDictColumnsTest {
     public void testDisableRejectsUnknownColumn() {
         Assertions.assertThrows(Exception.class,
                 () -> starRocksAssert.alterTable("ALTER TABLE test_dict.t DISABLE DICTIONARY (not_a_col)"));
+    }
+
+    // codex #2: DISABLE/ENABLE DICTIONARY must be case-insensitive. The persisted set stores the canonical
+    // column name so isNoDictColumn (canonical id) sees it, and a differently cased ENABLE fully clears it.
+    @Test
+    public void testDisableEnableDictionaryIsCaseInsensitive() throws Exception {
+        starRocksAssert.alterTable("ALTER TABLE test_dict.t DISABLE DICTIONARY (C3)");
+        OlapTable table = getTable();
+        Assertions.assertTrue(table.getNoDictColumns().contains("c3"),
+                "persisted set must use the canonical column name, got: " + table.getNoDictColumns());
+        Assertions.assertTrue(table.isNoDictColumn("c3"));
+
+        starRocksAssert.alterTable("ALTER TABLE test_dict.t ENABLE DICTIONARY (c3)");
+        Assertions.assertFalse(getTable().isNoDictColumn("c3"));
+        Assertions.assertTrue(getTable().getNoDictColumns().isEmpty());
     }
 }

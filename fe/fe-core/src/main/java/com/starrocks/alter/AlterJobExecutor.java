@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -534,8 +535,15 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
     @Override
     public Void visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, ConnectContext context) {
-        // Pure FE metadata change: add/remove columns from the persisted no-dict forbid set.
-        Set<String> cols = new java.util.HashSet<>(clause.getColumns());
+        // Pure FE metadata change: add/remove columns from the persisted no-dict forbid set. Canonicalize
+        // each name to the column's stored spelling (table column lookup is case-insensitive) so the
+        // persisted set matches the later case-sensitive isNoDictColumn(getId()) checks, and so ENABLE
+        // fully clears a differently cased DISABLE (e.g. DISABLE (C1) then ENABLE (c1)).
+        Set<String> cols = new java.util.HashSet<>();
+        for (String c : clause.getColumns()) {
+            Column col = table.getColumn(c);
+            cols.add(col != null ? col.getName() : c);
+        }
         long dbId = db.getId();
         long tableId = table.getId();
         if (clause.isEnable()) {

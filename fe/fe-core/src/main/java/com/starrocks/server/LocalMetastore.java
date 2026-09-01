@@ -4776,7 +4776,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     // Convenience wrapper used by the dictionary thrash guard: add one column to the persisted forbid set.
     public void disableGlobalDictForColumn(long dbId, long tableId, String columnName) {
-        updateNoDictColumns(dbId, tableId, java.util.Collections.singleton(columnName), java.util.Collections.emptySet());
+        updateNoDictColumns(dbId, tableId, java.util.Collections.singleton(columnName),
+                java.util.Collections.emptySet(), true);
     }
 
     // Persist a column-level global-dictionary forbid change: newSet = (existing UNION add) MINUS drop.
@@ -4784,6 +4785,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     // and edit log mirror setHasForbiddenGlobalDict above. Both the thrash guard (add one) and the
     // ALTER TABLE ... DISABLE/ENABLE DICTIONARY clause (add/drop several) funnel through this.
     public void updateNoDictColumns(long dbId, long tableId, Set<String> add, Set<String> drop) {
+        updateNoDictColumns(dbId, tableId, add, drop, false);
+    }
+
+    // fromThrashGuard: this add was queued asynchronously by the dictionary thrash guard. If an explicit
+    // ALTER TABLE ... ENABLE DICTIONARY has cleared the column's in-memory forbid in the meantime, that
+    // ENABLE wins: the column must not be re-persisted here, otherwise the late guard write would silently
+    // resurrect a forbid the operator just removed. Both callers take the table WRITE lock below, so the
+    // "still forbidden?" check and any ENABLE clear are serialized.
+    public void updateNoDictColumns(long dbId, long tableId, Set<String> add, Set<String> drop, boolean fromThrashGuard) {
         Database db = getDb(dbId);
         if (db == null) {
             return;
@@ -4793,10 +4803,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (!(table instanceof OlapTable olapTable)) {
                 return;
             }
+            // ENABLE must clear the in-memory forbid for these columns even when the persisted set does not
+            // change (e.g. a thrash-guard add is still pending and has not been written yet). hasGlobalDict
+            // checks the in-memory set first, so clearing only on a persisted change would leave the column
+            // disabled. Followers do the same in replayModifyTableProperty. Clearing a non-forbidden column
+            // is a no-op.
+            if (drop != null && !drop.isEmpty()) {
+                IDictManager.getInstance().clearForbiddenColumns(tableId, drop);
+            }
+            Set<String> effectiveAdd = add;
+            if (fromThrashGuard && add != null && !add.isEmpty()) {
+                effectiveAdd = new HashSet<>();
+                for (String c : add) {
+                    if (IDictManager.getInstance().isColumnForbidden(tableId, c)) {
+                        effectiveAdd.add(c);
+                    }
+                }
+            }
             Set<String> newSet = new HashSet<>(olapTable.getNoDictColumns());
             boolean changed = false;
-            if (add != null) {
-                changed |= newSet.addAll(add);
+            if (effectiveAdd != null) {
+                changed |= newSet.addAll(effectiveAdd);
             }
             if (drop != null) {
                 changed |= newSet.removeAll(drop);
@@ -4811,13 +4838,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             GlobalStateMgr.getCurrentState().getEditLog().logModifyNoDictColumns(info, wal -> {
                 olapTable.setNoDictColumns(newSet);
             });
-            if (drop != null && !drop.isEmpty()) {
-                // ENABLE just removed these columns from the persisted forbid; also clear the in-memory
-                // forbid (hasGlobalDict checks the in-memory set first), so the ENABLE takes effect on this
-                // leader immediately. Followers do the same in replayModifyTableProperty.
-                IDictManager.getInstance().clearForbiddenColumns(tableId, drop);
-            }
-            LOG.info("persist no-dict columns, table:{} add:{} drop:{} result:{}", tableId, add, drop, newSet);
+            LOG.info("persist no-dict columns, table:{} add:{} drop:{} result:{}", tableId, effectiveAdd, drop, newSet);
         }
     }
 
