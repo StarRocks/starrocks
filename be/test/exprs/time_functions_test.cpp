@@ -22,6 +22,11 @@
 #include <utility>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+>>>>>>> 95cbc8d ([BugFix] Fix BE crash on yearweek with invalid str_to_date input (#78358))
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -1568,6 +1573,47 @@ TEST_F(TimeFunctionsTest, str_to_date_of_dateformat) {
         ASSERT_EQ(TimestampValue::create(2020, 3, 12, 0, 0, 0), nullable_col->get(4).get_timestamp());
         ASSERT_TRUE(nullable_col->is_null(5));
     }
+}
+
+TEST_F(TimeFunctionsTest, yearweek_invalid_str_to_date) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    const char* fmt = "%Y-%m-%d";
+    const char* invalid_date = "0000-01-00";
+
+    Columns const_cols;
+    const_cols.emplace_back(nullptr);
+    const_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt, 1));
+    ctx->set_constant_columns(std::move(const_cols));
+    ASSERT_OK(TimeFunctions::str_to_date_prepare(ctx, FunctionContext::FRAGMENT_LOCAL));
+    DeferOp defer_close([&] { (void)TimeFunctions::str_to_date_close(ctx, FunctionContext::FRAGMENT_LOCAL); });
+
+    auto str_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(invalid_date, 1);
+    auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt, 1);
+    Columns columns;
+    columns.emplace_back(str_col);
+    columns.emplace_back(fmt_col);
+
+    ColumnPtr date_result = TimeFunctions::str_to_date(ctx, columns).value();
+    if (date_result->is_constant()) {
+        date_result = ColumnHelper::as_column<ConstColumn>(date_result)->data_column();
+    }
+    ASSERT_TRUE(date_result->is_nullable());
+    auto nullable_date = ColumnHelper::as_column<NullableColumn>(date_result);
+    ASSERT_EQ(1, nullable_date->size());
+    ASSERT_TRUE(nullable_date->is_null(0));
+
+    Columns yearweek_columns;
+    yearweek_columns.emplace_back(nullable_date);
+    ColumnPtr yearweek_result = TimeFunctions::year_week_with_default_mode(ctx, yearweek_columns).value();
+    if (yearweek_result->is_constant()) {
+        yearweek_result = ColumnHelper::as_column<ConstColumn>(yearweek_result)->data_column();
+    }
+    ASSERT_TRUE(yearweek_result->is_nullable());
+    auto nullable_yearweek = ColumnHelper::as_column<NullableColumn>(yearweek_result);
+    ASSERT_EQ(1, nullable_yearweek->size());
+    ASSERT_TRUE(nullable_yearweek->is_null(0));
 }
 
 TEST_F(TimeFunctionsTest, str_to_date_of_datetimeformat) {
