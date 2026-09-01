@@ -241,6 +241,13 @@ public:
     // investigation. Each orphan is also logged at ERROR on the CN.
     METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_orphan_partition_total, MetricUnit::NOUNIT);
 
+    // Counts remote lake tablet metadata read attempts that return NotFound,
+    // including each failed fallback attempt. A tablet's metadata lives either
+    // in its own metadata object or in a bundled metadata file, never in both,
+    // and reads of either location count. Replication reads of a source
+    // cluster and restore reads of a snapshot are not counted.
+    METRIC_DEFINE_INT_COUNTER(lake_tablet_metadata_get_not_found_total, MetricUnit::REQUESTS);
+
     // Metrics for async delta writer
     // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_execute_total, MetricUnit::OPERATIONS);

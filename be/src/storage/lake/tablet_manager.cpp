@@ -52,13 +52,13 @@
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
-#include "storage/storage_metrics.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/utils.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/raw_container.h"
+#include "util/starrocks_metrics.h"
 #include "util/time_guard.h"
 #include "util/trace.h"
 
@@ -933,7 +933,7 @@ Status TabletManager::load_tablet_metadata_file_with_meter(const std::string& pa
                                                            bool fill_cache, const std::shared_ptr<FileSystem>& fs) {
     auto status = load_lake_protobuf(path, metadata, fill_cache, fs);
     if (status.is_not_found()) {
-        StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total.increment(1);
+        StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total.increment(1);
     }
     return status;
 }
@@ -946,7 +946,7 @@ StatusOr<std::string> TabletManager::read_bundle_metadata_file_with_meter(FileSy
         return input_file->read_all();
     }();
     if (!read_result.ok() && read_result.status().is_not_found()) {
-        StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total.increment(1);
+        StarRocksMetrics::instance()->lake_tablet_metadata_get_not_found_total.increment(1);
     }
     return read_result;
 }
@@ -955,15 +955,8 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
                                                                                   FileSystem* input_fs) {
     std::shared_ptr<FileSystem> owned_fs;
     if (input_fs == nullptr) {
-<<<<<<< HEAD
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
-        ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
-    } else {
-        ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
-=======
-        ASSIGN_OR_RETURN(owned_fs, FileSystemFactory::CreateSharedFromString(location));
+        ASSIGN_OR_RETURN(owned_fs, FileSystem::CreateSharedFromString(location));
         input_fs = owned_fs.get();
->>>>>>> d36d1a8 ([BugFix] metric: Add a BE metric for NotFound lake tablet metadata reads (#78451))
     }
     ASSIGN_OR_RETURN(auto serialized_string,
                      read_bundle_metadata_file_with_meter(input_fs, location, /*skip_fill_local_cache=*/true));
