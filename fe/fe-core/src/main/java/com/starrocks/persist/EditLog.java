@@ -57,7 +57,11 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+<<<<<<< HEAD
 import com.starrocks.epack.persist.CreateTableInfoEPack;
+=======
+import com.starrocks.common.util.Util;
+>>>>>>> d152d3339a1... [BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215)
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
@@ -514,10 +518,22 @@ public class EditLog {
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
                     DropFrontendInfo dropFrontendInfo = (DropFrontendInfo) journal.data();
                     globalStateMgr.getNodeMgr().replayDropFrontend(dropFrontendInfo);
+<<<<<<< HEAD
                     if (dropFrontendInfo.getNodeName()
                             .equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
                         throw new JournalInconsistentException("current fe "
                                 + dropFrontendInfo.getNodeName() + " is removed. will exit");
+=======
+                    if (dropFrontendInfo.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
+                        // The removed frontend must exit by itself, and it must NOT be raised as a
+                        // JournalInconsistentException: OP_REMOVE_FRONTEND_V2 is an ignorable operation,
+                        // so the exception would be swallowed by canSkipBadReplayedJournal() when
+                        // metadata_journal_ignore_replay_failure is true (the default).
+                        String errMsg = "current fe " + dropFrontendInfo.getNodeName() + " is removed. will exit";
+                        LOG.error(errMsg);
+                        Util.stdoutWithTime(errMsg);
+                        System.exit(-1);
+>>>>>>> d152d3339a1... [BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215)
                     }
                     break;
                 }

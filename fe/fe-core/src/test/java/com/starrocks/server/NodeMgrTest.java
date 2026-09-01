@@ -17,8 +17,13 @@ package com.starrocks.server;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+=======
+import com.starrocks.ha.HAProtocol;
+import com.starrocks.leader.CheckpointController;
+>>>>>>> d152d3339a1... [BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215)
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
@@ -27,7 +32,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -111,6 +118,7 @@ public class NodeMgrTest {
         Assertions.assertEquals((int) selfNode.second, frontends.get(0).getEditLogPort());
     }
 
+<<<<<<< HEAD
     @Test
     public void testGetAllNodeHosts() {
         NodeMgr nodeMgr = new NodeMgr();
@@ -190,5 +198,98 @@ public class NodeMgrTest {
         Assertions.assertTrue(macs.contains("11:22:33:44:55:66"));
         Assertions.assertTrue(macs.contains("aa:bb:cc:dd:ee:ff"));
         Assertions.assertEquals(2, macs.size());
+=======
+    /**
+     * A dropped follower only learns that it was removed by replaying OP_REMOVE_FRONTEND_V2, and
+     * removeElectableNode() shuts down its feeder immediately, so the journal write (and its
+     * in-memory apply) has to happen first. removeUnstableNode() has to come last: it clears the
+     * electable group size override, and while a still-catching-up joiner is a group member it
+     * counts toward the ack quorum without ever acking.
+     */
+    @Test
+    public void testDropFollowerJournalsBeforeLeavingReplicationGroup() throws Exception {
+        NodeMgr nodeMgr = new NodeMgr(FrontendNodeType.LEADER, "leader", Pair.create("192.168.4.1", 9010));
+        nodeMgr.replayAddFrontend(new Frontend(FrontendNodeType.FOLLOWER, "follower1", "192.168.4.2", 9010));
+
+        List<String> calls = new ArrayList<>();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        HAProtocol previousHaProtocol = globalStateMgr.getHaProtocol();
+        CheckpointController previousController = globalStateMgr.getCheckpointController();
+        globalStateMgr.setHaProtocol(new RecordingHAProtocol(calls, nodeMgr));
+        // dropFrontendHook() cancels the checkpoint of the dropped node, and this test does not
+        // run a checkpoint controller of its own
+        globalStateMgr.setCheckpointController(
+                new CheckpointController("test_checkpoint_controller", globalStateMgr.getJournal(), ""));
+        try {
+            nodeMgr.dropFrontend(FrontendNodeType.FOLLOWER, "192.168.4.2", 9010);
+        } finally {
+            globalStateMgr.setHaProtocol(previousHaProtocol);
+            globalStateMgr.setCheckpointController(previousController);
+        }
+
+        // "journaled=true" means the record was already written and applied when the call was made
+        Assertions.assertEquals(
+                List.of("removeElectableNode(journaled=true)", "removeUnstableNode(journaled=true)"), calls);
+    }
+
+    private static class RecordingHAProtocol implements HAProtocol {
+        private final List<String> calls;
+        private final NodeMgr nodeMgr;
+
+        RecordingHAProtocol(List<String> calls, NodeMgr nodeMgr) {
+            this.calls = calls;
+            this.nodeMgr = nodeMgr;
+        }
+
+        private void record(String call) {
+            calls.add(call + "(journaled=" + (nodeMgr.checkFeExist("192.168.4.2", 9010) == null) + ")");
+        }
+
+        @Override
+        public boolean removeElectableNode(String nodeName) {
+            record("removeElectableNode");
+            return true;
+        }
+
+        @Override
+        public void removeUnstableNode(String nodeName, int currentFollowerCnt) {
+            record("removeUnstableNode");
+        }
+
+        @Override
+        public boolean fencing() {
+            return true;
+        }
+
+        @Override
+        public InetSocketAddress getLeader() {
+            return null;
+        }
+
+        @Override
+        public String getLeaderNodeName() {
+            return null;
+        }
+
+        @Override
+        public List<InetSocketAddress> getObserverNodes() {
+            return new ArrayList<>();
+        }
+
+        @Override
+        public List<InetSocketAddress> getElectableNodes(boolean leaderIncluded) {
+            return new ArrayList<>();
+        }
+
+        @Override
+        public long getLatestEpoch() {
+            return 0;
+        }
+
+        @Override
+        public String transferToLeader(String nodeName, int timeoutMs, boolean force) {
+            return null;
+        }
+>>>>>>> d152d3339a1... [BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215)
     }
 }
