@@ -203,34 +203,36 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META = 62,
     SCH_BE_DATACACHE_METRICS = 63,
     SCH_TEMP_TABLES = 64,
+    // SYS_USERS was inserted here with an implicit value (65) by the password
+    // policy feature and has shipped since 3.4, so this block stays at its
+    // long-shipped values and is permanently one ahead of upstream. Never
+    // realign it; upstream members arriving at/after 65 must be renumbered to
+    // the next free downstream value when synced. NEW downstream-only members
+    // go to >= 300 instead (the range the rule above reserves for extensions).
+    SYS_USERS = 65,
+    SCH_COLUMN_STATS_USAGE = 66,
+    SCH_ANALYZE_STATUS = 67,
 
-    SCH_COLUMN_STATS_USAGE = 65,
-    SCH_ANALYZE_STATUS = 66,
+    SCH_CLUSTER_SNAPSHOTS = 68,
+    SCH_CLUSTER_SNAPSHOT_JOBS = 69,
 
-    SCH_CLUSTER_SNAPSHOTS = 67,
-    SCH_CLUSTER_SNAPSHOT_JOBS = 68,
+    SCH_KEYWORDS = 70,
+    SCH_APPLICABLE_ROLES = 71,
 
-    SCH_KEYWORDS = 69,
-    SCH_APPLICABLE_ROLES = 70,
+    SCH_WAREHOUSE_METRICS = 72,
+    SCH_WAREHOUSE_QUERIES = 73,
 
-    SCH_WAREHOUSE_METRICS = 71,
-    SCH_WAREHOUSE_QUERIES = 72,
+    SCH_TABLET_RESHARD_JOBS = 74,
+    SCH_RECYCLEBIN_CATALOGS = 75,
 
-    SCH_TABLET_RESHARD_JOBS = 73,
-    SCH_RECYCLEBIN_CATALOGS = 74,
+    SCH_FE_THREADS = 76,
 
-    SCH_FE_THREADS = 75,
+    SCH_BE_TABLET_WRITE_LOG = 77,
 
-    SCH_BE_TABLET_WRITE_LOG = 76,
+    SCH_MATERIALIZED_VIEW_REFRESH_JOBS = 78,
 
-    SCH_MATERIALIZED_VIEW_REFRESH_JOBS = 77,
-
-    // Downstream-only members live at >= 300 (the range the rule above
-    // reserves for extensions). One-time migration when values were pinned:
-    // SYS_USERS 65->300, the 13 members after it realigned down by one to
-    // upstream's values, SCH_ICEBERG_MAINTENANCE_TASKS 79->301. FE and BE
-    // must not mix across that change.
-    SYS_USERS = 300,
+    // Downstream-only member added after values were pinned; unreleased, so it
+    // lives in the >= 300 extension range.
     SCH_ICEBERG_MAINTENANCE_TASKS = 301,
 
     // Used by epack
