@@ -145,6 +145,7 @@ set(EXEC_FILES
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
+        ./util/thrift_server_test.cpp
         ./base/types/int96_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./gutil/cpu_test.cc

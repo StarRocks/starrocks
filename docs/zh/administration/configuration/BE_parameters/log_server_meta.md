@@ -566,6 +566,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Thrift 连接建立超时时长（秒）。连接超过该时间未建立会失败重试。
 - 引入版本：-
 
+### thrift_max_frame_size
+
+- 默认值：16384000
+- 类型：Int
+- 单位：字节
+- 是否动态：是
+- 描述：BE Thrift 层允许的单个 `TFramedTransport` 帧的最大大小（字节）。该值映射到 thrift 的 `TConfiguration`，同时作用于客户端（反）序列化路径和接收外部 RPC 的服务端传输层。注意该限制仅在使用 `TFramedTransport` 时生效（BE Thrift 服务端默认以 `THREADED` 模式运行、使用 `TBufferedTransport`，因此该配置主要与 `NON_BLOCKING` 服务端路径相关）；当其与 `thrift_max_message_size` 冲突时，取两者中较小值。由于该配置为动态配置，运行时修改仅对修改之后新建立的连接生效；已建立的连接仍沿用其创建时的取值，若要对所有连接生效可能需要重连。
+- 引入版本：-
+
+### thrift_max_message_size
+
+- 默认值：1073741824
+- 类型：Int
+- 单位：字节
+- 是否动态：是
+- 描述：BE Thrift 层允许的单条 RPC 消息的最大大小（字节）。自 thrift 0.16 起，`TTransport` 会通过统计每条消息已消费的字节数来强制该限制（thrift 自身默认值为 100 MB）。该值映射到 thrift 的 `TConfiguration`，同时作用于客户端（反）序列化路径和接收外部 RPC 的服务端传输层。特别是，创建列数多、分桶数多的宽表时，单条 `BackendService.submit_tasks` 消息可能超过 100 MB；若该限制过小，服务端会抛出 `TTransportException("MaxMessageSize reached")` 并关闭连接，在 FE 侧表现为 "Socket is closed by peer" / "Broken pipe"，导致 `CREATE TABLE` 失败。由于该配置为动态配置，运行时修改仅对修改之后新建立的连接生效；已建立的连接仍沿用其创建时的取值，因此调大该限制以解除失败请求的阻塞会作用于后续新连接，而非正在传输中的连接。可配置的最大值为 2 GB（`INT32_MAX`）。
+- 引入版本：-
+
+### thrift_max_recursion_depth
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：BE Thrift 层在（反）序列化消息时允许的嵌套结构的最大深度。该值映射到 thrift 的 `TConfiguration`，同时作用于客户端路径和接收外部 RPC 的服务端传输层。由于该配置为动态配置，运行时修改仅对修改之后新建立的连接生效；已建立的连接仍沿用其创建时的取值。
+- 引入版本：-
+
 ### thrift_port
 
 - 默认值：0
