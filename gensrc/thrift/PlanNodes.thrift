@@ -101,9 +101,7 @@ enum TPlanNodeType {
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
 
   // Downstream-only members live at >= 300 (the range the rule above reserves
-  // for extensions). One-time migration when values were pinned:
-  // CHANGES_SCAN_NODE 44->300, ENFORCE_UNIQUE_ROW_LOCATOR_NODE 45->44,
-  // STARROCKS_SCAN_NODE 46->301. FE and BE must not mix across that change.
+  // for extensions).
   CHANGES_SCAN_NODE = 300,
   STARROCKS_SCAN_NODE = 301
 }

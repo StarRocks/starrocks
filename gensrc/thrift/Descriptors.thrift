@@ -203,12 +203,10 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META = 62,
     SCH_BE_DATACACHE_METRICS = 63,
     SCH_TEMP_TABLES = 64,
-    // SYS_USERS was inserted here with an implicit value (65) by the password
-    // policy feature and has shipped since 3.4, so this block stays at its
-    // long-shipped values and is permanently one ahead of upstream. Never
-    // realign it; upstream members arriving at/after 65 must be renumbered to
-    // the next free downstream value when synced. NEW downstream-only members
-    // go to >= 300 instead (the range the rule above reserves for extensions).
+    // This block has shipped with these values since 3.4 and stays one ahead
+    // of upstream. Never realign it; renumber upstream members arriving in
+    // this range to the next free downstream value. New downstream-only
+    // members go to >= 300 instead.
     SYS_USERS = 65,
     SCH_COLUMN_STATS_USAGE = 66,
     SCH_ANALYZE_STATUS = 67,
@@ -231,8 +229,8 @@ enum TSchemaTableType {
 
     SCH_MATERIALIZED_VIEW_REFRESH_JOBS = 78,
 
-    // Downstream-only member added after values were pinned; unreleased, so it
-    // lives in the >= 300 extension range.
+    // Downstream-only members live at >= 300 (the range the rule above
+    // reserves for extensions).
     SCH_ICEBERG_MAINTENANCE_TASKS = 301,
 
     // Used by epack
