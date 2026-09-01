@@ -55,6 +55,7 @@ ADD_BE_LIB(ConnectorHive
         hive/scanner/hdfs_scanner_partition.cpp
         hive/scanner/hdfs_scanner_text.cpp
         hive/scanner/jni_scanner.cpp
+        hive/paimon/paimon_cpp_loader.cpp
 )
 
 target_link_libraries(ConnectorHive PUBLIC
@@ -87,14 +88,50 @@ target_link_libraries(ConnectorHive PUBLIC
 
 target_link_libraries(ConnectorHive PRIVATE Formats)
 
-if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
-    target_sources(ConnectorHive PRIVATE
+# The paimon-cpp shim: the only binary linked against libpaimon.so. It is
+# loaded lazily by paimon_cpp_loader.cpp (compiled into ConnectorHive above)
+# through dlopen on the first paimon-native scan, so starrocks_be carries no
+# paimon DT_NEEDED and starts without the paimon libraries. BE symbols
+# (HdfsScanner, Status, Chunk, ...) stay undefined here and resolve against
+# the -rdynamic executable at dlopen time, the same mechanism
+# starrocks_format relies on. The sources are compiled again in this target
+# (not reused from ConnectorHive) because regular BE objects are not built
+# with -fPIC, and linking BE static libs would duplicate global state.
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON")
+    add_library(starrocks_paimon SHARED
+            hive/paimon/paimon_cpp_entry.cpp
             hive/paimon/paimon_predicate_converter.cpp
             hive/paimon/paimon_file_system.cpp
             hive/paimon/paimon_scanner.cpp
     )
-    target_compile_definitions(ConnectorHive PRIVATE WITH_PAIMON_CPP)
-    target_link_libraries(ConnectorHive PRIVATE paimon)
+    set_target_properties(starrocks_paimon PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    # WRAP_LINKER_FLAGS keeps __cxa_throw/__floattidf wrapping consistent with
+    # the executable; the __wrap_* definitions resolve from it at dlopen.
+    # fmt is linked in directly: libfmt.a is built with hidden visibility, so
+    # the executable's copy is absent from its .dynsym and cannot satisfy the
+    # shim at dlopen time. fmt is stateless, so a second copy is harmless.
+    target_link_libraries(starrocks_paimon PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS} paimon fmt)
+    # $ORIGIN lets the shim's DT_NEEDED libpaimon.so and its plugin libraries
+    # resolve from the same be/lib/paimon-cpp-lib directory regardless of
+    # LD_LIBRARY_PATH (start_backend.sh only exports it when JAVA_HOME is
+    # unset).
+    target_link_options(starrocks_paimon PRIVATE "LINKER:-rpath,$ORIGIN")
+    # The loader refuses a shim from a different build: the shim compiles BE
+    # class layouts, so cross-build mixing is ABI-unsafe. The version string
+    # must be a compile-time literal (see paimon_cpp_entry.cpp).
+    # The empty-env fallback mirrors gen_build_version.py, which writes
+    # "UNKNOWN" into version.cpp when STARROCKS_COMMIT_HASH is unset (e.g.
+    # release-tarball builds without git); the two sides must stay equal or
+    # the loader rejects a shim from its own build.
+    set(PAIMON_SHIM_COMMIT_HASH "$ENV{STARROCKS_COMMIT_HASH}")
+    if ("${PAIMON_SHIM_COMMIT_HASH}" STREQUAL "")
+        set(PAIMON_SHIM_COMMIT_HASH "UNKNOWN")
+    endif()
+    target_compile_definitions(starrocks_paimon PRIVATE
+            STARROCKS_PAIMON_SHIM_BUILD_VERSION="${PAIMON_SHIM_COMMIT_HASH}-${CMAKE_BUILD_TYPE}")
+    # build.sh copies this directory into the package as be/lib/paimon-cpp-lib,
+    # together with the libpaimon*.so files from thirdparty.
+    install(TARGETS starrocks_paimon LIBRARY DESTINATION ${OUTPUT_DIR}/lib/paimon-cpp-lib)
 endif ()
 
 ADD_BE_LIB(ConnectorIceberg

@@ -135,10 +135,10 @@ Usage: $0 <options>
      --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
-     --with-paimon-cpp {ON|OFF}
-                        build Backend with the paimon-cpp native reader and package its
-                        shared libraries. (default: OFF; thirdparty does not build
-                        paimon-cpp on macOS, so it is forced OFF there)
+     --without-paimon-cpp
+                        build Backend without the paimon-cpp native reader and its
+                        shared libraries (default with paimon-cpp; forced off on macOS,
+                        where thirdparty does not build paimon-cpp)
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -199,7 +199,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-thin-archive' \
   -l 'without-pch' \
   -l 'without-starcache' \
-  -l 'with-paimon-cpp:' \
+  -l 'without-paimon-cpp' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -243,7 +243,7 @@ else
     WITH_STARCACHE=ON
 fi
 WITH_PCH=ON
-WITH_PAIMON_CPP=OFF
+WITH_PAIMON_CPP=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -369,7 +369,7 @@ else
             --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
-            --with-paimon-cpp) WITH_PAIMON_CPP=$(echo "$2" | tr 'a-z' 'A-Z') ; shift 2 ;;
+            --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --configure-only) CONFIGURE_ONLY=ON; shift ;;
@@ -778,16 +778,15 @@ if [ ${BUILD_BE} -eq 1 ]; then
         mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     fi
     if [ "${WITH_PAIMON_CPP}" == "ON" ]; then
-        # libpaimon.so plus its plugin libraries (file formats, indexes, local fs).
-        # The plugins register themselves via load-time constructors, so they are
-        # linked as DT_NEEDED of starrocks_be and must sit next to libpaimon.so
-        # in be/lib, which start_backend.sh already puts on LD_LIBRARY_PATH.
-        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib*/libpaimon*.so*)
+        # All paimon-cpp libraries live in be/lib/paimon-cpp-lib
+        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib/libpaimon*.so*)
         if (( ${#paimon_cpp_libs[@]} == 0 )); then
-            echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp"
+            echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp, run thirdparty/build-thirdparty.sh paimon_cpp first"
             exit 1
         fi
-        cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib
+        cp -r -p ${STARROCKS_HOME}/be/output/lib/paimon-cpp-lib/. ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+        cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
     fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin

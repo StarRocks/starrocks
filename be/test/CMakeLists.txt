@@ -442,15 +442,21 @@ if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
 
-# paimon-cpp tests live in a standalone binary that exists only with
-# --with-paimon-cpp, so no other test binary depends on libpaimon.so.
+# paimon-cpp tests live in a standalone binary that is skipped with
+# --without-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
+# The production sources are compiled directly into this binary: they ship in
+# the dlopen()ed libstarrocks_paimon.so shim and are no longer part of
+# ConnectorHive, while tests link paimon the ordinary build-time way.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
     )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()
