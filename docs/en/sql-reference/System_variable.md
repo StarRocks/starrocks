@@ -459,14 +459,6 @@ Setting this value with hints applies only to `COUNT(DISTINCT)` with a single pa
 * **Unit**: Seconds
 * **Introduced in**: v3.5.1
 
-### decimal_overflow_to_double
-
-* **Scope**: Session
-* **Description**: When enabled, the analyzer converts decimal arithmetic results that would overflow the maximum decimal precision into 64-bit floating point (`DOUBLE`) instead of widening to larger decimal types or failing. Concretely, in DecimalV3 arithmetic (see DecimalV3FunctionAnalyzer), if a multiplication's computed precision exceeds the engine's max decimal precision but its return scale is within the maximum, the session flag `decimal_overflow_to_double = true` causes the return type and operand target types to be set to `DOUBLE`. This yields an approximate (lossy) numeric result but avoids decimal precision overflow errors or forced use of larger decimal types. When false (default), the planner will keep decimal semantics (attempt decimal128/256 or throw on unrepresentable scale/precision).
-* **Default**: `false`
-* **Data Type**: boolean
-* **Introduced in**: -
-
 ### default_authentication_plugin
 
 * **Scope**: Session
