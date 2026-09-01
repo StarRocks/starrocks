@@ -94,7 +94,11 @@ public:
 
     // given a set of ranges in page, apply compound and predicates on it, and only return filtered data
     // since null data is separate from actually data page, we need pass the null data by caller if this is a nullable column
-    // null_data is a uint8_t array where null_data[i] indicates whether the i-th row is null (1 for null, 0 for not null)
+    // null_data is the null-flag array of the WHOLE page, indexed by the in-page ordinal: null_data[ord] tells whether
+    // the row at ordinal `ord` is null (1 for null, 0 for not null). It is NOT relative to `range.begin()`, and it is
+    // NOT packed by the rows of `range`: `range` may be sparse (several non-adjacent sub-ranges of the same page), so
+    // the callee must look up null_data[r.begin() + i] for each sub-range `r` instead of walking null_data linearly.
+    // nullptr means the page has no null at all.
     // callee is responsible to handle null column and append null data into dst column if selected
     virtual Status next_batch_with_filter(Column* column, const SparseRange<>& range,
                                           const std::vector<const ColumnPredicate*>& compound_and_predicates,
