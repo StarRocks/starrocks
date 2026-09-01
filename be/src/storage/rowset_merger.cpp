@@ -18,16 +18,7 @@
 #include <queue>
 
 #include "column/binary_column.h"
-<<<<<<< HEAD
-=======
-#include "column/chunk_factory.h"
-#include "column/chunk_schema_helper.h"
-#include "column/column_helper.h"
-#include "column/raw_data_visitor.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_exec_fwd.h"
 #include "common/statusor.h"
->>>>>>> 2e754f3 ([BugFix] Fix compaction read chunk size estimation (#78192))
 #include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
