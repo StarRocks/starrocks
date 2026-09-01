@@ -49,6 +49,7 @@
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/disjunctive_predicates.h"
@@ -322,6 +323,45 @@ TEST_F(LakeRowsetTest, test_hold_segments_falls_back_for_segment_range_rowset) {
     for (size_t i = 0; i < first.size(); i++) {
         EXPECT_EQ(first[i].get(), second[i].get());
     }
+}
+
+// The pinned-bytes gauge is the only way an operator sees this memory class: it is not in the
+// metadata cache, so the cache's own usage metric never reports it. What matters is that it balances
+// -- the exact amount reported when a set is held is taken back whether the task releases the set
+// (fallback) or simply ends (Rowset destroyed) -- otherwise the gauge drifts and becomes useless.
+TEST_F(LakeRowsetTest, test_held_segment_bytes_metric_balances) {
+    create_rowsets_for_testing();
+
+    auto* gauge = &StorageMetrics::instance()->lake_compaction_held_segment_bytes;
+    const int64_t before = gauge->value();
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = false, .hold_segments = true};
+
+    // Released explicitly, the way a task that stops holding does.
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto held, rowset->segments(lake_io_opts));
+        int64_t expected = 0;
+        for (const auto& seg : held) {
+            expected += static_cast<int64_t>(seg->mem_usage());
+        }
+        EXPECT_EQ(before + expected, gauge->value());
+        rowset->release_held_segments();
+        EXPECT_EQ(before, gauge->value());
+        // Releasing twice must not take the amount back twice.
+        rowset->release_held_segments();
+        EXPECT_EQ(before, gauge->value());
+    }
+    EXPECT_EQ(before, gauge->value());
+
+    // Never released, just destroyed with the task: the destructor must still give it back.
+    {
+        auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
+                                                     0 /* compaction_segment_limit */);
+        ASSIGN_OR_ABORT(auto held, rowset->segments(lake_io_opts));
+        EXPECT_GT(gauge->value(), before);
+    }
+    EXPECT_EQ(before, gauge->value());
 }
 
 // Range-split parallel compaction shares one Rowset across concurrent subtasks; the held-segment

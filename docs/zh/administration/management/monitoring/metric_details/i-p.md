@@ -244,6 +244,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
+## `lake_compaction_held_segment_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：正在运行的存算分离（lake）压缩任务当前持有的输入 Segment 元数据大小（由 `lake_compaction_hold_input_segments` 控制）。与元数据缓存不同，这部分内存不受 LRU 管理，随持有它的任务结束而释放；因此该值长期偏高说明存在长时间运行的压缩任务，而不是缓存需要调大。
+
 ## `lake_compaction_failed`
 
 - 单位：计数

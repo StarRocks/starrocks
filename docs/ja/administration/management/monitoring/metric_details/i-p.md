@@ -244,6 +244,12 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: バイト
 - 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
 
+## `lake_compaction_held_segment_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 入力セグメントを保持する実行中の lake compaction タスクが現在ピン留めしているセグメントメタデータのサイズ（`lake_compaction_hold_input_segments` で制御）。メタデータキャッシュとは異なり、このメモリは LRU の管理下になく、保持しているタスクの終了時に解放されます。値が継続的に高い場合は、キャッシュのサイズ不足ではなく長時間実行中の compaction を示します。
+
 ## `lake_compaction_failed`
 
 - 単位: 件数

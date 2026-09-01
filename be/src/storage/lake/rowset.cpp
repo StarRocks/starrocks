@@ -48,6 +48,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema_map.h"
 #include "storage_primitive/projection_iterator.h"
 #include "storage_primitive/schema_helper.h"
@@ -145,6 +146,12 @@ Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int
 }
 
 Rowset::~Rowset() {
+    // A task that never fell back still holds its set here; take back exactly what was reported.
+    // No lock: destruction means no other thread can still hold a reference to this Rowset.
+    if (_held_segments_bytes != 0) {
+        StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(-_held_segments_bytes);
+        _held_segments_bytes = 0;
+    }
     if (_tablet_metadata) {
         DCHECK_LT(_index, _tablet_metadata->rowsets_size())
                 << "tablet metadata been modified before rowset been destroyed";
@@ -870,10 +877,13 @@ std::vector<SegmentSharedPtr> Rowset::get_segments() {
 void Rowset::release_held_segments() {
     std::vector<SegmentPtr> released;
     std::shared_ptr<CompactionDelvecHolder> released_delvecs;
+    int64_t released_bytes = 0;
     {
         std::lock_guard<std::mutex> l(_held_segments_mutex);
         released.swap(_held_segments);
         released_delvecs.swap(_held_delvecs);
+        released_bytes = _held_segments_bytes;
+        _held_segments_bytes = 0;
         // Deliberately NOT clearing the get_segments_checked() memo: TabletReader::
         // init_compaction_column_paths keeps raw ColumnReader pointers into those segments while the
         // shared_ptr vector it read them from is already gone, so the memo is what keeps them alive
@@ -895,6 +905,7 @@ void Rowset::release_held_segments() {
             }
         }
     }
+    StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(-released_bytes);
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
@@ -940,6 +951,13 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = effective_opts;
+    // NOTE: the held set is deliberately loaded under the ambient (task) tracker. Charging it to the
+    // process-lifetime compaction tracker instead looks tempting -- that tracker outlives every
+    // range-split subtask -- but it does not balance: a free is charged to whatever tracker is in TLS
+    // when it is flushed (CurrentThread::MemCacheManager::commit), and nothing ever frees these
+    // segments with that tracker installed, so its consumption would drift up for good. The task
+    // tracker balances instead: ~MemTracker hands its residual back to its ancestors
+    // (release_without_root), and the eventual free removes the same bytes from the root.
     auto load_status = load_segments(&loaded, seg_options, nullptr);
     if (!load_status.ok()) {
         if (effective_opts.hold_segments) {
@@ -978,12 +996,27 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
         }
         ordered[pos] = segments[i];
     }
+    // Measure once, at publication: this is both what the chunk sizing is charged and what the
+    // gauge below is told, and the same amount is taken back when the set goes away.
+    int64_t held_bytes = 0;
+    for (const auto& seg : ordered) {
+        if (seg != nullptr) {
+            held_bytes += static_cast<int64_t>(seg->mem_usage());
+        }
+    }
     // Only the elected loader reaches this publication, so the held set is written exactly once;
     // waiters woken by the notify read it under the same lock.
     std::lock_guard<std::mutex> l(_held_segments_mutex);
     _held_segments = std::move(ordered);
+    _held_segments_bytes = held_bytes;
     _held_segments_loading = false;
     _held_segments_cv.notify_all();
+    // Pinned by a running task and invisible to the metadata cache's LRU, so it needs its own gauge
+    // for an operator to see this memory class at all. Inside the critical section on purpose: it is
+    // one atomic add, and publishing and returning must stay indivisible -- a range-split sibling
+    // that woke on the notify can release the set in between, and this caller would then return an
+    // empty vector and size its read chunks as if this rowset were not there.
+    StorageMetrics::instance()->lake_compaction_held_segment_bytes.increment(held_bytes);
     return _held_segments;
 }
 

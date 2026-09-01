@@ -63,6 +63,7 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(txn_persist_total);
     REGISTER_STORAGE_METRIC(txn_persist_duration_us);
     REGISTER_STORAGE_METRIC(segment_file_not_found_total);
+    REGISTER_STORAGE_METRIC(lake_compaction_held_segment_bytes);
 
     REGISTER_STORAGE_METRIC(update_primary_index_num);
     REGISTER_STORAGE_METRIC(update_primary_index_bytes_total);

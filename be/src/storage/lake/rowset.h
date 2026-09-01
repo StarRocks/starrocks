@@ -350,6 +350,11 @@ private:
     // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
     // Rowset instance, which for compaction is the whole task.
     std::vector<SegmentPtr> _held_segments;
+    // What the held set was measured at when it was published, and therefore exactly what this
+    // Rowset contributed to the lake_compaction_held_segment_bytes gauge -- the same amount must be
+    // taken back when the set goes away, so it is remembered rather than re-measured (a segment's
+    // mem_usage() grows as later column-group passes load more column indexes).
+    int64_t _held_segments_bytes = 0;
     // Single-flight election for the held-segment load: true while one caller is loading outside
     // the lock. Range-split subtasks that miss together must not each load the full input set;
     // waiters block on _held_segments_cv, and a failed (or unheld) load clears the flag before
