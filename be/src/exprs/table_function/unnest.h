@@ -34,9 +34,14 @@ public:
             return {};
         }
         Column* arg0 = state->get_columns()[0]->as_mutable_raw_ptr();
-        auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
+        // const: every ArrayColumn accessor then resolves to its const overload, which keeps the
+        // offsets read on immutable_data(). The non-const FixedLengthColumnBase::get_data()
+        // materializes a ContainerResource-backed column into its own buffer and drops the
+        // resource, and nothing here may mutate the input column.
+        const ArrayColumn* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         state->set_processed_rows(arg0->size());
         Columns result;
+<<<<<<< HEAD
         // The offsets column doubles as the per-row output row count, so it can be handed downstream
         // as-is whenever it already carries the right counts - and it does, even for a LEFT JOIN: a row
         // that expands to nothing shows up as a zero-length bracket, which TableFunctionOperator turns
@@ -59,11 +64,21 @@ public:
         }
         if (rebuild_offsets) {
             auto offset_column = col_array->offsets_column();
+=======
+        if (arg0->has_null() || state->get_is_left_join()) {
+            // Read the offsets buffer directly: Datum::get_int32() would reinterpret any offset in
+            // [2^31, 2^32) as a negative value, because Datum keeps unsigned values in the matching
+            // signed slot.
+            const auto offsets = col_array->offsets().immutable_data();
+            const Column& elements = col_array->elements();
+            const size_t row_count = arg0->size();
+
+>>>>>>> 5505cfdf296... [BugFix] Read unnest array offsets as uint32 instead of int32 (#78480)
             auto copy_count_column = UInt32Column::create();
             copy_count_column->append(0);
             MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
             uint32_t offset = 0;
-            for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
+            for (size_t row_idx = 0; row_idx < row_count; ++row_idx) {
                 if (arg0->is_null(row_idx)) {
                     if (state->get_is_left_join()) {
                         // to support unnest with null.
@@ -74,19 +89,16 @@ public:
                     }
                     copy_count_column->append(offset);
                 } else {
-                    if (offset_column->get(row_idx + 1).get_int32() == offset_column->get(row_idx).get_int32() &&
-                        state->get_is_left_join()) {
+                    if (offsets[row_idx + 1] == offsets[row_idx] && state->get_is_left_join()) {
                         // to support unnest with null.
                         if (state->is_required()) {
                             unnested_array_elements->append_nulls(1);
                         }
                         offset += 1;
                     } else {
-                        auto length =
-                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
+                        const uint32_t length = offsets[row_idx + 1] - offsets[row_idx];
                         if (state->is_required()) {
-                            unnested_array_elements->append(*(col_array->elements_column()),
-                                                            offset_column->get(row_idx).get_int32(), length);
+                            unnested_array_elements->append(elements, offsets[row_idx], length);
                         }
                         offset += length;
                     }
