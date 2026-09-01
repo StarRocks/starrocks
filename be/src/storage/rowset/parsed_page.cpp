@@ -288,6 +288,62 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    Status read_with_filter(Column* column, const SparseRange<>& range,
+                            const std::vector<const ColumnPredicate*>& compound_and_predicates, uint8_t* selection,
+                            uint16_t* selected_idx) override {
+        DCHECK_EQ(_offset_in_page, range.begin());
+        DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
+
+        size_t original_col_size = column->size();
+
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(column, range, compound_and_predicates, nullptr,
+                                                                  selection, selected_idx));
+        } else {
+            // For ParsedPageV2 with nulls: pass null flags to data_decoder
+            // The data_decoder will handle null predicates
+            auto nc = down_cast<NullableColumn*>(column);
+
+            // Pass the null flags of the whole page: the decoder indexes them by the in-page ordinal of each row it
+            // reads. `range` may be sparse (several sub-ranges of this page merged by the column iterator), so a
+            // pointer shifted to range.begin() and walked linearly would misalign the flags after the first gap.
+            const uint8_t* null_data = _null_flags.data();
+            RETURN_IF_ERROR(_data_decoder->next_batch_with_filter(nc, range, compound_and_predicates, null_data,
+                                                                  selection, selected_idx));
+        }
+
+        size_t selected_size = SIMD::count_nonzero(selection, range.span_size());
+        size_t added_col_size = column->size() - original_col_size;
+        if (selected_size != added_col_size) {
+            return Status::InternalError(
+                    fmt::format("Selected size:{}, does not match added col size:{}", selected_size, added_col_size));
+        }
+        _offset_in_page = range.end();
+
+        return Status::OK();
+    }
+
+    Status read_by_rowids(Column* column, const rowid_t* rowids, size_t* count) override {
+        if (_null_flags.size() == 0) {
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, column));
+        } else {
+            auto nc = down_cast<NullableColumn*>(column);
+            RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, nc->data_column_raw_ptr()));
+            std::vector<uint8_t> null_flags;
+            for (size_t i = 0; i < *count; i++) {
+                ordinal_t ord = rowids[i] - _first_ordinal;
+                DCHECK_LT(ord, _num_rows);
+                null_flags.emplace_back(_null_flags[ord]);
+            }
+            nc->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
+            nc->update_has_null();
+        }
+        return Status::OK();
+    }
+
+>>>>>>> 1e7dcde ([BugFix] Index page null flags by ordinal when a pushed-down predicate reads a sparse range (#78389))
     Status read_dict_codes(Column* column, size_t* count) override {
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, column));

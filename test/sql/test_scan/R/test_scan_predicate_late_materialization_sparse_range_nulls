@@ -1,0 +1,85 @@
+-- name: test_predicate_late_materialization_sparse_range_nulls
+-- Issue #78300: the first predicate column is pushed down to the page level; when another column's zone map leaves
+-- several non-adjacent sub-ranges inside one page of that column, the null flags of the rows after a gap were taken
+-- from the skipped rows and a non-null match right after a run of NULLs was dropped.
+drop table if exists predicate_lm_sparse_nulls;
+-- result:
+-- !result
+drop table if exists predicate_lm_sparse_no_nulls;
+-- result:
+-- !result
+
+-- c2: unique 500-byte strings (never dictionary encoded, ~130 rows per page) whose prefix is the block id, so its zone
+-- map keeps block 10 of every 40-block cycle (2560 rows) and nothing else. s: plain varchar whose page holds thousands
+-- of rows, so one page of s contains at least two surviving sub-ranges; blocks 11..19 are NULL, which is exactly where
+-- a linear walk of the null flags would land for the second sub-range.
+create table predicate_lm_sparse_nulls (k bigint, c2 varchar(600), s varchar(64), v int)
+duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+
+insert into predicate_lm_sparse_nulls
+select g,
+       concat(lpad(cast((g div 64) % 40 as varchar), 4, "0"), "_", lpad(cast(g as varchar), 495, "0")),
+       case when ((g div 64) % 40) between 11 and 19 then NULL
+            when g % 2560 = 645 then "target"
+            else concat("v", g) end,
+       1
+from table(generate_series(0, 399999)) t(g);
+-- result:
+-- !result
+
+-- same layout, but no NULL at all: the page carries no null flags and never misbehaved
+create table predicate_lm_sparse_no_nulls (k bigint, c2 varchar(600), s varchar(64), v int)
+duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+
+insert into predicate_lm_sparse_no_nulls
+select g,
+       concat(lpad(cast((g div 64) % 40 as varchar), 4, "0"), "_", lpad(cast(g as varchar), 495, "0")),
+       case when ((g div 64) % 40) between 11 and 19 then concat("n", g)
+            when g % 2560 = 645 then "target"
+            else concat("v", g) end,
+       1
+from table(generate_series(0, 399999)) t(g);
+-- result:
+-- !result
+
+select count(*), sum(s = "target") from predicate_lm_sparse_nulls;
+-- result:
+400000	156
+-- !result
+
+-- v is referenced so the scan keeps a non-predicate output column and the predicate-column late-materialization
+-- path (rowid column + page-level pushdown of the first predicate column) is actually taken
+set enable_predicate_col_late_materialize = true;
+-- result:
+-- !result
+select count(*), sum(v), min(k), max(k) from predicate_lm_sparse_nulls where c2 >= "0010_" and c2 < "0010_~" and s = "target";
+-- result:
+156	156	645	397445
+-- !result
+select count(*), sum(v), min(k), max(k) from predicate_lm_sparse_no_nulls where c2 >= "0010_" and c2 < "0010_~" and s = "target";
+-- result:
+156	156	645	397445
+-- !result
+
+set enable_predicate_col_late_materialize = false;
+-- result:
+-- !result
+select count(*), sum(v), min(k), max(k) from predicate_lm_sparse_nulls where c2 >= "0010_" and c2 < "0010_~" and s = "target";
+-- result:
+156	156	645	397445
+-- !result
+select count(*), sum(v), min(k), max(k) from predicate_lm_sparse_no_nulls where c2 >= "0010_" and c2 < "0010_~" and s = "target";
+-- result:
+156	156	645	397445
+-- !result
+
+drop table if exists predicate_lm_sparse_nulls;
+-- result:
+-- !result
+drop table if exists predicate_lm_sparse_no_nulls;
+-- result:
+-- !result
