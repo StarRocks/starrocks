@@ -45,7 +45,10 @@ public:
         struct ArrayView {
             const Column* nullable_column;
             const Column* elements;
-            const Buffer<uint32_t>* offsets;
+            // immutable_data() rather than get_data(): the non-const get_data() materializes a
+            // ContainerResource-backed column into its own buffer and drops the resource, which
+            // the Datum path this replaced did not do.
+            UInt32Column::ImmContainer offsets;
         };
         std::vector<ArrayView> array_views;
         array_views.reserve(column_count);
@@ -56,7 +59,7 @@ public:
             Column* column = col->as_mutable_raw_ptr();
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
             array_views.emplace_back(ArrayView{column, col_array->elements_column_raw_ptr(),
-                                               &col_array->offsets_column_raw_ptr()->get_data()});
+                                               col_array->offsets_column_raw_ptr()->immutable_data()});
             unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());
         }
 
@@ -70,7 +73,7 @@ public:
                     // current row is null, ignore the offset.
                     continue;
                 }
-                const uint32_t array_element_length = (*view.offsets)[row_idx + 1] - (*view.offsets)[row_idx];
+                const uint32_t array_element_length = view.offsets[row_idx + 1] - view.offsets[row_idx];
                 max_length_array_size = std::max(max_length_array_size, array_element_length);
             }
 
@@ -94,8 +97,8 @@ public:
                     continue;
                 }
 
-                const uint32_t array_start = (*view.offsets)[row_idx];
-                const uint32_t array_element_length = (*view.offsets)[row_idx + 1] - array_start;
+                const uint32_t array_start = view.offsets[row_idx];
+                const uint32_t array_element_length = view.offsets[row_idx + 1] - array_start;
                 unnested_array_list[col_idx]->append(*view.elements, array_start, array_element_length);
 
                 if (array_element_length < max_length_array_size) {
