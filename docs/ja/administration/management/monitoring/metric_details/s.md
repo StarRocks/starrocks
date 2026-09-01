@@ -135,6 +135,12 @@ description: "Alphabetical s"
 - タイプ: 累積値
 - 説明: スキャン時に flat JSON サブカラム値の型変換に費やした累積時間。
 
+## `starrocks_be_flat_json_compaction_fallback_total`
+
+- 単位: 個
+- タイプ: 累積値
+- 説明: compaction が JSON カラムを平坦化できず、通常の JSON として書き込んだ累積回数。最も多い原因はサブフィールドが `olap_string_max_length` を超えることです。`starrocks_be_flat_json_compaction_total` と同じ粒度で **JSON カラム単位**にカウントされるため、そのようなカラムを 2 つ持つテーブルの compaction 1 回で 2 加算されます。フォールバック時にカラムの形態が暗黙的に変わるため、この値が 0 でなく増加し続けている場合、一部の tablet が平坦化された形式で保存されなくなっています。
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - 単位: カウント

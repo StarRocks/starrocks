@@ -161,6 +161,12 @@ description: "Alphabetical s"
 - 类型: 累积值
 - 描述: 扫描时对 flat JSON 子列值进行类型转换的累计耗时。
 
+## `starrocks_be_flat_json_compaction_fallback_total`
+
+- 单位: 个
+- 类型: 累积值
+- 描述: compaction 无法打平某个 JSON 列、转而按普通 JSON 写入的累计次数，最常见的原因是某个子字段超过 `olap_string_max_length`。与 `starrocks_be_flat_json_compaction_total` 同粒度，按 **JSON 列**计数，因此一次涉及两个此类列的 compaction 会累加 2。发生回退时列的形态会静默改变，因此该值非零且持续增长意味着部分 tablet 已不再以打平形式存储。
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - 单位: 计数

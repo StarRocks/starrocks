@@ -1,0 +1,61 @@
+-- name: test_flat_json_compaction_string_limit_fallback @sequential @slow
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t select n, parse_json(concat('{"a":', n, ',"s":"small', n, '"}'))
+  from table(generate_series(1, 50)) x(n);
+-- result:
+-- !result
+insert into t select 100 + n, parse_json(concat('{"a":', n, ',"s":"small', n, '"}'))
+  from table(generate_series(1, 50)) x(n);
+-- result:
+-- !result
+insert into t select 200 + n, parse_json(concat('{"a":', n, ',"s":"small', n, '"}'))
+  from table(generate_series(1, 50)) x(n);
+-- result:
+-- !result
+insert into t values (999, parse_json(concat('{"a":999,"s":"', repeat('x', 100000), '"}')));
+-- result:
+-- !result
+select count(*) as rows_before from t;
+-- result:
+151
+-- !result
+select k, length(get_json_string(j, '$.s')) as slen from t where k = 999;
+-- result:
+999	100000
+-- !result
+function: update_be_config("olap_string_max_length", "65536")
+-- result:
+None
+-- !result
+alter table t compact;
+-- result:
+-- !result
+function: wait_compaction_finish("t", 1)
+-- result:
+None
+-- !result
+select count(*) as rows_after from t;
+-- result:
+151
+-- !result
+select k, length(get_json_string(j, '$.s')) as slen from t where k = 999;
+-- result:
+999	100000
+-- !result
+select k, get_json_int(j, '$.a') as a from t where k in (1, 101, 201, 999) order by k;
+-- result:
+1	1
+101	1
+201	1
+999	999
+-- !result
+select flat_json_meta(j) from t [_META_];
+-- result:
+[]
+-- !result
+CLEANUP {
+  function: update_be_config("olap_string_max_length", "2147482624")
+} END CLEANUP

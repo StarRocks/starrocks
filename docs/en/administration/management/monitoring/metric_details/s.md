@@ -141,6 +141,12 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total time spent casting flat JSON sub-column values during scan.
 
+## `starrocks_be_flat_json_compaction_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON columns that a compaction could not flatten and wrote as plain JSON instead, most often because a subfield exceeds `olap_string_max_length`. Counted per JSON column, the same granularity as `starrocks_be_flat_json_compaction_total`, so one compaction of a table with two such columns adds two. The column silently changes shape when this happens, so a non-zero and growing value means some tablets are no longer being stored in flat form.
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - Unit: Count

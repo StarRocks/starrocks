@@ -20,7 +20,9 @@
 #include <string>
 #include <vector>
 
+#include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/flat_json/json_flat_path.h"
@@ -29,11 +31,13 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_json_flat_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -2123,4 +2127,221 @@ TEST_F(FlatJsonColumnCompactTest, CompactJsonNullableToNonNullableOutputErrorWit
         EXPECT_TRUE(st.is_internal_error()) << "mode=" << static_cast<int>(mode) << " " << st.to_string();
     }
 }
+
+TEST_F(FlatJsonColumnCompactTest, testCompactFallsBackWhenSubfieldExceedsStringLimit) {
+    // A subfield longer than config::olap_string_max_length is survivable at load time --
+    // FlatJsonColumnWriter::finish() catches the failure and writes the column as plain JSON -- but
+    // compaction propagated the error instead, so every later compaction of that tablet failed
+    // forever on data the load path had already accepted.
+    //
+    // The oversized value sits in the LAST source column deliberately. The earlier columns are
+    // flattened and written before the failure, so a fallback added without also moving the source
+    // release out of the flatten loop would re-write only what was left and silently drop their rows.
+    int32_t old_limit = config::olap_string_max_length;
+    config::olap_string_max_length = 64;
+    DeferOp reset_limit([&]() { config::olap_string_max_length = old_limit; });
+
+    std::string oversized(200, 'x');
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"a": 1, "s": "s1"})", false),
+            normal_json(R"({"a": 2, "s": "s2"})", false),
+            normal_json(fmt::format(R"({{"a": 3, "s": "{}"}})", oversized), false),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    // Fell back to plain JSON rather than failing the compaction.
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    EXPECT_EQ(0, _meta->children_columns_size());
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(0, read_json->flat_column_paths().size());
+    // Every row survives, including the two written before the failure.
+    EXPECT_EQ(3, read_json->size());
+    EXPECT_EQ(R"({"a": 1, "s": "s1"})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "s": "s2"})", read_col->debug_item(1));
+    EXPECT_EQ(fmt::format(R"({{"a": 3, "s": "{}"}})", oversized), read_col->debug_item(2));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testCompactFallsBackWhenFlatSubfieldExceedsStringLimit) {
+    // Same defect reached from already-flat input, which is what a real tablet looks like once flat
+    // json has been on for a while: compaction re-derives the paths and re-flattens, so it walks
+    // straight back into the length check that the original load had sidestepped.
+    int32_t old_limit = config::olap_string_max_length;
+    config::olap_string_max_length = 64;
+    DeferOp reset_limit([&]() { config::olap_string_max_length = old_limit; });
+
+    std::string oversized(200, 'y');
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            flat_json(R"({"a": 1, "s": "s1"})", false),
+            flat_json(R"({"a": 2, "s": "s2"})", false),
+            flat_json(fmt::format(R"({{"a": 3, "s": "{}"}})", oversized), false),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(3, read_json->size());
+    EXPECT_EQ(R"({"a": 1, "s": "s1"})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "s": "s2"})", read_col->debug_item(1));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testCompactFallsBackWhenFirstColumnExceedsStringLimit) {
+    // The mirror of the two tests above: here the very first source column is the one that fails, so
+    // no sub-writer has received anything yet when the fallback runs. It has to produce the same
+    // plain-JSON column either way -- the fallback cannot assume it is cleaning up after a partial
+    // write, nor that there was one.
+    int32_t old_limit = config::olap_string_max_length;
+    config::olap_string_max_length = 64;
+    DeferOp reset_limit([&]() { config::olap_string_max_length = old_limit; });
+
+    std::string oversized(200, 'z');
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(fmt::format(R"({{"a": 1, "s": "{}"}})", oversized), false),
+            normal_json(R"({"a": 2, "s": "s2"})", false),
+            normal_json(R"({"a": 3, "s": "s3"})", false),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    EXPECT_EQ(0, _meta->children_columns_size());
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(3, read_json->size());
+    EXPECT_EQ(R"({"a": 2, "s": "s2"})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "s": "s3"})", read_col->debug_item(2));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testNullableCompactFallsBackWhenSubfieldExceedsStringLimit) {
+    // _flatten_columns() prepends a reconstructed null column to _flat_columns for nullable columns,
+    // so the fallback has to unwind one more piece of state than in the non-nullable case. The NULL
+    // row must survive as NULL rather than as an empty or defaulted document.
+    int32_t old_limit = config::olap_string_max_length;
+    config::olap_string_max_length = 64;
+    DeferOp reset_limit([&]() { config::olap_string_max_length = old_limit; });
+
+    std::string oversized(200, 'n');
+    // One NULL in five rows, not one in three: JsonPathDeriver::check_null_factor rejects the whole
+    // column once nulls exceed config::json_flat_null_factor (0.3), which would abandon flattening
+    // before it ever reached the length check and leave this test asserting nothing.
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"a": 1, "s": "s1"})", true),
+            normal_json(R"(NULL)", true),
+            normal_json(R"({"a": 3, "s": "s3"})", true),
+            normal_json(R"({"a": 4, "s": "s4"})", true),
+            normal_json(fmt::format(R"({{"a": 5, "s": "{}"}})", oversized), true),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    EXPECT_EQ(5, read_col->size());
+    EXPECT_FALSE(read_col->is_null(0));
+    EXPECT_TRUE(read_col->is_null(1));
+    EXPECT_FALSE(read_col->is_null(2));
+    EXPECT_EQ(R"({"a": 1, "s": "s1"})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 3, "s": "s3"})", read_col->debug_item(2));
+    EXPECT_EQ(R"({"a": 4, "s": "s4"})", read_col->debug_item(3));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testMixedFlatAndPlainCompactFallsBack) {
+    // What a real tablet looks like once flat json has been on for a while and one load fell back:
+    // some input segments are flat, some are plain. The two take different routes through
+    // _flatten_columns() -- JsonFlattener vs HyperJsonTransformer -- and both have to end up in the
+    // same plain-JSON output when the write fails.
+    int32_t old_limit = config::olap_string_max_length;
+    config::olap_string_max_length = 64;
+    DeferOp reset_limit([&]() { config::olap_string_max_length = old_limit; });
+
+    std::string oversized(200, 'm');
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            flat_json(R"({"a": 1, "s": "s1"})", false),
+            normal_json(R"({"a": 2, "s": "s2"})", false),
+            flat_json(R"({"a": 3, "s": "s3"})", false),
+            normal_json(fmt::format(R"({{"a": 4, "s": "{}"}})", oversized), false),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[1]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(4, read_json->size());
+    EXPECT_EQ(R"({"a": 1, "s": "s1"})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "s": "s2"})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "s": "s3"})", read_col->debug_item(2));
+}
+
+TEST_F(FlatJsonColumnCompactTest, testCompactFallsBackOnAnyWriteFailure) {
+    // The string-length check is only the failure this was reported for. Drive the same fallback
+    // through the flat_json_write_column_fail injection point instead, so the test says what the fix
+    // actually promises: any failure to write the flat sub-columns leaves a readable plain-JSON
+    // column rather than a compaction that can never succeed.
+    PFailPointTriggerMode trigger_mode;
+    auto* fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("flat_json_write_column_fail");
+    ASSERT_NE(nullptr, fp);
+    trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+    fp->setMode(trigger_mode);
+    DeferOp disable_fp([&]() {
+        PFailPointTriggerMode off;
+        off.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(off);
+    });
+
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"a": 1, "b": 21})", false),
+            normal_json(R"({"a": 2, "b": 22})", false),
+            normal_json(R"({"a": 3, "b": 23})", false),
+    });
+    // clang-format on
+
+    int64_t fallbacks_before = FlatJsonMetrics::instance()->flat_json_compaction_fallback_total.value();
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    // The fallback is otherwise invisible -- the compaction succeeds and the column just quietly
+    // stops being flat -- so the counter is the only thing an operator can see.
+    EXPECT_EQ(fallbacks_before + 1, FlatJsonMetrics::instance()->flat_json_compaction_fallback_total.value());
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    EXPECT_EQ(0, _meta->children_columns_size());
+    auto* read_json = get_json_column(read_col);
+    EXPECT_FALSE(read_json->is_flat_json());
+    EXPECT_EQ(3, read_json->size());
+    EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+    EXPECT_EQ(R"({"a": 3, "b": 23})", read_col->debug_item(2));
+}
+
 } // namespace starrocks

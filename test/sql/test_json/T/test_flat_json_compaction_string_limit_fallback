@@ -1,0 +1,47 @@
+-- name: test_flat_json_compaction_string_limit_fallback @sequential @slow
+-- A JSON subfield longer than olap_string_max_length is survivable at load time: when flattening
+-- fails, FlatJsonColumnWriter::finish() writes the column as plain JSON and the load succeeds.
+-- Compaction had no such fallback -- FlatJsonColumnCompactor re-derives the paths, re-flattens, walks
+-- straight back into the same length check and propagates the error:
+--
+--   Fail to compact tablet 119054. version=4 txn_id=94049 cost=0s
+--     : Invalid argument: string length(100000) > limit(65536)
+--
+-- Nothing retried its way out of that: the input never changes, so every later compaction of the
+-- tablet failed on the same row, forever. In the incident that prompted this the compaction score
+-- reached 1131 after 502 consecutive failures on one 1.05MB value.
+--
+-- Ordering below matters. The oversized row has to be inserted BEFORE the limit is lowered: repeat()
+-- returns NULL once its result would exceed olap_string_max_length, so lowering first would quietly
+-- store a NULL and reproduce nothing at all. 100000 bytes is under every shipped default, so the
+-- insert succeeds whatever the build.
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t select n, parse_json(concat('{"a":', n, ',"s":"small', n, '"}'))
+  from table(generate_series(1, 50)) x(n);
+insert into t select 100 + n, parse_json(concat('{"a":', n, ',"s":"small', n, '"}'))
+  from table(generate_series(1, 50)) x(n);
+insert into t select 200 + n, parse_json(concat('{"a":', n, ',"s":"small', n, '"}'))
+  from table(generate_series(1, 50)) x(n);
+insert into t values (999, parse_json(concat('{"a":999,"s":"', repeat('x', 100000), '"}')));
+select count(*) as rows_before from t;
+select k, length(get_json_string(j, '$.s')) as slen from t where k = 999;
+-- Now the value on disk is over the limit. Compaction must fall back to plain JSON rather than fail.
+function: update_be_config("olap_string_max_length", "65536")
+alter table t compact;
+-- The assertion: the tablet reaches a single segment. On the unfixed build it never does, because
+-- every compaction attempt dies on the oversized subfield, and this call times out.
+function: wait_compaction_finish("t", 1)
+select count(*) as rows_after from t;
+select k, length(get_json_string(j, '$.s')) as slen from t where k = 999;
+select k, get_json_int(j, '$.a') as a from t where k in (1, 101, 201, 999) order by k;
+-- Fell back rather than stayed flat.
+select flat_json_meta(j) from t [_META_];
+-- Restore from a cleanup block rather than a trailing statement: the wait above fails on an unfixed
+-- build, which is exactly when the restore matters most -- without CLEANUP the runner would never
+-- reach it and every later case in the worker would keep the 64KiB limit. The value is the shipped
+-- default from be/src/common/config.h; if that ever changes, this has to change with it, since
+-- update_be_config cannot read the value back.
+CLEANUP {
+  function: update_be_config("olap_string_max_length", "2147482624")
+} END CLEANUP

@@ -39,6 +39,10 @@ public:
     METRIC_DEFINE_INT_COUNTER(flat_json_flatten_duration_ns_total, MetricUnit::NANOSECONDS);
     METRIC_DEFINE_INT_COUNTER(flat_json_compaction_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(flat_json_compaction_schema_change_total, MetricUnit::OPERATIONS);
+    // Compactions that could not flatten and wrote the column as plain JSON instead. Without this the
+    // fallback is invisible: flat_json_compaction_total is incremented before any write, so it counts
+    // a fallback as a flat compaction, and the column silently changes shape with nothing to see.
+    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_fallback_total, MetricUnit::OPERATIONS);
 
 private:
     MetricRegistry* _registry = nullptr;

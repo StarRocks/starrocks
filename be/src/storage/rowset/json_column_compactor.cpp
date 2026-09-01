@@ -67,7 +67,63 @@ Status FlatJsonColumnCompactor::_compact_columns(MutableColumns& json_datas) {
         // write json directly
         return _merge_columns(json_datas);
     }
-    return _flatten_columns(json_datas);
+
+    auto st = _flatten_columns(json_datas);
+    if (st.ok()) {
+        return Status::OK();
+    }
+
+    // The load path already survives this: FlatJsonColumnWriter::finish() falls back to plain JSON
+    // when flattening fails, most often because a subfield exceeds config::olap_string_max_length.
+    // Compaction had no such fallback, so a row that was accepted at write time made every later
+    // compaction of that tablet fail forever.
+    //
+    // This fallback deliberately sits here rather than in finish(): the _flat_paths.empty() branch
+    // above has already gone through _merge_columns(), and retrying it after a failure there would
+    // append every row a second time.
+
+    FlatJsonMetrics::instance()->flat_json_compaction_fallback_total.increment(1);
+
+    // json_datas holds one entry per append(), i.e. per chunk, not per row -- and the sources are
+    // all still intact here precisely because the release was moved out of the flatten loop.
+    size_t num_rows = 0;
+    for (const auto& col : json_datas) {
+        num_rows += col->size();
+    }
+    // Lead with the unique id: _column_name comes from ColumnWriterOptions::field_name, which
+    // SegmentWriter only fills in for the load path, so it is empty during compaction.
+    //
+    // The status is truncated on purpose. The failure this fallback exists for is
+    // StringColumnWriter's length check, whose message embeds the entire offending value
+    // ("string length({}) > limit({}), string: {}") -- 1.05MB of base64 per occurrence in the
+    // incident that prompted this fix. Logging it whole would trade a compaction that fails forever
+    // for a warning that floods be.WARNING on every compaction of that tablet.
+    std::string reason = st.to_string();
+    constexpr size_t kMaxReasonLen = 256;
+    if (reason.size() > kMaxReasonLen) {
+        reason = reason.substr(0, kMaxReasonLen) + "... (truncated)";
+    }
+    LOG(WARNING) << "FlatJsonColumnCompactor falls back to plain json, column unique_id=" << _json_meta->unique_id()
+                 << (_column_name.empty() ? "" : " (" + _column_name + ")") << ", chunks: " << json_datas.size()
+                 << ", rows: " << num_rows << ", reason: " << reason;
+
+    // _flatten_columns() may have run partway: _init_flat_writers() can have created sub-writers and
+    // stamped is_flat=true plus per-sub-column children onto _json_meta before _write_flat_column()
+    // failed. Drop that half-built state before handing the data to _json_writer. The invariant
+    // checked downstream by get_next_rowid()/write_data()/write_*_index() is
+    // _flat_writers.empty() iff !_is_flat, and a stale is_flat=true would also mislead the reader
+    // into looking for flat sub-columns that do not exist on disk.
+    _flat_writers.clear();
+    _flat_paths.clear();
+    _flat_types.clear();
+    _flat_columns.clear();
+    _subcolumn_dict_valid.clear();
+    _has_remain = false;
+    _remain_filter.reset();
+    _json_meta->clear_children_columns();
+    _json_meta->mutable_json_meta()->clear_remain_filter();
+    // _merge_columns() itself resets is_flat and has_remain on the meta.
+    return _merge_columns(json_datas);
 }
 
 bool check_is_same_schema(const JsonColumn* one, const JsonColumn* two) {
@@ -183,9 +239,15 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
 
         RETURN_IF_ERROR(_write_flat_column());
         _flat_columns.clear();
-        col->resize_uninitialized(0); // release after write
     }
 
+    // Release only once every column has been written. Releasing inside the loop leaves the caller's
+    // fallback with nothing to fall back to: a failure at column k has already destroyed columns
+    // 0..k-1, so re-writing what is left would silently drop their rows. FlatJsonColumnWriter's
+    // _flat_column() is structured the same way, for the same reason.
+    for (auto& col : json_datas) {
+        col->resize_uninitialized(0);
+    }
     return Status::OK();
 }
 
