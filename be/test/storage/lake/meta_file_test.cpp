@@ -405,10 +405,13 @@ TEST_F(MetaFileTest, test_compacted_delvec_plaintext_guard_raw_and_mixed) {
 TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycle) {
     const int64_t source_a = next_id();
     const int64_t source_b = next_id();
+    const int64_t source_same_name_other_tablet = next_id();
     write_file(_tablet_manager->delvec_location(source_a, "a.delvec"), "a");
     write_file(_tablet_manager->delvec_location(source_b, "b.delvec"), "b");
+    write_file(_tablet_manager->delvec_location(source_same_name_other_tablet, "a.delvec"), "a");
     const auto a = raw_output_page(source_a, "a.delvec", 0, 1);
     const auto b = raw_output_page(source_b, "b.delvec", 0, 1);
+    const auto same_name_other_tablet = raw_output_page(source_same_name_other_tablet, "a.delvec", 0, 1);
     int active_readers = 0;
     int peak_readers = 0;
     int copy_opens = 0;
@@ -436,6 +439,27 @@ TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycl
     EXPECT_EQ(3, copy_opens);
     EXPECT_EQ(1, peak_readers);
     EXPECT_EQ(0, active_readers);
+
+    source_size_lookups = 0;
+    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {a, same_name_other_tablet}, next_id(), next_id(),
+                                           &output, &offsets));
+    EXPECT_EQ(2, source_size_lookups);
+
+    auto expect_resolved_size_rejected = [&](int64_t resolved_size, std::string_view expected_message) {
+        int writer_opens = 0;
+        sync->SetCallBack("write_compacted_delvec_pages:source_size_override",
+                          [&](void* arg) { *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = resolved_size; });
+        sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), {a}, next_id(), next_id(), &output, &offsets);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_EQ(expected_message, status.message());
+        EXPECT_EQ(0, writer_opens);
+        sync->ClearCallBack("write_compacted_delvec_pages:source_size_override");
+        sync->ClearCallBack("write_compacted_delvec_pages:writer_open");
+    };
+    expect_resolved_size_rejected(-1, "compacted delvec resolved source size is negative");
+    expect_resolved_size_rejected(0, "compacted delvec resolved source size does not contain page");
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_serialized_output_uses_bounded_appends) {
