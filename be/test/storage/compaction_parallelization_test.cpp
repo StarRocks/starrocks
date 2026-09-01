@@ -17,19 +17,7 @@
 
 #include <memory>
 
-<<<<<<< HEAD
 #include "column/schema.h"
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
-#include "column/schema.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_exec_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "exec/exec_env.h"
->>>>>>> 2e754f3 ([BugFix] Fix compaction read chunk size estimation (#78192))
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -46,6 +34,8 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 class CompactionParallelizationTest : public testing::Test {
