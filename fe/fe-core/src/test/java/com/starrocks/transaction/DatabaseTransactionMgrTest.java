@@ -672,6 +672,95 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void getRunningTransactionsCarriesEveryColumnTest() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // toRunningTxnInfo claims to mirror getTxnStateInfo field for field, so that the view and SHOW PROC
+        // cannot drift as TransactionState getters evolve. Assert every column against the state it was
+        // derived from, with the optional diagnostic fields actually populated, so a column that silently
+        // stops being filled fails here rather than showing up empty in production.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "label_every_column",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        TransactionState txnState = masterDbTransMgr.getTransactionState(txnId);
+        txnState.setGlobalTransactionId(987654321L);
+        txnState.setReason("stalled for test");
+        txnState.setErrorMsg("boom");
+        txnState.setFinishTime(1234567890L);
+        // A second table id, so TABLE_IDS is exercised with an actual separator rather than a lone id.
+        txnState.addTableIdList(GlobalStateMgrTestUtil.testTableId1 + 1);
+
+        TRunningTxnInfo row = masterDbTransMgr.getRunningTransactions().stream()
+                .filter(r -> r.getTxn_id() == txnId)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("a running transaction must appear in the view"));
+
+        assertEquals(txnId, row.getTxn_id());
+        assertEquals(txnState.getGlobalTransactionId(), row.getGlobal_txn_id());
+        assertEquals("label_every_column", row.getLabel());
+        assertEquals(GlobalStateMgrTestUtil.testDbId1, row.getDatabase_id());
+        assertEquals(txnState.getTransactionStatus().name(), row.getState());
+        assertEquals(txnState.getCoordinator().toString(), row.getCoordinator());
+        assertEquals(txnState.getSourceType().name(), row.getSource_type());
+        assertEquals(txnState.getWarehouseId(), row.getWarehouse_id());
+        assertEquals(txnState.getPrepareTime(), row.getPrepare_time_ms());
+        assertEquals(txnState.getPreparedTime(), row.getPrepared_time_ms());
+        assertEquals(txnState.getCommitTime(), row.getCommit_time_ms());
+        assertEquals(txnState.getPublishVersionTime(), row.getPublish_time_ms());
+        assertEquals(txnState.getFinishTime(), row.getFinish_time_ms());
+        assertEquals(txnState.getTimeoutMs(), row.getTimeout_ms());
+        assertEquals(txnState.getPreparedTimeoutMs(), row.getPrepared_timeout_ms());
+        assertEquals(txnState.getErrorReplicas().size(), row.getError_replica_num());
+        assertEquals("stalled for test", row.getReason());
+        assertEquals("boom", row.getError_msg());
+        assertEquals(txnState.isNoOpPublish(), row.isIs_no_op_publish());
+        assertEquals(txnState.getNoOpPublishReason(), row.getNo_op_publish_reason());
+
+        // TABLE_IDS is the id list joined with commas, in list order.
+        List<String> expectedIds = new ArrayList<>();
+        for (Long tableId : txnState.getTableIdList()) {
+            expectedIds.add(String.valueOf(tableId));
+        }
+        assertEquals(String.join(",", expectedIds), row.getTable_ids());
+        assertTrue(row.getTable_ids().contains(","), "a multi table txn must join its ids with a comma");
+
+        // This transaction has not committed, so the stall column is 0 rather than an age measured from a
+        // sentinel commit time.
+        assertEquals(TransactionStatus.PREPARE, txnState.getTransactionStatus());
+        assertEquals(0L, row.getPending_publish_ms());
+    }
+
+    @Test
+    public void getCommittedTxnNumCountsOnlyCommittedTest() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        int before = masterDbTransMgr.getCommittedTxnNum();
+        assertTrue(before > 0);
+
+        // The gauge answers "how many transactions are waiting to publish", not "how many are open". A
+        // transaction that has only begun sits in PREPARE, so it must not move the count.
+        long preparedTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "label_prepare_not_counted",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        assertEquals(TransactionStatus.PREPARE,
+                masterDbTransMgr.getTransactionState(preparedTxnId).getTransactionStatus());
+        assertEquals(before, masterDbTransMgr.getCommittedTxnNum());
+
+        // Aborting leaves the running set entirely, which also must not move the count.
+        masterDbTransMgr.abortTransaction(preparedTxnId, "aborted for test", null);
+        assertEquals(TransactionStatus.ABORTED,
+                masterDbTransMgr.getTransactionState(preparedTxnId).getTransactionStatus());
+        assertEquals(before, masterDbTransMgr.getCommittedTxnNum());
+    }
+
+    @Test
     public void testAbortTransactionWithNotFoundException() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
