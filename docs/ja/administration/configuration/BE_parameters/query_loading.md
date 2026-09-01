@@ -396,6 +396,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: オブジェクトストレージとのソケット接続を確立するためのタイムアウト期間。`-1` は、SDK構成のデフォルトのタイムアウト期間を使用することを示します。
 - 導入バージョン: v3.0.9
 
+### enable_poco_client_for_aws_sdk
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: AWS SDK で Poco HTTP クライアントを使用するかどうかを指定します。`true` の場合、AWS SDK のデフォルトの curl HTTP クライアントを Poco に置き換えます。`false` の場合、デフォルトの curl クライアントを使用します。
+- 導入バージョン: -
+
 ### object_storage_request_timeout_ms
 
 - デフォルト: -1
