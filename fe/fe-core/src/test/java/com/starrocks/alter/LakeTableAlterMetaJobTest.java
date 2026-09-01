@@ -876,6 +876,7 @@ public class LakeTableAlterMetaJobTest {
         // holding, the assertions below would pass for the wrong reason.
         Assertions.assertNotEquals(partition.getId(), physicalPartition.getId());
         long versionBefore = physicalPartition.getVisibleVersion();
+        long versionTimeBefore = physicalPartition.getVisibleVersionTime();
 
         List<MVRepairHandler.PartitionRepairInfo> captured = new ArrayList<>();
         new MockUp<LocalMetastore>() {
@@ -902,6 +903,9 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(partition.getId(), repairInfo.getPartitionId());
         Assertions.assertEquals(partition.getName(), repairInfo.getPartitionName());
         Assertions.assertEquals(versionBefore, repairInfo.getLastVersion());
+        // The pre-alter visible version time has to be reported, otherwise MVMetaVersionRepairer cannot
+        // tell an up-to-date MV from one that is already stale through isBaseTableChanged's time disjunct.
+        Assertions.assertEquals(versionTimeBefore, repairInfo.getLastVersionTime());
         Assertions.assertEquals(versionBefore + 1, repairInfo.getNewVersion());
         Assertions.assertEquals(partition.getLatestPhysicalPartition().getVisibleVersion(),
                 repairInfo.getNewVersion());
