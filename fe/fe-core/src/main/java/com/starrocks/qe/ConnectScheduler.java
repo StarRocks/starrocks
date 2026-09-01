@@ -379,7 +379,17 @@ public class ConnectScheduler {
                 }
             });
         }
-        toCleanup.forEach(ConnectContext::cleanup);
+        toCleanup.forEach(context -> {
+            // Recheck idleness immediately before cleanup. Between collecting candidates under
+            // the lock and reaching this context in the loop, the connection may have received
+            // and started a new statement (the window can be long when an earlier follower
+            // cleanup waits on a synchronous rollback RPC). Cleanup without rechecking would
+            // close an active client's socket and roll back its explicit transaction
+            // mid-statement.
+            if (context.isIdleLastFor(1000)) {
+                context.cleanup();
+            }
+        });
     }
 
     public void printAllRunningQuery() {

@@ -1050,7 +1050,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: s
 - Is mutable: Yes
-- Description: Minimum time the FE stays alive after graceful exit (SIGUSR1) is marked, measured from the signal. Probe failure fires at the very start: HealthAction returns 500 (HTTP probe, load) and `stopAccept()` closes the MySQL port (TCP probe, query). The FE must not exit before the Load Balancer notices these failures within its probe interval and stops routing; this wait must be greater than the Load Balancer detach latency (typically 7-11 seconds). In practice `graceful_exit_accept_new_window_ms` is larger than this value, so this minimum is usually already satisfied when the accept-new window elapses. Must be smaller than `max_graceful_exit_time_second`.
+- Description: Minimum time the FE stays alive after graceful exit (SIGUSR1) is marked, measured from the signal. Probe failure fires at the very start: HealthAction returns 500 (HTTP probe, load) and `stopAccept()` closes the MySQL port (TCP probe, query). The FE must not exit before the Load Balancer notices these failures within its probe interval and stops routing; this wait must not be shorter than the Load Balancer detach latency (about 15 seconds). In practice `graceful_exit_accept_new_window_ms` is larger than this value, so this minimum is usually already satisfied when the accept-new window elapses. Must be smaller than `max_graceful_exit_time_second`.
 - Introduced in: -
 
 ### `mysql_nio_backlog_num`

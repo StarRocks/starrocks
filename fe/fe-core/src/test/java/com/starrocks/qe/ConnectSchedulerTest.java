@@ -134,4 +134,30 @@ public class ConnectSchedulerTest {
         // Must not throw when there are no connections registered.
         scheduler.closeAllIdleConnection();
     }
+    @Test
+    public void testCloseAllIdleConnectionSkipsContextThatBecameActiveAfterSelection() {
+        ConnectScheduler scheduler = new ConnectScheduler(10);
+        Map<Long, ConnectContext> connectionMap = Deencapsulation.getField(scheduler, "connectionMap");
+
+        int[] cleanups = {0};
+        // The lock-phase check reports idle so the connection is selected as a candidate, but the
+        // pre-cleanup recheck reports busy, simulating a new statement arriving after the lock was
+        // released (TOCTOU). Such a connection must not be cleaned up mid-statement.
+        connectionMap.put(1L, new TestContext(1L, false, true, () -> cleanups[0]++) {
+            private boolean firstCheck = true;
+
+            @Override
+            public boolean isIdleLastFor(long milliSeconds) {
+                if (firstCheck) {
+                    firstCheck = false;
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        scheduler.closeAllIdleConnection();
+
+        Assertions.assertEquals(0, cleanups[0]);
+    }
 }

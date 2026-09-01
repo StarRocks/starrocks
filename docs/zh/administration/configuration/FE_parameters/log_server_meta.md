@@ -1049,7 +1049,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: 优雅退出（SIGUSR1）标记后 FE 保持存活的最短时间，从信号发出时开始计时。探活失败最早触发：HealthAction 返回 500（HTTP 探活，导入链路），`stopAccept()` 关闭 MySQL 端口（TCP 探活，查询链路）。FE 不能早于负载均衡器在其探测周期内感知到这些失败并停止路由之前退出；该等待必须大于负载均衡器的摘除延迟（通常为 7-11 秒）。实践中 `graceful_exit_accept_new_window_ms` 大于此值，因此接受新连接窗口结束时该最小值通常已经满足。必须小于 `max_graceful_exit_time_second`。
+- 描述: 优雅退出（SIGUSR1）标记后 FE 保持存活的最短时间，从信号发出时开始计时。探活失败最早触发：HealthAction 返回 500（HTTP 探活，导入链路），`stopAccept()` 关闭 MySQL 端口（TCP 探活，查询链路）。FE 不能早于负载均衡器在其探测周期内感知到这些失败并停止路由之前退出；该等待不能短于负载均衡器的摘除延迟（约 15 秒）。实践中 `graceful_exit_accept_new_window_ms` 大于此值，因此接受新连接窗口结束时该最小值通常已经满足。必须小于 `max_graceful_exit_time_second`。
 - 引入版本: -
 
 ### `mysql_nio_backlog_num`
