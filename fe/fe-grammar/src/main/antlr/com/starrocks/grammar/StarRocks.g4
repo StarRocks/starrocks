@@ -998,6 +998,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | alterTableDictColumnsClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
     | modifyColumnCommentClause
@@ -1157,6 +1158,10 @@ addColumnsClause
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+alterTableDictColumnsClause
+    : (ENABLE | DISABLE) DICTIONARY '(' identifier (',' identifier)* ')'
     ;
 
 dropPartitionColumnClause
