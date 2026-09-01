@@ -59,8 +59,7 @@ public:
             // materializes a ContainerResource-backed column into its own buffer and drops the
             // resource, and nothing here may mutate the input column.
             const ArrayColumn* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            array_views.emplace_back(
-                    ArrayView{column, &col_array->elements(), col_array->offsets().immutable_data()});
+            array_views.emplace_back(ArrayView{column, &col_array->elements(), col_array->offsets().immutable_data()});
             unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());
         }
 
