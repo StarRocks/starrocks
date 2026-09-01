@@ -52,14 +52,14 @@ public:
 
         MutableColumns unnested_array_list;
         unnested_array_list.reserve(column_count);
-        for (auto& col : state->get_columns()) {
-            Column* column = col->as_mutable_raw_ptr();
-            // const: every ArrayColumn accessor then resolves to its const overload, which keeps the
-            // offsets read on immutable_data(). The non-const FixedLengthColumnBase::get_data()
-            // materializes a ContainerResource-backed column into its own buffer and drops the
-            // resource, and nothing here may mutate the input column.
-            const ArrayColumn* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            array_views.emplace_back(ArrayView{column, &col_array->elements(), col_array->offsets().immutable_data()});
+        // Everything here is const, all the way down from the input ColumnPtr: nothing on this path
+        // may mutate the input columns. That is also what keeps the offsets read on immutable_data(),
+        // since the non-const FixedLengthColumnBase::get_data() materializes a
+        // ContainerResource-backed column into its own buffer and drops the resource.
+        for (const auto& col : state->get_columns()) {
+            const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col));
+            array_views.emplace_back(
+                    ArrayView{col.get(), &col_array->elements(), col_array->offsets().immutable_data()});
             unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());
         }
 
