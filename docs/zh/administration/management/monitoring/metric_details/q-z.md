@@ -284,6 +284,12 @@ description: "Alphabetical q - z"
 - 单位: 计数
 - 描述: 读取的有效行数（不包括格式无效的行）。标签: `file_format`, `scan_type`。
 
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 仅存算分离模式。从远程存储读取 Lake Tablet 元数据时返回 `NotFound` 的尝试总数。Tablet 元数据要么存放在其独立的元数据文件中，要么存放在 Bundle 元数据文件中，二者必居其一且不会同时存在；对这两种位置的读取均会计入该指标，包括 Vacuum 流程发起的 Bundle 文件读取。每次失败的回退读取均会单独计数。缓存未命中和读取成功不会增加该指标。复制流程中对源集群元数据的读取、以及恢复流程中对快照元数据的读取不计入该指标。
+
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
 - 单位: 字节
