@@ -66,7 +66,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -561,12 +560,9 @@ public abstract class AlterJobV2 implements Writable {
 
     protected boolean publishVersion() {
         if (publishVersionFuture == null) {
-            Callable<Boolean> task = () -> {
-                return lakePublishVersion();
-            };
             ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
             try {
-                publishVersionFuture = executor.submit(task);
+                publishVersionFuture = executor.submit(this::lakePublishVersion);
             } catch (RejectedExecutionException e) {
                 LOG.warn("failed to submit publish task for job: {}: activeCount={}, poolSize={}, maximumPoolSize={}",
                         jobId, executor.getActiveCount(), executor.getPoolSize(), executor.getMaximumPoolSize(), e);
