@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <ctime>
+#include <functional>
 #include <limits>
 #include <set>
 #include <unordered_map>
@@ -116,6 +117,71 @@ protected:
                                  const FileMetaPB& after_file, const std::vector<uint64_t>& after_offsets) {
         EXPECT_EQ(before_file.SerializeAsString(), after_file.SerializeAsString());
         EXPECT_EQ(before_offsets, after_offsets);
+    }
+
+    enum class RejectionStatus { kInvalidArgument, kNotSupported, kCorruption };
+
+    void expect_compacted_delvec_rejected(const std::vector<DelvecOutputPage>& pages, RejectionStatus expected_status,
+                                          std::string_view expected_message, int expected_preflight_opens = 0,
+                                          int expected_source_sizes = 0,
+                                          const std::function<void(SyncPoint*)>& configure = {}) {
+        SCOPED_TRACE(expected_message);
+        FileMetaPB output;
+        output.set_name("unchanged.delvec");
+        output.set_size(123);
+        output.set_shared(true);
+        output.set_encryption_meta("unchanged-encryption");
+        std::vector<uint64_t> offsets = {7, 11};
+        const std::string before_file = output.SerializeAsString();
+        const std::vector<uint64_t> before_offsets = offsets;
+
+        int preflight_opens = 0;
+        int source_sizes = 0;
+        int get_del_vec_calls = 0;
+        int range_reads = 0;
+        int writer_opens = 0;
+        int append_chunks = 0;
+        int append_attempts = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+        sync->SetCallBack("write_compacted_delvec_pages:preflight_source_open", [&](void*) { ++preflight_opens; });
+        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_sizes; });
+        sync->SetCallBack("merge_delvecs:before_get_del_vec", [&](void*) { ++get_del_vec_calls; });
+        sync->SetCallBack("write_compacted_delvec_pages:read_chunk_size", [&](void*) { ++range_reads; });
+        sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
+        sync->SetCallBack("append_delvec_bytes_bounded:chunk_size", [&](void*) { ++append_chunks; });
+        sync->SetCallBack("write_delvec_output:append", [&](void*) { ++append_attempts; });
+        if (configure) configure(sync);
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+
+        const Status status =
+                write_compacted_delvec_pages(_tablet_manager.get(), pages, next_id(), next_id(), &output, &offsets);
+        switch (expected_status) {
+        case RejectionStatus::kInvalidArgument:
+            EXPECT_TRUE(status.is_invalid_argument()) << status;
+            break;
+        case RejectionStatus::kNotSupported:
+            EXPECT_TRUE(status.is_not_supported()) << status;
+            break;
+        case RejectionStatus::kCorruption:
+            EXPECT_TRUE(status.is_corruption()) << status;
+            break;
+        }
+        EXPECT_EQ(expected_message, status.message()) << status;
+        EXPECT_EQ(before_file, output.SerializeAsString());
+        EXPECT_EQ(before_offsets, offsets);
+        EXPECT_EQ(expected_preflight_opens, preflight_opens);
+        EXPECT_EQ(expected_source_sizes, source_sizes);
+        EXPECT_EQ(0, get_del_vec_calls);
+        EXPECT_EQ(0, range_reads);
+        EXPECT_EQ(0, writer_opens);
+        EXPECT_EQ(0, append_chunks);
+        EXPECT_EQ(0, append_attempts);
     }
 
     std::shared_ptr<TabletMetadataPB> make_shared_delvec_source(int64_t tablet_id, int segment_count) {
@@ -251,113 +317,68 @@ TEST_F(MetaFileTest, test_add_rowset_sums_composite_stats) {
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_empty_plan_rejected) {
-    FileMetaPB new_delvec_file;
-    new_delvec_file.set_name("unchanged.delvec");
-    std::vector<uint64_t> offsets = {1};
-    const FileMetaPB before_file = new_delvec_file;
-    const std::vector<uint64_t> before_offsets = offsets;
-
-    const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {}, 1, 1, &new_delvec_file, &offsets);
-    EXPECT_TRUE(status.is_invalid_argument()) << status;
-    EXPECT_EQ("compacted delvec page plan is empty", status.message());
-    expect_untouched_output(before_file, before_offsets, new_delvec_file, offsets);
+    expect_compacted_delvec_rejected({}, RejectionStatus::kInvalidArgument, "compacted delvec page plan is empty");
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_plan_shapes_and_filename) {
-    auto expect_invalid = [&](const std::vector<DelvecOutputPage>& pages, std::string_view message) {
-        FileMetaPB output;
-        output.set_name("unchanged.delvec");
-        std::vector<uint64_t> offsets = {9};
-        const FileMetaPB before_file = output;
-        const std::vector<uint64_t> before_offsets = offsets;
-        int preflight_opens = 0;
-        int source_sizes = 0;
-        int writer_opens = 0;
-        auto* sync = SyncPoint::GetInstance();
-        sync->SetCallBack("write_compacted_delvec_pages:preflight_source_open", [&](void*) { ++preflight_opens; });
-        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_sizes; });
-        sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
-        sync->EnableProcessing();
-        DeferOp cleanup([&] {
-            sync->ClearAllCallBacks();
-            sync->DisableProcessing();
-        });
-        const Status status =
-                write_compacted_delvec_pages(_tablet_manager.get(), pages, next_id(), next_id(), &output, &offsets);
-        EXPECT_TRUE(status.is_invalid_argument()) << status;
-        EXPECT_EQ(message, status.message()) << status;
-        EXPECT_EQ(0, preflight_opens);
-        EXPECT_EQ(0, source_sizes);
-        EXPECT_EQ(0, writer_opens);
-        expect_untouched_output(before_file, before_offsets, output, offsets);
-    };
-
-    expect_invalid({}, "compacted delvec page plan is empty");
-    expect_invalid({DelvecOutputPage{}}, "compacted delvec output page must contain exactly one payload");
+    expect_compacted_delvec_rejected({}, RejectionStatus::kInvalidArgument, "compacted delvec page plan is empty");
+    expect_compacted_delvec_rejected({DelvecOutputPage{}}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output page must contain exactly one payload");
     auto both = raw_output_page(next_id(), "both.delvec", 0, 1, 1);
     both.serialized_page = "x";
-    expect_invalid({both}, "compacted delvec output page must contain exactly one payload");
-    expect_invalid({raw_output_page(next_id(), "", 0, 1, 1)}, "compacted delvec raw page filename is empty");
+    expect_compacted_delvec_rejected({both}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output page must contain exactly one payload");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "", 0, 1, 1)}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec raw page filename is empty");
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_signed_and_file_domains) {
-    auto expect_invalid = [&](DelvecOutputPage page, std::string_view message) {
-        FileMetaPB output;
-        std::vector<uint64_t> offsets;
-        int source_sizes = 0;
-        auto* sync = SyncPoint::GetInstance();
-        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_sizes; });
-        sync->EnableProcessing();
-        DeferOp cleanup([&] {
-            sync->ClearAllCallBacks();
-            sync->DisableProcessing();
-        });
-        const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {std::move(page)}, next_id(),
-                                                           next_id(), &output, &offsets);
-        EXPECT_TRUE(status.is_invalid_argument()) << status;
-        EXPECT_EQ(message, status.message()) << status;
-        EXPECT_EQ(0, source_sizes);
-    };
-    expect_invalid(raw_output_page(next_id(), "zero.delvec", 0, 0, 0),
-                   "compacted delvec raw page size must be positive");
-    expect_invalid(raw_output_page(next_id(), "negative.delvec", 0, 1, -1),
-                   "compacted delvec declared source size is negative");
-    expect_invalid(raw_output_page(next_id(), "offset.delvec", uint64_t{std::numeric_limits<int64_t>::max()} + 1, 1,
-                                   std::numeric_limits<int64_t>::max()),
-                   "compacted delvec raw page offset is outside signed int64 domain");
-    expect_invalid(raw_output_page(next_id(), "size.delvec", 0, uint64_t{std::numeric_limits<int64_t>::max()} + 1,
-                                   std::numeric_limits<int64_t>::max()),
-                   "compacted delvec raw page size is outside signed int64 domain");
-    expect_invalid(raw_output_page(next_id(), "end.delvec", std::numeric_limits<int64_t>::max(), 1,
-                                   std::numeric_limits<int64_t>::max()),
-                   "compacted delvec raw page end is outside signed int64 domain");
-    expect_invalid(raw_output_page(next_id(), "undersize.delvec", 2, 3, 4),
-                   "compacted delvec declared source size does not contain page");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "zero.delvec", 0, 0, 0)},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec raw page size must be positive");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "negative.delvec", 0, 1, -1)},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec declared source size is negative");
+    expect_compacted_delvec_rejected(
+            {raw_output_page(next_id(), "offset.delvec", uint64_t{std::numeric_limits<int64_t>::max()} + 1, 1,
+                             std::numeric_limits<int64_t>::max())},
+            RejectionStatus::kInvalidArgument, "compacted delvec raw page offset is outside signed int64 domain");
+    expect_compacted_delvec_rejected(
+            {raw_output_page(next_id(), "size.delvec", 0, uint64_t{std::numeric_limits<int64_t>::max()} + 1,
+                             std::numeric_limits<int64_t>::max())},
+            RejectionStatus::kInvalidArgument, "compacted delvec raw page size is outside signed int64 domain");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "end.delvec", std::numeric_limits<int64_t>::max(), 1,
+                                                      std::numeric_limits<int64_t>::max())},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec raw page end is outside signed int64 domain");
+    expect_compacted_delvec_rejected({raw_output_page(next_id(), "undersize.delvec", 2, 3, 4)},
+                                     RejectionStatus::kInvalidArgument,
+                                     "compacted delvec declared source size does not contain page");
+
+    // The first entry ends exactly at INT64_MAX and is valid. The following malformed entry
+    // supplies a zero-I/O stopping point, proving the near-limit declaration passed preflight.
+    expect_compacted_delvec_rejected(
+            {raw_output_page(next_id(), "near-limit.delvec", std::numeric_limits<int64_t>::max() - 7, 7,
+                             std::numeric_limits<int64_t>::max()),
+             DelvecOutputPage{}},
+            RejectionStatus::kInvalidArgument, "compacted delvec output page must contain exactly one payload");
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_output_overflow) {
-    auto expect_invalid = [&](uint64_t initial, bool skip_int64, std::string_view message) {
-        FileMetaPB output;
-        std::vector<uint64_t> offsets;
-        auto* sync = SyncPoint::GetInstance();
-        sync->SetCallBack("write_compacted_delvec_pages:initial_output_offset",
-                          [&](void* arg) { *static_cast<uint64_t*>(arg) = initial; });
-        sync->SetCallBack("write_compacted_delvec_pages:test_skip_int64_output_limit",
-                          [&](void* arg) { *static_cast<bool*>(arg) = skip_int64; });
-        sync->EnableProcessing();
-        DeferOp cleanup([&] {
-            sync->ClearAllCallBacks();
-            sync->DisableProcessing();
-        });
-        const Status status =
-                write_compacted_delvec_pages(_tablet_manager.get(), {DelvecOutputPage{.serialized_page = "xx"}},
-                                             next_id(), next_id(), &output, &offsets);
-        EXPECT_TRUE(status.is_invalid_argument()) << status;
-        EXPECT_EQ(message, status.message()) << status;
+    auto configure_overflow = [](uint64_t initial, bool skip_int64) {
+        return [=](SyncPoint* sync) {
+            sync->SetCallBack("write_compacted_delvec_pages:initial_output_offset",
+                              [=](void* arg) { *static_cast<uint64_t*>(arg) = initial; });
+            sync->SetCallBack("write_compacted_delvec_pages:test_skip_int64_output_limit",
+                              [=](void* arg) { *static_cast<bool*>(arg) = skip_int64; });
+        };
     };
-    expect_invalid(std::numeric_limits<int64_t>::max(), false,
-                   "compacted delvec output size is outside signed int64 domain");
-    expect_invalid(std::numeric_limits<uint64_t>::max() - 1, true, "compacted delvec output size overflows uint64");
+    expect_compacted_delvec_rejected({DelvecOutputPage{.serialized_page = "xx"}}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output size is outside signed int64 domain", 0, 0,
+                                     configure_overflow(std::numeric_limits<int64_t>::max(), false));
+    expect_compacted_delvec_rejected({DelvecOutputPage{.serialized_page = "xx"}}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec output size overflows uint64", 0, 0,
+                                     configure_overflow(std::numeric_limits<uint64_t>::max() - 1, true));
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_duplicate_declarations) {
@@ -378,13 +399,8 @@ TEST_F(MetaFileTest, test_compacted_delvec_duplicate_declarations) {
     EXPECT_EQ("abcdabcd", copied);
 
     auto conflicting = raw_output_page(source_tablet, filename, 0, 3, 4);
-    FileMetaPB untouched;
-    untouched.set_name("untouched.delvec");
-    std::vector<uint64_t> untouched_offsets = {3};
-    const Status status = write_compacted_delvec_pages(_tablet_manager.get(), {raw, conflicting}, next_id(), next_id(),
-                                                       &untouched, &untouched_offsets);
-    EXPECT_TRUE(status.is_corruption()) << status;
-    EXPECT_EQ("compacted delvec duplicate page declarations disagree on size", status.message());
+    expect_compacted_delvec_rejected({raw, conflicting}, RejectionStatus::kCorruption,
+                                     "compacted delvec duplicate page declarations disagree on size");
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_plaintext_guard_raw_and_mixed) {
@@ -392,13 +408,9 @@ TEST_F(MetaFileTest, test_compacted_delvec_plaintext_guard_raw_and_mixed) {
     encrypted.raw_page->delvec_file.set_encryption_meta("stale");
     for (const auto& pages : std::vector<std::vector<DelvecOutputPage>>{
                  {encrypted}, {encrypted, DelvecOutputPage{.serialized_page = "x"}}}) {
-        FileMetaPB output;
-        std::vector<uint64_t> offsets;
-        const Status status =
-                write_compacted_delvec_pages(_tablet_manager.get(), pages, next_id(), next_id(), &output, &offsets);
-        EXPECT_TRUE(status.is_not_supported()) << status;
-        EXPECT_EQ("encrypted delvec input is unsupported; delvec must be plaintext: encrypted.delvec",
-                  status.message());
+        expect_compacted_delvec_rejected(
+                pages, RejectionStatus::kNotSupported,
+                "encrypted delvec input is unsupported; delvec must be plaintext: encrypted.delvec");
     }
 }
 
@@ -412,54 +424,54 @@ TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycl
     const auto a = raw_output_page(source_a, "a.delvec", 0, 1);
     const auto b = raw_output_page(source_b, "b.delvec", 0, 1);
     const auto same_name_other_tablet = raw_output_page(source_same_name_other_tablet, "a.delvec", 0, 1);
-    int active_readers = 0;
-    int peak_readers = 0;
-    int copy_opens = 0;
-    int source_size_lookups = 0;
-    auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
-        active_readers += *static_cast<int*>(arg);
-        peak_readers = std::max(peak_readers, active_readers);
-        if (*static_cast<int*>(arg) == 1) ++copy_opens;
-    });
-    sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_size_lookups; });
-    sync->SetCallBack("write_compacted_delvec_pages:source_options", [&](void* arg) {
-        EXPECT_TRUE(static_cast<RandomAccessFileOptions*>(arg)->skip_fill_local_cache);
-    });
-    sync->EnableProcessing();
-    DeferOp cleanup([&] {
-        sync->ClearAllCallBacks();
-        sync->DisableProcessing();
-    });
-    FileMetaPB output;
-    std::vector<uint64_t> offsets;
-    ASSERT_OK(
-            write_compacted_delvec_pages(_tablet_manager.get(), {a, a, b, a}, next_id(), next_id(), &output, &offsets));
-    EXPECT_EQ(2, source_size_lookups);
-    EXPECT_EQ(3, copy_opens);
-    EXPECT_EQ(1, peak_readers);
-    EXPECT_EQ(0, active_readers);
+    {
+        int active_readers = 0;
+        int peak_readers = 0;
+        int copy_opens = 0;
+        int source_size_lookups = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+            active_readers += *static_cast<int*>(arg);
+            peak_readers = std::max(peak_readers, active_readers);
+            if (*static_cast<int*>(arg) == 1) ++copy_opens;
+        });
+        sync->SetCallBack("write_compacted_delvec_pages:source_size", [&](void*) { ++source_size_lookups; });
+        sync->SetCallBack("write_compacted_delvec_pages:source_options", [&](void* arg) {
+            EXPECT_TRUE(static_cast<RandomAccessFileOptions*>(arg)->skip_fill_local_cache);
+        });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->ClearAllCallBacks();
+            sync->DisableProcessing();
+        });
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {a, a, b, a}, next_id(), next_id(), &output,
+                                               &offsets));
+        EXPECT_EQ(2, source_size_lookups);
+        EXPECT_EQ(3, copy_opens);
+        EXPECT_EQ(1, peak_readers);
+        EXPECT_EQ(0, active_readers);
 
-    source_size_lookups = 0;
-    ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {a, same_name_other_tablet}, next_id(), next_id(),
-                                           &output, &offsets));
-    EXPECT_EQ(2, source_size_lookups);
+        source_size_lookups = 0;
+        ASSERT_OK(write_compacted_delvec_pages(_tablet_manager.get(), {a, same_name_other_tablet}, next_id(), next_id(),
+                                               &output, &offsets));
+        EXPECT_EQ(2, source_size_lookups);
+    }
 
-    auto expect_resolved_size_rejected = [&](int64_t resolved_size, std::string_view expected_message) {
-        int writer_opens = 0;
-        sync->SetCallBack("write_compacted_delvec_pages:source_size_override",
-                          [&](void* arg) { *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = resolved_size; });
-        sync->SetCallBack("write_compacted_delvec_pages:writer_open", [&](void*) { ++writer_opens; });
-        const Status status =
-                write_compacted_delvec_pages(_tablet_manager.get(), {a}, next_id(), next_id(), &output, &offsets);
-        EXPECT_TRUE(status.is_invalid_argument()) << status;
-        EXPECT_EQ(expected_message, status.message());
-        EXPECT_EQ(0, writer_opens);
-        sync->ClearCallBack("write_compacted_delvec_pages:source_size_override");
-        sync->ClearCallBack("write_compacted_delvec_pages:writer_open");
+    auto configure_resolved_size = [](int64_t resolved_size) {
+        return [=](SyncPoint* sync) {
+            sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [resolved_size](void* arg) {
+                *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = resolved_size;
+            });
+        };
     };
-    expect_resolved_size_rejected(-1, "compacted delvec resolved source size is negative");
-    expect_resolved_size_rejected(0, "compacted delvec resolved source size does not contain page");
+    expect_compacted_delvec_rejected({a}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec resolved source size is negative", 1, 1,
+                                     configure_resolved_size(-1));
+    expect_compacted_delvec_rejected({a}, RejectionStatus::kInvalidArgument,
+                                     "compacted delvec resolved source size does not contain page", 1, 1,
+                                     configure_resolved_size(0));
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_serialized_output_uses_bounded_appends) {
@@ -501,6 +513,8 @@ TEST_F(MetaFileTest, test_finalize_delvec_uses_bounded_appends) {
     std::shared_ptr<DelVector> expected;
     seed.add_dels_as_new_version({deleted}, version, &expected);
     const std::string prefix = expected->save();
+    const std::string padding(3 * (1UL << 20) + 17, 'p');
+    const std::string expected_physical_bytes = prefix + padding;
     builder.append_delvec(expected, /*segment_id=*/1);
 
     std::vector<size_t> append_sizes;
@@ -509,7 +523,8 @@ TEST_F(MetaFileTest, test_finalize_delvec_uses_bounded_appends) {
     sync->SetCallBack("MetaFileBuilder::_finalize_delvec", [&](void* arg) {
         auto* buffer = static_cast<Buffer<uint8_t>*>(arg);
         const size_t original_size = buffer->size();
-        buffer->resize(original_size + 3 * (1UL << 20) + 17);
+        EXPECT_EQ(prefix.size(), original_size);
+        buffer->resize(original_size + padding.size());
         std::fill(buffer->begin() + original_size, buffer->end(), static_cast<uint8_t>('p'));
     });
     sync->SetCallBack("MetaFileBuilder::_finalize_delvec:logical_append_size",
@@ -527,7 +542,16 @@ TEST_F(MetaFileTest, test_finalize_delvec_uses_bounded_appends) {
     for (size_t size : append_sizes) EXPECT_LE(size, 1UL << 20);
     const auto& file = metadata->delvec_meta().version_to_file().at(version);
     EXPECT_EQ(logical_size, file.size());
+    EXPECT_EQ(static_cast<int64_t>(expected_physical_bytes.size()), file.size());
     EXPECT_TRUE(file.encryption_meta().empty());
+    ASSIGN_OR_ABORT(auto reader, fs::new_random_access_file(_tablet_manager->delvec_location(tablet_id, file.name())));
+    ASSIGN_OR_ABORT(auto physical_size, reader->get_size());
+    EXPECT_EQ(expected_physical_bytes.size(), physical_size);
+    ASSIGN_OR_ABORT(auto physical_bytes, reader->read_all());
+    EXPECT_EQ(expected_physical_bytes, physical_bytes);
+    ASSERT_GE(physical_bytes.size(), prefix.size());
+    EXPECT_EQ(prefix, physical_bytes.substr(0, prefix.size()));
+    EXPECT_EQ(padding, physical_bytes.substr(prefix.size()));
     DelVector loaded;
     LakeIOOptions io_options;
     ASSERT_OK(get_del_vec(_tablet_manager.get(), *metadata, /*segment_id=*/1, false, io_options, &loaded));
