@@ -256,8 +256,7 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
     // resident regardless of this group's width -- and it grows as later passes touch more column
     // indexes, so this re-decides every pass: once holding would starve the budget the task stops
     // holding, for this pass and every later one. See there.
-    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint,
-                                         _total_input_segs);
+    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs);
 }
 
 Status VerticalCompactionTask::compact_column_group(bool is_key, int column_group_index, size_t column_group_size,
