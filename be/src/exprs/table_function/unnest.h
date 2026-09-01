@@ -38,12 +38,18 @@ public:
         state->set_processed_rows(arg0->size());
         Columns result;
         if (arg0->has_null() || state->get_is_left_join()) {
-            auto offset_column = col_array->offsets_column();
+            // Read the offsets buffer directly. Going through Datum::get_int32() would reinterpret
+            // any offset in [2^31, 2^32) as a negative value, because Datum keeps unsigned values in
+            // the matching signed slot.
+            const Buffer<uint32_t>& offsets = col_array->offsets_column_raw_ptr()->get_data();
+            const Column* elements = col_array->elements_column_raw_ptr();
+            const size_t row_count = arg0->size();
+
             auto copy_count_column = UInt32Column::create();
             copy_count_column->append(0);
             MutableColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
             uint32_t offset = 0;
-            for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
+            for (size_t row_idx = 0; row_idx < row_count; ++row_idx) {
                 if (arg0->is_null(row_idx)) {
                     if (state->get_is_left_join()) {
                         // to support unnest with null.
@@ -54,19 +60,16 @@ public:
                     }
                     copy_count_column->append(offset);
                 } else {
-                    if (offset_column->get(row_idx + 1).get_int32() == offset_column->get(row_idx).get_int32() &&
-                        state->get_is_left_join()) {
+                    if (offsets[row_idx + 1] == offsets[row_idx] && state->get_is_left_join()) {
                         // to support unnest with null.
                         if (state->is_required()) {
                             unnested_array_elements->append_nulls(1);
                         }
                         offset += 1;
                     } else {
-                        auto length =
-                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
+                        const uint32_t length = offsets[row_idx + 1] - offsets[row_idx];
                         if (state->is_required()) {
-                            unnested_array_elements->append(*(col_array->elements_column()),
-                                                            offset_column->get(row_idx).get_int32(), length);
+                            unnested_array_elements->append(*elements, offsets[row_idx], length);
                         }
                         offset += length;
                     }
