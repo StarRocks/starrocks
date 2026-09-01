@@ -343,14 +343,42 @@ TEST(TestCompression, zlib_corrupted_stream_throws_error) {
     compressAndVerify(CompressionKind_ZLIB, &memStream, CompressionStrategy_COMPRESSION, 1024, 128, *pool, testData,
                       sizeof(testData));
 
-    // Corrupt compressed payload bytes
+    // Corrupt DEFLATE block header structure at offset 3 (after 3-byte ORC chunk header).
+    // Setting bits 1-2 to 0b11 (BTYPE = 3) creates an illegal reserved block type per RFC 1951,
+    // which libdeflate and zlib are guaranteed to reject with bad data / ParseError.
     char* raw = const_cast<char*>(memStream.getData());
-    if (memStream.getLength() > 5) {
-        raw[memStream.getLength() - 3] ^= 0xFF;
+    if (memStream.getLength() > 6) {
+        raw[3] = static_cast<char>(0x07);
+        raw[4] = static_cast<char>(0xFF);
+        raw[5] = static_cast<char>(0xFF);
     }
 
     std::unique_ptr<SeekableInputStream> inputStream(
             new SeekableArrayInputStream(memStream.getData(), memStream.getLength()));
+    std::unique_ptr<SeekableInputStream> decompressStream =
+            createDecompressor(CompressionKind_ZLIB, std::move(inputStream), 128, *pool, nullptr);
+
+    const char* decompressedBuffer;
+    int decompressedSize;
+    EXPECT_THROW(
+            {
+                while (decompressStream->Next(reinterpret_cast<const void**>(&decompressedBuffer), &decompressedSize)) {
+                }
+            },
+            ParseError);
+}
+
+TEST(TestCompression, zlib_truncated_stream_throws_error) {
+    MemoryOutputStream memStream(DEFAULT_MEM_STREAM_SIZE);
+    MemoryPool* pool = getDefaultPool();
+    char testData[] = "test data for truncated stream detection in libdeflate";
+    compressAndVerify(CompressionKind_ZLIB, &memStream, CompressionStrategy_COMPRESSION, 1024, 128, *pool, testData,
+                      sizeof(testData));
+
+    // Truncate stream mid-chunk so available bytes are fewer than chunk header specifies
+    uint64_t truncatedLength = memStream.getLength() > 6 ? 5 : memStream.getLength() / 2;
+    std::unique_ptr<SeekableInputStream> inputStream(
+            new SeekableArrayInputStream(memStream.getData(), truncatedLength));
     std::unique_ptr<SeekableInputStream> decompressStream =
             createDecompressor(CompressionKind_ZLIB, std::move(inputStream), 128, *pool, nullptr);
 
