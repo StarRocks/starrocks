@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -113,18 +114,18 @@ TEST_F(UnnestCoreTest, slow_path_with_nulls_and_empty_arrays) {
 // negative, and passing that to Column::append(src, size_t offset, size_t count) converts
 // modularly to ~1.8e19, breaking the offset + count <= src.size() precondition.
 //
-// Disabled by default: it needs an elements column holding more than 2^31 entries, i.e. about
-// 4GiB of RSS (2GiB of data plus a 2GiB null column). Run it explicitly against a release
-// build, which also avoids the ASAN shadow-memory overhead on those two buffers:
+// Marked SLOW: it needs an elements column holding more than 2^31 entries, i.e. about 4GiB of
+// RSS (2GiB of data plus a 2GiB null column). GROUP_SLOW_TEST_F keeps it out of the default
+// ASAN/Debug runs, where it would also pay the shadow-memory cost on those two buffers, and
+// enables it in release builds:
 //
-//   BUILD_TYPE=Release GTEST_OPTIONS=--gtest_also_run_disabled_tests \
-//     ./run-be-ut.sh --build-target expr_test --module expr_test --without-java-ext \
-//                    --gtest_filter='UnnestCoreTest.DISABLED_offsets_across_int32_boundary'
+//   BUILD_TYPE=Release ./run-be-ut.sh --build-target expr_test --module expr_test \
+//       --without-java-ext --gtest_filter='UnnestCoreTest.SLOW_offsets_across_int32_boundary'
 //
 // The ArrayColumn constructor does not validate offsets against the elements size, so the
 // offsets can start just below 2^31 instead of accumulating there row by row. That keeps the
 // test to four rows, and only the source elements column has to be large.
-TEST_F(UnnestCoreTest, DISABLED_offsets_across_int32_boundary) {
+GROUP_SLOW_TEST_F(UnnestCoreTest, offsets_across_int32_boundary) {
     constexpr uint32_t kFirstOffset = 0x7ffffffeU;
     constexpr uint32_t kRowCount = 4;
     constexpr size_t kElementCount = static_cast<size_t>(kFirstOffset) + kRowCount;
