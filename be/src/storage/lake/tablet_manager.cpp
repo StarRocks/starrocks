@@ -58,11 +58,7 @@
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
-<<<<<<< HEAD
-=======
-#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
->>>>>>> 83a7e8c49f3 ([BugFix] metric: Add a BE metric for NotFound lake tablet metadata reads (#60948))
 #include "storage/tablet_schema_map.h"
 #include "storage/utils.h"
 #include "storage_primitive/tablet_basic_info.h"
