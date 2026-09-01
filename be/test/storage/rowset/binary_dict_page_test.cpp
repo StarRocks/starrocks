@@ -426,6 +426,62 @@ TEST_F(BinaryDictPageTest, TestNextBatchWithFilter) {
     }
 }
 
+// Same scenario as BinaryPlainPageTest.TestNextBatchWithFilterSparseRangeWithNulls for the dictionary decoder: the null
+// flags are page-level and indexed by ordinal, a sparse range must not consume them linearly.
+TEST_F(BinaryDictPageTest, TestNextBatchWithFilterSparseRangeWithNulls) {
+    std::vector<Slice> slices{"a_100", "b_200", "c_300", "d_400", "e_500"};
+
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    options.dict_page_size = 256 * 1024;
+    BinaryDictPageBuilder page_builder(options);
+    size_t count = page_builder.add(reinterpret_cast<const uint8_t*>(slices.data()), slices.size());
+    ASSERT_EQ(slices.size(), count);
+    auto s = page_builder.finish()->build();
+
+    OwnedSlice dict_slice = page_builder.get_dictionary_page()->build();
+    auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice());
+    ASSERT_TRUE(dict_page_decoder->init().ok());
+
+    Slice encoded_data = s.slice();
+    PageFooterPB footer;
+    footer.set_type(DATA_PAGE);
+    footer.mutable_data_page_footer()->set_nullmap_size(0);
+    std::unique_ptr<std::vector<uint8_t>> page = nullptr;
+    Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::DICT_ENCODING, &page, &encoded_data);
+    ASSERT_TRUE(st.ok());
+
+    BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data);
+    page_decoder.set_dict_decoder(dict_page_decoder.get());
+    ASSERT_TRUE(page_decoder.init().ok());
+
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
+    std::vector<const ColumnPredicate*> predicates{predicate.get()};
+
+    // read ordinal 0 and ordinals 3..4, skip 1..2
+    SparseRange<> range;
+    range.add(Range<>(0, 1));
+    range.add(Range<>(3, 5));
+    std::vector<uint8_t> selection(3, 1);
+    std::vector<uint16_t> selected_idx(3);
+
+    // ordinals 1, 2 and 4 are null; a linear walk would hand {0, 1, 1} to the 3 rows read and drop "d_400"
+    uint8_t null_data[] = {0, 1, 1, 0, 1};
+
+    st = page_decoder.next_batch_with_filter(column.get(), range, predicates, null_data, selection.data(),
+                                             selected_idx.data());
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(0, selection[0]);
+    ASSERT_EQ(1, selection[1]);
+    ASSERT_EQ(0, selection[2]);
+
+    ASSERT_EQ(1, column->size());
+    ASSERT_FALSE(down_cast<NullableColumn*>(column.get())->has_null());
+    ASSERT_EQ("d_400", column->get(0).get_slice().to_string());
+}
+
 TEST_F(BinaryDictPageTest, TestReadByRowids) {
     std::vector<std::string> strings;
     std::vector<Slice> slices;
