@@ -146,6 +146,8 @@ struct TGetTabletsInfoResult {
     1: required Status.TStatus status;
     2: optional i64 report_version;
     3: optional map<Types.TTabletId, MasterService.TTablet> tablets;
+    // Keep the FE compaction score metrics up to date when regular tablet reports are disabled.
+    4: optional i64 tablet_max_compaction_score;
 }
 
 service BackendService {
