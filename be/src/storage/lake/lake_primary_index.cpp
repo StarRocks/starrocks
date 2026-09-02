@@ -20,7 +20,7 @@
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
-#include "io/io_profiler.h"
+#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
@@ -481,7 +481,6 @@ Status LakePrimaryIndex::get(const Column& pks, std::vector<uint64_t>* rowids) c
     if (index == nullptr) {
         return Status::InternalError("get on an unloaded lake primary index");
     }
-    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Buffer<Slice> keys;
     ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
     return index->get(pks.size(), vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
@@ -493,7 +492,6 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Colu
     if (index == nullptr) {
         return Status::InternalError("upsert on an unloaded lake primary index");
     }
-    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     // No runner, so the lookup of the replaced rowids completes inside index->upsert(), which
     // appends them to the context. See ParallelUpsertContext.
     ParallelPublishSlot slot;
@@ -517,7 +515,6 @@ Status LakePrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const
     if (index == nullptr) {
         return Status::InternalError("try_replace on an unloaded lake primary index");
     }
-    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Buffer<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
@@ -527,6 +524,47 @@ Status LakePrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const
     }
     ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
     return index->try_replace(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, failed);
+}
+
+Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
+                                ParallelUpsertContext* ctx) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("upsert on an unloaded lake primary index");
+    }
+    const uint32_t n = pks.size();
+    slot->values.reserve(n);
+    slot->old_values.resize(n, NullIndexValue);
+    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, n, &slot->keys));
+    const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
+    for (uint32_t i = 0; i < n; i++) {
+        slot->values.emplace_back(base + i);
+    }
+    return index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
+                         reinterpret_cast<IndexValue*>(slot->old_values.data()), /*stat=*/nullptr, ctx);
+}
+
+Status LakePrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks,
+                                ParallelPublishSlot* slot, ParallelUpsertContext* ctx) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("upsert on an unloaded lake primary index");
+    }
+    const uint32_t n = pks.size();
+    DCHECK_EQ(rowids.size(), n);
+    slot->values.reserve(n);
+    slot->old_values.resize(n, NullIndexValue);
+    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, n, &slot->keys));
+    const uint64_t base = ((uint64_t)rssid) << 32;
+    for (uint32_t i = 0; i < n; i++) {
+        slot->values.emplace_back(base + rowids[i]);
+    }
+    return index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
+                         reinterpret_cast<IndexValue*>(slot->old_values.data()), /*stat=*/nullptr, ctx);
+}
+
+std::string LakePrimaryIndex::to_string() const {
+    return strings::Substitute("LakePrimaryIndex tablet:$0", _tablet_id);
 }
 
 Status LakePrimaryIndex::prepare(const EditVersion& version) {

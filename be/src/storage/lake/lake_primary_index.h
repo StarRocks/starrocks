@@ -196,6 +196,19 @@ public:
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
 
+    // Parallel-publish overloads. The memtable write happens synchronously here; the lookup of the
+    // rowids being replaced is deferred to `ctx`'s runner when it has one, which is why `slot` --
+    // whose pk_column owns the bytes the lookup reads -- must outlive the join. The context receives
+    // the replaced rowids either way; the caller must not append them itself. See
+    // ParallelUpsertContext::defers_lookup().
+    //
+    // The second form addresses an arbitrary subset of rows by absolute rowid: pks[i] lands at
+    // (rssid, rowids[i]).
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx);
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx);
+
     // Replace the entries whose current rss_rowid is at or below |max_src_rssid|, reporting the
     // positions that did not match in |failed|. Used by compaction apply.
     Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
@@ -212,6 +225,8 @@ public:
     Status get_load_status() const;
     std::size_t memory_usage() const;
     size_t key_size() const { return _key_size; }
+
+    std::string to_string() const;
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
@@ -244,6 +259,12 @@ private:
     // make sure at most 1 thread is read or write primary index
     std::shared_timed_mutex _mutex;
 };
+
+// DynamicCache logs its values (see dynamic_cache.h), so the cached type has to be streamable.
+inline std::ostream& operator<<(std::ostream& os, const LakePrimaryIndex& o) {
+    os << o.to_string();
+    return os;
+}
 
 } // namespace lake
 } // namespace starrocks
