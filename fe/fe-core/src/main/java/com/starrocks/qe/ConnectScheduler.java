@@ -139,6 +139,26 @@ public class ConnectScheduler {
     }
 
     /**
+     * Register one connection, but only while graceful shutdown still accepts new requests. The
+     * admission check and the registration share connStatsLock with each other (and with
+     * unregisterConnection/closeAllIdleConnection), so the drain's zero-connection decision can
+     * never observe "no connections" between an accepted check and its registration: a request
+     * that passes the check registers before releasing the lock, and one that arrives after the
+     * accept-new window closes is rejected here without registering.
+     */
+    public Pair<Boolean, String> registerConnectionIfAccepting(ConnectContext ctx) {
+        try {
+            connStatsLock.lock();
+            if (!GracefulExitFlag.shouldAcceptNewRequest()) {
+                return new Pair<>(false, "FE is in graceful shutdown, no longer accepting new requests");
+            }
+            return registerConnection(ctx);
+        } finally {
+            connStatsLock.unlock();
+        }
+    }
+
+    /**
      * Register one connection with its connection id.
      *
      * @param ctx connection context
