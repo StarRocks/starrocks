@@ -77,7 +77,14 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             // if exception happens.
             ConnectContext context = new ConnectContext(connection);
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            context.setConnectionId(connectScheduler.getNextConnectionId());
+            try {
+                context.setConnectionId(connectScheduler.getNextConnectionId());
+            } catch (ConnectScheduler.ConnectionIdExhaustedException e) {
+                LOG.warn("Reject connection because no connection ID is available. remote={}",
+                        connection.getPeerAddress(), e);
+                context.cleanup();
+                return;
+            }
             context.resetConnectionStartTime();
             int connectionId = context.getConnectionId();
             SocketAddress remoteAddr = connection.getPeerAddress();

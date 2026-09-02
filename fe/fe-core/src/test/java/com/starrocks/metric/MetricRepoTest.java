@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
@@ -27,9 +28,12 @@ import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Mock;
@@ -44,6 +48,15 @@ import java.util.List;
 import java.util.Set;
 
 public class MetricRepoTest extends PlanTestBase {
+
+    private ConnectContext createConnectContextForUser(String qualifiedUser, int connectionId) {
+        ConnectContext context = new ConnectContext();
+        context.setQualifiedUser(qualifiedUser);
+        context.setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setConnectionId(connectionId);
+        return context;
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -84,6 +97,28 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(StringUtils.isNotEmpty(json));
         Assertions.assertTrue(json.contains("test_metric"));
         Assertions.assertTrue(json.contains("brpc_pool_numactive"));
+    }
+
+    @Test
+    public void testConnectionTotalUsesLiveMapSize() {
+        ExecuteEnv.setup();
+        ConnectScheduler scheduler = ExecuteEnv.getInstance().getScheduler();
+        ConnectContext original = createConnectContextForUser("metric_user_1", 10001);
+        ConnectContext collision = createConnectContextForUser("metric_user_2", 10001);
+        try {
+            Assertions.assertTrue(scheduler.registerConnection(original).first);
+            Assertions.assertFalse(scheduler.registerConnection(collision).first);
+
+            SimpleCoreMetricVisitor visitor = new SimpleCoreMetricVisitor("starrocks_fe");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(false, false, false, false, false);
+            String output = MetricRepo.getMetric(visitor, params);
+            Assertions.assertEquals(1, scheduler.getCurrentConnectionMap().size());
+            Assertions.assertEquals(1, scheduler.getConnectionNum());
+            Assertions.assertTrue(output.contains("starrocks_fe_connection_total LONG 1"), output);
+        } finally {
+            scheduler.unregisterConnection(collision);
+            scheduler.unregisterConnection(original);
+        }
     }
 
     @Test

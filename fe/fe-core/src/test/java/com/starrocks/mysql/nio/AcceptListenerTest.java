@@ -16,10 +16,13 @@ package com.starrocks.mysql.nio;
 
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
+import org.xnio.channels.AcceptingChannel;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
@@ -31,6 +34,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class AcceptListenerTest {
 
@@ -158,5 +162,23 @@ public class AcceptListenerTest {
         ConnectContext context = mock(ConnectContext.class);
         assertThrows(IOException.class,
                 () -> AcceptListener.applyProxyProtocol(channel, context, "10.0.0.0/8"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testConnectionIdExhaustionClosesConnectionBeforeScheduling() throws Exception {
+        ConnectScheduler scheduler = mock(ConnectScheduler.class);
+        AcceptingChannel<StreamConnection> channel = mock(AcceptingChannel.class);
+        StreamConnection connection = mock(StreamConnection.class);
+        when(channel.accept()).thenReturn(connection);
+        when(connection.getPeerAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 9030));
+        when(scheduler.getNextConnectionId()).thenThrow(
+                new ConnectScheduler.ConnectionIdExhaustedException("no connection ID"));
+
+        new AcceptListener(scheduler).handleEvent(channel);
+
+        verify(connection).close();
+        verify(channel, never()).getWorker();
+        verify(scheduler, never()).registerConnection(any());
     }
 }
