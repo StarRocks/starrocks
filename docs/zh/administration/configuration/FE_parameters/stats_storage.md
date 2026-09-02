@@ -116,6 +116,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在 `dict_thrash_guard_window_sec` 时间窗口内，触发全局字典抖动守卫禁止采集某列全局字典的失效次数阈值。设置为 `0` 可在保持守卫启用的同时禁用次数检查（不会自动禁用任何列）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
 - 引入版本: v4.2.0
 
+
+### `min_max_stats_collect_interval_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 同一列两次 min/max 统计采集之间的最小间隔。min/max 统计（用于将 `min()`/`max()` 折叠为常量、以及构建压缩 group-by key）通过读取每个 segment zone-map 元数据的 `[_META_]` MetaScan 按需采集；若不节流，频繁导入的列会在每次导入后重扫，和全局字典重采集一样争用 segment 元数据缓存。间隔窗口内跳过 min/max 优化而非重新采集——绝不返回陈旧值，因此只影响优化、不影响正确性。设置为 `0` 可禁用节流。
+- 引入版本: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true

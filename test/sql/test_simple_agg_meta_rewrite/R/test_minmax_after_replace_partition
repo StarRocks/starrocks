@@ -1,4 +1,7 @@
 -- name: test_minmax_after_replace_partition
+admin set frontend config ("min_max_stats_collect_interval_sec" = "0");
+-- result:
+-- !result
 DROP DATABASE IF EXISTS test_minmax_replace_partition;
 -- result:
 -- !result
