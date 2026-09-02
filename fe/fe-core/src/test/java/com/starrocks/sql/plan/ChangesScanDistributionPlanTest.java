@@ -14,25 +14,32 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.ChangesScanNode;
+import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -318,6 +325,65 @@ public class ChangesScanDistributionPlanTest extends BookmarkTestBase {
     }
 
     /**
+     * Inverse of testChangesSingleTableColocateAggUsesGroupExecution: a CHANGES scan whose
+     * bookmark range crosses a tablet reshard must never land in a bucket-scheduled fragment, even
+     * on a colocate table. It mixes generations, so it advertises no distribution and numbers no
+     * buckets; the scheduler picks ColocatedBackendSelector for a fragment holding any colocate
+     * node (ExecutionFragment.isColocated), and that selector derives its buckets from the scan's
+     * empty bucket-sequence map -- assigning it no scan range at all on a hash-colocate table, and
+     * failing closed on a range-colocate one. Asserted over the whole fragment holding the scan,
+     * which is the unit the selector is chosen for.
+     */
+    @Test
+    public void testChangesAcrossReshardIsNotColocateScheduled() throws Exception {
+        boolean savedEnableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
+        connectContext.getSessionVariable().setEnableGroupExecution(true);
+
+        String group = "ch_rsx_grp_" + COUNTER.getAndIncrement();
+        String delta = "ch_rsx_delta_" + COUNTER.getAndIncrement();
+        long deltaId = createTable("CREATE TABLE " + delta + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 3 "
+                + "PROPERTIES ('replication_num' = '1', 'colocate_with' = '" + group + "');");
+        OlapTable deltaTable = getTable(deltaId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rsx_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rsx_head");
+        bumpVisibleVersion(deltaTable, 3L);
+        Bookmark base = bm.create(dbId, deltaId, hBase);
+        bumpVisibleVersion(deltaTable, 5L);
+        installNewGeneration(deltaTable, 6, 6L);
+        bumpVisibleVersion(deltaTable, 9L);
+        Bookmark head = bm.create(dbId, deltaId, hHead);
+
+        try {
+            String sql = String.format(
+                    "SELECT k, count(*) FROM %s [_CHANGES_%d_%d_] GROUP BY k",
+                    delta, base.getBookmarkId(), head.getBookmarkId());
+            ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            PlanFragment scanFragment = null;
+            ChangesScanNode scan = null;
+            for (PlanFragment fragment : plan.getFragments()) {
+                scan = findChangesScanNode(fragment.getPlanRoot());
+                if (scan != null) {
+                    scanFragment = fragment;
+                    break;
+                }
+            }
+            assertNotNull(scanFragment, "expected a fragment holding the CHANGES scan:\n"
+                    + plan.getExplainString(TExplainLevel.NORMAL));
+            assertTrue(scan.getDelta().hasReshardedChanges(),
+                    "the installed generation should make the bookmark range cross a reshard");
+            assertFalse(hasColocateNode(scanFragment.getPlanRoot()),
+                    "the fragment holding a generation-crossing CHANGES scan must not be scheduled "
+                            + "bucket-aware:\n" + plan.getExplainString(TExplainLevel.NORMAL));
+        } finally {
+            connectContext.getSessionVariable().setEnableGroupExecution(savedEnableGroupExecution);
+            release(bm, deltaId, base, hBase, head, hHead);
+        }
+    }
+
+    /**
      * Red-line guard: two CHANGES scans over the same table but selecting
      * DIFFERENT partition subsets must not be judged colocate-compatible, so
      * their self-join shuffles; the same query restricted to the SAME partition
@@ -393,6 +459,60 @@ public class ChangesScanDistributionPlanTest extends BookmarkTestBase {
             }
         }
         return null;
+    }
+
+    /**
+     * Simulates a tablet reshard on {@code table}'s only physical partition: installs a new
+     * base-index generation (fresh index id, same meta id) over {@code tabletCount} real StarOS
+     * shards and stamped with the reshard lineage, leaving the old generation installed. Real
+     * shards matter because the scan resolves every tablet's queryable replicas through the
+     * shard-to-worker mapping.
+     */
+    private static void installNewGeneration(OlapTable table, int tabletCount, long takeoverVersion)
+            throws Exception {
+        PhysicalPartition pp = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+        MaterializedIndex oldBase = pp.getLatestBaseIndex();
+        MaterializedIndex newBase = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(),
+                oldBase.getMetaId(), MaterializedIndex.IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        List<Long> shardIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
+                tabletCount, table.getPartitionFilePathInfo(pp.getId()),
+                table.getPartitionFileCacheInfo(pp.getId()), pp.getShardGroupId(),
+                null, Map.of(), WarehouseManager.DEFAULT_RESOURCE);
+        for (Long shardId : shardIds) {
+            newBase.addTablet(new LakeTablet(shardId), null, false);
+        }
+        newBase.setTakeoverVersion(takeoverVersion);
+        newBase.setPredecessorIndexId(oldBase.getId());
+        pp.addMaterializedIndex(newBase, true);
+    }
+
+    private static ChangesScanNode findChangesScanNode(PlanNode root) {
+        if (root instanceof ChangesScanNode changesScanNode) {
+            return changesScanNode;
+        }
+        for (PlanNode child : root.getChildren()) {
+            ChangesScanNode scan = findChangesScanNode(child);
+            if (scan != null) {
+                return scan;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether any node of this fragment is flagged colocate -- the same walk (stopping at exchanges)
+     * {@code ExecutionFragment.isColocated} makes to decide between ColocatedBackendSelector and the
+     * normal one.
+     */
+    private static boolean hasColocateNode(PlanNode root) {
+        if (root instanceof ExchangeNode) {
+            return false;
+        }
+        if (root.isColocate()) {
+            return true;
+        }
+        return root.getChildren().stream().anyMatch(ChangesScanDistributionPlanTest::hasColocateNode);
     }
 
     private static OlapTable getTable(long tableId) {

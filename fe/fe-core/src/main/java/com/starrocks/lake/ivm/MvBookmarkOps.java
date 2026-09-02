@@ -30,6 +30,7 @@ import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkNotFoundException;
 import com.starrocks.lake.bookmark.HolderId;
+import com.starrocks.lake.bookmark.PartitionUnsharingException;
 import com.starrocks.lake.bookmark.ReferenceNotFoundException;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -69,6 +70,11 @@ public final class MvBookmarkOps {
             newId = e.getBookmarkId();
         } catch (LockTimeoutException e) {
             throw new StarRocksConnectorException("acquire bookmark timed out: " + e.getMessage());
+        } catch (PartitionUnsharingException e) {
+            // No bookmark can be taken mid-UNSHARE, so the MV cannot advance incrementally until
+            // the split's compaction finishes. AUTO-mode MVs fall back to a full refresh, which is
+            // the existing behaviour for any untrackable change; strict INCREMENTAL MVs surface it.
+            throw new StarRocksConnectorException("acquire bookmark rejected: " + e.getMessage());
         }
 
         Long vCommitted = resolveCommittedBookmarkId(mvId, baseTable);

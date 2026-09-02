@@ -49,6 +49,7 @@ public class CatalogRecycleBinEditLogTest {
     private static final long TABLE_ID = 40002L;
     private static final long PARTITION_ID = 40003L;
     private static final long PHYSICAL_PARTITION_ID = 40004L;
+    private static final long INDEX_ID = 40005L;
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -392,6 +393,25 @@ public class CatalogRecycleBinEditLogTest {
 
         // 6. Verify partition is still present after exception
         Assertions.assertNotNull(recycleBin.getPartition(PARTITION_ID));
+    }
+
+    @Test
+    public void testEraseMaterializedIndexReplayViaEditLog() throws Exception {
+        // 1. Park a materialized index in the recycle bin
+        RecycleMaterializedIndexInfo info = new RecycleMaterializedIndexInfo(
+                DB_ID, TABLE_ID, PARTITION_ID, PHYSICAL_PARTITION_ID, INDEX_ID, 0);
+        recycleBin.recycleMaterializedIndex(info);
+        Assertions.assertTrue(recycleBin.isMaterializedIndexRecycled(INDEX_ID));
+
+        // 2. Write the erase journal (mirrors what CatalogRecycleBin.eraseMaterializedIndex does after
+        // info.delete() succeeds; the no-op applier keeps the in-memory removal solely on the replay path
+        // below), then drive it through EditLog's replay dispatch rather than calling
+        // replayEraseMaterializedIndex directly.
+        GlobalStateMgr.getCurrentState().getEditLog().logEraseMaterializedIndex(info, wal -> { });
+        UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
+
+        // 3. Verify the replay removed the index from the recycle bin
+        Assertions.assertFalse(recycleBin.isMaterializedIndexRecycled(INDEX_ID));
     }
 
     @Test

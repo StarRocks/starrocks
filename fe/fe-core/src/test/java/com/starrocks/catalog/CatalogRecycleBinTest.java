@@ -715,7 +715,7 @@ public class CatalogRecycleBinTest {
             long physicalPartitionId = 3;
             long indexId = 1001;
             RecycleMaterializedIndexInfo info =
-                    new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, indexId);
+                    new RecycleMaterializedIndexInfo(dbId, tableId, 0, physicalPartitionId, indexId, 0);
 
             // 1. recycle: the index is scheduled for removal (it stays installed on its partition until
             //    erase, so nothing is detached here).
@@ -741,7 +741,7 @@ public class CatalogRecycleBinTest {
 
             // 5. replaying an erase for an already-gone index is null-safe (no NPE).
             recycleBin.replayEraseMaterializedIndex(
-                    new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, indexId));
+                    new RecycleMaterializedIndexInfo(dbId, tableId, 0, physicalPartitionId, indexId, 0));
         } finally {
             Config.partition_recycle_retention_period_secs = savedRetention;
         }
@@ -774,7 +774,7 @@ public class CatalogRecycleBinTest {
         when(olapTable.getPhysicalPartition(physicalPartitionId)).thenReturn(physicalPartition);
         when(physicalPartition.deleteMaterializedIndexByIndexId(indexId)).thenReturn(index);
 
-        new RecycleMaterializedIndexInfo(dbId, tableId, physicalPartitionId, indexId).delete();
+        new RecycleMaterializedIndexInfo(dbId, tableId, 0, physicalPartitionId, indexId, 0).delete();
 
         // Detached: the index was removed from its partition and its tablets dropped from the inverted index.
         Assertions.assertNull(invertedIndex.getTabletMeta(90001L));

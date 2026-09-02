@@ -16,8 +16,10 @@ INSERT INTO rn_t VALUES (2, 20);
 -- Same holder renews its own reference; answers the effective TTL, not "true".
 SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "1800000");
 
--- Non-positive ttl_ms drops the per-reference limit, as in bookmark_create; the answer is the
--- cluster ceiling, -1 here because bookmark_reference_max_ttl_ms is at its default.
+-- Non-positive ttl_ms drops the per-reference limit, as in bookmark_create; the answer is then
+-- the cluster ceiling bookmark_reference_max_ttl_ms, whose default is 3 days. Only when that
+-- ceiling is also non-positive does renew answer -1 (unbounded). Changing the default changes
+-- this expected value.
 SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "0");
 
 -- Restore a bounded lease. The holder reference must already exist; renewal never creates one.

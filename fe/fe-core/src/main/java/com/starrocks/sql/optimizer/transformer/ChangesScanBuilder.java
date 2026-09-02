@@ -28,6 +28,8 @@ import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkScopedTableResolver;
+import com.starrocks.lake.bookmark.IndexEpoch;
+import com.starrocks.lake.bookmark.PhysicalPartitionMeta;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -101,6 +103,19 @@ public final class ChangesScanBuilder {
                 .orElseThrow(() -> new SemanticException(String.format(
                         "bookmark %d not found on table '%s'", range.head(), table.getName())));
         BookmarkChange delta = BookmarkChange.computeChanges(Optional.of(base), head);
+        boolean hasReshardedChanges = delta.hasReshardedChanges();
+        if (hasReshardedChanges && tabletIdHint != null && !tabletIdHint.isEmpty()) {
+            // A TABLET hint names head-generation tablet ids; ChangesDistributionPruneRule copies
+            // it verbatim into selectedTabletIds, which would silently drop every old-generation
+            // tablet of the pre-reshard epochs. Reject rather than return partial changes.
+            //
+            // Deliberately conservative: this also fires when every resharded change takes the
+            // net-change head-only FULL_SCAN, where the hinted head-generation tablets are exactly
+            // what would be read.
+            throw new SemanticException(String.format(
+                    "CHANGES from bookmark %d to %d on table '%s' does not support a TABLET hint: "
+                            + "the range crosses a tablet reshard", range.base(), range.head(), table.getName()));
+        }
         OlapTable scopedTable = BookmarkScopedTableResolver.resolveByChange(table, delta);
 
         validatePartitionHint(scopedTable, partitionNameHint,
@@ -114,11 +129,25 @@ public final class ChangesScanBuilder {
         PartitionNames partitionNames = partitionNameHint == null ? null
                 : new PartitionNames(partitionNameHint.isTemp(),
                         partitionNameHint.getPartitionNames(), partitionNameHint.getPos());
+        // A scan mixing generations has no single bucket layout; advertise no distribution so the
+        // optimizer never relies on colocation for it (correctness over the colocate optimization).
+        //
+        // Net change depends on this too, which is easy to miss because the reason is not colocate.
+        // The fold is MIN/MAX(rv) OVER (PARTITION BY pk), so every row of a key must reach one
+        // fragment instance. The generations bucket the same key differently, so keeping either
+        // layout would leave a key split across instances and fold each part on its own: a key
+        // inserted at an old-generation version and deleted at a new-generation version nets to
+        // nothing, but folded per instance it yields a spurious INSERT and a spurious DELETE, with
+        // no error. Dropping to ANY is what forces the shuffle that makes the fold correct, so this
+        // cannot be narrowed to "keep the distribution when the layouts happen to be compatible"
+        // even though most split children are unchanged carry-overs.
+        DistributionSpec effectiveDistributionSpec = hasReshardedChanges
+                ? DistributionSpec.createAnyDistributionSpec() : distributionSpec;
         return new LogicalChangesScanOperator.Builder()
                 .withOperator(op)
                 .setPartitionNameHints(partitionNames)
                 .setTabletIdHints(tabletIdHint)
-                .setDistributionSpec(distributionSpec)
+                .setDistributionSpec(effectiveDistributionSpec)
                 .build();
     }
 
@@ -136,14 +165,56 @@ public final class ChangesScanBuilder {
         if (change instanceof BookmarkChange.DataChanged dataChanged) {
             long baseVersion = dataChanged.getBasePartition().getVisibleVersion();
             long headVersion = dataChanged.getHeadPartition().getVisibleVersion();
-            if (netChange && baseVersion == PhysicalPartition.PARTITION_INIT_VERSION) {
+            if (emptyAtBaseUnderNetFold(dataChanged.getBasePartition(), netChange)) {
                 // Empty at base under net-fold: the net result equals reading head directly, so read head
                 // rather than diffing the version chain.
                 return Optional.of(fullScanSpec(headVersion));
             }
             return Optional.of(versionChainDiffSpec(baseVersion, headVersion));
         }
+        if (change instanceof BookmarkChange.ReshardedDataChanged resharded) {
+            if (useHeadOnlyFullScan(resharded, netChange)) {
+                // Empty at base under net-fold: reading head's live rows equals the folded diff,
+                // even across the reshard -- and needs only the head generation's tablets.
+                return Optional.of(fullScanSpec(resharded.getHeadPartition().getVisibleVersion()));
+            }
+            // Multi-epoch: the scan node emits one VERSION_CHAIN_DIFF per epoch (buildEpochScanSpec).
+            return Optional.empty();
+        }
         return Optional.empty();
+    }
+
+    /**
+     * True iff a resharded change can be read as a head-only full scan: net-folded with an empty
+     * base, so the folded diff equals head's live rows even across the reshard.
+     */
+    public static boolean useHeadOnlyFullScan(BookmarkChange.ReshardedDataChanged change, boolean netChange) {
+        return emptyAtBaseUnderNetFold(change.getBasePartition(), netChange);
+    }
+
+    /**
+     * True iff a change's base partition is empty and {@code netChange} folding is in effect, so
+     * the folded diff equals head's live rows and a head-only full scan can be read instead of
+     * diffing the version chain.
+     */
+    private static boolean emptyAtBaseUnderNetFold(PhysicalPartitionMeta basePartition, boolean netChange) {
+        return netChange && basePartition.getVisibleVersion() == PhysicalPartition.PARTITION_INIT_VERSION;
+    }
+
+    /**
+     * True iff {@code change} must be read one generation at a time -- a resharded change that the
+     * head-only full-scan shortcut does not cover. Both the scan node (which emits one range per
+     * epoch) and the tablet pruner (which prunes each epoch's index) branch on this, so they must
+     * agree on it.
+     */
+    public static boolean isGenerationCrossing(BookmarkChange.PhysicalPartitionChange change, boolean netChange) {
+        return change instanceof BookmarkChange.ReshardedDataChanged resharded
+                && !useHeadOnlyFullScan(resharded, netChange);
+    }
+
+    /** The scan spec for one epoch of a resharded change: a VERSION_CHAIN_DIFF over its sub-range. */
+    public static TChangeScanSpec buildEpochScanSpec(IndexEpoch epoch) {
+        return versionChainDiffSpec(epoch.baseVersionExclusive(), epoch.headVersionInclusive());
     }
 
     private static TChangeScanSpec fullScanSpec(long headVersion) {

@@ -4405,4 +4405,84 @@ TEST_F(ChangesConnectorTest, test_pk_before_value_read_uses_scan_schema_across_d
     EXPECT_EQ(expected, rows);
 }
 
+// ============================================================================
+// Reshard boundary. A tablet id created by a split / merge at reshard version S
+// has no metadata below S, so its metadata at S records an EMPTY ancestor chain.
+// The two tests below pin the connector behavior a per-generation CDC dispatch
+// relies on: a scan whose base is exactly S terminates at S without reading
+// below it, and a scan misdispatched with base < S fails CLASSIFIED so the
+// frontend treats it as a planning error rather than a transient read failure.
+// ============================================================================
+
+TEST_F(ChangesConnectorTest, test_reshard_new_tablet_base_at_reshard_version_stops_clean) {
+    constexpr int64_t kReshardVersion = 5;
+    constexpr int64_t kInheritedRows = 6;
+    constexpr int64_t kNewRows = 3;
+
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+
+    // The reshard-written metadata at S: rowsets inherited from the pre-reshard
+    // source (stamped at their original versions) and no ancestor chain.
+    std::vector<RowsetSpec> at_reshard = {{.version = 3, .id = 100, .num_rows = kInheritedRows}};
+    publish_metadata(tablet_id, /*version=*/kReshardVersion, schema_id, /*ancestors=*/{}, &at_reshard);
+    // The first normal publish on the new id, whose direct parent is S.
+    std::vector<RowsetSpec> at_head = {
+            {.version = 3, .id = 100, .num_rows = kInheritedRows, .segment_path = at_reshard[0].segment_path},
+            {.version = kReshardVersion + 1, .id = 101, .num_rows = kNewRows}};
+    publish_metadata(tablet_id, /*version=*/kReshardVersion + 1, schema_id, /*ancestors=*/{kReshardVersion}, &at_head);
+
+    auto provider = make_provider(tuple_id, schema_id);
+    auto ds = provider->create_data_source(
+            make_scan_range(tablet_id, /*base=*/kReshardVersion, /*head=*/kReshardVersion + 1));
+    ASSERT_OK(ds->open(_runtime_state.get()));
+    // Exactly the S+1 changes: the walk stops at S, so the inherited rowset -- which
+    // is already present at base -- never surfaces, and the empty chain at S is never
+    // consulted.
+    EXPECT_EQ(kNewRows, drain(ds.get()));
+    ds->close(_runtime_state.get());
+}
+
+TEST_F(ChangesConnectorTest, test_reshard_new_tablet_base_below_reshard_version_is_classified) {
+    constexpr int64_t kReshardVersion = 5;
+    constexpr int64_t kInheritedRows = 6;
+    constexpr int64_t kNewRows = 3;
+
+    // Same fixture as the clean-stop case above, published for both key types: the
+    // classification must not depend on the primary-key CDC gate.
+    auto run = [&](KeysType keys_type) {
+        _keys_type = keys_type;
+        auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+        int64_t schema_id = next_id();
+        int64_t tablet_id = next_id();
+        initialize_tablet(tablet_id, schema_id);
+        std::vector<RowsetSpec> at_reshard = {{.version = 3, .id = 100, .num_rows = kInheritedRows}};
+        publish_metadata(tablet_id, /*version=*/kReshardVersion, schema_id, /*ancestors=*/{}, &at_reshard);
+        std::vector<RowsetSpec> at_head = {
+                {.version = 3, .id = 100, .num_rows = kInheritedRows, .segment_path = at_reshard[0].segment_path},
+                {.version = kReshardVersion + 1, .id = 101, .num_rows = kNewRows}};
+        publish_metadata(tablet_id, /*version=*/kReshardVersion + 1, schema_id, /*ancestors=*/{kReshardVersion},
+                         &at_head);
+
+        // Misdispatch: base sits one version BELOW the reshard, so the walk reaches S
+        // and finds no way down. Contrast test_parent_metadata_read_failure_stays_
+        // unclassified: had the reshard left an inherited ancestor on this id, the walk
+        // would instead read a version that does not exist under it and surface a bare
+        // NotFound, which the frontend reads as transient and retries.
+        auto provider = make_provider(tuple_id, schema_id);
+        auto ds = provider->create_data_source(
+                make_scan_range(tablet_id, /*base=*/kReshardVersion - 1, /*head=*/kReshardVersion + 1));
+        ASSERT_OK(ds->open(_runtime_state.get()));
+        Status st = drain_until_error(ds.get());
+        expect_change_not_trackable(st, "cannot reach base");
+        ds->close(_runtime_state.get());
+    };
+
+    run(DUP_KEYS);
+    run(PRIMARY_KEYS);
+    _keys_type = DUP_KEYS;
+}
+
 } // namespace starrocks::connector

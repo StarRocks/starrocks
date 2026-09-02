@@ -458,7 +458,9 @@ public abstract class TabletReshardJob implements Writable {
                     continue;
                 }
                 GlobalStateMgr.getCurrentState().getRecycleBin().recycleMaterializedIndex(
-                        new RecycleMaterializedIndexInfo(dbId, olapTable.getId(), physicalPartitionId, oldIndexId));
+                        new RecycleMaterializedIndexInfo(dbId, olapTable.getId(),
+                                physicalPartition.getParentId(), physicalPartitionId, oldIndexId,
+                                reshardingPhysicalPartition.getCommitVersion()));
             }
         }
     }

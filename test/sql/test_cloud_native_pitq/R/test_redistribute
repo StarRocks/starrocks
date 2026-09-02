@@ -44,13 +44,17 @@ None
 ALTER TABLE t_range SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
 -- result:
 -- !result
-function: wait_optimize_table_finish()
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 1, "desc": "wait for split tablet job to finish"}
+  result=SELECT count(*) FROM INFORMATION_SCHEMA.tablet_reshard_jobs WHERE DB_NAME = database() AND TABLE_NAME = 't_range' AND JOB_TYPE = 'SPLIT_TABLET' AND JOB_STATE = 'FINISHED';
+  CHECK: int(${result}[-1][0]) >= 1
+} END LOOP
+INSERT INTO t_range VALUES (2, 20);
 -- result:
-None
 -- !result
-SELECT k FROM t_range bk [_BOOKMARK_${range_bookmark_id}_];
+SELECT k FROM t_range bk [_BOOKMARK_${range_bookmark_id}_] ORDER BY k;
 -- result:
-[REGEX]E: \(1064, "Getting analyzing error\. Detail message: bookmark \d+ is no longer queryable: partition '.+' has been redistributed\."\)
+1
 -- !result
 [UC]SELECT bookmark_release("${db[0]}", "t_hash", "${hash_bookmark_id}", "sql_test");
 [UC]SELECT bookmark_release("${db[0]}", "t_range", "${range_bookmark_id}", "sql_test");

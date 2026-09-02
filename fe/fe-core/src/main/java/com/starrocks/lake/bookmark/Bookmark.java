@@ -87,13 +87,22 @@ public final class Bookmark {
      * Build a bookmark from the table's current state. Caller must hold the
      * table read-lock so the partition meta read here stays stable.
      */
-    public static Bookmark fromTable(long dbId, OlapTable table) {
+    public static Bookmark fromTable(long dbId, OlapTable table) throws PartitionUnsharingException {
         long bookmarkId = GlobalStateMgr.getCurrentState().getNextId();
         long bookmarkTimeMs = System.currentTimeMillis();
         Map<Long, Map<Long, PhysicalPartitionMeta>> parts = new HashMap<>();
         for (Partition p : table.getPartitions()) {
             Map<Long, PhysicalPartitionMeta> inner = new HashMap<>();
             for (PhysicalPartition pp : p.getSubPartitions()) {
+                if (pp.isUnsharing()) {
+                    // Writes and queries disagree about the layout for the length of this window,
+                    // so there is no index/version pair a bookmark could record that is right for
+                    // both. See PartitionUnsharingException.
+                    throw new PartitionUnsharingException(String.format(
+                            "cannot create a bookmark while physical partition %d of table %s is "
+                                    + "unsharing after a tablet split; retry once it completes",
+                            pp.getId(), table.getName()));
+                }
                 MaterializedIndex base = pp.getLatestBaseIndex();
                 inner.put(pp.getId(), new PhysicalPartitionMeta(
                         base.getId(), base.getMetaId(),

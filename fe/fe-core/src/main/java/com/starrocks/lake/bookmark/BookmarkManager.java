@@ -86,12 +86,12 @@ public class BookmarkManager extends LeaderDaemon {
     /* ---------- bookmark lifecycle ---------- */
 
     public Bookmark create(long dbId, long tableId, BookmarkHolder holder)
-            throws AlreadyAtLatestException, LockTimeoutException {
+            throws AlreadyAtLatestException, LockTimeoutException, PartitionUnsharingException {
         return create(dbId, tableId, holder, -1L);
     }
 
     public Bookmark create(long dbId, long tableId, BookmarkHolder holder, long ttlMs)
-            throws AlreadyAtLatestException, LockTimeoutException {
+            throws AlreadyAtLatestException, LockTimeoutException, PartitionUnsharingException {
         Preconditions.checkNotNull(holder);
         trackerMapLock.readLock().lock();
         boolean success = false;

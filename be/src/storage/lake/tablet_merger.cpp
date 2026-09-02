@@ -3196,6 +3196,12 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     new_tablet_metadata->clear_orphan_files();
     new_tablet_metadata->clear_prev_garbage_version();
     new_tablet_metadata->set_cumulative_point(0);
+    // Note for the OTHER caller: build_parent_tablet_metadata in service/service_be/lake_service.cpp
+    // reuses merge_tablet to synthesize a query-only parent alias (unreachable today -- nothing
+    // populates parent_tablet_publish_infos), so that alias also lands here with an EMPTY ancestor
+    // chain, diverging from its own single-child branch, which copies the child's chain verbatim. A
+    // parent view that ever needs to serve CHANGES must record its own chain, not rely on either.
+    tablet_reshard_helper::reset_cdc_carryover_for_new_tablet(new_tablet_metadata.get());
 
     // Reconcile the async vector-index build watermark to the MIN over all merge sources so the
     // build task never skips another source's unbuilt rowsets (see the helper for the invariant).

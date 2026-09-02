@@ -28,6 +28,7 @@ import com.starrocks.lake.bookmark.BookmarkLogEntry;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
+import com.starrocks.lake.bookmark.IndexEpoch;
 import com.starrocks.lake.bookmark.PhysicalPartitionMeta;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -53,6 +54,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalChangesScanOperator
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TChangeDerivationMode;
+import com.starrocks.thrift.TChangeScanSpec;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -246,6 +249,91 @@ public class ChangesScanBuilderTest extends BookmarkTestBase {
                 base.getBookmarkId(), head.getBookmarkId(), tableName, shiftedPhysicalId);
         assertTrue(ex.getMessage().contains(expected),
                 "expected message to contain '" + expected + "', got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testReshardedSpecShapes() {
+        // Two-generation reshard chain: index 100 (metaId 50), then index 101 (metaId 50) taking
+        // over at version 20 -- the same shape ReshardEpochResolverTest/BookmarkChangeTest use.
+        MaterializedIndex secondGeneration = new MaterializedIndex(101, 50, MaterializedIndex.IndexState.NORMAL, 7);
+        List<IndexEpoch> epochs = List.of(new IndexEpoch(secondGeneration, 5, 35));
+        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 0L);
+
+        // base at the empty initial version: net-fold short-circuits to a head-only FULL_SCAN even
+        // across the reshard.
+        PhysicalPartitionMeta emptyBaseMeta =
+                new PhysicalPartitionMeta(100, 50, PhysicalPartition.PARTITION_INIT_VERSION, 0L);
+        BookmarkChange.ReshardedDataChanged emptyBaseChange =
+                new BookmarkChange.ReshardedDataChanged(1L, 10L, emptyBaseMeta, headMeta, epochs);
+        assertTrue(ChangesScanBuilder.useHeadOnlyFullScan(emptyBaseChange, true));
+        assertFalse(ChangesScanBuilder.isGenerationCrossing(emptyBaseChange, true));
+        // Without the net-change fold the shortcut does not apply, so even an empty base crosses.
+        assertTrue(ChangesScanBuilder.isGenerationCrossing(emptyBaseChange, false));
+        TChangeScanSpec shortcut = ChangesScanBuilder.buildPartitionScanSpec(emptyBaseChange, true).orElseThrow();
+        assertEquals(TChangeDerivationMode.FULL_SCAN, shortcut.getDerivation_mode());
+        assertEquals(35, shortcut.getHead_version());
+
+        // base at a non-empty version: no single spec -- the scan node builds one per epoch.
+        PhysicalPartitionMeta nonEmptyBaseMeta = new PhysicalPartitionMeta(100, 50, 5, 0L);
+        BookmarkChange.ReshardedDataChanged nonEmptyBaseChange =
+                new BookmarkChange.ReshardedDataChanged(1L, 10L, nonEmptyBaseMeta, headMeta, epochs);
+        assertFalse(ChangesScanBuilder.useHeadOnlyFullScan(nonEmptyBaseChange, true));
+        assertTrue(ChangesScanBuilder.isGenerationCrossing(nonEmptyBaseChange, true));
+        assertTrue(ChangesScanBuilder.buildPartitionScanSpec(nonEmptyBaseChange, true).isEmpty());
+
+        // Neither a plain data change nor an absent change crosses generations.
+        assertFalse(ChangesScanBuilder.isGenerationCrossing(
+                new BookmarkChange.DataChanged(1L, 10L, nonEmptyBaseMeta, headMeta), false));
+        assertFalse(ChangesScanBuilder.isGenerationCrossing(null, false));
+
+        TChangeScanSpec epochSpec = ChangesScanBuilder.buildEpochScanSpec(new IndexEpoch(secondGeneration, 5, 19));
+        assertEquals(TChangeDerivationMode.VERSION_CHAIN_DIFF, epochSpec.getDerivation_mode());
+        assertEquals(5, epochSpec.getBase_version());
+        assertEquals(19, epochSpec.getHead_version());
+    }
+
+    @Test
+    public void testBuildRejectsTabletHintOnReshardedDelta() throws Exception {
+        String tableName = "dup_reshhint_" + TABLE_COUNTER.getAndIncrement();
+        long tableId = createDupTable(tableName);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+        PhysicalPartition pp = table.getPartitions().iterator().next().getSubPartitions().iterator().next();
+        MaterializedIndex baseGeneration = pp.getLatestBaseIndex();
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("resh_hint_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("resh_hint_head");
+        bumpVisibleVersion(table, 5L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+
+        // Simulate a tablet reshard: install a new generation on the same base-index meta id,
+        // taking over from the original generation at version 20.
+        MaterializedIndex newGeneration = new MaterializedIndex(
+                GlobalStateMgr.getCurrentState().getNextId(), baseGeneration.getMetaId(),
+                MaterializedIndex.IndexState.NORMAL, 7);
+        newGeneration.setTakeoverVersion(20);
+        newGeneration.setPredecessorIndexId(baseGeneration.getId());
+        pp.addMaterializedIndex(newGeneration, true);
+        pp.setVisibleVersion(35L, System.currentTimeMillis());
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> ChangesScanBuilder.buildScanOperator(
+                            table,
+                            new BookmarkRange(base.getBookmarkId(), head.getBookmarkId()),
+                            new HashMap<>(),
+                            new HashMap<>(),
+                            List.of(), null, List.of(999L), null, false));
+            assertTrue(ex.getMessage().contains("does not support a TABLET hint")
+                            && ex.getMessage().contains("crosses a tablet reshard"),
+                    "actual: " + ex.getMessage());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
     }
 
     @Test

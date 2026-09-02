@@ -313,6 +313,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
     // bookkeeping, holding no table lock).
     protected void eraseMaterializedIndex(long currentTimeMs) {
         long expireMs = Math.max(Config.partition_recycle_retention_period_secs, 1L) * 1000L;
+        // Read once so a single cycle cannot straddle two values of this mutable config.
+        boolean bookmarkHoldIsBounded = Config.bookmark_reference_max_ttl_ms > 0;
         List<RecycleMaterializedIndexInfo> erasable = new ArrayList<>();
         synchronized (this) {
             for (Map.Entry<Long, RecycleMaterializedIndexInfo> entry : idToIndex.entrySet()) {
@@ -325,6 +327,32 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
                 }
                 if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                         .isTableSafeToDeleteTablet(info.getTableId())) {
+                    continue;
+                }
+                // A live bookmark anchoring a pre-reshard version still needs this generation's
+                // tablets for PITQ / CHANGES reads, so hold the erase while one exists.
+                // supersededAtVersion == 0 marks a pre-upgrade entry with no recorded watermark --
+                // never gated. Leader-only decision: followers replay the journaled erase
+                // unconditionally, so leader and replay cannot diverge.
+                //
+                // The hold is bounded by bookmark_reference_max_ttl_ms rather than by a second
+                // reshard-specific cap: once the cleanup sweep reclaims a leaked or stale
+                // reference, no bookmark anchors the pre-reshard version any more and this gate
+                // stops holding. That bound covers every bookmark consumer instead of this one.
+                //
+                // A non-positive ceiling disables it, and the default way to take a reference
+                // (BookmarkManager.create without a per-reference ttl) asks for no lifetime of its
+                // own, so Reference.effectiveTtlMs answers -1 and the sweep never reclaims it. With
+                // nothing left to bound the hold, we do not hold at all: on a table that keeps
+                // auto-splitting, one leaked bookmark would otherwise pin every generation it ever
+                // parked. Erasing instead restores exactly the pre-feature behavior, and a read
+                // whose generation is gone fails closed to a full refresh -- incrementality is lost,
+                // results are not. Deliberately coarse: a reference carrying its own positive ttl
+                // does still expire under a disabled ceiling, but distinguishing that here would
+                // need the fence API to report per-reference lifetimes, and erring toward erasing
+                // costs a refresh while erring toward holding leaks storage without limit.
+                if (info.getSupersededAtVersion() > 0 && bookmarkHoldIsBounded
+                        && isReshardIndexAnchoredByBookmark(info)) {
                     continue;
                 }
                 erasable.add(info);
@@ -353,6 +381,17 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             LOG.info("Erased materialized index {} from recycle bin. dbId: {} tableId: {}", indexId,
                     info.getDbId(), info.getTableId());
         }
+    }
+
+    // Whether any live bookmark on the table anchors a version older than the parked generation's
+    // supersede watermark. Lock-safe from the erase loop: the fence API takes only bookmark tracker
+    // read locks, and eraseMaterializedIndex holds no catalog lock.
+    static boolean isReshardIndexAnchoredByBookmark(RecycleMaterializedIndexInfo info) {
+        return GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .getPhysicalPartitionFenceVersion(info.getDbId(), info.getTableId(),
+                        info.getLogicalPartitionId(), info.getPhysicalPartitionId())
+                .map(v -> v < info.getSupersededAtVersion())
+                .orElse(false);
     }
 
     public void replayEraseMaterializedIndex(RecycleMaterializedIndexInfo info) {

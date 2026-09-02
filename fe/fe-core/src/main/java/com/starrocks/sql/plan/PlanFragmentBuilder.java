@@ -3258,6 +3258,22 @@ public class PlanFragmentBuilder {
 
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateScanChildInFragment(PlanNode node) {
+            // A CHANGES scan whose delta crosses a tablet reshard mixes generations, so it
+            // advertises no distribution and numbers no buckets: colocate dispatch has no bucket
+            // sequence to align on (range colocate throws, hash colocate would assign no scan range
+            // at all). The scheduler picks its backend selector per fragment, so such a scan
+            // anywhere in the fragment vetoes colocate for the WHOLE fragment; answering only for
+            // the crossing leaf would let an OR over siblings hand the fragment's colocate answer
+            // to a colocate sibling and drag the crossing scan into bucket-aware dispatch anyway.
+            // No colocate scan can actually share the fragment today -- that needs an exchange-free
+            // colocate arrangement, which the ANY distribution spec ChangesScanBuilder forces on a
+            // crossing scan never satisfies -- so the veto is what keeps this guard correct on its
+            // own rather than by that coincidence. Conservative for a delta read as a head-only
+            // full scan, matching the same condition that forces the spec to ANY.
+            return !containsGenerationCrossingChangesScan(node) && hasColocateScanChild(node);
+        }
+
+        private boolean hasColocateScanChild(PlanNode node) {
             if (node instanceof OlapScanNode || node instanceof ChangesScanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
                 if (colocateIndex.isColocateTable(((AbstractOlapTableScanNode) node).getOlapTable().getId())) {
@@ -3274,9 +3290,24 @@ public class PlanFragmentBuilder {
             }
             boolean hasColocateChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasColocateChild |= hasColocateScanChildInFragment(child);
+                hasColocateChild |= hasColocateScanChild(child);
             }
             return hasColocateChild;
+        }
+
+        /**
+         * Whether this fragment (the subtree down to its exchange boundaries) holds a CHANGES scan
+         * whose bookmark range crosses a tablet reshard.
+         */
+        private boolean containsGenerationCrossingChangesScan(PlanNode node) {
+            if (node instanceof ChangesScanNode changesScanNode
+                    && changesScanNode.getDelta().hasReshardedChanges()) {
+                return true;
+            }
+            if (node instanceof ExchangeNode) {
+                return false;
+            }
+            return node.getChildren().stream().anyMatch(this::containsGenerationCrossingChangesScan);
         }
 
         public void rewriteAggDistinctFirstStageFunction(List<FunctionCallExpr> aggregateExprList) {

@@ -14,6 +14,8 @@
 
 package com.starrocks.lake.bookmark;
 
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.bookmark.BookmarkChange.ChangeType;
 import com.starrocks.lake.bookmark.BookmarkChange.DataChanged;
@@ -21,21 +23,25 @@ import com.starrocks.lake.bookmark.BookmarkChange.IndexReplaced;
 import com.starrocks.lake.bookmark.BookmarkChange.PartitionAdded;
 import com.starrocks.lake.bookmark.BookmarkChange.PartitionDropped;
 import com.starrocks.lake.bookmark.BookmarkChange.PhysicalPartitionChange;
+import com.starrocks.lake.bookmark.BookmarkChange.ReshardedDataChanged;
 import com.starrocks.lake.bookmark.BookmarkChange.TabletReshard;
 import com.starrocks.sql.optimizer.transformer.ChangesScanBuilder;
 import com.starrocks.thrift.TChangeDerivationMode;
 import com.starrocks.thrift.TChangeScanSpec;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,6 +69,19 @@ public class BookmarkChangeTest {
         List<PhysicalPartitionChange> out = new ArrayList<>();
         change.getChanges().values().forEach(out::addAll);
         return out;
+    }
+
+    /** Physical partition id 10 with a two-generation reshard chain: index 100 (metaId 50), then
+     * index 101 (metaId 50) taking over at version 20 with predecessor 100. */
+    private static PhysicalPartition buildPartitionWithGenerations() {
+        PhysicalPartition pp = new PhysicalPartition(10, 1);
+        MaterializedIndex g0 = new MaterializedIndex(100, 50, MaterializedIndex.IndexState.NORMAL, 7);
+        pp.createRollupIndex(g0);
+        MaterializedIndex g1 = new MaterializedIndex(101, 50, MaterializedIndex.IndexState.NORMAL, 7);
+        g1.setTakeoverVersion(20);
+        g1.setPredecessorIndexId(100);
+        pp.addMaterializedIndex(g1, false);
+        return pp;
     }
 
     @Test
@@ -248,5 +267,47 @@ public class BookmarkChangeTest {
         IndexReplaced ir = assertInstanceOf(IndexReplaced.class,
                 flatten(BookmarkChange.computeChanges(Optional.of(base), irHead)).get(0));
         assertTrue(ChangesScanBuilder.buildPartitionScanSpec(ir, true).isEmpty());
+    }
+
+    @Test
+    public void testResolveReshardsMakesTrackable() {
+        PhysicalPartition pp = buildPartitionWithGenerations();
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getPhysicalPartition(10L)).thenReturn(pp);
+
+        PhysicalPartitionMeta baseMeta = new PhysicalPartitionMeta(100, 50, 5, 1000);
+        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 2000);
+        Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
+        changes.put(1L, List.of(new TabletReshard(1L, 10L, baseMeta, headMeta)));
+        BookmarkChange change = new BookmarkChange(OptionalLong.of(1), 2, changes);
+
+        assertFalse(change.isTrackable());
+        BookmarkChange resolved = change.resolveReshards(table);
+        assertTrue(resolved.isTrackable());
+        assertTrue(resolved.hasReshardedChanges());
+        ReshardedDataChanged r = assertInstanceOf(ReshardedDataChanged.class,
+                resolved.getChange(1L, 10L).orElseThrow());
+        assertEquals(2, r.getEpochs().size()); // (5,19] on gen 100 and (20,35] on gen 101
+        assertEquals(headMeta, r.getHeadPartition());
+    }
+
+    @Test
+    public void testResolveReshardsKeepsUnresolvable() {
+        // Partition missing from the table -> the TabletReshard entry survives unresolved.
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getPhysicalPartition(10L)).thenReturn(null);
+
+        PhysicalPartitionMeta baseMeta = new PhysicalPartitionMeta(100, 50, 5, 1000);
+        PhysicalPartitionMeta headMeta = new PhysicalPartitionMeta(101, 50, 35, 2000);
+        TabletReshard reshard = new TabletReshard(1L, 10L, baseMeta, headMeta);
+        Map<Long, List<PhysicalPartitionChange>> changes = new HashMap<>();
+        changes.put(1L, List.of(reshard));
+        BookmarkChange change = new BookmarkChange(OptionalLong.of(1), 2, changes);
+
+        BookmarkChange resolved = change.resolveReshards(table);
+        assertFalse(resolved.isTrackable());
+        assertFalse(resolved.hasReshardedChanges());
+        assertSame(reshard, resolved.getChange(1L, 10L).orElseThrow());
+        assertTrue(resolved.getChange(99L, 99L).isEmpty());
     }
 }

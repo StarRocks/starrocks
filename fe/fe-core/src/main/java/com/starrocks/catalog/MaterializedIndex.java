@@ -112,6 +112,21 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     @SerializedName(value = "shardGroupId")
     private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
 
+    // The partition version at which this index generation became the serving generation -- the
+    // reshard (tablet split/merge) commit version that installed it. 0 for a generation created
+    // with the partition and for any index not produced by a reshard. The retiring generation's
+    // last data version is takeoverVersion - 1; only reshard jobs set this, so a generation
+    // without it can never be resolved as a reshard epoch (see ReshardEpochResolver).
+    @SerializedName(value = "takeoverVersion")
+    private long takeoverVersion = 0;
+
+    // The index generation this reshard-created generation superseded (0 = none). Together with
+    // takeoverVersion this is the durable lineage link ReshardEpochResolver walks; a dangling
+    // pointer (predecessor erased from the partition) fails resolution closed, which the
+    // generation-id list alone cannot express (erase removes the id from the list).
+    @SerializedName(value = "predecessorIndexId")
+    private long predecessorIndexId = 0;
+
     // If this is an index of LakeTable and the index state is SHADOW, all transactions
     // whose txn id is less than 'visibleTxnId' will ignore this index when sending
     // PublishVersionRequest requests to BE nodes.
@@ -197,6 +212,22 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     public long getShardGroupId() {
         return shardGroupId;
+    }
+
+    public void setTakeoverVersion(long takeoverVersion) {
+        this.takeoverVersion = takeoverVersion;
+    }
+
+    public long getTakeoverVersion() {
+        return takeoverVersion;
+    }
+
+    public void setPredecessorIndexId(long predecessorIndexId) {
+        this.predecessorIndexId = predecessorIndexId;
+    }
+
+    public long getPredecessorIndexId() {
+        return predecessorIndexId;
     }
 
     public List<Tablet> getTablets() {
@@ -361,6 +392,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         buffer.append("index meta id: ").append(metaId).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
+        buffer.append("takeoverVersion: ").append(takeoverVersion).append("; ");
+        buffer.append("predecessorIndexId: ").append(predecessorIndexId).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
         buffer.append("visibleTxnId: ").append(visibleTxnId).append("; ");
         buffer.append("tablets size: ").append(tablets.size()).append("; ");

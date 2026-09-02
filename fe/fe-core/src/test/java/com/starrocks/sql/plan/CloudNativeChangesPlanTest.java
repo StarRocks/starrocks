@@ -14,28 +14,46 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.Range;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkTestBase;
+import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.ChangesScanNode;
+import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TChangeDerivationMode;
 import com.starrocks.thrift.TChangeScanSpec;
+import com.starrocks.thrift.TChangesScanRange;
+import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,6 +64,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -767,6 +786,522 @@ public class CloudNativeChangesPlanTest extends BookmarkTestBase {
         } finally {
             bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
             bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * A bookmark range crossing two tablet reshards must be read one generation at a time: the
+     * scan emits a range for every generation's tablets, each carrying that generation's own
+     * version sub-range. The reshard commit version belongs to neither side, so the retiring
+     * generation's slice ends one version below the takeover.
+     */
+    @Test
+    public void testChangesAcrossReshardEmitsPerEpochRanges() throws Exception {
+        String name = "ch_rs_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rs_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rs_head");
+        bumpVisibleVersion(table, 3L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        List<Long> gen0Tablets = currentGenerationTabletIds(table);
+
+        // Two successive reshards: gen1 takes over at 6, gen2 at 9.
+        bumpVisibleVersion(table, 5L);
+        List<Long> gen1Tablets = installNewGeneration(table, 8, 6L);
+        bumpVisibleVersion(table, 8L);
+        List<Long> gen2Tablets = installNewGeneration(table, 2, 9L);
+        bumpVisibleVersion(table, 12L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            Map<Long, TChangeScanSpec> specByTablet = scanSpecsByTablet(changesScanOf(sql));
+
+            assertEquals(gen0Tablets.size() + gen1Tablets.size() + gen2Tablets.size(), specByTablet.size(),
+                    "every generation's tablets must get a scan range: " + specByTablet.keySet());
+            assertEpochSpecs(specByTablet, gen0Tablets, 3L, 5L);
+            assertEpochSpecs(specByTablet, gen1Tablets, 6L, 8L);
+            assertEpochSpecs(specByTablet, gen2Tablets, 9L, 12L);
+
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertTrue(plan.contains("tabletRatio=14/14"),
+                    "tabletRatio should count every generation's tablets:\n" + plan);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * Silent-filter hazard: with an equality predicate on the distribution column, tablet pruning
+     * must run per generation and keep the matching OLD-generation tablet too. Pruning only the
+     * head generation would leave the pre-reshard epoch with no surviving tablet, silently
+     * dropping its changes from an otherwise successful query.
+     */
+    @Test
+    public void testChangesAcrossReshardPrunesEveryGeneration() throws Exception {
+        String name = "ch_rsp_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rsp_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rsp_head");
+        bumpVisibleVersion(table, 3L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        List<Long> gen0Tablets = currentGenerationTabletIds(table);
+
+        bumpVisibleVersion(table, 5L);
+        List<Long> gen1Tablets = installNewGeneration(table, 8, 6L);
+        bumpVisibleVersion(table, 9L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_] WHERE k = 7",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            Map<Long, TChangeScanSpec> specByTablet = scanSpecsByTablet(changesScanOf(sql));
+
+            // A bucket-key equality keeps one tablet per generation: each generation hashes the
+            // value over its own bucket count (4 before the reshard, 8 after).
+            assertEquals(2, specByTablet.size(),
+                    "bucket-key equality should keep one tablet per generation: " + specByTablet.keySet());
+            assertEquals(1, gen0Tablets.stream().filter(specByTablet::containsKey).count(),
+                    "the matching pre-reshard tablet must survive pruning: " + specByTablet.keySet());
+            assertEquals(1, gen1Tablets.stream().filter(specByTablet::containsKey).count(),
+                    "the matching post-reshard tablet must survive pruning: " + specByTablet.keySet());
+            assertEpochSpecs(specByTablet, gen0Tablets, 3L, 5L);
+            assertEpochSpecs(specByTablet, gen1Tablets, 6L, 9L);
+
+            // EXPLAIN reports the pruning: 1 of 4 pre-reshard plus 1 of 8 post-reshard tablets.
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            assertEquals("2/12", tabletRatioOf(plan),
+                    "a crossing scan should report the pruned count over every generation's tablets:\n" + plan);
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * A scan mixing generations has no single bucket layout, so it advertises no distribution and
+     * builds no bucket-sequence map: the colocation dispatch map stays empty instead of tripping
+     * over an unnumbered old-generation tablet.
+     */
+    @Test
+    public void testChangesAcrossReshardBuildsNoBucketSeq() throws Exception {
+        String name = "ch_rsb_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rsb_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rsb_head");
+        bumpVisibleVersion(table, 3L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+
+        bumpVisibleVersion(table, 5L);
+        installNewGeneration(table, 8, 6L);
+        bumpVisibleVersion(table, 9L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            ChangesScanNode scan = changesScanOf(sql);
+            assertFalse(scan.getScanRangeLocations(0).isEmpty(), "the crossing scan should emit ranges");
+            assertTrue(scan.getBucketSeqToLocations().isEmpty(),
+                    "a generation-crossing scan must not build a bucket-sequence map: "
+                            + scan.getBucketSeqToLocations());
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * Net-change fold with an empty base folds to head's live rows even across a reshard, so the
+     * scan stays on the single-spec FULL_SCAN path over the head generation only -- no
+     * old-generation tablets, no per-epoch diff.
+     */
+    @Test
+    public void testChangesAcrossReshardNetChangeReadsHeadOnly() throws Exception {
+        String name = "ch_rsn_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rsn_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rsn_head");
+        // Base at the partition's initial (empty) version: the precondition for the head-only fold.
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        List<Long> gen0Tablets = currentGenerationTabletIds(table);
+
+        bumpVisibleVersion(table, 5L);
+        List<Long> gen1Tablets = installNewGeneration(table, 8, 6L);
+        bumpVisibleVersion(table, 9L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        boolean savedNetChange = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            Map<Long, TChangeScanSpec> specByTablet = scanSpecsByTablet(changesScanOf(sql));
+
+            assertEquals(Set.copyOf(gen1Tablets), specByTablet.keySet(),
+                    "the head-only fold must read exactly the head generation's tablets");
+            assertTrue(gen0Tablets.stream().noneMatch(specByTablet::containsKey),
+                    "no pre-reshard tablet may be read: " + specByTablet.keySet());
+            for (TChangeScanSpec spec : specByTablet.values()) {
+                assertEquals(TChangeDerivationMode.FULL_SCAN, spec.getDerivation_mode());
+                assertEquals(9L, spec.getHead_version());
+                assertFalse(spec.isSetBase_version(), "FULL_SCAN range must not carry a base_version");
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(savedNetChange);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * A resolved reshard whose epochs are all empty crosses nothing. base = S-1 and head = S for a
+     * split with no load in between collapses both sub-ranges, so the scan reads no tablet at all.
+     * The protections that exist for a generation-crossing scan -- ANY distribution, the fragment
+     * colocate veto, and rejecting a TABLET hint -- must not fire for it; rejecting a hint here
+     * told the user "the range crosses a tablet reshard" about a range that crosses nothing.
+     */
+    @Test
+    public void testEmptyEpochReshardIsNotTreatedAsCrossing() throws Exception {
+        String name = "ch_rse_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) DUPLICATE KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rse_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rse_head");
+        // Base at S-1, then the split takes over at S with no load in between: (S-1, S-1] and
+        // (S, S] are both empty, so the resolved change carries no epochs. The partition version
+        // has to advance to S with the takeover -- a reshard commits at S -- or the generation is
+        // installed ahead of the version and the delta does not resolve at all.
+        bumpVisibleVersion(table, 5L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        List<Long> gen1Tablets = installNewGeneration(table, 4, 6L);
+        bumpVisibleVersion(table, 6L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            assertTrue(scanSpecsByTablet(changesScanOf(sql)).isEmpty(),
+                    "an empty-epoch reshard must produce no scan ranges");
+
+            // The hint names a head-generation tablet, which is what the scan would read if it read
+            // anything. It must be accepted rather than rejected as generation-crossing.
+            String hinted = String.format("SELECT k, v FROM %s TABLET(%d) [_CHANGES_%d_%d_]",
+                    name, gen1Tablets.get(0), base.getBookmarkId(), head.getBookmarkId());
+            assertTrue(scanSpecsByTablet(changesScanOf(hinted)).isEmpty(),
+                    "a TABLET hint must be accepted for a range that crosses nothing");
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * Net change on a PK table across a reshard must shuffle. The fold is
+     * MIN/MAX(rv) OVER (PARTITION BY pk), so every row of a key has to reach one fragment instance;
+     * the two generations bucket the same key differently, so the ANY-distribution downgrade is
+     * what forces the exchange that makes the fold correct. Without it a key inserted at an
+     * old-generation version and deleted at a new-generation version folds per instance and yields
+     * a spurious INSERT plus a spurious DELETE, with no error to notice.
+     */
+    @Test
+    public void testNetChangeAcrossReshardOnPkShuffles() throws Exception {
+        String name = "ch_rsnpk_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name + " (k int, v int) PRIMARY KEY(k) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rsnpk_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rsnpk_head");
+        // Base above the initial version so this is a real multi-version diff rather than the
+        // head-only FULL_SCAN shortcut, which needs no fold and so would not exercise the shuffle.
+        bumpVisibleVersion(table, 3L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        installNewGeneration(table, 4, 6L);
+        bumpVisibleVersion(table, 9L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        boolean savedNetChange = connectContext.getSessionVariable().isEnableCdcNetChange();
+        connectContext.getSessionVariable().setEnableCdcNetChange(true);
+        try {
+            String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+
+            List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
+            execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
+            assertFalse(analyticNodes.isEmpty(), "crossing PK net change must fold:\n" + plan);
+
+            List<ExchangeNode> exchanges = new ArrayList<>();
+            analyticNodes.get(0).collect(ExchangeNode.class, exchanges);
+            assertFalse(exchanges.isEmpty(),
+                    "the fold must be fed by an exchange, or a key split across generations is "
+                            + "netted per fragment instance:\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setEnableCdcNetChange(savedNetChange);
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * Range distribution -- what a tablet reshard actually splits -- across a reshard: the split
+     * halves the parent's key space, so pruning by the distribution column must run against each
+     * generation's own tablet ranges. The pre-reshard generation's single all-range tablet always
+     * matches; the post-reshard generation keeps only the half covering the value.
+     */
+    @Test
+    public void testChangesAcrossReshardPrunesRangeDistribution() throws Exception {
+        boolean savedRangeDistribution = Config.enable_range_distribution;
+        try {
+            Config.enable_range_distribution = true;
+
+            String name = "ch_rsr_" + COUNTER.getAndIncrement();
+            long tableId = createTable("CREATE TABLE " + name + " (k int, v int) ORDER BY (k) "
+                    + "PROPERTIES ('replication_num'='1');");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getDb(dbId).getTable(tableId);
+            table.maySetDatabaseId(dbId);
+
+            BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+            BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rsr_base");
+            BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rsr_head");
+            bumpVisibleVersion(table, 3L);
+            Bookmark base = bm.create(dbId, tableId, hBase);
+            List<Long> gen0Tablets = currentGenerationTabletIds(table);
+
+            bumpVisibleVersion(table, 5L);
+            Type keyType = table.getColumn("k").getType();
+            List<Long> gen1Tablets = installNewGeneration(table, 6L,
+                    List.of(keyRange(keyType, null, "100"), keyRange(keyType, "100", null)));
+            bumpVisibleVersion(table, 9L);
+            Bookmark head = bm.create(dbId, tableId, hHead);
+
+            try {
+                String sql = String.format("SELECT k, v FROM %s [_CHANGES_%d_%d_] WHERE k = 7",
+                        name, base.getBookmarkId(), head.getBookmarkId());
+                Map<Long, TChangeScanSpec> specByTablet = scanSpecsByTablet(changesScanOf(sql));
+
+                assertEquals(1, gen0Tablets.size(), "a fresh range-distributed partition has one tablet");
+                assertTrue(specByTablet.containsKey(gen0Tablets.get(0)),
+                        "the pre-reshard all-range tablet must survive pruning: " + specByTablet.keySet());
+                assertEquals(1, gen1Tablets.stream().filter(specByTablet::containsKey).count(),
+                        "only the post-reshard range covering k = 7 should survive: " + specByTablet.keySet());
+                assertEpochSpecs(specByTablet, gen0Tablets, 3L, 5L);
+                assertEpochSpecs(specByTablet, gen1Tablets, 6L, 9L);
+            } finally {
+                bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+                bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+            }
+        } finally {
+            Config.enable_range_distribution = savedRangeDistribution;
+        }
+    }
+
+    /**
+     * A delta mixing a resharded partition with a plainly changed one: the crossing partition emits
+     * one range per generation, while the plain partition keeps the single-spec whole-range path and
+     * its bucket numbering -- which the crossing partition's tablets stay out of.
+     */
+    @Test
+    public void testChangesMixedReshardedAndPlainPartitions() throws Exception {
+        String name = "ch_rsm_" + COUNTER.getAndIncrement();
+        long tableId = createTable("CREATE TABLE " + name
+                + " (k int NOT NULL, city varchar(16) NOT NULL, v int) DUPLICATE KEY(k, city) "
+                + "PARTITION BY LIST(city) ("
+                + "PARTITION p_bj VALUES IN ('bj'), PARTITION p_sh VALUES IN ('sh')) "
+                + "DISTRIBUTED BY HASH(k) BUCKETS 4 PROPERTIES ('replication_num'='1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(dbId).getTable(tableId);
+        table.maySetDatabaseId(dbId);
+
+        BookmarkManager bm = GlobalStateMgr.getCurrentState().getBookmarkManager();
+        BookmarkHolder hBase = BookmarkHolder.forEmptyInfo("rsm_base");
+        BookmarkHolder hHead = BookmarkHolder.forEmptyInfo("rsm_head");
+        bumpVisibleVersion(table, 3L);
+        Bookmark base = bm.create(dbId, tableId, hBase);
+        PhysicalPartition reshardedPartition = table.getPartition("p_bj").getDefaultPhysicalPartition();
+        List<Long> reshardedGen0 = currentGenerationTabletIds(reshardedPartition);
+        List<Long> plainTablets = currentGenerationTabletIds(
+                table.getPartition("p_sh").getDefaultPhysicalPartition());
+
+        // Only p_bj reshards; p_sh just takes writes, so its change stays DATA_CHANGED.
+        bumpVisibleVersion(table, 5L);
+        List<Long> reshardedGen1 = installNewGeneration(
+                table, reshardedPartition, 6L, Collections.nCopies(8, null));
+        bumpVisibleVersion(table, 9L);
+        Bookmark head = bm.create(dbId, tableId, hHead);
+
+        try {
+            String sql = String.format("SELECT k, city, v FROM %s [_CHANGES_%d_%d_]",
+                    name, base.getBookmarkId(), head.getBookmarkId());
+            ChangesScanNode scan = changesScanOf(sql);
+            Map<Long, TChangeScanSpec> specByTablet = scanSpecsByTablet(scan);
+
+            assertEquals(reshardedGen0.size() + reshardedGen1.size() + plainTablets.size(),
+                    specByTablet.size(),
+                    "both partitions must contribute scan ranges: " + specByTablet.keySet());
+            assertEpochSpecs(specByTablet, reshardedGen0, 3L, 5L);
+            assertEpochSpecs(specByTablet, reshardedGen1, 6L, 9L);
+            // The plain partition diffs the whole bookmark range in a single spec.
+            assertEpochSpecs(specByTablet, plainTablets, 3L, 9L);
+
+            assertEquals(Set.copyOf(plainTablets), bucketNumberedTablets(scan),
+                    "only the plainly changed partition should be bucket-numbered");
+        } finally {
+            bm.releaseReference(dbId, tableId, base.getBookmarkId(), hBase.getHolderId());
+            bm.releaseReference(dbId, tableId, head.getBookmarkId(), hHead.getHolderId());
+        }
+    }
+
+    /**
+     * Simulates a tablet reshard on {@code table}'s only physical partition: installs a new
+     * base-index generation (fresh index id, same meta id) carrying {@code tabletCount} tablets and
+     * stamped with the reshard lineage, while leaving the old generation installed -- the parked
+     * state a reshard leaves until the recycle bin erases the predecessor. Returns the new
+     * generation's tablet ids.
+     */
+    private List<Long> installNewGeneration(OlapTable table, int tabletCount, long takeoverVersion)
+            throws Exception {
+        return installNewGeneration(table, takeoverVersion, Collections.nCopies(tabletCount, null));
+    }
+
+    /**
+     * {@link #installNewGeneration(OlapTable, int, long)} with one tablet per entry of
+     * {@code tabletRanges}; a null entry leaves the tablet without a range, as a hash-distributed
+     * table's tablets are.
+     */
+    private List<Long> installNewGeneration(OlapTable table, long takeoverVersion,
+                                            List<TabletRange> tabletRanges) throws Exception {
+        return installNewGeneration(table, onlyPhysicalPartition(table), takeoverVersion, tabletRanges);
+    }
+
+    /** {@link #installNewGeneration(OlapTable, long, List)} on one physical partition of {@code table}. */
+    private List<Long> installNewGeneration(OlapTable table, PhysicalPartition pp, long takeoverVersion,
+                                            List<TabletRange> tabletRanges) throws Exception {
+        MaterializedIndex oldBase = pp.getLatestBaseIndex();
+        MaterializedIndex newBase = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(),
+                oldBase.getMetaId(), MaterializedIndex.IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        // Real StarOS shards: the scan resolves every tablet's queryable replicas through the
+        // shard-to-worker mapping, which a fabricated tablet id would not have. The inverted index
+        // is left alone (nothing on the planning path reads it for a CHANGES scan).
+        List<Long> shardIds = GlobalStateMgr.getCurrentState().getStarOSAgent().createShards(
+                tabletRanges.size(), table.getPartitionFilePathInfo(pp.getId()),
+                table.getPartitionFileCacheInfo(pp.getId()), pp.getShardGroupId(),
+                null, Map.of(), WarehouseManager.DEFAULT_RESOURCE);
+        for (int i = 0; i < shardIds.size(); i++) {
+            Tablet tablet = new LakeTablet(shardIds.get(i));
+            if (tabletRanges.get(i) != null) {
+                tablet.setRange(tabletRanges.get(i));
+            }
+            newBase.addTablet(tablet, null, false);
+        }
+        newBase.setTakeoverVersion(takeoverVersion);
+        newBase.setPredecessorIndexId(oldBase.getId());
+        pp.addMaterializedIndex(newBase, true);
+        return currentGenerationTabletIds(pp);
+    }
+
+    /** The tablet range [{@code lower}, {@code upper}) on one distribution column; null is unbounded. */
+    private static TabletRange keyRange(Type keyType, String lower, String upper) {
+        Tuple lowerBound = lower == null ? null : new Tuple(Lists.newArrayList(Variant.of(keyType, lower)));
+        Tuple upperBound = upper == null ? null : new Tuple(Lists.newArrayList(Variant.of(keyType, upper)));
+        return new TabletRange(Range.of(lowerBound, upperBound, lower != null, false));
+    }
+
+    private static PhysicalPartition onlyPhysicalPartition(OlapTable table) {
+        return table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+    }
+
+    /** Tablet ids of the current base-index generation of {@code table}'s only physical partition. */
+    private static List<Long> currentGenerationTabletIds(OlapTable table) {
+        return currentGenerationTabletIds(onlyPhysicalPartition(table));
+    }
+
+    /** Tablet ids of {@code pp}'s current base-index generation. */
+    private static List<Long> currentGenerationTabletIds(PhysicalPartition pp) {
+        return pp.getLatestBaseIndex().getTablets().stream().map(Tablet::getId).toList();
+    }
+
+    /** The ChangesScanNode of {@code sql}'s plan. */
+    private ChangesScanNode changesScanOf(String sql) throws Exception {
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        for (ScanNode node : planPair.second.getScanNodes()) {
+            if (node instanceof ChangesScanNode changesScanNode) {
+                return changesScanNode;
+            }
+        }
+        throw new AssertionError("ExecPlan should contain a ChangesScanNode:\n" + planPair.first);
+    }
+
+    /** Scan spec per scanned tablet id; a tablet must not be scanned by two ranges. */
+    private static Map<Long, TChangeScanSpec> scanSpecsByTablet(ChangesScanNode scan) {
+        Map<Long, TChangeScanSpec> specByTablet = new HashMap<>();
+        for (TScanRangeLocations locations : scan.getScanRangeLocations(0)) {
+            TChangesScanRange range = locations.getScan_range().getChanges_scan_range();
+            assertNull(specByTablet.put(range.getTablet_id(), range.getScan_spec()),
+                    "tablet " + range.getTablet_id() + " should be scanned by one range only");
+            assertFalse(locations.getLocations().isEmpty(),
+                    "tablet " + range.getTablet_id() + " should resolve to a location");
+        }
+        return specByTablet;
+    }
+
+    /** Tablet ids that got a bucket sequence, i.e. that entered the colocation dispatch map. */
+    private static Set<Long> bucketNumberedTablets(ChangesScanNode scan) {
+        return scan.getBucketSeqToLocations().values().stream()
+                .map(locations -> locations.getScan_range().getChanges_scan_range().getTablet_id())
+                .collect(Collectors.toSet());
+    }
+
+    /** Every scanned tablet of {@code generationTablets} must diff exactly {@code (base, head]}. */
+    private static void assertEpochSpecs(Map<Long, TChangeScanSpec> specByTablet,
+                                        List<Long> generationTablets, long baseVersion, long headVersion) {
+        for (Long tabletId : generationTablets) {
+            TChangeScanSpec spec = specByTablet.get(tabletId);
+            if (spec == null) {
+                continue;
+            }
+            assertEquals(TChangeDerivationMode.VERSION_CHAIN_DIFF, spec.getDerivation_mode(),
+                    "tablet " + tabletId + " should diff its own generation's version chain");
+            assertEquals(baseVersion, spec.getBase_version(), "base version of tablet " + tabletId);
+            assertEquals(headVersion, spec.getHead_version(), "head version of tablet " + tabletId);
         }
     }
 }

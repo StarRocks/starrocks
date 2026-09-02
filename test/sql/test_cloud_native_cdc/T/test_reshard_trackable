@@ -1,0 +1,338 @@
+-- All cases here cover a range-distribution table that goes through a tablet split (and, in the
+-- last case, a merge) while a CDC/PITQ window spans the reshard. Unlike the metadata breaks in
+-- not_trackable, SPLIT/MERGE TABLET preserve the physical partition id and only advance the
+-- partition into a new tablet-reshard generation, so per-epoch scan-range tracking keeps the
+-- window trackable and PITQ reads resolvable straight through the boundary.
+--
+-- SPLIT/MERGE TABLET jobs are tracked in their own registry (not the legacy SHOW ALTER TABLE
+-- OPTIMIZE job list), so completion is polled from information_schema.tablet_reshard_jobs by
+-- wait_reshard_job_finish(table, job_type, finished_job_count).
+
+-- name: test_cdc_reshard_dup_split @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+SET enable_range_distribution = true;
+
+CREATE TABLE dup_t (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_t VALUES (1, 10);
+
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_t", "rt", "1800000");
+
+-- Pre-split writes, still on the original tablet generation.
+INSERT INTO dup_t VALUES (2, 20);
+INSERT INTO dup_t VALUES (3, 30);
+
+function: set_max_tablet_id("dup_t")
+ALTER TABLE dup_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+function: wait_reshard_job_finish("dup_t", "SPLIT_TABLET", 1)
+
+-- Post-split writes, landing on the new tablet-reshard generation.
+INSERT INTO dup_t VALUES (4, 40);
+INSERT INTO dup_t VALUES (5, 50);
+
+[UC]bk2=SELECT bookmark_create("${db[0]}", "dup_t", "rt", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk2}", "rt");
+} END CLEANUP
+
+-- CHANGES walks across the split boundary and returns every row written after bk1 -- both the
+-- pre-split writes (k=2,3) and the post-split writes (k=4,5) -- in __ROW_VERSION__ order.
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__;
+SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_t [_CHANGES_${bk1}_${bk2}_];
+
+
+-- name: test_cdc_reshard_pk_split @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+SET enable_range_distribution = true;
+
+CREATE TABLE pk_t (k bigint NOT NULL, v bigint)
+PRIMARY KEY(k)
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO pk_t VALUES (1, 10), (2, 20), (4, 40);
+
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_t", "rt", "1800000");
+
+-- Pre-split: update k=1, delete k=2, update k=4. Each surfaces as a DELETE+INSERT (or lone
+-- DELETE) pair; k=4 is updated again post-split to exercise a key whose changes straddle the
+-- split boundary.
+UPDATE pk_t SET v = 11 WHERE k = 1;
+DELETE FROM pk_t WHERE k = 2;
+UPDATE pk_t SET v = 41 WHERE k = 4;
+
+function: set_max_tablet_id("pk_t")
+ALTER TABLE pk_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+function: wait_reshard_job_finish("pk_t", "SPLIT_TABLET", 1)
+
+-- Post-split: insert k=3, then update it. The insert+update pair crosses no key boundary but
+-- exercises the delete+insert pair on the new tablet generation. k=4, updated again here, now
+-- has one change in the pre-split epoch and one in the post-split epoch.
+INSERT INTO pk_t VALUES (3, 30);
+UPDATE pk_t SET v = 31 WHERE k = 3;
+UPDATE pk_t SET v = 42 WHERE k = 4;
+
+[UC]bk2=SELECT bookmark_create("${db[0]}", "pk_t", "rt", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk2}", "rt");
+} END CLEANUP
+
+-- Default (net-change off): every per-transaction diff surfaces across the split boundary.
+SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__, __CHANGE_TYPE__ DESC;
+
+SET enable_cdc_net_change = true;
+
+-- Net change collapses each key to its base-vs-final diff: k=1 update -> DELETE(old)+INSERT(new);
+-- k=2 delete -> lone DELETE; k=3 (born and updated within the window) -> lone INSERT at its final
+-- value; k=4, updated once in each epoch, folds across the split boundary into a single
+-- DELETE(old)+INSERT(new) pair rather than two.
+SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk1}_${bk2}_] ORDER BY k, __CHANGE_TYPE__ DESC;
+
+
+-- name: test_pitq_reshard_split @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+SET enable_range_distribution = true;
+
+CREATE TABLE pitq_t (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO pitq_t VALUES (1, 10), (2, 20);
+
+[UC]bk_id=SELECT bookmark_create("${db[0]}", "pitq_t", "rt", "1800000");
+
+function: set_max_tablet_id("pitq_t")
+ALTER TABLE pitq_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+function: wait_reshard_job_finish("pitq_t", "SPLIT_TABLET", 1)
+
+-- Written on the new tablet generation after the split; must not be visible at the pre-split
+-- bookmark.
+INSERT INTO pitq_t VALUES (3, 30);
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pitq_t", "${bk_id}", "rt");
+} END CLEANUP
+
+-- Live read sees all three rows.
+SELECT k, v FROM pitq_t ORDER BY k;
+
+-- PITQ read at the pre-split bookmark resolves through the parked pre-split generation and
+-- returns only the pre-split state.
+SELECT k, v FROM pitq_t bk [_BOOKMARK_${bk_id}_] ORDER BY k;
+
+
+-- name: test_cdc_reshard_double_split @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+SET enable_range_distribution = true;
+
+CREATE TABLE dup_t2 (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_t2 VALUES (1, 10);
+
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_t2", "rt", "1800000");
+
+INSERT INTO dup_t2 VALUES (2, 20);
+
+-- First split: k=1 and k=2 sit in separate rowsets, so the split has a cut point between them.
+function: set_max_tablet_id("dup_t2")
+ALTER TABLE dup_t2 SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+function: wait_reshard_job_finish("dup_t2", "SPLIT_TABLET", 1)
+
+-- One write into each tablet the first split produced (k=3 into the upper range, k=0 into the
+-- lower one), so whichever of them the second split picks holds two distinct keys and therefore
+-- has a cut point of its own.
+INSERT INTO dup_t2 VALUES (3, 30);
+INSERT INTO dup_t2 VALUES (0, 0);
+
+-- Second split, on one of the tablets the first split produced -- two reshard generations now
+-- sit between bk1 and the eventual head bookmark.
+function: set_max_tablet_id("dup_t2")
+ALTER TABLE dup_t2 SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+function: wait_reshard_job_finish("dup_t2", "SPLIT_TABLET", 2)
+
+INSERT INTO dup_t2 VALUES (4, 40);
+
+[UC]bk2=SELECT bookmark_create("${db[0]}", "dup_t2", "rt", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_t2", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "dup_t2", "${bk2}", "rt");
+} END CLEANUP
+
+-- CHANGES walks across both reshard generations and returns every row written after bk1.
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t2 [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__;
+SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_t2 [_CHANGES_${bk1}_${bk2}_];
+
+
+-- name: test_cdc_reshard_merge @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+[UC]ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "true");
+
+SET enable_range_distribution = true;
+
+CREATE TABLE dup_m (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+
+INSERT INTO dup_m VALUES (1, 10);
+
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_m", "rt", "1800000");
+
+-- Four distinct keys in separate rowsets before the split: the split needs enough key spread to
+-- find cut points, and the three-way split below needs two of them.
+INSERT INTO dup_m VALUES (2, 20);
+INSERT INTO dup_m VALUES (3, 30);
+INSERT INTO dup_m VALUES (4, 40);
+
+-- Split three ways so the merge below has something to do. Snapshot the tablet ids first so the
+-- merge can name exactly the generation this split installs.
+function: snapshot_tablet_ids("dup_m")
+function: set_max_tablet_id("dup_m")
+ALTER TABLE dup_m SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-3');
+function: wait_reshard_job_finish("dup_m", "SPLIT_TABLET", 1)
+
+INSERT INTO dup_m VALUES (5, 50);
+
+-- Merge the split tablets back into one with an explicit tablet group. Size-based auto-merge is
+-- unusable here: it needs tablet size stats that refresh asynchronously after the split, and its
+-- parallelism floor scales with the node count, so on a large enough cluster a three-tablet index
+-- can never auto-merge at all.
+function: merge_tablets_added_since_snapshot("dup_m")
+function: wait_reshard_job_finish("dup_m", "MERGE_TABLET", 1)
+
+INSERT INTO dup_m VALUES (6, 60);
+
+[UC]bk2=SELECT bookmark_create("${db[0]}", "dup_m", "rt", "1800000");
+
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_m", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "dup_m", "${bk2}", "rt");
+    ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+} END CLEANUP
+
+-- CHANGES walks across both the split generation and the merge generation and returns every row
+-- written after bk1.
+SELECT k, v, __CHANGE_TYPE__ FROM dup_m [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__;
+SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_m [_CHANGES_${bk1}_${bk2}_];
+
+-- name: test_ivm_mv_reshard_split @cloud
+-- The whole point of tracking a reshard is that an incremental MV keeps refreshing incrementally
+-- across it. The base is a primary-key table because enable_change_data_capture -- which an
+-- incremental MV over a native table needs -- is only accepted on shared-data primary-key tables. Every other case here stops at the CDC/PITQ layer, and the trait layer only proves
+-- the delta is MONOTONIC -- necessary, not sufficient. Between that and a correct MV sits the
+-- refresh path itself: append-only check, bookmark advance, INSERT plan, write. This drives it.
+
+SET enable_range_distribution = true;
+
+CREATE TABLE ivm_split_base (k bigint NOT NULL, v bigint)
+PRIMARY KEY(k)
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+-- One row per statement: the splitter needs key spread across rowsets to find cut points, and a
+-- single batched insert leaves it with none, so the split degrades to one carried-over child and
+-- the case stops covering a multi-child fan-out.
+INSERT INTO ivm_split_base VALUES (1, 10);
+INSERT INTO ivm_split_base VALUES (2, 20);
+INSERT INTO ivm_split_base VALUES (3, 30);
+
+-- Only the base needs range distribution; keep the MV on the default layout so this case varies
+-- one thing.
+SET enable_range_distribution = false;
+
+CREATE MATERIALIZED VIEW ivm_split_mv REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM ivm_split_base;
+
+REFRESH MATERIALIZED VIEW ivm_split_mv WITH SYNC MODE;
+
+-- Split three ways, with writes on both sides so the refreshed delta genuinely spans the boundary.
+INSERT INTO ivm_split_base VALUES (4, 40);
+function: set_max_tablet_id("ivm_split_base")
+ALTER TABLE ivm_split_base SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-3');
+function: wait_reshard_job_finish("ivm_split_base", "SPLIT_TABLET", 1)
+INSERT INTO ivm_split_base VALUES (5, 50);
+INSERT INTO ivm_split_base VALUES (6, 60);
+
+REFRESH MATERIALIZED VIEW ivm_split_mv WITH SYNC MODE;
+
+-- Oracle: the MV equals the base table, checked both directions so neither missing nor duplicated
+-- rows can hide.
+SELECT k, v FROM ivm_split_mv ORDER BY k;
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM ivm_split_mv EXCEPT SELECT k, v FROM ivm_split_base) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM ivm_split_base EXCEPT SELECT k, v FROM ivm_split_mv) t;
+
+-- Matching rows alone would also be satisfied by a full-refresh fallback, which is exactly the
+-- failure this feature exists to prevent. Only a pure incremental job records a source version
+-- range, so at least one job must carry one -- and the MV must still be active and INCREMENTAL.
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'ivm_split_mv';
+function: assert_query_contains("SELECT count(*) >= 1 FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='${db[0]}' AND TABLE_NAME='ivm_split_mv' AND IMV_SOURCE_VERSION_RANGE IS NOT NULL", "1")
+
+DROP MATERIALIZED VIEW ivm_split_mv;
+
+-- name: test_ivm_mv_reshard_merge @cloud
+-- The same for a merge. A merge dedups rows shared by the source tablets, so an MV that maintained
+-- across it incorrectly would show duplicates -- which the two-way diff catches.
+
+[UC]ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "true");
+
+SET enable_range_distribution = true;
+
+CREATE TABLE ivm_merge_base (k bigint NOT NULL, v bigint)
+PRIMARY KEY(k)
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+
+INSERT INTO ivm_merge_base VALUES (1, 10);
+INSERT INTO ivm_merge_base VALUES (2, 20);
+INSERT INTO ivm_merge_base VALUES (3, 30);
+INSERT INTO ivm_merge_base VALUES (4, 40);
+
+SET enable_range_distribution = false;
+
+CREATE MATERIALIZED VIEW ivm_merge_mv REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM ivm_merge_base;
+
+REFRESH MATERIALIZED VIEW ivm_merge_mv WITH SYNC MODE;
+
+-- Split first so there is something to merge back, then merge the whole installed generation.
+function: snapshot_tablet_ids("ivm_merge_base")
+function: set_max_tablet_id("ivm_merge_base")
+ALTER TABLE ivm_merge_base SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-3');
+function: wait_reshard_job_finish("ivm_merge_base", "SPLIT_TABLET", 1)
+INSERT INTO ivm_merge_base VALUES (5, 50);
+function: merge_tablets_added_since_snapshot("ivm_merge_base")
+function: wait_reshard_job_finish("ivm_merge_base", "MERGE_TABLET", 1)
+INSERT INTO ivm_merge_base VALUES (6, 60);
+
+REFRESH MATERIALIZED VIEW ivm_merge_mv WITH SYNC MODE;
+
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+} END CLEANUP
+
+SELECT k, v FROM ivm_merge_mv ORDER BY k;
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM ivm_merge_mv EXCEPT SELECT k, v FROM ivm_merge_base) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM ivm_merge_base EXCEPT SELECT k, v FROM ivm_merge_mv) t;
+
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'ivm_merge_mv';
+function: assert_query_contains("SELECT count(*) >= 1 FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='${db[0]}' AND TABLE_NAME='ivm_merge_mv' AND IMV_SOURCE_VERSION_RANGE IS NOT NULL", "1")
+
+DROP MATERIALIZED VIEW ivm_merge_mv;

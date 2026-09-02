@@ -107,13 +107,15 @@ public class TableBookmarkTracker {
      * meta, that bookmark is reused and only the new reference is added;
      * older equivalent bookmarks are not consulted.
      *
+     * @throws PartitionUnsharingException if a physical partition is mid-UNSHARE, where the
+     *                                    writable and queryable layouts disagree
      * @throws AlreadyAtLatestException   if {@code holder} already references the
      *                                    bookmark this call would reuse
      * @throws LockTimeoutException       if the db+table read lock cannot be obtained
      * @throws IllegalStateException      if the table is missing from the catalog
      */
     public Bookmark create(BookmarkHolder holder)
-            throws AlreadyAtLatestException, LockTimeoutException {
+            throws AlreadyAtLatestException, LockTimeoutException, PartitionUnsharingException {
         return create(holder, -1L);
     }
 
@@ -122,7 +124,7 @@ public class TableBookmarkTracker {
      * (-1 for no per-reference limit, leaving only the cluster-wide TTL ceiling to apply).
      */
     public Bookmark create(BookmarkHolder holder, long ttlMs)
-            throws AlreadyAtLatestException, LockTimeoutException {
+            throws AlreadyAtLatestException, LockTimeoutException, PartitionUnsharingException {
         Objects.requireNonNull(holder, "holder");
 
         createLock.lock();

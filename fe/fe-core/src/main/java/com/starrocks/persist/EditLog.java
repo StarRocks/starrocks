@@ -336,7 +336,7 @@ public class EditLog {
                 case OperationType.OP_ERASE_MATERIALIZED_INDEX: {
                     EraseMaterializedIndexLog log = (EraseMaterializedIndexLog) journal.data();
                     globalStateMgr.getRecycleBin().replayEraseMaterializedIndex(new RecycleMaterializedIndexInfo(
-                            log.getDbId(), log.getTableId(), log.getPhysicalPartitionId(), log.getIndexId()));
+                            log.getDbId(), log.getTableId(), 0, log.getPhysicalPartitionId(), log.getIndexId(), 0));
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE_V2: {

@@ -5367,8 +5367,13 @@ public class Config extends ConfigBase {
                     + "<= 0 disables the ceiling. The effective lease is the smaller of this ceiling "
                     + "and the reference's own TTL, treating <= 0 on either side as no limit -- so the "
                     + "ceiling also bounds a reference that sets no TTL of its own. It runs from the last "
-                    + "bookmark_renew (or the acquire time when never renewed).")
-    public static long bookmark_reference_max_ttl_ms = -1;
+                    + "bookmark_renew (or the acquire time when never renewed). Because it runs from the "
+                    + "last renew, it also bounds how long a bookmark that stops being renewed can hold "
+                    + "a superseded (pre-reshard) index generation in the recycle bin: reclaiming the "
+                    + "reference lets that generation be erased, so a leaked holder or a stopped "
+                    + "materialized view cannot pin shards indefinitely. A holder that keeps renewing "
+                    + "keeps its generation, which is the intended behaviour -- it is still reading it.")
+    public static long bookmark_reference_max_ttl_ms = 3 * 24 * 3600 * 1000L; // 3 days
 
     @ConfField(mutable = true, comment =
             "Whether the bookmark metadata functions (bookmark_create / bookmark_renew / bookmark_release) are enabled. "

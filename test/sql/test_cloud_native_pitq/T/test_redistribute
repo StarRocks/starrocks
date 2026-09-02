@@ -23,9 +23,10 @@ function: wait_optimize_table_finish()
 SELECT k FROM t_hash bk [_BOOKMARK_${hash_bookmark_id}_];
 
 -- RANGE-distributed table: SPLIT TABLETS splits each oversized tablet into
--- smaller ones. The partition's baseMaterializedIndexId advances while
--- baseMaterializedIndexMetaId is unchanged, so the resolver classifies the
--- post-bookmark state as a redistribute rather than a partition drop.
+-- smaller ones. The partition's baseMaterializedIndexId advances while the
+-- physical partition id is preserved, so per-epoch generation tracking keeps
+-- the bookmark resolvable across the split rather than orphaning it the way
+-- the HASH rebucket above does.
 SET enable_range_distribution = true;
 
 CREATE TABLE t_range (
@@ -40,10 +41,18 @@ INSERT INTO t_range VALUES (1, 10);
 
 function: set_first_tablet_id("t_range")
 ALTER TABLE t_range SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
-function: wait_optimize_table_finish()
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 1, "desc": "wait for split tablet job to finish"}
+  result=SELECT count(*) FROM INFORMATION_SCHEMA.tablet_reshard_jobs WHERE DB_NAME = database() AND TABLE_NAME = 't_range' AND JOB_TYPE = 'SPLIT_TABLET' AND JOB_STATE = 'FINISHED';
+  CHECK: int(${result}[-1][0]) >= 1
+} END LOOP
 
--- Bookmark is no longer queryable because the partition was redistributed.
-SELECT k FROM t_range bk [_BOOKMARK_${range_bookmark_id}_];
+-- Written on the new tablet generation after the split.
+INSERT INTO t_range VALUES (2, 20);
+
+-- The bookmark is still queryable across the split: it resolves through the parked pre-split
+-- generation and returns exactly the pre-split state.
+SELECT k FROM t_range bk [_BOOKMARK_${range_bookmark_id}_] ORDER BY k;
 
 [UC]SELECT bookmark_release("${db[0]}", "t_hash", "${hash_bookmark_id}", "sql_test");
 [UC]SELECT bookmark_release("${db[0]}", "t_range", "${range_bookmark_id}", "sql_test");

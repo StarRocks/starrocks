@@ -19,7 +19,7 @@ SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "1800000");
 -- !result
 SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "0");
 -- result:
--1
+259200000
 -- !result
 SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn", "1800000");
 -- result:

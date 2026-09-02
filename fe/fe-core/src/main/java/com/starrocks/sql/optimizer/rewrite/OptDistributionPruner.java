@@ -26,6 +26,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.lake.bookmark.BookmarkChange;
+import com.starrocks.lake.bookmark.IndexEpoch;
 import com.starrocks.planner.HashDistributionPruner;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangeDistributionPruner;
@@ -34,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalChangesScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.transformer.ChangesScanBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,16 +56,53 @@ public class OptDistributionPruner {
     /**
      * Prunes the tablets of a cloud-native CHANGES scan by its distribution-column predicates,
      * returning a new scan operator with the surviving tablet ids. Reads the partitions already
-     * selected on the operator and prunes within the base index of each.
+     * selected on the operator and prunes each partition's base index; a generation-crossing
+     * change instead prunes every generation epoch's own index and unions the results.
      */
     public static LogicalChangesScanOperator pruneChangesScanTablets(LogicalChangesScanOperator scan) {
         OlapTable table = (OlapTable) scan.getTable();
-        List<Long> selectedTabletIds = computeSelectedTabletIds(
+        List<Long> selectedTabletIds = computeSelectedChangesTabletIds(
                 scan, scan.getSelectedLogicalPartitionId(), table.getBaseIndexMetaId());
         return new LogicalChangesScanOperator.Builder()
                 .withOperator(scan)
                 .setSelectedTabletId(selectedTabletIds)
                 .build();
+    }
+
+    /**
+     * Twin of {@link #computeSelectedTabletIds} for a CHANGES scan: a change whose bookmark range
+     * crosses a tablet reshard is read one generation at a time, so the surviving tablet ids are the
+     * union of the per-generation prunes -- pruning only the latest generation would leave the
+     * pre-reshard epochs with no tablet and silently drop their changes. Every other change, and a
+     * resharded change taken as a head-only full scan, reads the scoped partition's single latest
+     * index, exactly like the OLAP scan.
+     */
+    private static List<Long> computeSelectedChangesTabletIds(LogicalChangesScanOperator scan,
+                                                              List<Long> selectedPartitionIds,
+                                                              long selectedIndexMetaId) {
+        OlapTable olapTable = (OlapTable) scan.getTable();
+        BookmarkChange delta = scan.getDelta();
+
+        List<Long> result = Lists.newArrayList();
+        for (Long partitionId : selectedPartitionIds) {
+            Partition partition = olapTable.getPartition(partitionId);
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                BookmarkChange.PhysicalPartitionChange change =
+                        delta.getChange(partitionId, physicalPartition.getId()).orElse(null);
+                if (ChangesScanBuilder.isGenerationCrossing(change, scan.isNetChange())) {
+                    BookmarkChange.ReshardedDataChanged resharded = (BookmarkChange.ReshardedDataChanged) change;
+                    for (IndexEpoch epoch : resharded.getEpochs()) {
+                        result.addAll(distributionPrune(epoch.index(), partition.getDistributionInfo(),
+                                scan, olapTable.getIdToColumn()));
+                    }
+                    continue;
+                }
+                MaterializedIndex index = physicalPartition.getLatestIndex(selectedIndexMetaId);
+                result.addAll(distributionPrune(index, partition.getDistributionInfo(), scan,
+                        olapTable.getIdToColumn()));
+            }
+        }
+        return result;
     }
 
     /**

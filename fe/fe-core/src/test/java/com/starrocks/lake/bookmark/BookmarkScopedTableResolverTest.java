@@ -209,6 +209,84 @@ public class BookmarkScopedTableResolverTest extends BookmarkTestBase {
                         b, BookmarkHolder.forEmptyInfo("synthetic"), b.getBookmarkTimeMs(), -1L));
     }
 
+    @Test
+    public void testResolveByIdUsesParkedGeneration() throws Exception {
+        OlapTable t = table(createDefaultTable());
+        Bookmark b = registerBookmark(t);
+
+        Partition p = t.getPartitions().iterator().next();
+        PhysicalPartition pp = p.getDefaultPhysicalPartition();
+        long physicalPartitionId = pp.getId();
+        long bookmarkVersion = b.getPhysicalPartitionVersion(p.getId(), physicalPartitionId).orElseThrow();
+        long oldIndexId = parkNewGeneration(pp);
+
+        OlapTable scoped = BookmarkScopedTableResolver.resolveById(t, b.getBookmarkId());
+        PhysicalPartition scopedPp = scoped.getPhysicalPartition(physicalPartitionId);
+        assertEquals(oldIndexId, scopedPp.getLatestBaseIndex().getId());
+        assertEquals(bookmarkVersion, scopedPp.getVisibleVersion());
+    }
+
+    @Test
+    public void testResolveByIdStillRejectsWhenGenerationErased() throws Exception {
+        OlapTable t = table(createDefaultTable());
+        Bookmark b = registerBookmark(t);
+
+        Partition p = t.getPartitions().iterator().next();
+        PhysicalPartition pp = p.getDefaultPhysicalPartition();
+        long oldIndexId = parkNewGeneration(pp);
+        pp.deleteMaterializedIndexByIndexId(oldIndexId);
+
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> BookmarkScopedTableResolver.resolveById(t, b.getBookmarkId()));
+        assertTrue(ex.getMessage().contains("redistributed"), ex.getMessage());
+    }
+
+    @Test
+    public void testResolveByIdRejectsGenerationWithoutLineageStamps() throws Exception {
+        OlapTable t = table(createDefaultTable());
+        Bookmark b = registerBookmark(t);
+
+        Partition p = t.getPartitions().iterator().next();
+        PhysicalPartition pp = p.getDefaultPhysicalPartition();
+        parkNewGeneration(pp, /* stampLineage = */ false);
+
+        // The bookmark's generation is still installed, but nothing links the live generation to
+        // it, so the recycle bin's bookmark gate does not hold it either (its recycle entry has no
+        // supersede watermark). Reject deterministically rather than read a generation that the
+        // next recycle cycle may erase.
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> BookmarkScopedTableResolver.resolveById(t, b.getBookmarkId()));
+        assertTrue(ex.getMessage().contains("redistributed"), ex.getMessage());
+    }
+
+    /**
+     * Simulates a tablet reshard on {@code pp}: installs a new base-index generation (fresh
+     * index id, same metaId) advanced past the old generation's visible version, while leaving
+     * the old generation installed -- exactly the "parked" state a reshard leaves until the
+     * recycle bin erases the predecessor. Returns the old (bookmark-anchored) index id.
+     */
+    private long parkNewGeneration(PhysicalPartition pp) {
+        return parkNewGeneration(pp, true);
+    }
+
+    /**
+     * As {@link #parkNewGeneration(PhysicalPartition)}, but leaves the reshard lineage stamps at
+     * their defaults when {@code stampLineage} is false -- the shape of a generation installed by
+     * anything other than a reshard job, and of a reshard parking that predates those stamps.
+     */
+    private long parkNewGeneration(PhysicalPartition pp, boolean stampLineage) {
+        MaterializedIndex oldBase = pp.getLatestBaseIndex();
+        long newIndexId = GlobalStateMgr.getCurrentState().getNextId();
+        MaterializedIndex newBase = new MaterializedIndex(newIndexId, oldBase.getMetaId(),
+                MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        if (stampLineage) {
+            newBase.setTakeoverVersion(pp.getVisibleVersion() + 1);
+            newBase.setPredecessorIndexId(oldBase.getId());
+        }
+        pp.addMaterializedIndex(newBase, true);
+        return oldBase.getId();
+    }
+
     /**
      * Build a BookmarkChange whose entries cover every partition of {@code live}:
      * the first as ADDED, the rest as DATA_CHANGED. Each head meta carries a

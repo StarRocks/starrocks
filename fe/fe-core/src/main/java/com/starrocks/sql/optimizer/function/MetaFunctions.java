@@ -55,6 +55,7 @@ import com.starrocks.lake.bookmark.BookmarkHolder;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.bookmark.BookmarkNotFoundException;
 import com.starrocks.lake.bookmark.HolderId;
+import com.starrocks.lake.bookmark.PartitionUnsharingException;
 import com.starrocks.lake.bookmark.Reference;
 import com.starrocks.lake.bookmark.ReferenceNotFoundException;
 import com.starrocks.memory.MemoryTrackable;
@@ -932,6 +933,8 @@ public class MetaFunctions {
             return ConstantOperator.createVarchar(Long.toString(e.getBookmarkId()));
         } catch (LockTimeoutException e) {
             throw new SemanticException("bookmark_create timed out acquiring the table lock: " + e.getMessage());
+        } catch (PartitionUnsharingException e) {
+            throw new SemanticException("bookmark_create rejected: " + e.getMessage());
         }
     }
 

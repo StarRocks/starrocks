@@ -254,12 +254,42 @@ public final class BookmarkScopedTableResolver {
 
             MaterializedIndex liveBaseIndex = physical.getLatestBaseIndex();
             PhysicalPartitionMeta livePartitionMeta = livePhysicalMeta(physical, liveBaseIndex);
+            if (physical.isUnsharing()) {
+                // Mid-UNSHARE the writable and queryable layouts differ, and comparing the bookmark
+                // against either one is wrong: the writable child would send the read down the
+                // range-pruning scan path the pin exists to avoid, while the queryable parent has
+                // no version at or after the split commit for the bookmark to sit on. Degrade to
+                // not-trackable for the duration rather than read one layout and plan for the other.
+                nonTrackableChangesSeenDuringRewrite.add(new TabletReshard(
+                        logicalId, physicalId, bookmarkPartitionMeta, livePartitionMeta));
+                return Optional.empty();
+            }
             if (bookmarkPartitionMeta.getBaseMaterializedIndexMetaId() != liveBaseIndex.getMetaId()) {
                 nonTrackableChangesSeenDuringRewrite.add(new IndexReplaced(
                         logicalId, physicalId, bookmarkPartitionMeta, livePartitionMeta));
                 return Optional.empty();
             }
             if (bookmarkPartitionMeta.getBaseMaterializedIndexId() != liveBaseIndex.getId()) {
+                MaterializedIndex bookmarkGeneration =
+                        physical.getIndex(bookmarkPartitionMeta.getBaseMaterializedIndexId());
+                // Scope the read to the bookmark's own generation, but only when it is still
+                // installed AND the live generation descends from it by stamped reshard lineage.
+                // Stamped lineage is the necessary condition for the recycle bin's bookmark gate
+                // to hold a generation: one parked without it (pre-upgrade entry, or any
+                // non-reshard index replacement) is erasable on the next recycle cycle no matter
+                // what bookmarks are live, so reading it would race the erase. It is not
+                // sufficient on its own -- the gate holds only while a bookmark still anchors the
+                // pre-reshard version, and bookmark_reference_max_ttl_ms eventually reclaims the
+                // reference. A read whose bookmark is reclaimed between this check and the scan
+                // races the erase, which is the generic expired-bookmark race rather than anything
+                // specific to reshard.
+                if (bookmarkGeneration != null && ReshardEpochResolver.isLineageConnected(
+                        physical, liveBaseIndex.getMetaId(),
+                        bookmarkPartitionMeta.getBaseMaterializedIndexId(), liveBaseIndex.getId())) {
+                    return Optional.of(physical.copyForBookmark(bookmarkGeneration,
+                            bookmarkPartitionMeta.getVisibleVersion(),
+                            bookmarkPartitionMeta.getVisibleVersionTimeMs()));
+                }
                 nonTrackableChangesSeenDuringRewrite.add(new TabletReshard(
                         logicalId, physicalId, bookmarkPartitionMeta, livePartitionMeta));
                 return Optional.empty();
@@ -344,6 +374,9 @@ public final class BookmarkScopedTableResolver {
             }
             if (change instanceof DataChanged) {
                 return ((DataChanged) change).getHeadPartition();
+            }
+            if (change instanceof BookmarkChange.ReshardedDataChanged resharded) {
+                return resharded.getHeadPartition();
             }
             return null;
         }

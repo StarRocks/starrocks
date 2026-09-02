@@ -377,6 +377,7 @@ public class AutovacuumDaemon extends LeaderDaemon {
         final long txnLogSweepWatermark = lastMinActiveTxnId;
         partition.setLastMinActiveTxnId(minActiveTxnId);
 
+        long baseGenerationTakeover = 0;
         long preExtraFileSize = 0;
         // If shared file cleanup is enabled, vacuum runs on a single aggregator node.
         Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
@@ -387,6 +388,10 @@ public class AutovacuumDaemon extends LeaderDaemon {
         try {
             for (MaterializedIndex index : partition.getMaterializedIndicesForVacuum(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
+            }
+            MaterializedIndex latestBaseIndex = partition.getLatestBaseIndex();
+            if (latestBaseIndex != null) {
+                baseGenerationTakeover = latestBaseIndex.getTakeoverVersion();
             }
             visibleVersion = partition.getVisibleVersion();
             minRetainVersion = partition.getMinRetainVersion();
@@ -414,6 +419,24 @@ public class AutovacuumDaemon extends LeaderDaemon {
                 .orElse(Long.MAX_VALUE);
         if (oldestReferencedVersion < minRetainVersion) {
             minRetainVersion = oldestReferencedVersion;
+        }
+
+        // Versions below the base generation's takeover do not exist for its tablets (a
+        // reshard-created tablet has no metadata below the reshard commit version), so retaining
+        // them is vacuous -- and an entry version below a tablet's first version stalls the BE's
+        // incremental vacuum proposal for the whole partition. Pre-reshard generations are
+        // protected separately: they are parked in the recycle bin (bookmark-gated) and never
+        // appear in this request's tablet list. Clamp with the BASE generation ONLY: the bookmark
+        // fence protects base-index data, and raising the floor to a non-base index's newer
+        // takeover would un-retain base versions a live bookmark still needs. A non-base index
+        // whose tablets start above this floor (e.g. a range rollup created/resharded after the
+        // fence) can still stall the BE proposal -- that generic case needs per-tablet handling in
+        // the BE propose path and is out of scope here. A partition can also be PARTIALLY resharded
+        // (a split skips indexes whose tablets are all under the target size), so a live non-base
+        // index may still have metadata below this clamp; that is safe because bookmark reads are
+        // base-index-scoped and in-flight readers are grace-timestamp-protected on the BE.
+        if (baseGenerationTakeover > minRetainVersion) {
+            minRetainVersion = baseGenerationTakeover;
         }
 
         boolean enableSharedFileCleanup = fileBundling || rangeDistribution;

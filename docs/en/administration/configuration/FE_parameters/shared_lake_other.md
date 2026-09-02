@@ -1649,11 +1649,11 @@ This topic introduces the following types of FE configurations:
 
 ### `bookmark_reference_max_ttl_ms`
 
-- Default: -1
+- Default: 259200000
 - Type: Long
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Cluster-wide ceiling on how long a bookmark reference's lease may run before the cleanup sweep reclaims it, regardless of the reference's own TTL. `<= 0` disables the ceiling. The effective lease of a reference is the smaller of this ceiling and the reference's own TTL, treating `<= 0` on either side as no limit, so this ceiling also bounds a reference that sets no TTL of its own. It runs from the reference's last `bookmark_renew` (or its acquire time when never renewed) — a holder that keeps renewing keeps its reference alive indefinitely. Because the sweep re-reads this value every pass, lowering it shortens leases that were already granted: a reference is reclaimed as soon as the time since its last renewal reaches the new ceiling, and a holder whose renewal interval is longer than that loses its bookmark before it renews again. The value `bookmark_renew` returns bounds a lease only as of that call.
+- Description: Cluster-wide ceiling on how long a bookmark reference's lease may run before the cleanup sweep reclaims it, regardless of the reference's own TTL. `<= 0` disables the ceiling. The effective lease of a reference is the smaller of this ceiling and the reference's own TTL, treating `<= 0` on either side as no limit, so this ceiling also bounds a reference that sets no TTL of its own. It runs from the reference's last `bookmark_renew` (or its acquire time when never renewed) — a holder that keeps renewing keeps its reference alive indefinitely. Because the sweep re-reads this value every pass, lowering it shortens leases that were already granted: a reference is reclaimed as soon as the time since its last renewal reaches the new ceiling, and a holder whose renewal interval is longer than that loses its bookmark before it renews again. The value `bookmark_renew` returns bounds a lease only as of that call. Because it runs from the last renewal, this ceiling also bounds how long a bookmark that stops being renewed can hold a superseded (pre-reshard) index generation in the recycle bin: reclaiming the reference lets that generation be erased, so a leaked holder or a stopped materialized view cannot pin shards indefinitely.
 - Introduced in:
 
 ### `enable_bookmark_meta_functions`

@@ -339,6 +339,37 @@ public class LockManager {
         }
     }
 
+    /**
+     * Whether the calling thread already holds {@code lockType} on {@code rid}, through any
+     * {@link Locker}. {@link #isOwner} answers the same question for one specific {@code Locker}
+     * instance, which a caller that did not create the original {@code Locker} cannot supply.
+     *
+     * <p>Exists so a method reached both with and without the lock already held can read directly
+     * instead of acquiring a second time. Re-acquiring is not harmless: a second acquisition uses a
+     * different {@code Locker}, so it misses {@code MultiUserLock}'s same-locker refCount path and
+     * is queued like any foreign request. If a conflicting waiter arrived in between, the second
+     * request waits behind it while the waiter waits for the first acquisition -- held by this very
+     * thread -- to be released. {@code DeadLockChecker} cannot see that: its graph has an edge per
+     * waiting {@code Locker}, and the first one is not waiting, so the cycle never appears.
+     */
+    public boolean isOwnedByCurrentThread(long rid, LockType lockType) {
+        long currentThreadId = Thread.currentThread().getId();
+        int lockTableIndex = getLockTableIndex(rid);
+        synchronized (lockTableMutexes[lockTableIndex]) {
+            final Lock lock = lockTables[lockTableIndex].get(rid);
+            if (lock == null) {
+                return false;
+            }
+            for (LockHolder owner : lock.getOwners()) {
+                if (owner.getLocker().getThreadId() == currentThreadId
+                        && owner.getLockType().equals(lockType)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     private boolean isOwnerInternal(long rid, Locker locker, LockType lockType, int lockTableIndex) {
         final Map<Long, Lock> lockTable = lockTables[lockTableIndex];
         final Lock lock = lockTable.get(rid);

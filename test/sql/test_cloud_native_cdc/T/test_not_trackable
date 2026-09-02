@@ -187,38 +187,6 @@ CLEANUP {
 SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
 
 
--- name: test_cdc_not_trackable_range_split @cloud
-
-[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
-
-SET enable_range_distribution = true;
-
-CREATE TABLE dup_t (k bigint NOT NULL, v bigint)
-DUPLICATE KEY(k)
-PROPERTIES ('replication_num' = '1');
-
-INSERT INTO dup_t VALUES (1, 10);
-
-[UC]bk_base=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
-
--- SPLIT TABLET advances baseMaterializedIndexId; the partition's physical id
--- is preserved, so the resolver classifies the change as a reshard.
-function: set_first_tablet_id("dup_t")
-ALTER TABLE dup_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
-function: wait_optimize_table_finish()
-
-INSERT INTO dup_t VALUES (2, 20);
-
-[UC]bk_head=SELECT bookmark_create("${db[0]}", "dup_t", "nt", "1800000");
-
-CLEANUP {
-    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_base}", "nt");
-    SELECT bookmark_release("${db[0]}", "dup_t", "${bk_head}", "nt");
-} END CLEANUP
-
-SELECT * FROM dup_t [_CHANGES_${bk_base}_${bk_head}_];
-
-
 -- name: test_cdc_hint_partition_not_present @cloud
 
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");

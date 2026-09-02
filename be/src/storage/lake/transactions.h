@@ -92,6 +92,13 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const Txn
 void collect_files_in_log(TabletManager* tablet_mgr, const TxnLogPB& txn_log,
                           std::vector<std::string>* files_to_delete);
 
+// Populate `new_metadata->metadata_ancestors` for CDC reverse traversal: the direct parent
+// followed by up to (cloud_native_tablet_metadata_ancestors_recorded - 1) entries of
+// `parent_metadata`'s own chain. `parent_metadata` may be nullptr, in which case only
+// `direct_parent` is recorded.
+void build_metadata_ancestors(TabletMetadataPB* new_metadata, int64_t direct_parent,
+                              const TabletMetadataPB* parent_metadata);
+
 // Reserve a per-tablet publish slot. Returns false if another publish task
 // (publish_version or publish_resharding_tablet) is already running on this
 // tablet — callers should surface this as Status::ResourceBusy and let the

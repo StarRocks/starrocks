@@ -23,7 +23,9 @@
 
 #include "base/uid_util.h"
 #include "common/logging.h"
+#include "storage/lake/cdc_util.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/transactions.h"
 #include "storage/tablet_range.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
@@ -402,6 +404,17 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
         set_all_data_files_shared(&rowset_metadata);
     }
     set_non_segment_files_shared(tablet_metadata, skip_delvecs);
+}
+
+void reset_cdc_carryover_for_old_tablet(TabletMetadataPB* metadata, int64_t base_version,
+                                        const TabletMetadataPB* old_metadata) {
+    build_metadata_ancestors(metadata, base_version, old_metadata);
+    init_cdc(metadata);
+}
+
+void reset_cdc_carryover_for_new_tablet(TabletMetadataPB* metadata) {
+    metadata->clear_metadata_ancestors();
+    init_cdc(metadata);
 }
 
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {

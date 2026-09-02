@@ -35,6 +35,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -164,6 +165,26 @@ public class SplitTabletJobTest {
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+
+        Assertions.assertEquals(physicalPartition.getVisibleVersion(), newMaterializedIndex.getTakeoverVersion(),
+                "reshard-installed generation must be stamped with the reshard commit version");
+        Assertions.assertEquals(materializedIndex.getId(), newMaterializedIndex.getPredecessorIndexId());
+    }
+
+    @Test
+    public void testReshardLineageGsonRoundTrip() {
+        MaterializedIndex index = new MaterializedIndex(101, 100, MaterializedIndex.IndexState.NORMAL, 7);
+        index.setTakeoverVersion(42);
+        index.setPredecessorIndexId(99);
+        MaterializedIndex reloaded = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(index), MaterializedIndex.class);
+        Assertions.assertEquals(42, reloaded.getTakeoverVersion());
+        Assertions.assertEquals(99, reloaded.getPredecessorIndexId());
+        // Legacy JSON without the fields deserializes to 0.
+        MaterializedIndex legacy = GsonUtils.GSON.fromJson(
+                "{\"id\":1,\"metaId\":1,\"state\":\"NORMAL\",\"rowCount\":0,\"tablets\":[]}",
+                MaterializedIndex.class);
+        Assertions.assertEquals(0, legacy.getTakeoverVersion());
+        Assertions.assertEquals(0, legacy.getPredecessorIndexId());
     }
 
     @Test
@@ -314,6 +335,11 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
+
+        // REPLAY must install the lineage fields too, not just the leader run() path.
+        Assertions.assertEquals(newVersion, newMaterializedIndex.getTakeoverVersion(),
+                "reshard-installed generation must be stamped with the reshard commit version");
+        Assertions.assertEquals(materializedIndex.getId(), newMaterializedIndex.getPredecessorIndexId());
     }
 
     @Test

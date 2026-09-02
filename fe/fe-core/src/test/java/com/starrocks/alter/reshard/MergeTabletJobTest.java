@@ -212,6 +212,10 @@ public class MergeTabletJobTest {
         Assertions.assertNotEquals(beforeMergeIndex, afterMergeIndex);
         Assertions.assertTrue(afterMergeIndex.getTablets().size() < beforeMergeIndex.getTablets().size());
 
+        Assertions.assertEquals(newVersion, afterMergeIndex.getTakeoverVersion(),
+                "reshard-installed generation must be stamped with the reshard commit version");
+        Assertions.assertEquals(beforeMergeIndex.getId(), afterMergeIndex.getPredecessorIndexId());
+
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // The superseded (old) merge-child index is parked in the recycle bin rather than deleted
         // immediately (issue #75993), so its tablets are retained until the retention expires and an
@@ -713,6 +717,11 @@ public class MergeTabletJobTest {
 
         MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertNotEquals(materializedIndex, newMaterializedIndex);
+
+        // REPLAY must install the lineage fields too, not just the leader run() path.
+        Assertions.assertEquals(newVersion, newMaterializedIndex.getTakeoverVersion(),
+                "reshard-installed generation must be stamped with the reshard commit version");
+        Assertions.assertEquals(materializedIndex.getId(), newMaterializedIndex.getPredecessorIndexId());
     }
 
     @Test

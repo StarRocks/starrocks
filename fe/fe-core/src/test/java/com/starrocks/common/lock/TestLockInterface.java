@@ -34,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TestLockInterface {
     @BeforeEach
@@ -92,6 +93,39 @@ public class TestLockInterface {
         Assertions.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.WRITE);
+    }
+
+    @Test
+    public void testIsOwnedByCurrentThread() throws Exception {
+        long dbId = 41L;
+        long tableId = 42L;
+        Database database = new Database(dbId, "db_owned_by_thread");
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+
+        Assertions.assertFalse(lockManager.isOwnedByCurrentThread(tableId, LockType.READ));
+
+        Locker holder = new Locker();
+        holder.lockTableWithIntensiveDbLock(database.getId(), tableId, LockType.READ);
+        try {
+            // True through a DIFFERENT Locker than the one that acquired it: that is the whole
+            // point, since a callee cannot reach the caller's Locker instance. isOwner cannot
+            // answer this without being handed that instance.
+            Assertions.assertTrue(lockManager.isOwnedByCurrentThread(tableId, LockType.READ));
+            Assertions.assertFalse(lockManager.isOwnedByCurrentThread(tableId, LockType.WRITE));
+            Assertions.assertFalse(lockManager.isOwnedByCurrentThread(tableId + 1, LockType.READ));
+
+            // Another thread holding nothing must not see this thread's lock as its own.
+            AtomicBoolean seenByOtherThread = new AtomicBoolean(true);
+            Thread other = new Thread(() -> seenByOtherThread.set(
+                    lockManager.isOwnedByCurrentThread(tableId, LockType.READ)));
+            other.start();
+            other.join();
+            Assertions.assertFalse(seenByOtherThread.get());
+        } finally {
+            holder.unLockTableWithIntensiveDbLock(database.getId(), tableId, LockType.READ);
+        }
+
+        Assertions.assertFalse(lockManager.isOwnedByCurrentThread(tableId, LockType.READ));
     }
 
     @Test

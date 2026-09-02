@@ -46,6 +46,9 @@ public class BookmarkChangeTvrAdapterTest {
         return new PhysicalPartitionMeta(indexId, indexMetaId, visibleVersion, 0L);
     }
 
+    /** Physical partition with a two-generation reshard chain: {@code BASE_INDEX_ID} (metaId
+     * {@code BASE_INDEX_META_ID}), then index 51 taking over at {@code takeoverVersion} with
+     * {@code BASE_INDEX_ID} as predecessor. */
     private static Bookmark bookmark(long bookmarkId, Map<Long, Map<Long, PhysicalPartitionMeta>> parts) {
         return new Bookmark(DB_ID, TABLE_ID, bookmarkId, 1000L, parts);
     }
@@ -174,6 +177,22 @@ public class BookmarkChangeTvrAdapterTest {
 
         assertEquals(1, traits.size());
         assertFalse(traits.get(0).isAppendOnly());
+    }
+
+    @Test
+    public void testUnresolvableTabletReshardIsRetractable() {
+        // indexId changed but metaId same → tablet split/merge → TABLET_RESHARD. There is no live
+        // table behind these ids, so resolution inside computeChanges finds no generation chain and
+        // the delta stays non-append-only. Resolution against a real chain is covered by
+        // BookmarkChangeTest, which can drive it with a mocked table.
+        Bookmark base = bookmark(10L,
+                partitions(LOGICAL_PARTITION_1, PHYSICAL_PARTITION_1, metaWithIndex(BASE_INDEX_ID, BASE_INDEX_META_ID, 5L)));
+        Bookmark head = bookmark(11L,
+                partitions(LOGICAL_PARTITION_1, PHYSICAL_PARTITION_1, metaWithIndex(51L, BASE_INDEX_META_ID, 35L)));
+
+        List<TvrTableDeltaTrait> unresolved = BookmarkChangeTvrAdapter.toTvrTraits(base, head);
+        assertEquals(1, unresolved.size());
+        assertFalse(unresolved.get(0).isAppendOnly());
     }
 
     @Test

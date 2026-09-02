@@ -154,6 +154,8 @@ CONTINUE_HANDLE_SPLITTING_TABLET:
     old_tablet_new_metadata->set_commit_time(txn_info.commit_time());
     old_tablet_new_metadata->set_gtid(txn_info.gtid());
     tablet_reshard_helper::set_all_data_files_shared(old_tablet_new_metadata.get());
+    tablet_reshard_helper::reset_cdc_carryover_for_old_tablet(old_tablet_new_metadata.get(), base_version,
+                                                              old_tablet_old_metadata.get());
     new_metadatas.emplace(splitting_tablet.old_tablet_id(), std::move(old_tablet_new_metadata));
 
     auto split_start_ts = butil::gettimeofday_us();
@@ -247,6 +249,8 @@ CONTINUE_HANDLE_MERGING_TABLET:
         old_tablet_new_metadata->set_commit_time(txn_info.commit_time());
         old_tablet_new_metadata->set_gtid(txn_info.gtid());
         tablet_reshard_helper::set_all_data_files_shared(old_tablet_new_metadata.get(), true);
+        tablet_reshard_helper::reset_cdc_carryover_for_old_tablet(old_tablet_new_metadata.get(), base_version,
+                                                                  old_tablet_old_metadata.get());
         new_metadatas.emplace(old_tablet_old_metadata->id(), std::move(old_tablet_new_metadata));
     }
 
@@ -352,6 +356,8 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     old_tablet_new_metadata->set_commit_time(txn_info.commit_time());
     old_tablet_new_metadata->set_gtid(txn_info.gtid());
     tablet_reshard_helper::set_all_data_files_shared(old_tablet_new_metadata.get());
+    tablet_reshard_helper::reset_cdc_carryover_for_old_tablet(old_tablet_new_metadata.get(), base_version,
+                                                              old_tablet_old_metadata.get());
     new_metadatas.emplace(identical_tablet.old_tablet_id(), std::move(old_tablet_new_metadata));
 
     auto new_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_old_metadata);
@@ -362,6 +368,7 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     new_tablet_new_metadata->clear_compaction_inputs();
     new_tablet_new_metadata->clear_orphan_files();
     new_tablet_new_metadata->clear_prev_garbage_version();
+    tablet_reshard_helper::reset_cdc_carryover_for_new_tablet(new_tablet_new_metadata.get());
     // uid is inherited verbatim from the source rowsets via the metadata copy above.
     new_metadatas.emplace(identical_tablet.new_tablet_id(), std::move(new_tablet_new_metadata));
     return Status::OK();

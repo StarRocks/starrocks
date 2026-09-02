@@ -13261,4 +13261,278 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_sstable) {
     EXPECT_OK(run_merge());
 }
 
+// ============================================================================
+// Reshard CDC metadata hygiene. Every reshard publish writes its output as a
+// verbatim copy of a source metadata, so without an explicit reset each copy
+// would inherit the source's metadata_ancestors chain and the per-publish
+// cdc_metadata state of the source's LAST publish. The helpers below seed a
+// source with exactly the carry-over a real pre-reshard tablet accumulates and
+// assert the two shapes a reshard must write instead, over all six metadata
+// kinds: split parent / child, merge source / merged, identical old / new.
+// ============================================================================
+
+// The CDC state a real tablet carries at base_version: one recorded ancestor,
+// CDC enabled (a table property), and the previous publish's per-publish
+// capture state (a non-OK capture_status plus a pk_change_locator entry).
+inline void seed_stale_cdc_carryover(TabletMetadataPB* metadata, int64_t base_version) {
+    metadata->add_metadata_ancestors(base_version - 1);
+    auto* cdc = metadata->mutable_cdc_metadata();
+    cdc->set_enable_cdc(true);
+    Status::NotSupported("seed").to_protobuf(cdc->mutable_capture_status());
+    (*cdc->mutable_pk_change_locator()->mutable_compaction_input_delvecs())[1].set_version(base_version);
+}
+
+// An old tablet id's copy at the reshard version S continues its own history:
+// the chain restarts at base_version (S-1), so an (S-1, S] diff is empty by
+// construction instead of misattributing the base publish's rowsets, and it
+// carries a bounded prefix of the source's own chain behind that. The
+// per-publish CDC state is cleared; enable_cdc survives.
+inline void expect_old_tablet_cdc_reset(const TabletMetadataPtr& metadata, int64_t base_version) {
+    ASSERT_GE(metadata->metadata_ancestors_size(), 2); // the source was seeded with one ancestor
+    EXPECT_EQ(base_version, metadata->metadata_ancestors(0));
+    EXPECT_EQ(base_version - 1, metadata->metadata_ancestors(1)); // the seeded source entry
+    EXPECT_TRUE(metadata->cdc_metadata().enable_cdc());
+    EXPECT_FALSE(metadata->cdc_metadata().has_capture_status());
+    EXPECT_FALSE(metadata->cdc_metadata().has_pk_change_locator());
+}
+
+// A new tablet id has no metadata below S, so its chain must be empty: a
+// CHANGES walk misdispatched with base < S then fails classified
+// (CHANGE_NOT_TRACKABLE) rather than following an inherited ancestor into an
+// unclassified NotFound the frontend would retry.
+inline void expect_new_tablet_cdc_reset(const TabletMetadataPtr& metadata) {
+    EXPECT_EQ(0, metadata->metadata_ancestors_size());
+    EXPECT_TRUE(metadata->cdc_metadata().enable_cdc());
+    EXPECT_FALSE(metadata->cdc_metadata().has_capture_status());
+    EXPECT_FALSE(metadata->cdc_metadata().has_pk_change_locator());
+}
+
+TEST_F(LakeTabletReshardTest, test_reshard_splitting_resets_cdc_carryover) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    auto* rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_0.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(3);
+    }
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_1.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+        sm->set_num_rows(2);
+    }
+    rowset_meta_pb->add_del_files()->set_name("test.del");
+    rowset_meta_pb->set_overlapped(true);
+    rowset_meta_pb->set_data_size(1024);
+    rowset_meta_pb->set_num_rows(5);
+
+    FileMetaPB file_meta;
+    file_meta.set_name("test.delvec");
+    metadata.mutable_delvec_meta()->mutable_version_to_file()->insert({base_version, file_meta});
+    DeltaColumnGroupVerPB dcg;
+    dcg.add_column_files("test.dcg");
+    metadata.mutable_dcg_meta()->mutable_dcgs()->insert({2, dcg});
+    metadata.mutable_sstable_meta()->add_sstables()->set_filename("test.sst");
+
+    seed_stale_cdc_carryover(&metadata, base_version);
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& splitting_tablet = *resharding_tablet.mutable_splitting_tablet_info();
+    splitting_tablet.set_old_tablet_id(tablet_id);
+    splitting_tablet.add_new_tablet_ids(next_id());
+    splitting_tablet.add_new_tablet_ids(next_id());
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+    ASSERT_EQ(3U, tablet_metadatas.size());
+
+    // The split parent keeps publishing under its own id.
+    expect_old_tablet_cdc_reset(tablet_metadatas.at(tablet_id), base_version);
+    // Each child is a brand-new id with no history below new_version.
+    for (auto new_tablet_id : splitting_tablet.new_tablet_ids()) {
+        SCOPED_TRACE(fmt::format("split child {}", new_tablet_id));
+        expect_new_tablet_cdc_reset(tablet_metadatas.at(new_tablet_id));
+    }
+}
+
+// The identical-fallback branch of split_tablet materializes its single new
+// tablet through make_identical_new_tablet_metadata rather than the per-child
+// loop, so it needs its own coverage: that copy is a new id too.
+TEST_F(LakeTabletReshardTest, test_reshard_split_fallback_resets_cdc_carryover_on_new_tablet) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+
+    // 2 sort-key samples -> 3 candidate ranges, fewer than the 8 requested, so
+    // split_tablet takes the identical-fallback path.
+    auto* rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("seg_0.dat");
+        sm->set_size(1024);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
+        sm->set_num_rows(300);
+        sm->set_deprecated_sort_key_sample_row_interval(100);
+        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(100));
+        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(200));
+    }
+    rowset_meta_pb->set_num_rows(300);
+    rowset_meta_pb->set_data_size(1024);
+    seed_stale_cdc_carryover(&metadata, base_version);
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& splitting_tablet = *resharding_tablet.mutable_splitting_tablet_info();
+    splitting_tablet.set_old_tablet_id(tablet_id);
+    for (int i = 0; i < 8; ++i) {
+        splitting_tablet.add_new_tablet_ids(next_id());
+    }
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+    ASSERT_EQ(2U, tablet_metadatas.size());
+
+    expect_old_tablet_cdc_reset(tablet_metadatas.at(tablet_id), base_version);
+    expect_new_tablet_cdc_reset(tablet_metadatas.at(splitting_tablet.new_tablet_ids(0)));
+}
+
+TEST_F(LakeTabletReshardTest, test_reshard_merging_resets_cdc_carryover) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t old_tablet_id_1 = next_id();
+    const int64_t old_tablet_id_2 = next_id();
+    const int64_t new_tablet_id = next_id();
+
+    prepare_tablet_dirs(old_tablet_id_1);
+    prepare_tablet_dirs(old_tablet_id_2);
+    prepare_tablet_dirs(new_tablet_id);
+
+    // Same fixture as test_tablet_merging_basic, so the merge itself is on a proven
+    // shape and only the CDC carry-over seed is new.
+    auto meta1 = std::make_shared<TabletMetadataPB>();
+    meta1->set_id(old_tablet_id_1);
+    meta1->set_version(base_version);
+    meta1->set_next_rowset_id(100);
+    set_primary_key_schema(meta1.get(), 1001);
+    add_rowset(meta1.get(), 10, 7, 10);
+    (*meta1->mutable_rowset_to_schema())[10] = 1001;
+    add_delvec(meta1.get(), old_tablet_id_1, base_version, 10, "delvec-1", "aaaa");
+    add_sstable(meta1.get(), "sst-1", (static_cast<uint64_t>(1) << 32) | 7, true);
+    add_dcg_with_columns(meta1.get(), 10, "dcg-1", {101, 102}, 1);
+    seed_stale_cdc_carryover(meta1.get(), base_version);
+
+    auto meta2 = std::make_shared<TabletMetadataPB>();
+    meta2->set_id(old_tablet_id_2);
+    meta2->set_version(base_version);
+    meta2->set_next_rowset_id(3);
+    set_primary_key_schema(meta2.get(), 2002);
+    add_rowset(meta2.get(), 1, 3, 1);
+    (*meta2->mutable_rowset_to_schema())[1] = 2002;
+    add_delvec(meta2.get(), old_tablet_id_2, base_version, 1, "delvec-2", "bbbbbb");
+    add_sstable(meta2.get(), "sst-2", (static_cast<uint64_t>(2) << 32) | 5, true);
+    add_dcg_with_columns(meta2.get(), 1, "dcg-2", {201, 202}, 1);
+    seed_stale_cdc_carryover(meta2.get(), base_version);
+
+    ASSERT_OK(put_tablet_metadata(meta1));
+    ASSERT_OK(put_tablet_metadata(meta2));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(old_tablet_id_1);
+    merging_tablet.add_old_tablet_ids(old_tablet_id_2);
+    merging_tablet.set_new_tablet_id(new_tablet_id);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(10);
+    txn_info.set_commit_time(111);
+    txn_info.set_gtid(222);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    // Every merge source keeps publishing under its own id.
+    for (int64_t old_tablet_id : {old_tablet_id_1, old_tablet_id_2}) {
+        SCOPED_TRACE(fmt::format("merge source {}", old_tablet_id));
+        expect_old_tablet_cdc_reset(tablet_metadatas.at(old_tablet_id), base_version);
+    }
+    // The merged tablet is a new id, even though its metadata is a copy of the
+    // first source's.
+    expect_new_tablet_cdc_reset(tablet_metadatas.at(new_tablet_id));
+}
+
+TEST_F(LakeTabletReshardTest, test_reshard_identical_resets_cdc_carryover) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+
+    starrocks::TabletMetadata metadata;
+    auto tablet_id = next_id();
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    auto* rowset_meta_pb = metadata.add_rowsets();
+    rowset_meta_pb->set_id(2);
+    {
+        auto* sm = rowset_meta_pb->add_segment_metas();
+        sm->set_filename("test_0.dat");
+        sm->set_size(512);
+        sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+        sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+        sm->set_num_rows(3);
+    }
+    rowset_meta_pb->set_data_size(512);
+    rowset_meta_pb->set_num_rows(3);
+    seed_stale_cdc_carryover(&metadata, base_version);
+    ASSERT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& identical_tablet = *resharding_tablet.mutable_identical_tablet_info();
+    identical_tablet.set_old_tablet_id(tablet_id);
+    identical_tablet.set_new_tablet_id(next_id());
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+    ASSERT_EQ(2U, tablet_metadatas.size());
+
+    expect_old_tablet_cdc_reset(tablet_metadatas.at(tablet_id), base_version);
+    expect_new_tablet_cdc_reset(tablet_metadatas.at(identical_tablet.new_tablet_id()));
+}
+
 } // namespace starrocks

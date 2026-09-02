@@ -1203,6 +1203,7 @@ MutableTabletMetadataPtr make_identical_new_tablet_metadata(const TabletMetadata
     new_tablet_metadata->clear_compaction_inputs();
     new_tablet_metadata->clear_orphan_files();
     new_tablet_metadata->clear_prev_garbage_version();
+    tablet_reshard_helper::reset_cdc_carryover_for_new_tablet(new_tablet_metadata.get());
     // Every rowset already carries a uid (minted by its producer); the metadata copy
     // above preserves it, so no per-rowset uid handling is needed here.
     return new_tablet_metadata;
@@ -1716,6 +1717,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> build_new_tablet
         new_tablet_new_metadata->clear_orphan_files();
         new_tablet_new_metadata->clear_prev_garbage_version();
         new_tablet_new_metadata->mutable_range()->CopyFrom(split_ranges[i].range);
+        tablet_reshard_helper::reset_cdc_carryover_for_new_tablet(new_tablet_new_metadata.get());
         // Non-segment files (delvec/dcg/sstable) stay all-shared; each rowset's
         // per-segment shared flags are (re)written below by exactly one branch per rowset.
         tablet_reshard_helper::set_non_segment_files_shared(new_tablet_new_metadata.get());

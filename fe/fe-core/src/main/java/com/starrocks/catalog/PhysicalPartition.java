@@ -227,18 +227,28 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      * {@code nextVersionEpoch}.
      */
     public PhysicalPartition copyForBookmark(long visibleVersion, long visibleVersionTimeMs) {
+        MaterializedIndex latestBaseIndex = null;
+        List<Long> baseIndexIds = this.indexMetaIdToIndexIds.get(this.baseIndexMetaId);
+        if (baseIndexIds != null && !baseIndexIds.isEmpty()) {
+            latestBaseIndex = this.idToVisibleIndex.get(baseIndexIds.get(baseIndexIds.size() - 1));
+        }
+        return copyForBookmark(latestBaseIndex, visibleVersion, visibleVersionTimeMs);
+    }
+
+    /**
+     * Same as {@link #copyForBookmark(long, long)} but scoped to a caller-chosen base-index
+     * generation -- used by bookmark reads whose anchored generation predates a tablet reshard
+     * (the old generation stays installed until the recycle bin erases it).
+     */
+    public PhysicalPartition copyForBookmark(MaterializedIndex baseIndex, long visibleVersion,
+                                             long visibleVersionTimeMs) {
         PhysicalPartition copy = new PhysicalPartition();
         copy.id              = this.id;
         copy.parentId        = this.parentId;
         copy.baseIndexMetaId = this.baseIndexMetaId;
-        List<Long> baseIndexIds = this.indexMetaIdToIndexIds.get(this.baseIndexMetaId);
-        if (baseIndexIds != null && !baseIndexIds.isEmpty()) {
-            long latestBaseIndexId = baseIndexIds.get(baseIndexIds.size() - 1);
-            copy.indexMetaIdToIndexIds.put(this.baseIndexMetaId, Lists.newArrayList(latestBaseIndexId));
-            MaterializedIndex latestBaseIndex = this.idToVisibleIndex.get(latestBaseIndexId);
-            if (latestBaseIndex != null) {
-                copy.idToVisibleIndex.put(latestBaseIndexId, latestBaseIndex);
-            }
+        if (baseIndex != null) {
+            copy.indexMetaIdToIndexIds.put(this.baseIndexMetaId, Lists.newArrayList(baseIndex.getId()));
+            copy.idToVisibleIndex.put(baseIndex.getId(), baseIndex);
         }
         copy.visibleVersion     = visibleVersion;
         copy.visibleVersionTime = visibleVersionTimeMs;

@@ -775,6 +775,115 @@ public class VacuumTest {
     }
 
     /**
+     * The base generation's takeoverVersion (set by a tablet reshard) must clamp minRetainVersion
+     * above the bookmark fence, since versions below it don't exist for the base index's tablets.
+     * With no reshard (takeoverVersion == 0), the fence still wins as before.
+     */
+    @Test
+    public void testAutovacuumClampsMinRetainVersionToBaseTakeoverVersion() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(100L, System.currentTimeMillis());
+        partition.setMinRetainVersion(50L);
+        partition.setLastSuccVacuumVersion(0L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
+
+        MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+        long previousBaseTakeover = baseIndex.getTakeoverVersion();
+
+        BookmarkFenceMocks fence = new BookmarkFenceMocks(() -> Optional.of(10L));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public BookmarkManager getBookmarkManager() {
+                return fence.bookmarkManager;
+            }
+        };
+
+        try {
+            baseIndex.setTakeoverVersion(30L);
+            Assertions.assertEquals(30L, runVacuumCaptureMinRetainVersion(),
+                    "base takeover must raise minRetainVersion above the bookmark fence");
+
+            baseIndex.setTakeoverVersion(0L);
+            Assertions.assertEquals(10L, runVacuumCaptureMinRetainVersion(),
+                    "with no reshard takeover, the bookmark fence must still win");
+        } finally {
+            baseIndex.setTakeoverVersion(previousBaseTakeover);
+            partition.setLastVacuumTime(0L);
+        }
+    }
+
+    /**
+     * A non-base latest index (e.g. a range rollup) with a newer takeoverVersion than the base
+     * generation must NOT raise minRetainVersion: only the base generation's takeover is
+     * authoritative for the bookmark fence it shares.
+     */
+    @Test
+    public void testAutovacuumClampIgnoresNonBaseIndexTakeoverVersion() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(100L, System.currentTimeMillis());
+        partition.setMinRetainVersion(50L);
+        partition.setLastSuccVacuumVersion(0L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
+
+        MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+        long previousBaseTakeover = baseIndex.getTakeoverVersion();
+        baseIndex.setTakeoverVersion(30L);
+
+        long rollupIndexId = GlobalStateMgr.getCurrentState().getNextId();
+        long rollupMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        MaterializedIndex rollupIndex = new MaterializedIndex(rollupIndexId, rollupMetaId,
+                MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        rollupIndex.setTakeoverVersion(50L);
+        partition.createRollupIndex(rollupIndex);
+
+        BookmarkFenceMocks fence = new BookmarkFenceMocks(() -> Optional.of(10L));
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public BookmarkManager getBookmarkManager() {
+                return fence.bookmarkManager;
+            }
+        };
+
+        try {
+            Assertions.assertEquals(30L, runVacuumCaptureMinRetainVersion(),
+                    "a newer non-base takeover must be ignored by the clamp");
+        } finally {
+            partition.deleteMaterializedIndexByMetaId(rollupMetaId);
+            baseIndex.setTakeoverVersion(previousBaseTakeover);
+            partition.setLastVacuumTime(0L);
+        }
+    }
+
+    private long runVacuumCaptureMinRetainVersion() throws Exception {
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 0;
+        mockResponse.vacuumedFiles = 0L;
+        mockResponse.vacuumedFileSize = 0L;
+        mockResponse.vacuumedVersion = 0L;
+        mockResponse.extraFileSize = 0L;
+        mockResponse.tabletInfos = new ArrayList<>();
+
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(mockResponse);
+
+        AtomicLong sentMinRetainVersion = new AtomicLong(-1L);
+        LakeService localLakeService = mock(LakeService.class);
+        when(localLakeService.vacuum(any(VacuumRequest.class))).thenAnswer(invocation -> {
+            VacuumRequest req = invocation.getArgument(0);
+            sentMinRetainVersion.set(req.minRetainVersion);
+            return mockFuture;
+        });
+        try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
+            mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(localLakeService);
+            new AutovacuumDaemon().testVacuumPartitionImpl(db, olapTable, partition);
+        }
+        return sentMinRetainVersion.get();
+    }
+
+    /**
      * Installs a MockUp so BookmarkManager.getPhysicalPartitionFenceVersion returns whatever
      * {@code fence} supplies at the moment vacuum reads it.
      */

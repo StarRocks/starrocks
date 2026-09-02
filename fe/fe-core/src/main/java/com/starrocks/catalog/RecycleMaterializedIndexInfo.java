@@ -48,16 +48,26 @@ public class RecycleMaterializedIndexInfo {
     private final long dbId;
     @SerializedName(value = "tableId")
     private final long tableId;
+    @SerializedName(value = "logicalPartitionId")
+    private final long logicalPartitionId;
     @SerializedName(value = "physicalPartitionId")
     private final long physicalPartitionId;
     @SerializedName(value = "indexId")
     private final long indexId;
-
-    public RecycleMaterializedIndexInfo(long dbId, long tableId, long physicalPartitionId, long indexId) {
+    /**
+     * The reshard commit version at which this generation stopped serving; 0 = unknown
+     * (pre-upgrade entry), never bookmark-gated.
+     */
+    @SerializedName(value = "supersededAtVersion")
+    private final long supersededAtVersion;
+    public RecycleMaterializedIndexInfo(long dbId, long tableId, long logicalPartitionId,
+            long physicalPartitionId, long indexId, long supersededAtVersion) {
         this.dbId = dbId;
         this.tableId = tableId;
+        this.logicalPartitionId = logicalPartitionId;
         this.physicalPartitionId = physicalPartitionId;
         this.indexId = indexId;
+        this.supersededAtVersion = supersededAtVersion;
     }
 
     public long getDbId() {
@@ -68,12 +78,20 @@ public class RecycleMaterializedIndexInfo {
         return tableId;
     }
 
+    public long getLogicalPartitionId() {
+        return logicalPartitionId;
+    }
+
     public long getPhysicalPartitionId() {
         return physicalPartitionId;
     }
 
     public long getIndexId() {
         return indexId;
+    }
+
+    public long getSupersededAtVersion() {
+        return supersededAtVersion;
     }
 
     /**

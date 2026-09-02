@@ -1,0 +1,494 @@
+-- name: test_cdc_reshard_dup_split @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE dup_t (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (1, 10);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_t", "rt", "1800000");
+INSERT INTO dup_t VALUES (2, 20);
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (3, 30);
+-- result:
+-- !result
+function: set_max_tablet_id("dup_t")
+-- result:
+None
+-- !result
+ALTER TABLE dup_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+-- result:
+-- !result
+function: wait_reshard_job_finish("dup_t", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO dup_t VALUES (4, 40);
+-- result:
+-- !result
+INSERT INTO dup_t VALUES (5, 50);
+-- result:
+-- !result
+[UC]bk2=SELECT bookmark_create("${db[0]}", "dup_t", "rt", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "dup_t", "${bk2}", "rt");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__;
+-- result:
+2	20	0
+3	30	0
+4	40	0
+5	50	0
+-- !result
+SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_t [_CHANGES_${bk1}_${bk2}_];
+-- result:
+4	4
+-- !result
+
+
+
+-- name: test_cdc_reshard_pk_split @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE pk_t (k bigint NOT NULL, v bigint)
+PRIMARY KEY(k)
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO pk_t VALUES (1, 10), (2, 20), (4, 40);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "pk_t", "rt", "1800000");
+UPDATE pk_t SET v = 11 WHERE k = 1;
+-- result:
+-- !result
+DELETE FROM pk_t WHERE k = 2;
+-- result:
+-- !result
+UPDATE pk_t SET v = 41 WHERE k = 4;
+-- result:
+-- !result
+function: set_max_tablet_id("pk_t")
+-- result:
+None
+-- !result
+ALTER TABLE pk_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+-- result:
+-- !result
+function: wait_reshard_job_finish("pk_t", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO pk_t VALUES (3, 30);
+-- result:
+-- !result
+UPDATE pk_t SET v = 31 WHERE k = 3;
+-- result:
+-- !result
+UPDATE pk_t SET v = 42 WHERE k = 4;
+-- result:
+-- !result
+[UC]bk2=SELECT bookmark_create("${db[0]}", "pk_t", "rt", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "pk_t", "${bk2}", "rt");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__, __CHANGE_TYPE__ DESC;
+-- result:
+1	10	1
+1	11	0
+2	20	1
+4	40	1
+4	41	0
+3	30	0
+3	30	1
+3	31	0
+4	41	1
+4	42	0
+-- !result
+SET enable_cdc_net_change = true;
+-- result:
+-- !result
+SELECT k, v, __CHANGE_TYPE__ FROM pk_t [_CHANGES_${bk1}_${bk2}_] ORDER BY k, __CHANGE_TYPE__ DESC;
+-- result:
+1	10	1
+1	11	0
+2	20	1
+3	31	0
+4	40	1
+4	42	0
+-- !result
+
+
+
+-- name: test_pitq_reshard_split @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE pitq_t (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO pitq_t VALUES (1, 10), (2, 20);
+-- result:
+-- !result
+[UC]bk_id=SELECT bookmark_create("${db[0]}", "pitq_t", "rt", "1800000");
+function: set_max_tablet_id("pitq_t")
+-- result:
+None
+-- !result
+ALTER TABLE pitq_t SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+-- result:
+-- !result
+function: wait_reshard_job_finish("pitq_t", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO pitq_t VALUES (3, 30);
+-- result:
+-- !result
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "pitq_t", "${bk_id}", "rt");
+} END CLEANUP
+
+SELECT k, v FROM pitq_t ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+SELECT k, v FROM pitq_t bk [_BOOKMARK_${bk_id}_] ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+
+
+
+-- name: test_cdc_reshard_double_split @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE dup_t2 (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_t2 VALUES (1, 10);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_t2", "rt", "1800000");
+INSERT INTO dup_t2 VALUES (2, 20);
+-- result:
+-- !result
+function: set_max_tablet_id("dup_t2")
+-- result:
+None
+-- !result
+ALTER TABLE dup_t2 SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+-- result:
+-- !result
+function: wait_reshard_job_finish("dup_t2", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO dup_t2 VALUES (3, 30);
+-- result:
+-- !result
+INSERT INTO dup_t2 VALUES (0, 0);
+-- result:
+-- !result
+function: set_max_tablet_id("dup_t2")
+-- result:
+None
+-- !result
+ALTER TABLE dup_t2 SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-2');
+-- result:
+-- !result
+function: wait_reshard_job_finish("dup_t2", "SPLIT_TABLET", 2)
+-- result:
+None
+-- !result
+INSERT INTO dup_t2 VALUES (4, 40);
+-- result:
+-- !result
+[UC]bk2=SELECT bookmark_create("${db[0]}", "dup_t2", "rt", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_t2", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "dup_t2", "${bk2}", "rt");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM dup_t2 [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__;
+-- result:
+2	20	0
+3	30	0
+0	0	0
+4	40	0
+-- !result
+SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_t2 [_CHANGES_${bk1}_${bk2}_];
+-- result:
+4	4
+-- !result
+
+
+
+-- name: test_cdc_reshard_merge @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+[UC]ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "true");
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE dup_m (k bigint NOT NULL, v bigint)
+DUPLICATE KEY(k)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dup_m VALUES (1, 10);
+-- result:
+-- !result
+[UC]bk1=SELECT bookmark_create("${db[0]}", "dup_m", "rt", "1800000");
+INSERT INTO dup_m VALUES (2, 20);
+-- result:
+-- !result
+INSERT INTO dup_m VALUES (3, 30);
+-- result:
+-- !result
+INSERT INTO dup_m VALUES (4, 40);
+-- result:
+-- !result
+function: snapshot_tablet_ids("dup_m")
+-- result:
+None
+-- !result
+function: set_max_tablet_id("dup_m")
+-- result:
+None
+-- !result
+ALTER TABLE dup_m SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-3');
+-- result:
+-- !result
+function: wait_reshard_job_finish("dup_m", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO dup_m VALUES (5, 50);
+-- result:
+-- !result
+function: merge_tablets_added_since_snapshot("dup_m")
+-- result:
+None
+-- !result
+function: wait_reshard_job_finish("dup_m", "MERGE_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO dup_m VALUES (6, 60);
+-- result:
+-- !result
+[UC]bk2=SELECT bookmark_create("${db[0]}", "dup_m", "rt", "1800000");
+CLEANUP {
+    SELECT bookmark_release("${db[0]}", "dup_m", "${bk1}", "rt");
+    SELECT bookmark_release("${db[0]}", "dup_m", "${bk2}", "rt");
+    ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+} END CLEANUP
+
+SELECT k, v, __CHANGE_TYPE__ FROM dup_m [_CHANGES_${bk1}_${bk2}_] ORDER BY __ROW_VERSION__;
+-- result:
+2	20	0
+3	30	0
+4	40	0
+5	50	0
+6	60	0
+-- !result
+SELECT count(*), count(DISTINCT __ROW_VERSION__) FROM dup_m [_CHANGES_${bk1}_${bk2}_];
+-- result:
+5	5
+-- !result
+
+
+
+-- name: test_ivm_mv_reshard_split @cloud
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE ivm_split_base (k bigint NOT NULL, v bigint)
+PRIMARY KEY(k)
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO ivm_split_base VALUES (1, 10);
+-- result:
+-- !result
+INSERT INTO ivm_split_base VALUES (2, 20);
+-- result:
+-- !result
+INSERT INTO ivm_split_base VALUES (3, 30);
+-- result:
+-- !result
+SET enable_range_distribution = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ivm_split_mv REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM ivm_split_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW ivm_split_mv WITH SYNC MODE;
+INSERT INTO ivm_split_base VALUES (4, 40);
+-- result:
+-- !result
+function: set_max_tablet_id("ivm_split_base")
+-- result:
+None
+-- !result
+ALTER TABLE ivm_split_base SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-3');
+-- result:
+-- !result
+function: wait_reshard_job_finish("ivm_split_base", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO ivm_split_base VALUES (5, 50);
+-- result:
+-- !result
+INSERT INTO ivm_split_base VALUES (6, 60);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW ivm_split_mv WITH SYNC MODE;
+SELECT k, v FROM ivm_split_mv ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM ivm_split_mv EXCEPT SELECT k, v FROM ivm_split_base) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM ivm_split_base EXCEPT SELECT k, v FROM ivm_split_mv) t;
+-- result:
+0
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'ivm_split_mv';
+-- result:
+true
+-- !result
+function: assert_query_contains("SELECT count(*) >= 1 FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='${db[0]}' AND TABLE_NAME='ivm_split_mv' AND IMV_SOURCE_VERSION_RANGE IS NOT NULL", "1")
+-- result:
+None
+-- !result
+DROP MATERIALIZED VIEW ivm_split_mv;
+-- result:
+-- !result
+-- name: test_ivm_mv_reshard_merge @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "true");
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE ivm_merge_base (k bigint NOT NULL, v bigint)
+PRIMARY KEY(k)
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO ivm_merge_base VALUES (1, 10);
+-- result:
+-- !result
+INSERT INTO ivm_merge_base VALUES (2, 20);
+-- result:
+-- !result
+INSERT INTO ivm_merge_base VALUES (3, 30);
+-- result:
+-- !result
+INSERT INTO ivm_merge_base VALUES (4, 40);
+-- result:
+-- !result
+SET enable_range_distribution = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW ivm_merge_mv REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, v FROM ivm_merge_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW ivm_merge_mv WITH SYNC MODE;
+function: snapshot_tablet_ids("ivm_merge_base")
+-- result:
+None
+-- !result
+function: set_max_tablet_id("ivm_merge_base")
+-- result:
+None
+-- !result
+ALTER TABLE ivm_merge_base SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-3');
+-- result:
+-- !result
+function: wait_reshard_job_finish("ivm_merge_base", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO ivm_merge_base VALUES (5, 50);
+-- result:
+-- !result
+function: merge_tablets_added_since_snapshot("ivm_merge_base")
+-- result:
+None
+-- !result
+function: wait_reshard_job_finish("ivm_merge_base", "MERGE_TABLET", 1)
+-- result:
+None
+-- !result
+INSERT INTO ivm_merge_base VALUES (6, 60);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW ivm_merge_mv WITH SYNC MODE;
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+} END CLEANUP
+
+SELECT k, v FROM ivm_merge_mv ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+6	60
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT k, v FROM ivm_merge_mv EXCEPT SELECT k, v FROM ivm_merge_base) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT k, v FROM ivm_merge_base EXCEPT SELECT k, v FROM ivm_merge_mv) t;
+-- result:
+0
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'ivm_merge_mv';
+-- result:
+true
+-- !result
+function: assert_query_contains("SELECT count(*) >= 1 FROM information_schema.materialized_view_refresh_jobs WHERE TABLE_SCHEMA='${db[0]}' AND TABLE_NAME='ivm_merge_mv' AND IMV_SOURCE_VERSION_RANGE IS NOT NULL", "1")
+-- result:
+None
+-- !result
+DROP MATERIALIZED VIEW ivm_merge_mv;
+-- result:
+-- !result
