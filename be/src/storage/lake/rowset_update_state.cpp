@@ -384,6 +384,12 @@ StatusOr<std::vector<int32_t>> RowsetUpdateState::_read_cset_column_from_upt(uin
                 strings::Substitute("FLEXIBLE-on-ROW: segment_id $0 out of range ($1 segments) reading `$2`",
                                     segment_id, segment_iters.size(), LOAD_CSET_COLUMN));
     }
+    // Positional vector: an empty slot means that segment held no rows for this tablet.
+    if (segment_iters[segment_id] == nullptr) {
+        return Status::InternalError(
+                strings::Substitute("FLEXIBLE-on-ROW: segment $0 has no iterator (empty for this tablet) reading `$1`",
+                                    segment_id, LOAD_CSET_COLUMN));
+    }
     DeferOp close_iters([&]() {
         for (auto& it : segment_iters) {
             if (it != nullptr) {
@@ -983,6 +989,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
                                                  union_schema, union_schema_ts, true, &upt_stats));
         RETURN_ERROR_IF_FALSE(segment_id < upt_iters.size(),
                               "FLEXIBLE-on-ROW: segment_id out of range reading .upt union columns");
+        RETURN_ERROR_IF_FALSE(upt_iters[segment_id] != nullptr,
+                              "FLEXIBLE-on-ROW: segment has no iterator (empty for this tablet) reading .upt");
         DeferOp close_upt_iters([&]() {
             for (auto& it : upt_iters) {
                 if (it != nullptr) {

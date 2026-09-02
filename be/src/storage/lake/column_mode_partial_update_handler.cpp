@@ -765,6 +765,13 @@ StatusOr<std::vector<int32_t>> ColumnModePartialUpdateHandler::_read_cset_column
                 fmt::format("ColumnModePartialUpdateHandler: upt_id {} out of range ({} segments) reading `{}`", upt_id,
                             segment_iters.size(), kSDCGCsetColumnName));
     }
+    // The vector is positional, so this slot can be empty when that segment held no rows for this
+    // tablet. Reading it would dereference a null iterator; say so instead.
+    if (segment_iters[upt_id] == nullptr) {
+        return Status::InternalError(fmt::format(
+                "ColumnModePartialUpdateHandler: segment {} has no iterator (empty for this tablet) reading `{}`",
+                upt_id, kSDCGCsetColumnName));
+    }
     DeferOp close_iters([&]() {
         for (auto& it : segment_iters) {
             if (it != nullptr) it->close();

@@ -744,8 +744,14 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_s
     // suffix of rows and corrupting per-column presence for a subset of base rows.
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
+    // POSITIONAL, not compacted. Every caller indexes this by the segment's own index -- upt_id /
+    // segment_id -- to pair a segment with its `__cset__` set-ids. A segment whose iterator comes
+    // back EOF (a range-distributed tablet can own no rows of an early segment) must therefore
+    // leave a HOLE, not shift everything after it down by one: compacting here silently pairs
+    // every later segment with the wrong segment's set-ids. get_each_segment_iterator_with_delvec
+    // states the same contract a few lines below and sizes up front for exactly this reason.
     std::vector<ChunkIteratorPtr> seg_iterators;
-    seg_iterators.reserve(metadata().segment_metas_size());
+    seg_iterators.resize(metadata().segment_metas_size());
     size_t footer_size_hint = 16 * 1024;
     for (int index = 0; index < metadata().segment_metas_size(); index++) {
         const auto& segment_meta = metadata().segment_metas(index);
@@ -774,12 +780,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_s
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            // Leave the hole; callers null-check.
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        seg_iterators.push_back(std::move(res).value());
+        seg_iterators[index] = std::move(res).value();
     }
     return seg_iterators;
 }
