@@ -591,27 +591,13 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             const auto* upt_pairs_ptr = &each.second;
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
-<<<<<<< HEAD
                          upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids, &updated_rowids_per_segment,
-                         &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex,
-                         &shared_status]() {
+                         &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex]() -> Status {
                 // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
                 // `updated_rowids` accumulates segment-absolute rowids across every streamed range.
                 Roaring updated_rowids;
-                auto writer_or = _prepare_delta_column_group_writer(params, partial_tschema);
-                if (!writer_or.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(writer_or.status());
-                    return;
-                }
-                auto delta_column_group_writer = std::move(writer_or.value());
-=======
-                         upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids,
-                         &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex]() -> Status {
-                // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
                 ASSIGN_OR_RETURN(auto delta_column_group_writer,
                                  _prepare_delta_column_group_writer(params, partial_tschema));
->>>>>>> f3abeab3a13... [Refactor] Convert the partial-update and condition-update fan-outs to the runner (#78356)
                 auto st = _read_from_source_segment_and_update(
                         params, partial_schema, rssid, [&](StreamChunkContainer container) {
                             const size_t source_chunk_size = container.chunk_ptr->memory_usage();
@@ -640,23 +626,12 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
                 // 3.6 collect results under lock
                 std::lock_guard<std::mutex> l(result_mutex);
-<<<<<<< HEAD
-                shared_status.update(st);
-                if (shared_status.ok()) {
-                    dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
-                    dcg_column_file_with_encryption_metas[rssid].emplace_back(
-                            file_name(delta_column_group_writer->segment_path()),
-                            delta_column_group_writer->encryption_meta());
-                    dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
-                    updated_rowids_per_segment[rssid] |= updated_rowids;
-                }
-=======
                 dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
                 dcg_column_file_with_encryption_metas[rssid].emplace_back(
                         file_name(delta_column_group_writer->segment_path()),
                         delta_column_group_writer->encryption_meta());
                 dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
->>>>>>> f3abeab3a13... [Refactor] Convert the partial-update and condition-update fan-outs to the runner (#78356)
+                updated_rowids_per_segment[rssid] |= updated_rowids;
                 TRACE_COUNTER_INCREMENT("pcu_handle_cnt", 1);
                 return Status::OK();
             };
