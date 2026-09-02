@@ -887,7 +887,8 @@ Status DeltaWriterImpl::init_write_schema() {
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         _partial_schema_with_sort_key_conflict = starrocks::DeltaWriter::is_partial_update_with_sort_key_conflict(
-                _partial_update_mode, _write_column_ids, sort_key_idxes, _tablet_schema->num_key_columns());
+                _partial_update_mode, _write_column_ids, sort_key_idxes, _tablet_schema->num_key_columns(),
+                /*column_mode_inserts_rows=*/_flexible_partial_update);
         auto write_schema = TabletSchema::create(_tablet_schema, _write_column_ids);
         // Append the synthetic "__cset__" set-id column (reserved uid) so the set-id flows
         // into the op_write .dat (lake's update payload), mirroring the local .upt path.

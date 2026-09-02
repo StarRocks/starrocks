@@ -232,10 +232,14 @@ public:
     }
     const DeltaWriterStat& get_writer_stat() const { return _stats; }
 
+    // |column_mode_inserts_rows| tells the sort-key gate that a COLUMN_UPDATE_MODE load can still
+    // INSERT rows. That is true only for a flexible partial update, which stays in
+    // COLUMN_UPDATE_MODE but upserts; every other column-update load is update-only.
     static bool is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
                                                          const std::vector<int32_t>& referenced_column_ids,
                                                          const std::vector<ColumnId>& sort_key_idxes,
-                                                         size_t num_key_columns);
+                                                         size_t num_key_columns,
+                                                         bool column_mode_inserts_rows = false);
 
     // Maps the table's sort key columns, in their original order, onto positions in a partial update
     // schema built from |referenced_column_ids|. Returns an empty vector if any sort key column is
