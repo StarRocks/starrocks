@@ -394,6 +394,18 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testRunningTransactionsSchemaScanPushesExactDbName() throws Exception {
+        // running_transactions resolves the pushed-down database with an exact getDb() lookup, the same way
+        // loads does, so the planner must hand it the literal name. If it were escaped for LIKE matching, a
+        // database whose name contains '_' would arrive as 'my\_db', the exact lookup would miss, and the
+        // query would silently return no rows instead of that database's transactions.
+        String sql = "select txn_id from information_schema.running_transactions where database_name = 'test_db'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("test_db", scanNode.getSchemaDb());
+    }
+
+    @Test
     public void testSchemaScanWithLikePattern() throws Exception {
         String sql = "select column_name from information_schema.columns " +
                 "where table_schema like 'test_%' and table_name like 'my_table%'";
