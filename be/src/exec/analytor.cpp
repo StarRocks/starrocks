@@ -1413,9 +1413,10 @@ bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t availa
             current_frame_start = std::max<int64_t>(current_frame_start, _partition.start);
             current_frame_end = std::min<int64_t>(current_frame_end, _partition.end);
         }
-        if (!_agg_functions[i]->is_window_result_ready(
-                    _agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i], _agg_intput_columns[i],
-                    partition_start, available_end, current_frame_start, current_frame_end, _partition.is_real)) {
+        if (!_agg_functions[i]->is_window_result_ready(_agg_fn_ctxs[i],
+                                                       _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i],
+                                                       _agg_intput_columns[i], partition_start, available_end,
+                                                       current_frame_start, current_frame_end, _partition.is_real)) {
             return false;
         }
     }

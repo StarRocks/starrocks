@@ -539,6 +539,9 @@ struct LeadLagState<LT, true> {
     bool default_is_null = false;
     int64_t target_not_null_index = 0; // recored the 'offset' not null value's position
     size_t non_null_count;             // only used for lag
+    int64_t lead_ready_current_row = INT64_MIN;
+    int64_t lead_ready_scan_end = 0;
+    int64_t lead_ready_non_null_count = 0;
     bool default_value_is_constant = false;
 };
 
@@ -762,6 +765,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         if constexpr (ignoreNulls) {
             this->data(state).target_not_null_index = INT64_MIN;
             this->data(state).non_null_count = 0;
+            this->data(state).lead_ready_current_row = INT64_MIN;
+            this->data(state).lead_ready_scan_end = 0;
+            this->data(state).lead_ready_non_null_count = 0;
         }
     }
 
@@ -769,38 +775,61 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     // beyond the physical N FOLLOWING frame. Wait while the partition may still grow and that
     // non-null is not yet in [current+1, available_end). Once the partition is complete, the
     // existing update path may emit the default.
-    bool is_window_result_ready(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& columns,
-                                int64_t partition_start, int64_t available_end, int64_t frame_start,
-                                int64_t frame_end, bool partition_is_complete) const override {
-        if constexpr (!(ignoreNulls && !isLag)) {
-            return true;
-        }
-        if (partition_is_complete) {
-            return true;
-        }
-        const int64_t offset = this->data(state).offset;
-        DCHECK_GT(offset, 0);
-        // Same encoding as update_batch_single_state_with_frame: frame_end = current + offset + 1.
-        int64_t current_row = frame_end - 1 - offset;
-        if (current_row < partition_start) {
-            current_row = partition_start;
-        }
-        if (columns.empty() || columns[0] == nullptr) {
-            return false;
-        }
-        const Column* col = columns[0].get();
-        const int64_t search_end = std::min(available_end, static_cast<int64_t>(col->size()));
-        int64_t remaining = offset;
-        int64_t pos = current_row;
-        while (remaining > 0 && pos + 1 < search_end) {
-            const int64_t next = static_cast<int64_t>(ColumnHelper::find_nonnull(col, pos + 1, search_end));
-            if (next >= search_end) {
+    bool is_window_result_ready(FunctionContext* ctx, AggDataPtr __restrict state, const Columns& columns,
+                                int64_t partition_start, int64_t available_end, int64_t frame_start, int64_t frame_end,
+                                bool partition_is_complete) const override {
+        // The cursor fields below exist only in the IGNORE NULLS state specialization, so the whole
+        // body must sit inside `if constexpr` to stay uninstantiated for the other cases.
+        if constexpr (ignoreNulls && !isLag) {
+            if (partition_is_complete) {
+                return true;
+            }
+            const int64_t offset = this->data(state).offset;
+            DCHECK_GT(offset, 0);
+            // Same encoding as update_batch_single_state_with_frame: frame_end = current + offset + 1.
+            int64_t current_row = frame_end - 1 - offset;
+            if (current_row < partition_start) {
+                current_row = partition_start;
+            }
+            if (columns.empty() || columns[0] == nullptr) {
                 return false;
             }
-            pos = next;
-            --remaining;
+            const Column* col = columns[0].get();
+            const int64_t search_end = std::min(available_end, static_cast<int64_t>(col->size()));
+            auto& lead_state = this->data(state);
+
+            // Both current_row and search_end move forward within a partition. Keep the number of
+            // non-nulls in (lead_ready_current_row, lead_ready_scan_end), retract rows that leave
+            // the window, and only scan newly available rows. This makes the total scan linear.
+            if (lead_state.lead_ready_current_row == INT64_MIN || current_row < lead_state.lead_ready_current_row) {
+                lead_state.lead_ready_current_row = current_row;
+                lead_state.lead_ready_scan_end = current_row + 1;
+                lead_state.lead_ready_non_null_count = 0;
+            } else if (current_row > lead_state.lead_ready_current_row) {
+                const int64_t retract_end = std::min(current_row + 1, lead_state.lead_ready_scan_end);
+                for (int64_t pos = lead_state.lead_ready_current_row + 1; pos < retract_end; ++pos) {
+                    if (!col->is_null(pos)) {
+                        --lead_state.lead_ready_non_null_count;
+                    }
+                }
+                lead_state.lead_ready_current_row = current_row;
+                lead_state.lead_ready_scan_end = std::max(lead_state.lead_ready_scan_end, current_row + 1);
+            }
+
+            while (lead_state.lead_ready_non_null_count < offset && lead_state.lead_ready_scan_end < search_end) {
+                const int64_t next = static_cast<int64_t>(
+                        ColumnHelper::find_nonnull(col, lead_state.lead_ready_scan_end, search_end));
+                if (next >= search_end) {
+                    lead_state.lead_ready_scan_end = search_end;
+                    break;
+                }
+                lead_state.lead_ready_scan_end = next + 1;
+                ++lead_state.lead_ready_non_null_count;
+            }
+            return lead_state.lead_ready_non_null_count >= offset;
+        } else {
+            return true;
         }
-        return remaining == 0;
     }
 
     // `lag ... IGNORE NULLS` supports streaming eviction. Once at least one non-null value has
@@ -823,6 +852,14 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             if (this->data(state).target_not_null_index >= 0) {
                 this->data(state).target_not_null_index -= count;
                 DCHECK_GE(this->data(state).target_not_null_index, 0);
+            }
+            if constexpr (!isLag) {
+                if (this->data(state).lead_ready_current_row != INT64_MIN) {
+                    this->data(state).lead_ready_current_row -= count;
+                    this->data(state).lead_ready_scan_end -= count;
+                    DCHECK_GE(this->data(state).lead_ready_current_row, 0);
+                    DCHECK_GT(this->data(state).lead_ready_scan_end, this->data(state).lead_ready_current_row);
+                }
             }
         }
     }

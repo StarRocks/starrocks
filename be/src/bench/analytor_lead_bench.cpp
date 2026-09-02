@@ -158,9 +158,6 @@ static void BM_LeadIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool s
         auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
         CHECK(analytor->prepare(state, &pool, &profile).ok());
         CHECK(analytor->open(state).ok());
-        // Surface which path the Analytor actually chose, so a run that silently fell back to
-        // materializing is not mistaken for a streaming result.
-        bstate.SetLabel(profile.get_info_string("ProcessMode").value_or("ProcessMode=?"));
 
         bstate.ResumeTiming();
 
@@ -200,12 +197,10 @@ BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, dense_legacy, DENSE, false)->Unit(benchmar
 BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, sparse_legacy, SPARSE, false)->Unit(benchmark::kMillisecond);
 BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, tail_nonnull_legacy, TAIL_NONNULL, false)->Unit(benchmark::kMillisecond);
 
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, all_null_streaming, ALL_NULL, true)->Unit(benchmark::kMillisecond)->Iterations(1);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, all_null_streaming, ALL_NULL, true)->Unit(benchmark::kMillisecond);
 BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, dense_streaming, DENSE, true)->Unit(benchmark::kMillisecond);
 BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, sparse_streaming, SPARSE, true)->Unit(benchmark::kMillisecond);
-BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, tail_nonnull_streaming, TAIL_NONNULL, true)
-        ->Unit(benchmark::kMillisecond)
-        ->Iterations(1);
+BENCHMARK_CAPTURE(BM_LeadIgnoreNulls, tail_nonnull_streaming, TAIL_NONNULL, true)->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
 

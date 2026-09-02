@@ -708,6 +708,46 @@ TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_offset2_needs_two_non
     ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 4, frame_start, frame_end, false));
 }
 
+TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_cursor_with_contraction) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    for (int64_t i = 0; i < 8; ++i) {
+        const bool is_null = (i % 2 == 0);
+        data_col->append(is_null ? 0 : i * 10);
+        null_col->append(is_null);
+    }
+    MutableColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    const int64_t offset = 2;
+
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
+    const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lead_func);
+    lead_func->reset(ctx, args, state->state());
+
+    auto check_ready = [&](int64_t current, int64_t available_end) {
+        int64_t remaining = offset;
+        for (int64_t i = current + 1; i < available_end && remaining > 0; ++i) {
+            remaining -= !value_col->is_null(i);
+        }
+        const int64_t frame_end = current + offset + 1;
+        ASSERT_EQ(remaining == 0, lead_func->is_window_result_ready(ctx, state->state(), args, 0, available_end,
+                                                                    frame_end - 1, frame_end, false));
+    };
+
+    check_ready(0, 3);
+    check_ready(0, 4);
+    check_ready(1, 4);
+    check_ready(1, 6);
+    check_ready(2, 6);
+
+    constexpr size_t remove_count = 2;
+    value_col->remove_first_n_values(remove_count);
+    args = build_lead_lag_args(value_col, offset, default_col);
+    lead_func->reset_state_for_contraction(ctx, state->state(), remove_count);
+    check_ready(1, value_col->size());
+}
+
 TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_complete_partition_uses_default) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();

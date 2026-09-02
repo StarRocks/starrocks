@@ -154,9 +154,6 @@ static void BM_LagIgnoreNulls(benchmark::State& bstate, Pattern pattern, bool st
         auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
         CHECK(analytor->prepare(state, &pool, &profile).ok());
         CHECK(analytor->open(state).ok());
-        // Surface which path the Analytor actually chose, so a run that silently fell back to
-        // materializing is not mistaken for a streaming result.
-        bstate.SetLabel(profile.get_info_string("ProcessMode").value_or("ProcessMode=?"));
 
         bstate.ResumeTiming();
 
