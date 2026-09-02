@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -26,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -94,6 +96,151 @@ public class ReduceCastRuleTest {
         assertTrue(child instanceof CastOperator);
         ScalarOperator grandChild = child.getChild(0);
         assertEquals(OperatorType.CONSTANT, grandChild.getOpType());
+    }
+
+    @Test
+    public void testFloatToIntegralCastIsNotReduced() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+        ScalarOperator doubleColumn = new ColumnRefOperator(0, Type.DOUBLE, "id_double", false);
+        ScalarOperator floatColumn = new ColumnRefOperator(1, Type.FLOAT, "id_float", false);
+
+        // cast(cast(id_double as bigint) as varchar) keeps the truncating cast
+        {
+            ScalarOperator operator =
+                    new CastOperator(Type.VARCHAR, new CastOperator(Type.BIGINT, doubleColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isVarchar());
+            assertTrue(result.getChild(0) instanceof CastOperator);
+            assertTrue(result.getChild(0).getType().isBigint());
+            Assertions.assertSame(doubleColumn, result.getChild(0).getChild(0));
+        }
+        // cast(cast(id_double as bigint) as double) keeps the truncating cast
+        {
+            ScalarOperator operator =
+                    new CastOperator(Type.DOUBLE, new CastOperator(Type.BIGINT, doubleColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isDouble());
+            assertTrue(result.getChild(0) instanceof CastOperator);
+            assertTrue(result.getChild(0).getType().isBigint());
+        }
+        // float needs the same guard
+        {
+            ScalarOperator operator =
+                    new CastOperator(Type.VARCHAR, new CastOperator(Type.BIGINT, floatColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getChild(0) instanceof CastOperator);
+            assertTrue(result.getChild(0).getType().isBigint());
+        }
+        // float -> boolean changes the value the same way
+        {
+            ScalarOperator operator =
+                    new CastOperator(Type.TINYINT, new CastOperator(Type.BOOLEAN, doubleColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getChild(0) instanceof CastOperator);
+            assertTrue(result.getChild(0).getType().isBoolean());
+        }
+    }
+
+    @Test
+    public void testFloatToIntegralCastFoldsToTruncatedValue() {
+        // cast(cast(100 / 3 as bigint) as varchar) -> '33', not '33.333333333333336'
+        ScalarOperator operator = new CastOperator(Type.VARCHAR,
+                new CastOperator(Type.BIGINT, ConstantOperator.createDouble(100.0 / 3)));
+
+        ScalarOperator result = new ScalarOperatorRewriter().rewrite(operator,
+                Lists.newArrayList(new ReduceCastRule(), new FoldConstantsRule()));
+
+        assertTrue(result instanceof ConstantOperator);
+        assertEquals("33", ((ConstantOperator) result).getVarchar());
+    }
+
+    @Test
+    public void testIntegralToFloatCastIsNotReducedWhenItRounds() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        // bigint above 2^53 is rounded by the cast to double
+        {
+            ScalarOperator bigintColumn = new ColumnRefOperator(0, Type.BIGINT, "id_bigint", false);
+            ScalarOperator operator =
+                    new CastOperator(Type.VARCHAR, new CastOperator(Type.DOUBLE, bigintColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getChild(0) instanceof CastOperator);
+            assertTrue(result.getChild(0).getType().isDouble());
+        }
+        // int does not fit the 24 bit float mantissa either
+        {
+            ScalarOperator intColumn = new ColumnRefOperator(0, Type.INT, "id_int", false);
+            ScalarOperator operator =
+                    new CastOperator(Type.VARCHAR, new CastOperator(Type.FLOAT, intColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getChild(0) instanceof CastOperator);
+            assertTrue(result.getChild(0).getType().isFloat());
+        }
+        // double -> float rounds as well
+        {
+            ScalarOperator doubleColumn = new ColumnRefOperator(0, Type.DOUBLE, "id_double", false);
+            ScalarOperator operator =
+                    new CastOperator(Type.VARCHAR, new CastOperator(Type.FLOAT, doubleColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getChild(0) instanceof CastOperator);
+            assertTrue(result.getChild(0).getType().isFloat());
+        }
+    }
+
+    @Test
+    public void testValuePreservingCastIsStillReduced() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        // cast(cast(id_int as bigint) as varchar) -> cast(id_int as varchar)
+        {
+            ScalarOperator intColumn = new ColumnRefOperator(0, Type.INT, "id_int", false);
+            ScalarOperator operator =
+                    new CastOperator(Type.VARCHAR, new CastOperator(Type.BIGINT, intColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isVarchar());
+            assertTrue(result.getChild(0) instanceof ColumnRefOperator);
+            assertTrue(result.getChild(0).getType().isInt());
+        }
+        // int fits the 53 bit double mantissa exactly
+        {
+            ScalarOperator intColumn = new ColumnRefOperator(0, Type.INT, "id_int", false);
+            ScalarOperator operator =
+                    new CastOperator(Type.DOUBLE, new CastOperator(Type.DOUBLE, intColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isDouble());
+            assertTrue(result.getChild(0) instanceof ColumnRefOperator);
+            assertTrue(result.getChild(0).getType().isInt());
+        }
+        // smallint fits the 24 bit float mantissa
+        {
+            ScalarOperator smallintColumn = new ColumnRefOperator(0, Type.SMALLINT, "id_smallint", false);
+            ScalarOperator operator =
+                    new CastOperator(Type.FLOAT, new CastOperator(Type.FLOAT, smallintColumn));
+
+            ScalarOperator result = rule.apply(operator, null);
+
+            assertTrue(result.getType().isFloat());
+            assertTrue(result.getChild(0) instanceof ColumnRefOperator);
+            assertTrue(result.getChild(0).getType().isSmallint());
+        }
     }
 
     @Test
