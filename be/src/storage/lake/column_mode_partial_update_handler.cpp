@@ -480,8 +480,15 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt_flexible(
         _tracker->consume(upt_chunk_size);
         DeferOp tracker_defer([&]() { _tracker->release(upt_chunk_size); });
 
-        // Per-row set-id (hidden "__cset__"); validate once per pair.
-        ASSIGN_OR_RETURN(std::vector<int32_t> set_ids, _read_cset_column_from_upt(upt_id));
+        // Per-row set-id (hidden "__cset__"), from the handler-wide cache (this runs once per streamed
+        // source range per rssid; re-reading every segment's `__cset__` each time was the dominant cost).
+        ASSIGN_OR_RETURN(const auto* all_set_ids, _cached_cset_columns());
+        if (upt_id >= all_set_ids->size()) {
+            return Status::InternalError(
+                    fmt::format("ColumnModePartialUpdateHandler(flex): upt_id {} out of range ({} `{}` segments)",
+                                upt_id, all_set_ids->size(), kSDCGCsetColumnName));
+        }
+        const std::vector<int32_t>& set_ids = (*all_set_ids)[upt_id];
         struct Pair {
             uint32_t source_rowid;
             uint32_t upt_rowid;
@@ -727,8 +734,8 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_sparse_chunk_from_upt(
     return sparse_chunk;
 }
 
-StatusOr<std::vector<int32_t>> ColumnModePartialUpdateHandler::_read_cset_column_from_upt(uint32_t upt_id) {
-    // Read the hidden "__cset__" set-id column for this upt segment. The `.upt` carries it as a real
+StatusOr<std::vector<std::vector<int32_t>>> ColumnModePartialUpdateHandler::_read_all_cset_columns_from_upt() {
+    // Read the hidden "__cset__" set-id column of every upt segment. The `.upt` carries it as a real
     // Segment v2 column with the RESERVED unique-id kCsetReservedColumnUid (see flexible_partial_update.h and
     // the lake delta_writer's synthetic-column append). The Rowset's tablet_schema() is the FULL base schema
     // and does NOT contain "__cset__", so we cannot resolve it by field_index there. Instead we synthesize a
@@ -749,6 +756,9 @@ StatusOr<std::vector<int32_t>> ColumnModePartialUpdateHandler::_read_cset_column
     // schema with num_short_key_columns(0).
     cset_tschema->set_num_short_key_columns(0);
     Schema cset_schema = ChunkHelper::convert_schema(cset_tschema);
+    // The Datum is a variant typed by the column's storage; dispatch on the cset column's logical type so
+    // we read the correct integer width (SMALLINT spine slot == int16; INT/BIGINT also accepted).
+    const LogicalType cset_type = cset_tschema->column(0).type();
 
     OlapReaderStatistics stats;
     // Read "__cset__" via a cache-bypassing open bound to cset_tschema. "__cset__" is NOT in the
@@ -760,51 +770,52 @@ StatusOr<std::vector<int32_t>> ColumnModePartialUpdateHandler::_read_cset_column
     // get_each_segment_iterator would reuse it and fail with "nonexistent column(__cset__)".
     ASSIGN_OR_RETURN(auto segment_iters,
                      _rowset_ptr->get_each_segment_iterator_with_schema(cset_schema, cset_tschema, true, &stats));
-    if (upt_id >= segment_iters.size()) {
-        return Status::InternalError(
-                fmt::format("ColumnModePartialUpdateHandler: upt_id {} out of range ({} segments) reading `{}`", upt_id,
-                            segment_iters.size(), kSDCGCsetColumnName));
-    }
-    // The vector is positional, so this slot can be empty when that segment held no rows for this
-    // tablet. Reading it would dereference a null iterator; say so instead.
-    if (segment_iters[upt_id] == nullptr) {
-        return Status::InternalError(fmt::format(
-                "ColumnModePartialUpdateHandler: segment {} has no iterator (empty for this tablet) reading `{}`",
-                upt_id, kSDCGCsetColumnName));
-    }
     DeferOp close_iters([&]() {
         for (auto& it : segment_iters) {
             if (it != nullptr) it->close();
         }
     });
 
-    ChunkUniquePtr cset_chunk = ChunkFactory::new_chunk(cset_schema, DEFAULT_CHUNK_SIZE);
-    RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[upt_id], cset_chunk));
-    const auto& col = cset_chunk->get_column_by_index(0);
-    // The Datum is a variant typed by the column's storage; dispatch on the cset column's logical type so
-    // we read the correct integer width (SMALLINT spine slot == int16; INT/BIGINT also accepted).
-    const LogicalType cset_type = cset_tschema->column(0).type();
-    std::vector<int32_t> set_ids;
-    set_ids.reserve(col->size());
-    for (size_t i = 0; i < col->size(); ++i) {
-        const auto datum = col->get(i);
-        switch (cset_type) {
-        case TYPE_SMALLINT:
-            set_ids.push_back(static_cast<int32_t>(datum.get_int16()));
-            break;
-        case TYPE_INT:
-            set_ids.push_back(datum.get_int32());
-            break;
-        case TYPE_BIGINT:
-            set_ids.push_back(static_cast<int32_t>(datum.get_int64()));
-            break;
-        default:
-            return Status::InternalError(fmt::format(
-                    "ColumnModePartialUpdateHandler: `{}` column has unexpected type {} (expected SMALLINT/INT/BIGINT)",
-                    kSDCGCsetColumnName, static_cast<int>(cset_type)));
+    std::vector<std::vector<int32_t>> all_set_ids(segment_iters.size());
+    for (size_t seg = 0; seg < segment_iters.size(); ++seg) {
+        if (segment_iters[seg] == nullptr) {
+            continue; // positional hole: this segment holds no rows for this tablet
+        }
+        ChunkUniquePtr cset_chunk = ChunkFactory::new_chunk(cset_schema, DEFAULT_CHUNK_SIZE);
+        RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[seg], cset_chunk));
+        const auto& col = cset_chunk->get_column_by_index(0);
+        auto& set_ids = all_set_ids[seg];
+        set_ids.reserve(col->size());
+        for (size_t i = 0; i < col->size(); ++i) {
+            const auto datum = col->get(i);
+            switch (cset_type) {
+            case TYPE_SMALLINT:
+                set_ids.push_back(static_cast<int32_t>(datum.get_int16()));
+                break;
+            case TYPE_INT:
+                set_ids.push_back(datum.get_int32());
+                break;
+            case TYPE_BIGINT:
+                set_ids.push_back(static_cast<int32_t>(datum.get_int64()));
+                break;
+            default:
+                return Status::InternalError(
+                        fmt::format("ColumnModePartialUpdateHandler: `{}` column has unexpected type {} (expected "
+                                    "SMALLINT/INT/BIGINT)",
+                                    kSDCGCsetColumnName, static_cast<int>(cset_type)));
+            }
         }
     }
-    return set_ids;
+    return all_set_ids;
+}
+
+StatusOr<const std::vector<std::vector<int32_t>>*> ColumnModePartialUpdateHandler::_cached_cset_columns() {
+    std::lock_guard<std::mutex> l(_cset_cache_mutex);
+    if (!_cset_cache.has_value()) {
+        ASSIGN_OR_RETURN(auto all_set_ids, _read_all_cset_columns_from_upt());
+        _cset_cache = std::move(all_set_ids);
+    }
+    return &_cset_cache.value();
 }
 
 StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_packed_sparse_chunk_from_upt(
@@ -854,57 +865,11 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_build_packed_sparse_chunk_fr
     std::vector<std::vector<ColumnPair>> per_column_pairs(num_value_cols);
     std::vector<uint32_t> union_vec; // (④) collect then sort+unique, instead of a per-insert std::set
 
-    // (①) Read every upt segment's `__cset__` in ONE iterator-open pass (the per-upt_id helper opened all
+    // (①) Read every upt segment's `__cset__` in ONE iterator-open pass (a per-upt_id read would open all
     // N iterators on EVERY call -> O(N^2) opens of a cache-bypassing custom-schema segment). all_set_ids[seg]
     // = per-row set-ids for upt segment seg.
-    std::vector<std::vector<int32_t>> all_set_ids;
-    {
-        TabletColumn cset_col(STORAGE_AGGREGATE_REPLACE, TYPE_SMALLINT, /*is_nullable=*/false,
-                              static_cast<int32_t>(kCsetReservedColumnUid), sizeof(int16_t));
-        cset_col.set_name(kSDCGCsetColumnName);
-        cset_col.set_is_key(false);
-        std::vector<TabletColumn> cset_cols;
-        cset_cols.emplace_back(std::move(cset_col));
-        auto cset_tschema = TabletSchema::copy(*_rowset_ptr->tablet_schema(), cset_cols);
-        cset_tschema->set_num_short_key_columns(0);
-        Schema cset_schema = ChunkHelper::convert_schema(cset_tschema);
-        const LogicalType cset_type = cset_tschema->column(0).type();
-        OlapReaderStatistics cset_stats;
-        ASSIGN_OR_RETURN(auto cset_iters, _rowset_ptr->get_each_segment_iterator_with_schema(cset_schema, cset_tschema,
-                                                                                             true, &cset_stats));
-        DeferOp close_cset([&]() {
-            for (auto& it : cset_iters) {
-                if (it != nullptr) it->close();
-            }
-        });
-        all_set_ids.resize(cset_iters.size());
-        for (size_t seg = 0; seg < cset_iters.size(); ++seg) {
-            if (cset_iters[seg] == nullptr) continue;
-            ChunkUniquePtr cset_chunk = ChunkFactory::new_chunk(cset_schema, DEFAULT_CHUNK_SIZE);
-            RETURN_IF_ERROR(read_chunk_from_update_file(cset_iters[seg], cset_chunk));
-            const auto& ccol = cset_chunk->get_column_by_index(0);
-            auto& sids = all_set_ids[seg];
-            sids.reserve(ccol->size());
-            for (size_t i = 0; i < ccol->size(); ++i) {
-                const auto d = ccol->get(i);
-                switch (cset_type) {
-                case TYPE_SMALLINT:
-                    sids.push_back(static_cast<int32_t>(d.get_int16()));
-                    break;
-                case TYPE_INT:
-                    sids.push_back(d.get_int32());
-                    break;
-                case TYPE_BIGINT:
-                    sids.push_back(static_cast<int32_t>(d.get_int64()));
-                    break;
-                default:
-                    return Status::InternalError(
-                            fmt::format("ColumnModePartialUpdateHandler: `{}` column has unexpected type {}",
-                                        kSDCGCsetColumnName, static_cast<int>(cset_type)));
-                }
-            }
-        }
-    }
+    ASSIGN_OR_RETURN(const auto* all_set_ids_ptr, _cached_cset_columns());
+    const std::vector<std::vector<int32_t>>& all_set_ids = *all_set_ids_ptr;
 
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
@@ -1399,7 +1364,18 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         insert_rowids_by_segment->resize(_partial_update_states.size());
     }
     if (flexible_insert_mask != nullptr && flexible_mode) {
-        flexible_insert_mask->set_ids_by_segment.resize(_partial_update_states.size());
+        // A flexible load's inserted rows need their per-row column set downstream: the `.upt` is a
+        // dense union with NULL placeholders, so an insert that copies it verbatim stores NULL where
+        // the row declared nothing instead of the column DEFAULT. Read every segment's set-ids in one
+        // pass here (positional, index == upt_id) rather than re-deriving them in the apply path.
+        ASSIGN_OR_RETURN(const auto* all_set_ids, _cached_cset_columns());
+        flexible_insert_mask->set_ids_by_segment = *all_set_ids;
+        if (flexible_insert_mask->set_ids_by_segment.size() != _partial_update_states.size()) {
+            return Status::InternalError(fmt::format(
+                    "ColumnModePartialUpdateHandler: `{}` read covers {} segments but the update rowset has {}",
+                    kSDCGCsetColumnName, flexible_insert_mask->set_ids_by_segment.size(),
+                    _partial_update_states.size()));
+        }
         flexible_insert_mask->distinct_column_sets = distinct_column_sets;
     }
 
@@ -1417,15 +1393,6 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             // (build_rss_rowid_to_update_rowid applied upt_segment_physical_rowid_offset),
             // exactly what the downstream fetch_values_by_rowid reads expect.
             (*insert_rowids_by_segment)[upt_id] = std::move(_partial_update_states[upt_id].insert_rowids);
-        }
-
-        // A flexible load's inserted rows need their per-row column set downstream: the `.upt` is a
-        // dense union with NULL placeholders, so an insert that copies it verbatim stores NULL where
-        // the row declared nothing instead of the column DEFAULT. Read the set-ids here, where the
-        // `__cset__` reader already lives, rather than re-deriving them in the apply path.
-        if (flexible_insert_mask != nullptr && flexible_mode) {
-            ASSIGN_OR_RETURN(std::vector<int32_t> set_ids, _read_cset_column_from_upt(upt_id));
-            flexible_insert_mask->set_ids_by_segment[upt_id] = std::move(set_ids);
         }
     }
 

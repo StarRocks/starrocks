@@ -15,6 +15,8 @@
 #pragma once
 
 #include <functional>
+#include <mutex>
+#include <optional>
 
 #include "storage/lake/cross_publish_context.h"
 #include "storage/lake/rowset_update_state.h"
@@ -147,11 +149,24 @@ private:
             int64_t* out_num_rows, int64_t* out_min_source_rowid, int64_t* out_max_source_rowid,
             std::vector<PackedColumnPresence>* out_column_presences);
 
-    // Read the hidden "__cset__" set-id column from the `.upt` for one upt_id. Returns a per-upt-row
-    // vector of set-ids (size == upt segment row count). The column is read by NAME (kSDCGCsetColumnName)
-    // via a synthetic single-column schema; if the upt segment does not carry it (non-flexible payload) the
-    // caller must not invoke this. SMALLINT/INT/BIGINT storage are all accepted (value is a small set-id).
-    StatusOr<std::vector<int32_t>> _read_cset_column_from_upt(uint32_t upt_id);
+    // Read the hidden "__cset__" set-id column of EVERY `.upt` segment in ONE cache-bypassing pass. The
+    // result is POSITIONAL (index == upt_id, size == the rowset's segment count) with one set-id per upt
+    // row; a segment that holds no rows for this tablet (a range-distributed hole) leaves an EMPTY entry.
+    // The column is resolved by its reserved uid (kCsetReservedColumnUid) through a synthetic one-column
+    // schema; if the payload does not carry it (non-flexible load) the caller must not invoke this.
+    // SMALLINT/INT/BIGINT storage are all accepted (the value is a small set-id).
+    //
+    // One pass, not one call per upt_id: opening the iterators re-opens every segment of the rowset with
+    // a fresh footer read (the metacache holds the base-schema Segment, which has no reader for the
+    // reserved-uid column), so a per-segment helper costs O(segments^2) footer GETs against object storage.
+    StatusOr<std::vector<std::vector<int32_t>>> _read_all_cset_columns_from_upt();
+
+    // The result of _read_all_cset_columns_from_upt, read once per publish and shared by every consumer:
+    // the insert-mask fill, the packed builder of each (batch, rssid) task, and the masked-dense path that
+    // runs once per streamed source range. The tasks run in parallel, so the fill is serialised by
+    // _cset_cache_mutex; after it the vector is immutable and read without the lock. Owned by the handler,
+    // which outlives the ParallelTaskRunner join.
+    StatusOr<const std::vector<std::vector<int32_t>>*> _cached_cset_columns();
 
     // Prepare a SegmentWriter for a sparse `.spcols` file. Identical construction to the dense `.cols`
     // writer (options/encryption/init(false)) except the filename is a `.spcols` name and the schema is
@@ -193,6 +208,9 @@ private:
     // Only a SPLIT child's cross publish builds one. Outlives the SegmentPKIterators that reference it.
     CrossPublishRowSelectorPtr _row_selector;
     int64_t _upt_memory_usage_per_row = 0;
+    // See _cached_cset_columns().
+    std::mutex _cset_cache_mutex;
+    std::optional<std::vector<std::vector<int32_t>>> _cset_cache;
 };
 
 // Classification of a PK-compaction-vs-concurrent-update conflict, used to decide how the compaction
