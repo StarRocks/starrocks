@@ -51,6 +51,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
@@ -272,6 +273,38 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public String getCatalogName() {
         return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    }
+
+    /**
+     * Whether the FE metadata lock can protect this table, i.e. whether it may be a target of
+     * {@link com.starrocks.sql.analyzer.PlannerMetaLocker} / Locker. A table for which this is false is never
+     * in the lock set, so it must not influence lock scope either -- see
+     * AnalyzerUtils.CopyUnsafeTablesCollector.
+     * <p>
+     * The question is about ownership, not engine type: is this object's in-memory metadata something the FE
+     * itself owns and rewrites in place? Answering it by listing table types is what makes it fragile, because
+     * the list keeps missing cases:
+     * <ul>
+     *   <li>an internal view is neither native nor an FE transaction participant, yet AlterJobMgr.alterView
+     *       rewrites its definition, schema and security in place under this very lock;</li>
+     *   <li>a resource-mapping table (ENGINE=HIVE/ICEBERG/HUDI created from a resource) reports a
+     *       resource-mapping catalog name, yet HiveTable.modifyTableSchema clears and refills its fullSchema
+     *       inside lockDatabase(WRITE), and LocalMetastore.replayModifyHiveTableColumn does the same on
+     *       replay.</li>
+     * </ul>
+     * So the predicate is "does it live in an internal database", expressed as {@code !isExternalCatalog}.
+     * That is deliberately not {@code isInternalCatalog}: the two differ exactly on resource-mapping catalogs,
+     * which {@link CatalogMgr#isExternalCatalog} already classifies as not-external. It is also fail-closed --
+     * a table kind nobody has classified yet keeps its lock, which costs a little contention rather than
+     * silently losing mutual exclusion.
+     */
+    public boolean isMetaLockTarget() {
+        // Spelled out, CatalogMgr.isExternalCatalog negated is: the internal catalog, or a resource-mapping
+        // pseudo-catalog (ENGINE=HIVE/ICEBERG/HUDI created from a RESOURCE -- those live in an internal
+        // database too), or no catalog name at all (ENGINE=JDBC from a RESOURCE leaves it null, as do a few
+        // other connector tables). Using it rather than open-coding those three keeps the null case handled:
+        // both isInternalCatalog and isResourceMappingCatalog throw on a null name.
+        return !CatalogMgr.isExternalCatalog(getCatalogName());
     }
 
     public String getResourceName() {
