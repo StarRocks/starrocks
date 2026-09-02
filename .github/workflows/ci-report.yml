@@ -119,6 +119,10 @@ jobs:
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
       SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
+      # Scratch dir the FE UT tarball unpacks into. Deliberately NOT the repo's own `fe/`:
+      # that is a tracked path, so it survives `git clean` and collides. Untracked, so the
+      # CLEAN / Clean ENV steps clear it between runs.
+      FE_UT_UNPACK_DIR: fe-ut-report
     outputs:
       FE_INCREMENTAL_RESULT: ${{ steps.fe_incremental_check.outputs.fe_incremental_check }}
     steps:
@@ -133,7 +137,22 @@ jobs:
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/fe_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
-            mkdir fe && cd fe
+            # Unpack into a dedicated scratch dir, NOT the repo's own `fe/`.
+            #
+            # This used to be `mkdir fe && cd fe`, which broke on any runner whose workspace
+            # still held a checkout: `fe` is a TRACKED directory, so it survives the
+            # `git clean -ffdxq` in CLEAN / Clean ENV, mkdir failed, the `cd` was skipped,
+            # and `set -e` did not abort (a non-final member of an && list is exempt). The
+            # tarball -- whose root is fe-core/... -- then unpacked into the workspace ROOT,
+            # so every consumer looked under fe/fe-core/... and found nothing: 0 surefire
+            # XMLs parsed, then `cp: cannot stat .../fe/fe-core/target/jacoco.exec`.
+            #
+            # A scratch name cannot collide with a tracked path, and being untracked it is
+            # cleared by `git clean -ffdxq` between runs -- so no stale jacoco.exec from a
+            # previous PR can be silently reused. The tarball carries the whole fe/ tree
+            # (sources included, see elastic-ut.sh: `cp -rf .../fe/* ${cov_dir}`), so this
+            # job needs nothing from the workspace checkout.
+            rm -rf ${FE_UT_UNPACK_DIR} && mkdir ${FE_UT_UNPACK_DIR} && cd ${FE_UT_UNPACK_DIR}
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
             tar zxf fe_ut_report.tar.gz
           fi
@@ -159,13 +178,13 @@ jobs:
           detailed_summary: true
           fail_on_failure: true
           commit: ${{ github.event.workflow_run.head_sha }}
-          report_paths: ./fe/fe-core/target/surefire-reports/*.xml
+          report_paths: ./${{ env.FE_UT_UNPACK_DIR }}/fe-core/target/surefire-reports/*.xml
 
       - name: Merge FE Coverage
         id: merge_report
         if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main' && env.SKIP_COV != 'true'
         env:
-          fe_path: ${{ github.workspace }}/fe
+          fe_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}
         run: |
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
@@ -189,8 +208,8 @@ jobs:
         id: generate-xml-report
         env:
           package_path: ${{ github.workspace }}/ci-tool/package
-          fe_path: ${{ github.workspace }}/fe
-          fe_core_path: ${{ github.workspace }}/fe/fe-core
+          fe_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}
+          fe_core_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}/fe-core
         if: steps.merge_report.outcome == 'success'
         run: |
           rm -rf result
@@ -211,7 +230,7 @@ jobs:
         if: steps.generate-xml-report.outcome == 'success'
         id: fe_incremental_check
         env:
-          fe_path: ${{ github.workspace }}/fe
+          fe_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
@@ -456,6 +475,8 @@ jobs:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
+      # Scratch dir, deliberately not the tracked `java-extensions/`. See FE_UT_UNPACK_DIR.
+      JAVA_EXT_UT_UNPACK_DIR: java-extensions-ut-report
     steps:
       - name: CLEAN
         run: |
@@ -468,7 +489,10 @@ jobs:
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/java_extension_ut_report.tar.gz | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
-            mkdir java-extensions && cd java-extensions
+            # Same defect as the FE report above: `java-extensions` is a TRACKED repo
+            # directory, so it survives `git clean`, mkdir fails, and the `cd` is silently
+            # skipped. Unpack into a scratch dir that cannot collide with a tracked path.
+            rm -rf ${JAVA_EXT_UT_UNPACK_DIR} && mkdir ${JAVA_EXT_UT_UNPACK_DIR} && cd ${JAVA_EXT_UT_UNPACK_DIR}
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/java_extension_ut_report.tar.gz . --recursive
             tar zxf java_extension_ut_report.tar.gz
           elif [[ "${BASE_REF}" == "main" ]]; then
@@ -493,13 +517,13 @@ jobs:
           detailed_summary: true
           fail_on_failure: true
           commit: ${{ github.event.workflow_run.head_sha }}
-          report_paths: ./java-extensions/xml_dir/*.xml
+          report_paths: ./${{ env.JAVA_EXT_UT_UNPACK_DIR }}/xml_dir/*.xml
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
         if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main'
         env:
-          code_path: ${{ github.workspace }}/java-extensions
+          code_path: ${{ github.workspace }}/${{ env.JAVA_EXT_UT_UNPACK_DIR }}
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
