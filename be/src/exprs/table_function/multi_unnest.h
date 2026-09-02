@@ -58,7 +58,7 @@ public:
         // since the non-const FixedLengthColumnBase::get_data() materializes a
         // ContainerResource-backed column into its own buffer and drops the resource.
         for (const auto& col : state->get_columns()) {
-            const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col));
+            const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
             array_views.emplace_back(
                     ArrayView{col.get(), &col_array->elements(), col_array->offsets().immutable_data()});
             unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());

@@ -204,6 +204,7 @@ set(EXEC_FILES
         ./exprs/map_expr_test.cpp
         ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
+        ./exprs/multi_unnest_core_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
         ./exprs/string_fn_concat_test.cpp
