@@ -35,7 +35,7 @@ namespace {
 // contains what the test itself changed.
 std::string make_conf(std::string_view dirty_decay_ms, std::string_view muzzy_decay_ms, std::string_view prof_active) {
     return fmt::format(
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:{},dirty_decay_ms:{},metadata_thp:auto,"
+            "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:{},dirty_decay_ms:{},metadata_thp:auto,"
             "background_thread:true,prof:true,prof_active:{}",
             muzzy_decay_ms, dirty_decay_ms, prof_active);
 }
@@ -175,7 +175,7 @@ TEST_F(JemallocConfUpdaterTest, reject_immutable_option) {
 
     // Changed.
     Status st = updater.update(
-            "percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+            "percpu_arena:disabled,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
     EXPECT_TRUE(st.is_not_supported()) << st;
     EXPECT_TRUE(st.message().find("percpu_arena") != std::string::npos) << st;
@@ -187,14 +187,14 @@ TEST_F(JemallocConfUpdaterTest, reject_immutable_option) {
 
     // Removed.
     st = updater.update(
-            "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+            "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
             "metadata_thp:auto,background_thread:true,prof:true");
     EXPECT_TRUE(st.is_not_supported()) << st;
     EXPECT_TRUE(st.message().find("prof_active (removed)") != std::string::npos) << st;
 
     // A mutable option changed together with an immutable one is rejected as well.
     st = updater.update(
-            "percpu_arena:disabled,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:6000,"
+            "percpu_arena:disabled,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:6000,"
             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
     EXPECT_TRUE(st.is_not_supported()) << st;
 
@@ -222,7 +222,7 @@ TEST_F(JemallocConfUpdaterTest, update_without_change_is_a_noop) {
     // The option order does not matter either.
     ASSERT_OK(
             updater.update("prof_active:false,prof:true,background_thread:true,metadata_thp:auto,"
-                           "dirty_decay_ms:5000,muzzy_decay_ms:5000,oversize_threshold:0,percpu_arena:percpu"));
+                           "dirty_decay_ms:5000,muzzy_decay_ms:5000,oversize_threshold:134217728,percpu_arena:percpu"));
     EXPECT_EQ("5000", updater.applied_options()["muzzy_decay_ms"]);
 }
 
@@ -230,9 +230,10 @@ TEST_F(JemallocConfUpdaterTest, update_without_change_is_a_noop) {
 // arena at index narenas_auto and puts it on eager purge on purpose, and the arenas created
 // through `arenas.create` sit above that, so neither may be retuned from here.
 //
-// This process has no huge arena (`oversize_threshold:0`), but a manually created arena is
-// on the same side of narenas_auto, so it stands in for one: if the walk stopped at
-// `arenas.narenas` it would reach this arena too.
+// A manually created arena stands in for the huge one here: it sits on the same side of
+// narenas_auto, so if the walk stopped at `arenas.narenas` it would reach this arena too.
+// The test binary inherits no JEMALLOC_CONF, so whether a huge arena exists at all depends
+// on jemalloc's own `oversize_threshold` default; the assertion below holds either way.
 TEST_F(JemallocConfUpdaterTest, decay_ms_skips_the_arenas_above_narenas_auto) {
     unsigned manual_arena = 0;
     size_t size = sizeof(manual_arena);
