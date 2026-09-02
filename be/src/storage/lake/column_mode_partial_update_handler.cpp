@@ -1314,7 +1314,8 @@ static SdcgAutoMode select_write_mode(const SdcgAutoSignals& s, bool allow_row) 
 }
 
 Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
-                                               std::vector<std::vector<uint32_t>>* insert_rowids_by_segment) {
+                                               std::vector<std::vector<uint32_t>>* insert_rowids_by_segment,
+                                               FlexibleInsertMask* flexible_insert_mask) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_execute_us");
     // 1. load update state first
     RETURN_IF_ERROR(_load_update_state(params));
@@ -1397,6 +1398,10 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     if (insert_rowids_by_segment != nullptr) {
         insert_rowids_by_segment->resize(_partial_update_states.size());
     }
+    if (flexible_insert_mask != nullptr && flexible_mode) {
+        flexible_insert_mask->set_ids_by_segment.resize(_partial_update_states.size());
+        flexible_insert_mask->distinct_column_sets = distinct_column_sets;
+    }
 
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
         for (const auto& each_rss : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
@@ -1412,6 +1417,15 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             // (build_rss_rowid_to_update_rowid applied upt_segment_physical_rowid_offset),
             // exactly what the downstream fetch_values_by_rowid reads expect.
             (*insert_rowids_by_segment)[upt_id] = std::move(_partial_update_states[upt_id].insert_rowids);
+        }
+
+        // A flexible load's inserted rows need their per-row column set downstream: the `.upt` is a
+        // dense union with NULL placeholders, so an insert that copies it verbatim stores NULL where
+        // the row declared nothing instead of the column DEFAULT. Read the set-ids here, where the
+        // `__cset__` reader already lives, rather than re-deriving them in the apply path.
+        if (flexible_insert_mask != nullptr && flexible_mode) {
+            ASSIGN_OR_RETURN(std::vector<int32_t> set_ids, _read_cset_column_from_upt(upt_id));
+            flexible_insert_mask->set_ids_by_segment[upt_id] = std::move(set_ids);
         }
     }
 

@@ -752,7 +752,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
                                              Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
                                              const std::vector<uint32_t>& insert_rowids,
-                                             const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
+                                             const std::vector<uint32_t>& update_cids,
+                                             const FlexibleInsertMask& flexible_insert_mask, ChunkPtr* out_chunk) {
     auto full_schema = ChunkHelper::convert_schema(tschema);
     auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
 
@@ -790,6 +791,83 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(insert_rowids.data(), insert_rowids.size(), mut_col));
+        }
+    }
+
+    // FLEXIBLE: undo the union's NULL placeholders for cells the row never declared.
+    //
+    // The `.upt` of a flexible load is a DENSE UNION of every column any row in the batch touched;
+    // a row that did not mention column X still has a cell for X, holding NULL. For an UPDATE that
+    // is harmless because the overlay is masked. For an INSERT it is not: the row is being created,
+    // so copying the union verbatim persists NULL where the correct value is the column's DEFAULT --
+    // the same value a plain partial-update insert writes for any column outside update_cids.
+    //
+    // So: for each update column, find the inserted rows whose own set does NOT cover it, and
+    // overwrite just those cells with the default. update_rows() is the same primitive the flexible
+    // UPDATE path uses for its mask, so the two paths agree cell for cell.
+    if (flexible_insert_mask.valid()) {
+        if (seg >= flexible_insert_mask.set_ids_by_segment.size()) {
+            return Status::InternalError(strings::Substitute(
+                    "flexible insert: no `__cset__` set-ids for segment $0 (have $1)", seg,
+                    flexible_insert_mask.set_ids_by_segment.size()));
+        }
+        const auto& set_ids = flexible_insert_mask.set_ids_by_segment[seg];
+        const auto& sets = flexible_insert_mask.distinct_column_sets;
+
+        // set id -> covered uids, as a lookup.
+        std::vector<std::set<ColumnUID>> set_cover(sets.size());
+        for (size_t si = 0; si < sets.size(); ++si) {
+            set_cover[si].insert(sets[si].begin(), sets[si].end());
+        }
+
+        for (uint32_t cid : update_cids) {
+            const TabletColumn& tablet_column = tschema->column(cid);
+            const ColumnUID uid = static_cast<ColumnUID>(tablet_column.unique_id());
+            std::vector<uint32_t> uncovered;  // positions WITHIN this batch
+            uncovered.reserve(insert_rowids.size());
+            for (size_t i = 0; i < insert_rowids.size(); ++i) {
+                const uint32_t rowid = insert_rowids[i];
+                if (rowid >= set_ids.size()) {
+                    return Status::InternalError(strings::Substitute(
+                            "flexible insert: rowid $0 outside `__cset__` (size $1) in segment $2", rowid,
+                            set_ids.size(), seg));
+                }
+                const int32_t sid = set_ids[rowid];
+                if (sid < 0 || static_cast<size_t>(sid) >= set_cover.size()) {
+                    return Status::InternalError(strings::Substitute(
+                            "flexible insert: set id $0 out of range (have $1 sets)", sid, set_cover.size()));
+                }
+                if (set_cover[sid].count(uid) == 0) {
+                    uncovered.push_back(static_cast<uint32_t>(i));
+                }
+            }
+            if (uncovered.empty()) {
+                continue;
+            }
+            // Build the default values for exactly the uncovered rows, then splice them in.
+            bool has_default_value = tablet_column.has_default_value();
+            std::string default_value = has_default_value ? tablet_column.default_value() : "";
+            auto expr_it = op_write.txn_meta().column_to_expr_value().find(tablet_column.name());
+            if (expr_it != op_write.txn_meta().column_to_expr_value().end()) {
+                has_default_value = true;
+                default_value = expr_it->second;
+            }
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            auto def_col = mut_col->clone_empty();
+            if (has_default_value) {
+                const TypeInfoPtr& type_info = get_type_info(tablet_column);
+                auto def_iter = std::make_unique<DefaultValueColumnIterator>(
+                        true, default_value, tablet_column.is_nullable(), type_info, tablet_column.length(),
+                        (int)uncovered.size());
+                ColumnIteratorOptions def_opts;
+                RETURN_IF_ERROR(def_iter->init(def_opts));
+                RETURN_IF_ERROR(def_iter->fetch_values_by_rowid(nullptr, uncovered.size(), def_col.get()));
+            } else {
+                def_col->append_default(uncovered.size());
+            }
+            RETURN_ERROR_IF_FALSE(def_col->size() == uncovered.size(),
+                                  "flexible insert: default column size != uncovered row count");
+            mut_col->update_rows(*def_col, uncovered.data());
         }
     }
 
@@ -836,8 +914,15 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                                                  LakePrimaryIndex& index, MetaFileBuilder* builder,
                                                  int64_t base_version, uint32_t rowset_id,
                                                  const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                                 const FlexibleInsertMask& flexible_insert_mask,
                                                  uint32_t* new_del_rebuild_rssid) {
-    if (op_write.txn_meta().partial_update_mode() != PartialUpdateMode::COLUMN_UPSERT_MODE) {
+    // A FLEXIBLE load arrives as COLUMN_UPDATE_MODE (see stream_load.cpp) but is semantically an
+    // upsert, exactly like every other partial update: a key that is not in the table yet must be
+    // INSERTED with defaults for the columns the row did not declare. Letting it fall out here is
+    // what silently dropped those rows. It still needs the per-row mask -- see _read_chunk_for_upsert.
+    const auto mode = op_write.txn_meta().partial_update_mode();
+    const bool flexible_upsert = (mode == PartialUpdateMode::COLUMN_UPDATE_MODE) && flexible_insert_mask.valid();
+    if (mode != PartialUpdateMode::COLUMN_UPSERT_MODE && !flexible_upsert) {
         return Status::OK();
     }
 
@@ -927,7 +1012,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                                                       insert_rowids.begin() + batch_end);
             ChunkPtr full_chunk;
             RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, tablet, fs, seg, batch_insert_rowids, update_cids,
-                                                   &full_chunk));
+                                                   flexible_insert_mask, &full_chunk));
 
             RETURN_IF_ERROR(writer.append_chunk(*full_chunk));
             total_rows += full_chunk->num_rows();
@@ -1076,6 +1161,9 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);
     std::vector<std::vector<uint32_t>> insert_rowids_by_segment;
+    // Empty unless the load is flexible; _handle_column_upsert_mode keys off valid() to decide
+    // whether the inserted rows need the per-row column-set mask.
+    FlexibleInsertMask flexible_insert_mask;
 
     RowsetUpdateStateParams params{
             .op_write = op_write,
@@ -1087,7 +1175,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 
     {
         ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
-        RETURN_IF_ERROR(handler.execute(params, builder, &insert_rowids_by_segment));
+        RETURN_IF_ERROR(handler.execute(params, builder, &insert_rowids_by_segment, &flexible_insert_mask));
     }
 
     const uint32_t rowset_id = metadata->next_rowset_id();
@@ -1097,7 +1185,8 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
     RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
-                                               rowset_id, insert_rowids_by_segment, &new_del_rebuild_rssid));
+                                               rowset_id, insert_rowids_by_segment, flexible_insert_mask,
+                                               &new_del_rebuild_rssid));
 
     // 2. handle delete files and generate delvecs for existing rssids only
     RETURN_IF_ERROR(_handle_delete_files(op_write, txn_id, metadata, tablet, index, index_entry, builder, base_version,

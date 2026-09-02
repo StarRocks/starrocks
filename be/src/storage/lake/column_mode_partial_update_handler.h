@@ -41,6 +41,23 @@ private:
     TabletMetadataPtr _tablet_metadata;
 };
 
+// What a FLEXIBLE load's inserted rows declared, per row.
+//
+// A flexible `.upt` is a DENSE UNION of every column any row touched, with NULL placeholders in
+// the cells a given row did NOT declare. For an UPDATE that is handled by masking the overlay, but
+// an INSERT builds a brand-new row: writing the union verbatim would store NULL where the row
+// simply said nothing, instead of the column's DEFAULT. That is a silent difference from every
+// other partial-update path, so the insert needs the same mask the update already uses.
+struct FlexibleInsertMask {
+    // Per update-segment, the per-row set id read from the hidden `__cset__` column. Indexed by the
+    // row's PHYSICAL rowid in that segment -- the same space insert_rowids uses.
+    std::vector<std::vector<int32_t>> set_ids_by_segment;
+    // set id -> the column unique-ids that set covers.
+    std::vector<std::vector<ColumnUID>> distinct_column_sets;
+
+    bool valid() const { return !distinct_column_sets.empty(); }
+};
+
 // Used in column mode partial update
 class ColumnModePartialUpdateHandler {
 public:
@@ -48,7 +65,8 @@ public:
     ~ColumnModePartialUpdateHandler();
 
     Status execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
-                   std::vector<std::vector<uint32_t>>* insert_rowids_by_segment = nullptr);
+                   std::vector<std::vector<uint32_t>>* insert_rowids_by_segment = nullptr,
+                   FlexibleInsertMask* flexible_insert_mask = nullptr);
 
 private:
     Status _load_update_state(const RowsetUpdateStateParams& params);
