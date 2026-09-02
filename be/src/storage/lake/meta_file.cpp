@@ -1700,6 +1700,13 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
     // segment_idx = assigned_segment_idx(1) + 0 = 1 (non-positional). At read the segment's effective
     // rssid = rowset.id() + segment_idx lands one slot above where the base-row delete vector was keyed
     // at apply (the positional rssid), so the superseded base rows are never hidden -> duplicate PKs.
+    //
+    // This does NOT remove the slot a pure-delete statement reserves (see the del comment above and
+    // delta_writer.cpp flush_chunk_with_deletes): a delete-only flush still writes a 0-row segment for its
+    // empty upsert chunk, so such a statement has segment_metas_size() == 1 and advances the offset here
+    // exactly as get_rowset_id_step() would. Only a statement that deposited NO segment at all is skipped.
+    // The ordering guarantee for a middle pure-delete statement therefore rests on that empty segment
+    // existing (pinned by LakeMergedDelOpOffsetTest); dropping it as a cleanup would bring this bug back.
     if (rowset_pb.segment_metas_size() > 0) {
         _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
     }
