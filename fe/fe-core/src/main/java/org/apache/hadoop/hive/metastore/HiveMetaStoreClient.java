@@ -1278,14 +1278,14 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public List<Partition> listPartitionsByFilter(String db_name, String tbl_name, String filter, short max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return client.get_partitions_by_filter(db_name, tbl_name, filter, max_parts);
     }
 
     @Override
     public List<Partition> listPartitionsByFilter(String catName, String db_name, String tbl_name, String filter,
                                                   int max_parts)
             throws MetaException, NoSuchObjectException, TException {
-        throw new TException("method not implemented");
+        return listPartitionsByFilter(db_name, tbl_name, filter, shrinkMaxtoShort(max_parts));
     }
 
     @Override
@@ -2580,4 +2580,3 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         throw new TException("method not implemented");
     }
 }
-

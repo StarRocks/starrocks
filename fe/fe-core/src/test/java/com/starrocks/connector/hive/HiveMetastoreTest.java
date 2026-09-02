@@ -115,6 +115,19 @@ public class HiveMetastoreTest {
     }
 
     @Test
+    public void testGetPartitionsByFilter() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+
+        Map<String, com.starrocks.connector.hive.Partition> partitions = metastore.getPartitionsByFilter(
+                "db1", "table1", Lists.newArrayList("col1"), "col1 >= 1");
+
+        Assertions.assertEquals(2, partitions.size());
+        Assertions.assertTrue(partitions.containsKey("col1=1"));
+        Assertions.assertTrue(partitions.containsKey("col1=2"));
+    }
+
+    @Test
     public void testGetPartition() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
@@ -539,6 +552,10 @@ public class HiveMetastoreTest {
                 res.add(partition);
             }
             return res;
+        }
+
+        public List<Partition> getPartitionsByFilter(String dbName, String tableName, String filter) {
+            return getPartitionsByNames(dbName, tableName, Lists.newArrayList("col1=1", "col1=2"));
         }
 
         public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
