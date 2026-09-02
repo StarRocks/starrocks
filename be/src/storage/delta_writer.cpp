@@ -155,9 +155,9 @@ bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMo
     // new row's position -- an assumption that stopped holding when flexible inserts started
     // materialising instead of being silently dropped. Without this, those rows land in a segment
     // whose order the sort key cannot address.
-    const bool inserts_new_rows = partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
-                                  (partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE &&
-                                   column_mode_inserts_rows);
+    const bool inserts_new_rows =
+            partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+            (partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE && column_mode_inserts_rows);
     // In the current implementation, UNKNOWN_MODE and AUTO_MODE can be considered as ROW_MODE
     if (partial_update_mode == PartialUpdateMode::ROW_MODE || partial_update_mode == PartialUpdateMode::AUTO_MODE ||
         partial_update_mode == PartialUpdateMode::UNKNOWN_MODE || inserts_new_rows) {
