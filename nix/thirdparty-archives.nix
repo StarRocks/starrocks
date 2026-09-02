@@ -314,10 +314,10 @@ let
       md5 = "731c78ab5a10c6073942dc93d5c4b04c";
       sha256 = "0xwdx99qn4ckv4bd9ib5w3i00l8wiy2d7vrdz2c8avasz2zg21i7";
     };
-    "snappy-1.1.8.tar.gz" = {
-      url = "https://github.com/google/snappy/archive/1.1.8.tar.gz";
-      md5 = "70e48cba7fecf289153d009791c9977f";
-      sha256 = "07v5b365vz6bjdlqw4vwcna4yhaf6xzxny31hfq159ijg3q7gdhn";
+    "snappy-1.2.1.tar.gz" = {
+      url = "https://github.com/google/snappy/archive/1.2.1.tar.gz";
+      md5 = "dd6f9b667e69491e1dbf7419bdf68823";
+      sha256 = "0wvaxdjdhrb6s8invpzs51jywpbshb96r40nndi1iz62gsjg17w6";
     };
     "starrocks-clucene-2026.06.23.tar.gz" = {
       url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz";
@@ -465,7 +465,7 @@ let
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
@@ -536,7 +536,7 @@ let
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
@@ -605,7 +605,7 @@ let
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
