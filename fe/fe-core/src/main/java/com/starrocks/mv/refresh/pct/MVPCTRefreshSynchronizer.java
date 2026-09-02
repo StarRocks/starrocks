@@ -124,6 +124,11 @@ public final class MVPCTRefreshSynchronizer {
         final Stopwatch stopwatch = Stopwatch.createStarted();
         processor.setSnapshotBaseTables(processor.collectBaseTableSnapshotInfos());
 
+        // Freeze first, align second: the partition topology published below drives the refresh scope
+        // and its partition predicate, so it has to be derived from a state no older than the frozen
+        // snapshot the scan will read.
+        processor.freezeSnapshotBeforePartitionAlign();
+
         if (!processor.getMvContext().isExplain() && processor.getMvRefreshParams().isNonTentativeForce()) {
             PCellSortedSet toRefreshPartitions = processor.getMvPctRefreshPartitioner().getMVPartitionsToRefreshByParams();
             if (toRefreshPartitions != null && !toRefreshPartitions.isEmpty()) {
