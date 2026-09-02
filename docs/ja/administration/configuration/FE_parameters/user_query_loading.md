@@ -283,15 +283,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：特定のデータベースをバックアップまたは復元する際に、非同期マテリアライズドビューの BACKUP と RESTORE を有効にするかどうか。この項目が `false` に設定されている場合、StarRocks は非同期マテリアライズドビューのバックアップをスキップします。
 - 導入時期：v3.2.0
 
-### `enable_batch_insert_histogram_statistics`
-
-- デフォルト：true
-- タイプ：Boolean
-- 単位：-
-- 変更可能：Yes
-- 説明：複数列のヒストグラムを収集するときに、ヒストグラム統計を一括挿入するかどうかを指定します。このパラメータは StarRocks テーブルと外部テーブルの両方に適用されます。`false` に設定すると、StarRocks は列ごとにヒストグラム統計を個別に挿入します。
-- 導入時期：-
-
 ### `enable_collect_full_statistic`
 
 - デフォルト：true
