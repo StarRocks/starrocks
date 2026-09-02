@@ -1170,7 +1170,24 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     for (size_t i = 0; i < dels.size(); ++i) {
         _pending_rowset_data.dels.emplace_back(dels[i]);
         const int64_t off = i < del_op_offsets.size() ? del_op_offsets[i] : -1;
-        _pending_rowset_data.del_op_offsets.push_back(off >= 0 ? off + seg_base : -1);
+        // Resolve the del's position into the merged rowset's segment-id space HERE, while the
+        // op_write that produced it is still in hand, with the same expression apply used for that
+        // op_write (build_del_interleave_plan(): `seg_base + get_segment_idx()` for a recorded
+        // offset, "right after this op_write's own last segment" for an unrecorded one). An
+        // op_write with no segments (a pure-delete statement) resolves to `seg_base`, the slot
+        // get_rowset_id_step() reserves for it and which therefore holds no segment, so it erases
+        // every earlier statement's rows and nothing later -- which is what apply did.
+        //
+        // An unrecorded offset used to be deferred to set_final_rowset() as -1, which resolved it
+        // against the MERGED rowset, i.e. after every LATER statement's segments too. The rebuild
+        // then replayed that del over rows a later statement of the same transaction had
+        // re-inserted (and, being at the max, without the ordering filter), erasing index entries
+        // whose rows are live and not delvec-masked. The next upsert of such a key finds nothing,
+        // writes no delete-vector mark, and leaves two live rows -- which a later index rebuild
+        // reports as "insert found duplicate key" (issue 78224).
+        const uint32_t local_idx =
+                off >= 0 ? get_segment_idx(rowset_pb, static_cast<int32_t>(off)) : get_max_segment_idx(rowset_pb);
+        _pending_rowset_data.del_op_offsets.push_back(static_cast<int64_t>(seg_base) + local_idx);
         _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : 0);
     }
 
@@ -1222,10 +1239,15 @@ Status MetaFileBuilder::set_final_rowset() {
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
-        // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
-        // fall back to the max segment id (delete after all upserts).
-        del_file_with_rid.set_op_offset(
-                resolve_del_op_offset(_pending_rowset_data.del_op_offsets[i], /*column_mode=*/false, *rowset));
+        // op_offset is already resolved into this merged rowset's segment-id space by add_rowset(),
+        // which is the only place that knows which op_write each del came from. Clamp it to the
+        // merged rowset's last segment: a trailing pure-delete statement's reserved slot sits past
+        // that segment, and an op_offset outside the rowset's own rssid range would push the
+        // rebuild point into the next rowset. Clamping keeps the "erases everything in this rowset"
+        // meaning (the rebuild's ordering filter is skipped once op_offset reaches the max) without
+        // escaping the range.
+        del_file_with_rid.set_op_offset(static_cast<uint32_t>(
+                std::min<int64_t>(_pending_rowset_data.del_op_offsets[i], get_max_segment_idx(*rowset))));
         if (!del.encryption_meta().empty()) {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }
