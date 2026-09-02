@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <vector>
+
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -35,68 +38,70 @@ public:
             return {};
         }
 
-        long row_count = state->get_columns()[0]->size();
+        const size_t column_count = state->get_columns().size();
+        const size_t row_count = state->get_columns()[0]->size();
         state->set_processed_rows(row_count);
 
-        Columns unnested_array_list;
-        for (auto& col_idx : state->get_columns()) {
-            Column* column = col_idx.get();
+        // Resolve the per-column views once instead of re-resolving them for every row.
+        struct ArrayView {
+            const Column* nullable_column;
+            const Column* elements;
+            const UInt32Column::Container* offsets;
+        };
+        std::vector<ArrayView> array_views;
+        array_views.reserve(column_count);
 
-            auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
-            unnested_array_list.emplace_back(unnested_array_elements);
+        Columns unnested_array_list;
+        unnested_array_list.reserve(column_count);
+        // Everything here is const, all the way down from the input ColumnPtr: nothing on this path
+        // may mutate the input columns.
+        for (const auto& col : state->get_columns()) {
+            const Column* column = col.get();
+            const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(column));
+            array_views.emplace_back(ArrayView{column, &col_array->elements(), &col_array->offsets().get_data()});
+            unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());
         }
 
         auto copy_count_column = UInt32Column::create();
         uint32_t offset = 0;
         copy_count_column->append(offset);
-        for (int row_idx = 0; row_idx < row_count; ++row_idx) {
+        for (size_t row_idx = 0; row_idx < row_count; ++row_idx) {
             uint32_t max_length_array_size = 0;
-            for (auto& col_idx : state->get_columns()) {
-                Column* column = col_idx.get();
-                if (column->is_null(row_idx)) {
+            for (const auto& view : array_views) {
+                if (view.nullable_column->is_null(row_idx)) {
                     // current row is null, ignore the offset.
                     continue;
                 }
-                auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-                auto offset_column = col_array->offsets_column();
-
-                long array_element_length =
-                        offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                if (array_element_length > max_length_array_size) {
-                    max_length_array_size = array_element_length;
-                }
+                const uint32_t array_element_length = (*view.offsets)[row_idx + 1] - (*view.offsets)[row_idx];
+                max_length_array_size = std::max(max_length_array_size, array_element_length);
             }
+
             if (max_length_array_size == 0 && state->get_is_left_join()) {
                 offset += 1;
                 copy_count_column->append(offset);
-            } else {
-                offset += max_length_array_size;
-                copy_count_column->append(offset);
+                for (size_t col_idx = 0; col_idx < column_count; ++col_idx) {
+                    unnested_array_list[col_idx]->append_nulls(1);
+                }
+                continue;
             }
 
-            for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
-                Column* column = state->get_columns()[col_idx].get();
-                auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-                auto offset_column = col_array->offsets_column();
+            offset += max_length_array_size;
+            copy_count_column->append(offset);
 
-                if (max_length_array_size == 0 && state->get_is_left_join()) {
-                    unnested_array_list[col_idx]->append_nulls(1);
-                } else {
-                    if (column->is_null(row_idx)) {
-                        // current row is null, ignore element data.
-                        unnested_array_list[col_idx]->append_nulls(max_length_array_size);
-                    } else {
-                        auto array_element_length =
-                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                        unnested_array_list[col_idx]->append(*(col_array->elements_column()),
-                                                             offset_column->get(row_idx).get_int32(),
-                                                             array_element_length);
+            for (size_t col_idx = 0; col_idx < column_count; ++col_idx) {
+                const auto& view = array_views[col_idx];
+                if (view.nullable_column->is_null(row_idx)) {
+                    // current row is null, ignore element data.
+                    unnested_array_list[col_idx]->append_nulls(max_length_array_size);
+                    continue;
+                }
 
-                        if (array_element_length < max_length_array_size) {
-                            unnested_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
-                        }
-                    }
+                const uint32_t array_start = (*view.offsets)[row_idx];
+                const uint32_t array_element_length = (*view.offsets)[row_idx + 1] - array_start;
+                unnested_array_list[col_idx]->append(*view.elements, array_start, array_element_length);
+
+                if (array_element_length < max_length_array_size) {
+                    unnested_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
                 }
             }
         }
