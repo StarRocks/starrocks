@@ -16,25 +16,11 @@
 
 #include <unordered_set>
 
+#include "util/trim.h"
+
 namespace starrocks {
 
 using Field = Slice;
-
-static std::pair<const char*, size_t> trim(const char* value, size_t len) {
-    size_t begin = 0;
-
-    while (begin < len && value[begin] == ' ') {
-        ++begin;
-    }
-
-    size_t end = len - 1;
-
-    while (end > begin && value[end] == ' ') {
-        --end;
-    }
-
-    return std::make_pair(value + begin, end - begin + 1);
-}
 
 inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
     if (LIKELY(_column_delimiter_length == 1)) {
@@ -564,8 +550,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         for (size_t i = 0; i < size; ++i, ++ptr) {
             if (*ptr == _parse_options.column_delimiter[0]) {
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
                     columns->emplace_back(value, ptr - value);
                 }
@@ -580,8 +566,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
                                             _column_delimiter_length));
             if (ptr != nullptr) {
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
                     columns->emplace_back(value, ptr - value);
                 }
@@ -592,8 +578,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
         ptr = record.data + size;
     }
     if (_parse_options.trim_space) {
-        std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-        columns->emplace_back(newPos.first, newPos.second);
+        std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+        columns->emplace_back(field.data(), field.size());
     } else {
         columns->emplace_back(value, ptr - value);
     }
