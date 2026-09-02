@@ -553,6 +553,11 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
+<<<<<<< HEAD
+=======
+        ./service/service_be/backend_service_test.cpp
+        ./service/service_be/http_auth_response_test.cpp
+>>>>>>> 9f3ccca ([BugFix] Fix FE max tablet compaction score collection (#78496))
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./storage/metadata_util_test.cpp
