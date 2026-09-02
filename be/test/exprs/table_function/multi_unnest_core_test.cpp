@@ -212,6 +212,9 @@ TEST(MultiUnnestTest, counts_only_when_result_is_not_required) {
         // Same row count and same bracket-to-input-row mapping, values not materialized.
         EXPECT_EQ(expected_expansion(args, false, /*with_values=*/false), result.rows) << "chunk_size=" << chunk_size;
         EXPECT_LE(result.max_rows_per_call, static_cast<uint32_t>(chunk_size));
+        // Nothing was appended at all - the zip and its NULL padding are the bulk of the work here and
+        // there is no column to hand back by reference, unlike single-array Unnest.
+        EXPECT_EQ(0u, result.max_fn_result_rows) << "chunk_size=" << chunk_size;
     }
 }
 
