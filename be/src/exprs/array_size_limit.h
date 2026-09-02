@@ -23,16 +23,16 @@
 
 namespace starrocks {
 
-// The max_array_size session variable caps the number of elements in an array built by an array
+// The max_array_length session variable caps the number of elements in an array built by an array
 // function. Every array-producing function is meant to honor it. Currently supporting functions:
 //   array_agg
 inline bool reject_if_array_too_large(FunctionContext* ctx, std::string_view func_name, size_t element_count) {
-    const ssize_t limit = ctx->get_max_array_size();
+    const ssize_t limit = ctx->get_max_array_length();
     if (LIKELY(limit <= 0 || element_count <= static_cast<size_t>(limit))) {
         return false;
     }
     ctx->set_error(fmt::format("{} produced an array of {} elements, exceeding the limit {} set by the session "
-                               "variable max_array_size.",
+                               "variable max_array_length.",
                                func_name, element_count, limit)
                            .c_str(),
                    false);

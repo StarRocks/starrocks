@@ -966,7 +966,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
-    public static final String MAX_ARRAY_SIZE = "max_array_size";
+    public static final String MAX_ARRAY_LENGTH = "max_array_length";
 
     // These parameters are experimental. They may be removed in the future
     public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
@@ -3136,8 +3136,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Maximum number of elements in an array produced by an array function. A query that exceeds it
     // fails instead of returning an oversized array. 0 or negative means unlimited. This is meant to
     // cover every array-producing function, but only array_agg enforces it so far.
-    @VariableMgr.VarAttr(name = MAX_ARRAY_SIZE)
-    private long maxArraySize = 0;
+    @VariableMgr.VarAttr(name = MAX_ARRAY_LENGTH)
+    private long maxArrayLength = 0;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedRows = 1 * 1024 * 1024 * 1024;
@@ -3720,12 +3720,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.exprChildrenLimit = exprChildrenLimit;
     }
 
-    public long getMaxArraySize() {
-        return maxArraySize;
+    public long getMaxArrayLength() {
+        return maxArrayLength;
     }
 
-    public void setMaxArraySize(long maxArraySize) {
-        this.maxArraySize = maxArraySize;
+    public void setMaxArrayLength(long maxArrayLength) {
+        this.maxArrayLength = maxArrayLength;
     }
 
     public void setFullSortMaxBufferedRows(long v) {
@@ -6745,7 +6745,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
-        tResult.setMax_array_size(maxArraySize);
+        tResult.setMax_array_length(maxArrayLength);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
         tResult.setEnable_predicate_col_late_materialize(enablePredicateColLateMaterialize);
