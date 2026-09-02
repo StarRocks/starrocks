@@ -393,6 +393,20 @@ public class VariantPathRewriteRule extends TransformationRule {
             Preconditions.checkState(tableAndColumn != null,
                     "ColumnRefOperator %s must be attached to a table when creating column access expression",
                     variantColumn);
+
+            // Same round trip as the JSON rule: the identity below is columnId + "." + fields flattened
+            // into one string, and it is split apart again on "." -- by pathFromColumn, and
+            // independently by the backend, which rebuilds it with ColumnAccessPath::linear_path(). A
+            // column name carrying a "." is cut in the wrong place, so the access path names whatever
+            // column the first segment happens to be; a '"' cannot be re-encoded either, because the
+            // tokenizer that splits the string escapes a quote by doubling it. Declining here rather
+            // than at the entry points covers both of them -- visitCall and visitCastOperator each
+            // reach this method and each already treat IllegalArgumentException as "leave it alone".
+            String rootColumnName = tableAndColumn.second.getColumnId().getId();
+            if (rootColumnName.indexOf('.') >= 0 || rootColumnName.indexOf('"') >= 0) {
+                throw new IllegalArgumentException("column name cannot carry an access path: " + rootColumnName);
+            }
+
             List<String> fullPath = Lists.newArrayList();
             fullPath.add(tableAndColumn.second.getColumnId().getId());
             fullPath.addAll(fields);

@@ -85,6 +85,9 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
     public static final String MOCKED_UNPARTITIONED_V2_TABLE_NAME = "t0_v2";
     public static final String MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME = "variant_t0";
+    // A VARIANT column whose name carries a "." -- legal in an Iceberg schema, and the shape that the
+    // extended column's flat identity cannot round trip.
+    public static final String MOCKED_UNPARTITIONED_VARIANT_DOTTED_TABLE_NAME = "variant_dotted_t0";
     public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
     public static final String MOCKED_UNKNOWN_TYPE_TABLE_NAME = "t_unknown_types";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
@@ -199,6 +202,12 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         new Column("v", VariantType.VARIANT, true)),
                 new Schema(required(3, "id", Types.IntegerType.get()),
                         required(4, "v", Types.VariantType.get())),
+                3);
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_VARIANT_DOTTED_TABLE_NAME,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("v.a", VariantType.VARIANT, true)),
+                new Schema(required(9, "id", Types.IntegerType.get()),
+                        required(10, "v.a", Types.VariantType.get())),
                 3);
         registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_TABLE_NUMERIC,
                 ImmutableList.of(new Column("id", IntegerType.INT, true),

@@ -28,6 +28,7 @@ import org.mockito.Mockito;
 
 public class VariantPathRewriteTest extends ConnectorPlanTestBase {
     private static final String VARIANT_TABLE = "iceberg0.unpartitioned_db.variant_t0";
+    private static final String DOTTED_VARIANT_TABLE = "iceberg0.unpartitioned_db.variant_dotted_t0";
 
     @Test
     public void testProjectionRewrite() throws Exception {
@@ -299,6 +300,36 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
         Assertions.assertNotNull(extendedColumn);
         Assertions.assertEquals("v_new.a", extendedColumn.getName());
         Assertions.assertEquals("v", extendedColumn.getPhysicalName());
+    }
+
+    /**
+     * The extended column's identity is the flat string columnId + "." + fields, and it is split apart
+     * again on "." -- by pathFromColumn, and independently by the backend, which rebuilds it with
+     * ColumnAccessPath::linear_path(). A column name carrying a "." is cut in the wrong place, so the
+     * access path names whatever column the first segment happens to be. On the JSON side the same
+     * defect was measured on a cluster as a silent read of a sibling column.
+     *
+     * Both entry points have to decline: visitCall reaches createColumnAccessExpression through
+     * rewriteVariantFunction, and visitCastOperator reaches it directly. The guard lives in that shared
+     * method for exactly that reason.
+     */
+    @Test
+    public void testSkipRewriteWhenTheVariantColumnNameCannotSurviveTheLinearPath() throws Exception {
+        connectContext.getSessionVariable().setEnableVariantPathRewrite(true);
+
+        // visitCall -> rewriteVariantFunction -> createColumnAccessExpression
+        String plan = getVerboseExplain("select get_variant_int(`v.a`, '$.b') from " + DOTTED_VARIANT_TABLE);
+        Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+        // visitCastOperator -> createColumnAccessExpression, bypassing rewriteVariantFunction
+        plan = getVerboseExplain("select cast(variant_query(`v.a`, '$.b') as bigint) from " + DOTTED_VARIANT_TABLE);
+        Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+        // A name that round trips still gets the rewrite through both entries.
+        plan = getVerboseExplain("select get_variant_int(v, '$.a.b') from " + VARIANT_TABLE);
+        Assertions.assertTrue(plan.contains("ExtendedColumnAccessPath"), plan);
+        plan = getVerboseExplain("select cast(variant_query(v, '$.profile.rank') as bigint) from " + VARIANT_TABLE);
+        Assertions.assertTrue(plan.contains("ExtendedColumnAccessPath"), plan);
     }
 
 }

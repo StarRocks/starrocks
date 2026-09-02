@@ -729,4 +729,48 @@ public class JsonPathRewriteTest extends PlanTestBase {
         }
     }
 
+    /**
+     * An extended column's identity is the flat string columnId + "." + field1 + "." + field2..., and it
+     * is taken apart again by splitting on "." -- by pathFromColumn here, and independently on the
+     * backend, which rebuilds the same string with ColumnAccessPath::linear_path(). A column name that
+     * carries a "." does not survive that round trip: the root is cut in the wrong place, so for a JSON
+     * column named `j.a` the access path becomes /j/a/b. If the table also has a column actually called
+     * j, the query silently reads that column instead -- measured on a cluster, `j.a`->'$.b' returned
+     * column j's $.a.b. Without such a sibling it fails with "unknown access path: j".
+     *
+     * Path segments cannot reach this, JSON_PATH_VALID_PATTERN keeps them to [a-zA-Z0-9_-], so the root
+     * is the only way in. Declining the rewrite for such a column leaves the expression on the JSON
+     * column, which answers correctly.
+     */
+    @Test
+    public void testSkipRewriteWhenTheJsonColumnNameCannotSurviveTheLinearPath() throws Exception {
+        starRocksAssert.withTable("create table json_dotted_name (k int, j json, `j.a` json)"
+                + " duplicate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1')");
+        try {
+            // The shape that silently read the wrong column: a sibling named exactly the mis-cut root.
+            String plan = getVerboseExplain(
+                    "select cast(`j.a`->'$.b' as bigint) from json_dotted_name");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+            // No sibling to hit, so this one used to fail on the backend instead of reading wrongly.
+            plan = getVerboseExplain(
+                    "select cast(`j.a`->'$.b' as bigint) from json_dotted_name where k = 1");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+            // A quote in the name is the same round trip hazard: StrTokenizer escapes a quote by
+            // doubling it, so a name carrying one cannot be re-encoded by wrapping either.
+            starRocksAssert.withTable("create table json_quoted_name (k int, `a\"b` json)"
+                    + " duplicate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1')");
+            plan = getVerboseExplain("select cast(`a\"b`->'$.c' as bigint) from json_quoted_name");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+            starRocksAssert.dropTable("json_quoted_name");
+
+            // The plain column on the same table still gets the rewrite, so this declines per column.
+            plan = getVerboseExplain("select cast(j->'$.b' as bigint) from json_dotted_name");
+            Assertions.assertTrue(plan.contains("ExtendedColumnAccessPath"), plan);
+        } finally {
+            starRocksAssert.dropTable("json_dotted_name");
+        }
+    }
+
 }

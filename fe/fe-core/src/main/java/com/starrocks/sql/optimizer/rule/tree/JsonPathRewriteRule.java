@@ -591,6 +591,22 @@ public class JsonPathRewriteRule extends TransformationRule {
                 return call; // Cannot rewrite if not attached to a table (e.g., lambda arguments)
             }
 
+            // The extended column's identity is the flat string columnId + "." + field1 + "." + ..., and
+            // it is taken apart again by splitting on "." -- by pathFromColumn below, and independently
+            // by the backend, which rebuilds the same string with ColumnAccessPath::linear_path(). A
+            // column name carrying a "." does not survive that round trip: the root is cut in the wrong
+            // place, so a column named `j.a` yields the access path /j/a/b. With a sibling column
+            // actually named j the query silently reads that one instead; without it, the backend fails
+            // with "unknown access path: j". A quote cannot be re-encoded either -- the tokenizer that
+            // splits the string escapes a quote by doubling it, so wrapping the name is not a total
+            // encoding. Path segments cannot reach this, the valid-segment pattern keeps them to
+            // [a-zA-Z0-9_-], so the root is the only way in. Leave the expression on the JSON column,
+            // which answers correctly.
+            String rootColumnName = tableAndColumn.second.getColumnId().getId();
+            if (rootColumnName.indexOf('.') >= 0 || rootColumnName.indexOf('"') >= 0) {
+                return call;
+            }
+
             String path = ((ConstantOperator) pathArg).getVarchar();
             List<String> fields = parseJsonPath(path);
 
