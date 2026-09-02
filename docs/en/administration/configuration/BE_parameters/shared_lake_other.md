@@ -93,7 +93,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The tracked memory budget for synchronous allocations made while processing one `/api/cloudnative/dump_tablet_metadata` request on a CN. It uses the standard MemTracker accounting granularity rather than enforcing a byte-exact ceiling. It covers metadata inspection, sensitive-field redaction, and JSON serialization, but not the metadata already stored in the CN metadata cache or the asynchronous HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
-- Introduced in: v26.2
+- Introduced in: v4.2
 
 ### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
 
@@ -102,7 +102,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The maximum size of the complete JSON response for one `/api/cloudnative/dump_tablet_metadata` request. The size is checked before the response is handed to the HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
-- Introduced in: v26.2
+- Introduced in: v4.2
 
 ### lake_dump_tablet_metadata_max_concurrency
 
@@ -111,7 +111,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Requests
 - Is mutable: Yes
 - Description: The maximum number of `/api/cloudnative/dump_tablet_metadata` requests admitted concurrently on one CN. A request continues to occupy one slot until its HTTP request is released. Increasing the value applies immediately to new requests. Decreasing it does not cancel admitted requests, and new requests are rejected until the active count is below the new limit. If this value is less than or equal to `0`, new requests fail closed.
-- Introduced in: v26.2
+- Introduced in: v4.2
 
 ### lake_enable_del_file_crc_check
 
