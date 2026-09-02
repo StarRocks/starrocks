@@ -568,6 +568,42 @@ This topic introduces the following types of FE configurations:
 - Description:
 - Introduced in: -
 
+### `lake_scheduler_enable_colocate_group_sample`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the tablet scheduler estimates a large colocate group's replica distribution by sampling its tablets, instead of scanning every tablet in the group. When a tablet that belongs to a colocate group is scheduled, the scheduler builds a per-Compute Node replica histogram over the whole group to decide where the new replica goes. For a group with tens of thousands of tablets, that full scan dominates the scheduling cost, even though a healthy colocate group is uniformly placed and every tablet in it reports the same signal. When this item is set to `true`, the scheduler instead draws `lake_scheduler_colocate_group_sample_size` random tablets from any group larger than `lake_scheduler_colocate_group_sample_threshold` and scales the sampled per-Compute Node counts up to the full group size. A healthy, fully placed colocate group has all of its tablets on the same Compute Nodes, so the sample reproduces the true distribution exactly; a group that is mid-rebalance incurs a bounded error that at worst produces a sub-optimal (never invalid) placement, which the background tablet balancer later reconciles. Only colocate groups are sampled. Set this item to `false` to always scan every tablet.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- Default: 256
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The minimum number of tablets a colocate group must exceed before the scheduler samples it. Groups at or below this size are always scanned in full, because the full scan is already cheap and sampling would only add error. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- Default: 128
+- Type: Int
+- Unit: Count
+- Is mutable: Yes
+- Description: The number of tablets sampled when a colocate group exceeds `lake_scheduler_colocate_group_sample_threshold`. A larger sample reduces the estimation error for a skewed (mid-rebalance) group but costs more per scheduling decision, so it trades scheduling latency for placement precision. The value should stay well below `lake_scheduler_colocate_group_sample_threshold`, otherwise sampling saves little over a full scan. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- Default: 40
+- Type: Int
+- Unit: Percent
+- Is mutable: Yes
+- Description: The density guard for colocate group sampling, expressed as the maximum tolerated percentage of empty draws. A sampled tablet is an empty draw when it holds no replica on a candidate Compute Node, that is, it is not placed yet or is not on that Compute Node. If more than this percentage of the sample is empty, the group is too sparsely placed for the sample to represent its true distribution, which is what happens while a group is still bulk filling from empty, so the scheduler discards the sample and falls back to a full scan. Equivalently, the sample is trusted only when at least (100 - this value)% of the sampled tablets are placed on a candidate Compute Node, so a lower value is more conservative and demands a denser group before sampling. A stable, fully placed group yields close to 0% empty draws and always takes the fast sampled path regardless of this value, so this item only governs the bulk-fill transient. Set it to `100` to never fall back. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
+- Introduced in: v4.1.5
+
 ## Data Lake
 
 ### `files_enable_insert_push_down_column_type`
