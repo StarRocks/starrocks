@@ -36,7 +36,7 @@ public class GracefulExitFlagTest {
         Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
         beginField.setAccessible(true);
         ((AtomicLong) beginField.get(null)).set(0L);
-        GracefulExitFlag.setBoundaryTxnId(Long.MAX_VALUE);
+        GracefulExitFlag.setPreSignalTxnIds(null);
     }
 
     @BeforeEach

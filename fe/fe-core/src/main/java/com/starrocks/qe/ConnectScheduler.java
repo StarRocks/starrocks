@@ -358,6 +358,22 @@ public class ConnectScheduler {
         return connectionMap.size();
     }
 
+    // Transaction ids of connections that are inside an explicit transaction right now. Called by the
+    // SIGUSR1 handler before the graceful-exit flag becomes visible: isTerminated() later exempts a
+    // connection only if its current txnId is in this set, which is exact on leader and follower
+    // (a numeric TransactionIdGenerator boundary is not -- see GracefulExitFlag.preSignalTxnIds).
+    public Set<Long> getActiveExplicitTxnIds() {
+        Set<Long> txnIds = new HashSet<>();
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            connectionMap.values().forEach(ctx -> {
+                if (ctx.inActiveExplicitTransaction()) {
+                    txnIds.add(ctx.getTxnId());
+                }
+            });
+        }
+        return txnIds;
+    }
+
     public void closeAllIdleConnection() {
         // Only select candidates under the lock; run cleanup() after releasing it. A follower
         // cleanup may forward an explicit-txn rollback to the leader, a synchronous Thrift RPC,

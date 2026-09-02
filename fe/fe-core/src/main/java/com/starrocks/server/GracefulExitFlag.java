@@ -15,6 +15,9 @@ package com.starrocks.server;
 
 import com.starrocks.common.Config;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -23,18 +26,26 @@ public class GracefulExitFlag {
     private static final AtomicBoolean GRACEFUL_EXIT = new AtomicBoolean(false);
     // System.nanoTime() when graceful exit was marked (0 = not marked)
     private static final AtomicLong BEGIN_NANO = new AtomicLong(0L);
-    // Transaction-id boundary captured at drain start: transactions begun before graceful exit hold
-    // ids strictly below this value, so after the accept-new window closes only those keep their
-    // connection exempt. Defaults to MAX_VALUE so a connection is never wrongly terminated when the
-    // boundary has not been captured (e.g. tests that exercise isTerminated() directly).
-    private static final AtomicLong BOUNDARY_TXN_ID = new AtomicLong(Long.MAX_VALUE);
+    // Snapshot of transaction ids that were already in an explicit transaction when graceful exit
+    // began, captured by the SIGUSR1 handler from the local connection map BEFORE the graceful-exit
+    // flag becomes visible. A follower must not approximate this with TransactionIdGenerator.peekNext
+    // (as a numeric boundary would): the generator journals ids in batches of 1000 and follower replay
+    // advances nextId to the reserved batch end, so a follower's captured boundary can sit hundreds of
+    // ids above the leader's actual position -- a BEGIN forwarded during the accept window would then
+    // hold an id below that inflated boundary and wrongly stay exempt after the window. An explicit
+    // txnId snapshot is exact on leader and follower alike: any txn begun after graceful exit is simply
+    // not in the set. Null means the snapshot has not been captured yet; treat every txn as pre-existing
+    // then, so a connection is never wrongly terminated before the handler records the set (and tests
+    // that drive isTerminated() directly stay safe).
+    private static volatile Set<Long> preSignalTxnIds = null;
 
-    public static void setBoundaryTxnId(long txnId) {
-        BOUNDARY_TXN_ID.set(txnId);
+    public static void setPreSignalTxnIds(Set<Long> txnIds) {
+        preSignalTxnIds = txnIds == null ? null : Collections.unmodifiableSet(new HashSet<>(txnIds));
     }
 
-    public static long getBoundaryTxnId() {
-        return BOUNDARY_TXN_ID.get();
+    public static boolean isPreSignalTxn(long txnId) {
+        Set<Long> ids = preSignalTxnIds;
+        return ids == null || ids.contains(txnId);
     }
 
     // Atomically claim the graceful-exit start. Returns true only for the caller that wins the

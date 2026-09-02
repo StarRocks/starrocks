@@ -217,16 +217,18 @@ public class StarRocksFEServer {
         // Since the normal exit is using SIGTERM(15),
         // so we have to choose another signal for the graceful exit, use SIGUSR1(10) here.
         Signal.handle(new Signal("USR1"), sig -> {
-            // Capture the transaction-id boundary BEFORE the graceful-exit flag becomes visible.
-            // Transaction ids are globally monotonic (TransactionIdGenerator): a BEGIN that runs
-            // between flag visibility and boundary capture would get an id below the boundary and
-            // be misclassified as pre-existing by MySQLReadListener.isTerminated() after the window
-            // closes. The isGracefulExit() guard also stops a repeated SIGUSR1 from re-capturing a
-            // larger boundary mid-drain, which would widen the exemption set.
+            // Snapshot the explicit transactions active on this node BEFORE the graceful-exit flag
+            // becomes visible. Transaction ids are globally monotonic, but TransactionIdGenerator
+            // journals them in batches of 1000 and follower replay advances nextId to the reserved
+            // batch end, so a follower's peekNextTransactionId() can sit far above the leader's
+            // actual position: a numeric boundary captured here would wrongly exempt post-signal
+            // transactions on followers (their leader-assigned ids fall below the inflated boundary).
+            // A snapshot of the ids actually active when shutdown begins is exact on both leader and
+            // follower. The isGracefulExit() guard stops a repeated SIGUSR1 from re-snapshotting
+            // mid-drain (which would admit post-signal transactions into the exempt set).
             if (!GracefulExitFlag.isGracefulExit()) {
-                GracefulExitFlag.setBoundaryTxnId(
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                                .getTransactionIDGenerator().peekNextTransactionId());
+                GracefulExitFlag.setPreSignalTxnIds(
+                        ExecuteEnv.getInstance().getScheduler().getActiveExplicitTxnIds());
             }
             if (!GracefulExitFlag.markGracefulExit()) {
                 LOG.info("already handling graceful exit, ignore repeated SIGUSR1");

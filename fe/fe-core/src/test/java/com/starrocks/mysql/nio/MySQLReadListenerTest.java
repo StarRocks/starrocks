@@ -38,6 +38,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -66,7 +67,7 @@ public class MySQLReadListenerTest {
         Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
         beginField.setAccessible(true);
         ((AtomicLong) beginField.get(null)).set(0L);
-        GracefulExitFlag.setBoundaryTxnId(Long.MAX_VALUE);
+        GracefulExitFlag.setPreSignalTxnIds(null);
     }
 
     // Simulate that the graceful-exit drain window (accept-new window + min wait) has elapsed.
@@ -163,8 +164,8 @@ public class MySQLReadListenerTest {
 
         // Mark graceful exit and let the drain window elapse
         markDrainWindowElapsed();
-        // A transaction begun after graceful exit holds a txnId above the drain boundary
-        GracefulExitFlag.setBoundaryTxnId(1000L);
+        // Snapshot captured at SIGUSR1 contained txnId 500; the BEGIN below got 2000 after that
+        GracefulExitFlag.setPreSignalTxnIds(Collections.singleton(500L));
 
         // Parse a non-pre-query SQL statement (regular SELECT)
         StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
@@ -197,8 +198,8 @@ public class MySQLReadListenerTest {
 
         // Mark graceful exit and let the drain window elapse
         markDrainWindowElapsed();
-        // A transaction that predates graceful exit holds a txnId below the drain boundary
-        GracefulExitFlag.setBoundaryTxnId(1000L);
+        // txnId 500 was already active (in the snapshot) when SIGUSR1 arrived
+        GracefulExitFlag.setPreSignalTxnIds(Collections.singleton(500L));
 
         // Parse a non-pre-query SQL statement (regular SELECT)
         StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
