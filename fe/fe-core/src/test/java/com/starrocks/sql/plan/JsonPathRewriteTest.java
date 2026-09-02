@@ -585,4 +585,92 @@ public class JsonPathRewriteTest extends PlanTestBase {
             connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
         }
     }
+
+    /**
+     * A table may legally own a column whose name is literally a JSON path -- a varchar `j.a` beside a
+     * JSON column `j`. The rewrite synthesizes an extended column under exactly that name, so the two
+     * would coexist with different types: a projection reading both fails with "Duplicate key j.a", and
+     * one reading only the subfield gets them confused at the exchange, where the varchar payload is
+     * deserialized as an int64 and the BE dies in FixedLengthColumnSerde<long>::deserialize.
+     *
+     * Until #61560 createExtendedColumn() resolved to the real column instead of minting one, which
+     * answered with the varchar rather than the subfield -- wrong, but not a crash. Removing that
+     * lookup (it was the same one that let two scans share an extended column) turned the wrong answer
+     * into a crash. The rewrite is now skipped for such a scan, which is both crash-free and correct:
+     * reading the JSON column whole is what cbo_json_v2_rewrite=false does, and that answers with the
+     * subfield.
+     */
+    @Test
+    public void testSkipRewriteWhenSubfieldNameCollidesWithRealColumn() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable(
+                "create table json_name_collision (k int, j json, `j.a` varchar(20)) "
+                        + "properties('replication_num'='1')");
+        try {
+            String plan = getVerboseExplain("select k, get_json_int(j, '$.a') from json_name_collision");
+            // No extended column is synthesized, so nothing claims the name the varchar already holds.
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+            Assertions.assertFalse(plan.contains("/j(bigint(20))/a"), plan);
+
+            // The predicate form takes the same route: this is the shape that reached the BE.
+            String predPlan =
+                    getVerboseExplain("select count(*) from json_name_collision where get_json_int(j, '$.a') = 1");
+            Assertions.assertFalse(predPlan.contains("ExtendedColumnAccessPath"), predPlan);
+
+            // A JSON column on the same table whose paths do not collide is still pushed down, so the
+            // guard is scoped to the offending name rather than disabling the rewrite for the table.
+            String okPlan = getVerboseExplain("select k, get_json_int(j, '$.b') from json_name_collision");
+            assertContains(okPlan, "ExtendedColumnAccessPath: [/j(bigint(20))/b(bigint(20))]");
+        } finally {
+            starRocksAssert.dropTable("json_name_collision");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
+
+    /**
+     * Same collision, reached through transparent MV rewrite: the query scans the MV, the rewrite
+     * replaces that scan with the base table, and the colliding varchar lives on the base table only.
+     *
+     * This one is shape coverage, not a regression test for the target-table resolution the guard
+     * shares with getOrCreateColumn(): #65597 made OptExpressionDuplicator re-register the duplicated
+     * column refs against the scan's table, so ColumnRefFactory and the scan operator agree here and
+     * the guard would find the collision either way. It is kept because the combination -- transparent
+     * rewrite plus a colliding real column -- is the one that has to keep planning without synthesizing
+     * a duplicate, and nothing else covers it.
+     */
+    @Test
+    public void testSkipRewriteWhenCollidingColumnIsOnlyOnTheScanTable() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable("CREATE TABLE json_mv_collision_base (\n" +
+                "  id INT,\n" +
+                "  user_object JSON,\n" +
+                "  `user_object.tier` VARCHAR(20)\n" +
+                ") ENGINE=OLAP DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW json_mv_collision\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1 REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('transparent_mv_rewrite_mode' = 'true', 'replication_num' = '1')\n" +
+                "AS SELECT id, get_json_string(user_object, '$.tier') AS tier FROM json_mv_collision_base;");
+        try {
+            starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW json_mv_collision WITH SYNC MODE");
+            String plan = getVerboseExplain("SELECT * FROM json_mv_collision");
+            // Transparent rewrite really did switch to the base table -- otherwise this test proves nothing.
+            assertContains(plan, "json_mv_collision_base");
+            // And the guard found the collision there, so no extended column was synthesized.
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+        } finally {
+            starRocksAssert.dropMaterializedView("json_mv_collision");
+            starRocksAssert.dropTable("json_mv_collision_base");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
+
 }

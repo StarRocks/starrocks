@@ -262,9 +262,11 @@ public class JsonPathRewriteRule extends TransformationRule {
             LogicalProjectOperator project = (LogicalProjectOperator) optExpr.getOp();
             LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
 
-            // Skip the JSON-path pushdown when two subfields of the same JSON column collide
-            // case-insensitively (e.g. 'Campaign' vs 'campaign'); see hasCaseCollidingJsonSubfields.
-            if (hasCaseCollidingJsonSubfields(new ArrayList<>(project.getColumnRefMap().values()), columnRefFactory)) {
+            // Skip the JSON-path pushdown when the extended column cannot own its name: the table
+            // already has a real column called that, or two subfields collide case-insensitively.
+            // See hasCollidingJsonSubfieldName.
+            if (hasCollidingJsonSubfieldName(new ArrayList<>(project.getColumnRefMap().values()), columnRefFactory,
+                    metaScan.getTable())) {
                 return optExpr;
             }
 
@@ -329,8 +331,9 @@ public class JsonPathRewriteRule extends TransformationRule {
         private OptExpression rewriteLogicalScan(OptExpression optExpr, Void v) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) optExpr.getOp();
 
-            // Skip the JSON-path pushdown when two subfields of the same JSON column collide
-            // case-insensitively (e.g. 'Campaign' vs 'campaign'); see hasCaseCollidingJsonSubfields.
+            // Skip the JSON-path pushdown when the extended column cannot own its name: the table
+            // already has a real column called that, or two subfields collide case-insensitively.
+            // See hasCollidingJsonSubfieldName.
             List<ScalarOperator> jsonRoots = new ArrayList<>();
             if (scanOperator.getPredicate() != null) {
                 jsonRoots.add(scanOperator.getPredicate());
@@ -338,7 +341,7 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (scanOperator.getProjection() != null) {
                 jsonRoots.addAll(scanOperator.getProjection().getColumnRefMap().values());
             }
-            if (hasCaseCollidingJsonSubfields(jsonRoots, columnRefFactory)) {
+            if (hasCollidingJsonSubfieldName(jsonRoots, columnRefFactory, scanOperator.getTable())) {
                 return optExpr;
             }
 
@@ -411,11 +414,16 @@ public class JsonPathRewriteRule extends TransformationRule {
     }
 
     /**
-     * Returns true if any JSON column referenced by {@code roots} has two subfields whose access
-     * paths differ only by case, e.g. {@code get_json_string(c,'Campaign')} and
-     * {@code get_json_string(c,'campaign')}.
+     * Returns true if the extended column a JSON subfield access would synthesize cannot safely own its
+     * name, in which case the caller skips the rewrite for that scan.
      *
-     * <p>JSON object keys are case-sensitive, so these are two distinct fields with distinct values.
+     * <p>Two ways that happens. The name may already belong to a real column of the table -- a table can
+     * legally have a varchar called {@code j.a} beside a JSON column {@code j} -- so the synthesized
+     * column and the real one would coexist under one name with different types. Or two subfields of one
+     * JSON column may have access paths that differ only by case, e.g.
+     * {@code get_json_string(c,'Campaign')} and {@code get_json_string(c,'campaign')}.
+     *
+     * <p>JSON object keys are case-sensitive, so those are two distinct fields with distinct values.
      * The pushdown, however, materializes each as an extended {@link Column} whose name is the
      * subfield path; those names collide in every downstream name-keyed lookup (global-dict, min/max
      * statistics). The result is a scan chunk with mismatched column row counts (BE crash) or a wrong
@@ -427,7 +435,8 @@ public class JsonPathRewriteRule extends TransformationRule {
      * <p>This is a side-effect-free pre-pass: it must run before any extended column is created,
      * because a partially-applied rewrite leaves dangling column refs that break later stages.
      */
-    private static boolean hasCaseCollidingJsonSubfields(List<ScalarOperator> roots, ColumnRefFactory factory) {
+    private static boolean hasCollidingJsonSubfieldName(List<ScalarOperator> roots, ColumnRefFactory factory,
+                                                       Table scanTable) {
         // key: case-folded extended-column name -> the actual (case-sensitive) name that first claimed it.
         Map<String, String> claimed = Maps.newHashMap();
         Deque<ScalarOperator> stack = new ArrayDeque<>();
@@ -468,6 +477,37 @@ public class JsonPathRewriteRule extends TransformationRule {
             fullPath.add(tableAndColumn.second.getColumnId().getId());
             fullPath.addAll(fields);
             String name = ColumnAccessPath.createLinearPath(fullPath, call.getType()).getLinearPath();
+
+            // Collision with a real column of the table. A table may legally own a column whose name is
+            // literally a JSON path -- a varchar "j.a" sitting next to a JSON column "j" -- and the
+            // synthesized extended column claims that same name. The two then coexist under one name
+            // carrying different types: a projection that reads both reports "Duplicate key j.a", and
+            // one that reads only the subfield gets the two confused at the exchange, where
+            // FixedLengthColumnSerde<long>::deserialize reads the varchar payload as an int64 and takes
+            // the BE down.
+            //
+            // Until #61560 createExtendedColumn() returned the real column here rather than minting one.
+            // That read the wrong column -- the query answered with the varchar instead of the subfield --
+            // but it did not crash. The reuse was removed because it was the same lookup that made two
+            // scans share one extended column and inherit each other's type; this restores the half of it
+            // that was doing something useful, and does it correctly: skip the rewrite rather than resolve
+            // to the wrong column.
+            // Resolve the table the extended column would be created against exactly the way
+            // getOrCreateColumn() does, so this pre-pass and the creation it guards can never disagree
+            // about which table to look at. Since #65597 made OptExpressionDuplicator re-register the
+            // duplicated column refs against the scan's table, the two agree by construction on every
+            // shape reachable today; keeping the resolution identical here means a future path that
+            // reintroduces the divergence loses a pushdown instead of creating a duplicate column.
+            Table targetTable = scanTable != null ? scanTable : tableAndColumn.first;
+            if (targetTable.getColumn(tableAndColumn.second.getName()) == null) {
+                targetTable = tableAndColumn.first;
+            }
+            // Both tables are checked: the resolved one decides where the column is created, but a name
+            // already taken on either side is a hazard, and being wrong in this direction only costs a
+            // pushdown whereas missing a collision costs a backend crash.
+            if (targetTable.getColumn(name) != null || tableAndColumn.first.getColumn(name) != null) {
+                return true;
+            }
 
             // Collision within this scan: two subfields whose extended-column names differ only by case.
             // The cross-scan branch that used to live here is gone together with createExtendedColumn()'s

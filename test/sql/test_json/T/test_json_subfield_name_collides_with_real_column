@@ -1,0 +1,41 @@
+-- name: test_json_subfield_name_collides_with_real_column
+-- A table may legally own a column whose name is literally a JSON path: a varchar `j.a` sitting next
+-- to a JSON column `j`. The v2 rewrite synthesizes an extended column for `j->'$.a'` under exactly
+-- that name, so the two would coexist under one name carrying different types.
+--
+-- Until the rewrite stopped registering its extended columns on the shared catalog, createExtendedColumn()
+-- resolved to the real column here rather than minting one. That answered with the varchar instead of the
+-- subfield -- wrong, but survivable. Removing that lookup (it was the same one that let two scans share an
+-- extended column and inherit each other's type) left the two colliding for real: a projection that reads
+-- both fails with "Duplicate key j.a", and one that reads only the subfield gets them confused at the
+-- exchange, where FixedLengthColumnSerde<long>::deserialize reads the varchar payload as an int64 and
+-- takes the backend down.
+--
+-- The rewrite is now skipped for such a scan. That is not merely crash-free, it is the correct answer:
+-- reading the JSON column whole is what cbo_json_v2_rewrite=false does, and that answers with the subfield.
+create table t (k int, j json, `j.a` varchar(20)) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values
+  (1, parse_json('{"a":1,"b":10}'), 'x1'),
+  (2, parse_json('{"a":2,"b":20}'), 'x2');
+set cbo_json_v2_rewrite = true;
+-- The subfield, not the varchar. This is the statement that crashed the backend.
+select k, get_json_int(j, '$.a') as sub from t order by k;
+-- The real column, still reachable under its own name.
+select k, `j.a` as real_col from t order by k;
+-- Both at once: this is where the name collision surfaced as "Duplicate key j.a".
+select k, `j.a` as real_col, get_json_int(j, '$.a') as sub from t order by k;
+-- The predicate form takes the same route into the backend.
+select count(*) as cnt from t where get_json_int(j, '$.a') = 1;
+-- The guard is scoped to the offending name: a path on the same JSON column that collides with nothing
+-- is still pushed down, so one awkward column name does not cost the whole table its optimization.
+select k, get_json_int(j, '$.b') as other from t order by k;
+select count(*) as cnt_b from t where get_json_int(j, '$.b') = 20;
+-- Control: with the rewrite off every answer above must come back unchanged.
+set cbo_json_v2_rewrite = false;
+select k, get_json_int(j, '$.a') as sub from t order by k;
+select k, `j.a` as real_col from t order by k;
+select k, `j.a` as real_col, get_json_int(j, '$.a') as sub from t order by k;
+select count(*) as cnt from t where get_json_int(j, '$.a') = 1;
+select k, get_json_int(j, '$.b') as other from t order by k;
+select count(*) as cnt_b from t where get_json_int(j, '$.b') = 20;
