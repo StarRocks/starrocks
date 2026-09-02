@@ -1853,7 +1853,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             params.tablet->id(), _txn_id, rssid, spcols_name, packed_rows, source_num_rows,
                             min_source_rowid, max_source_rowid, cols_str);
                     TRACE_COUNTER_INCREMENT("pcu_packed_sparse_handle_cnt", 1);
-                    return;
+                    return Status::OK();
                 }
 
                 if (take_sparse) {
@@ -1919,7 +1919,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             params.tablet->id(), _txn_id, rssid, spcols_name, sparse_rows, source_num_rows,
                             min_source_rowid, max_source_rowid, cols_str);
                     TRACE_COUNTER_INCREMENT("pcu_sparse_handle_cnt", 1);
-                    return;
+                    return Status::OK();
                 }
 
                 // DENSE path: stream the source segment through update and append into one row-complete
