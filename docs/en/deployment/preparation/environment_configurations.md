@@ -114,6 +114,7 @@ Additional notes:
 - The FE compile target was raised from Java 11 to Java 17 in v3.5.0, which is why v3.5 and later require JDK 17 or later at runtime.
 - As of v3.5.0, StarRocks no longer ships JVM presets for specific JDK versions; all JDK versions share a single `JAVA_OPTS`. When upgrading to v3.5 or later from v3.4 or earlier, remove any `JAVA_OPTS` options in **fe.conf** that are incompatible with JDK 17 (for example, CMS-related options), and use the default `JAVA_OPTS` shipped with v3.5 and later.
 - Starting with v4.2, JDK 21 is recommended. The minimum runtime version remains JDK 17 (the FE compile target is Java 17), and JDK 21 is backward-compatible with the JDK 17 runtime target.
+- The minimum and recommended JDK follow the Java LTS calendar. The next change is scheduled for the first minor version released after October 2027, when the minimum JDK becomes JDK 21 and the recommended JDK becomes JDK 25. For details, see [JDK Support Policy](../../developers/versions.md#jdk-support-policy).
 
 :::note
 StarRocks does not support JRE. You must install a full JDK.
