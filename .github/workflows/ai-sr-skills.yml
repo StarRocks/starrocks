@@ -30,40 +30,22 @@ jobs:
       !contains(github.head_ref, '-sync-pr-')
     steps:
       - name: Recommend Reviewer (AI)
-        # SECURITY (pull_request_target): bind attacker-influenceable context — above all
-        # github.head_ref, the PR branch name — to env vars and reference them as $VARs.
-        # Interpolating ${{ github.head_ref }} straight into this inline script lets a crafted
-        # branch name (e.g. `pwned";whoami;"`) break out and run arbitrary commands on the
-        # self-hosted runner, which holds CLAUDE_CODE_OAUTH_TOKEN / GITHUB_TOKEN. Env var
-        # VALUES are never re-parsed as shell, so this closes the injection.
+        # Thin call. The two security controls for this pull_request_target job — the TRUST
+        # GATE (author_association / internal allowlist) and the READ-ONLY tool allowlist —
+        # both live in ci-tool bin/assign-reviewer.sh so they always travel together and
+        # can't be shipped half-applied. REPO/PR_NUMBER are safe context (repo name +
+        # integer); no untrusted github.head_ref reaches the shell (the script reads the
+        # author association from the API). The host-side "Apply Reviewer" step below does
+        # the actual assignment.
         env:
-          HEAD_REF: ${{ github.head_ref }}
-          BASE_REF: ${{ github.base_ref }}
-          PR_NUMBER: ${{ github.event.number }}
-          PR_ACTION: ${{ github.event.action }}
           REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          echo "=== DEBUG ==="
-          echo "PR: ${PR_NUMBER}"
-          echo "ACTION: ${PR_ACTION}"
-          echo "BASE_REF: ${BASE_REF}"
-          echo "HEAD_REF: ${HEAD_REF}"
-          echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
-          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
-          echo "=== RUN ==="
-          # Bare `claude` on the [ubuntu, ai] host (claudeci is pre-authed; the
-          # starrocks-assign-pr-reviewer skill is installed there). Produces only
-          # "Recommended reviewer: <login>" lines; the host-side "Apply Reviewer" step
-          # below does the actual attach (kept separate so this step needs no write token).
-          #
-          # SECURITY (pull_request_target on a persistent host user): this runs the skill on
-          # attacker-controlled PR content, so we do NOT use --dangerously-skip-permissions.
-          # A read-only tool allowlist constrains what a prompt injection could do to exactly
-          # what the skill needs — read the PR (gh pr view/diff), mine changed-file history
-          # (git log/shortlog), read local reference files. No arbitrary Bash / Write /
-          # network exfil, no `gh pr edit`. Non-allowlisted tools are auto-denied in -p mode.
-          claude -p "/starrocks-assign-pr-reviewer https://github.com/${REPO}/pull/${PR_NUMBER}" \
-            --allowedTools 'Read,Grep,Glob,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(git log:*),Bash(git shortlog:*)' \
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool && (git pull >/dev/null 2>&1 || true)
+          ./bin/assign-reviewer.sh --repo "${REPO}" --pr "${PR_NUMBER}" \
             2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
 
       - name: Apply Reviewer
