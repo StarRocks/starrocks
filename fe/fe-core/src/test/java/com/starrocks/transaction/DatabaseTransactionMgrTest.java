@@ -717,9 +717,13 @@ public class DatabaseTransactionMgrTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION,
                         Lists.newArrayList()));
-        ExceptionChecker.expectThrows(RunningTxnExceedException.class,
+        RunningTxnExceedException perDbReject = Assertions.assertThrows(RunningTxnExceedException.class,
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                         Lists.newArrayList()));
+        // The rejection has to name the config to change and the statement that changes it, so an operator
+        // is not left to go find it. This limit is what blocks loads database-wide once it is reached.
+        assertThat(perDbReject.getMessage(), containsString("max_running_txn_num_per_db"));
+        assertThat(perDbReject.getMessage(), containsString("ADMIN SET FRONTEND CONFIG"));
     }
 
     private static void addRunningTxn(DatabaseTransactionMgr mgr, long txnId, String label,
@@ -759,6 +763,16 @@ public class DatabaseTransactionMgrTest {
             ExceptionChecker.expectThrows(RunningTxnExceedException.class,
                     () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
                             Lists.newArrayList(tableA)));
+            // The rejection has to tell an operator what to do about it, not just that it happened: name the
+            // config to change, show the statement that changes it, and say the per-table limit can be turned
+            // off entirely. Someone hitting this may not know the feature exists, since it defaults to off.
+            RunningTxnExceedException perTableReject = Assertions.assertThrows(RunningTxnExceedException.class,
+                    () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                            Lists.newArrayList(tableA)));
+            assertThat(perTableReject.getMessage(), containsString("max_running_txn_num_per_table"));
+            assertThat(perTableReject.getMessage(), containsString("ADMIN SET FRONTEND CONFIG"));
+            assertThat(perTableReject.getMessage(), containsString("set it to 0"));
+
             // A multi-table load is rejected if ANY member table is over limit.
             ExceptionChecker.expectThrows(RunningTxnExceedException.class,
                     () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING,

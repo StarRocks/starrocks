@@ -2196,7 +2196,10 @@ public class DatabaseTransactionMgr {
             default:
                 if (runningTxnNums >= Config.max_running_txn_num_per_db) {
                     throw new RunningTxnExceedException("current running txns on db " + dbId + " is "
-                            + runningTxnNums + ", larger than limit " + Config.max_running_txn_num_per_db);
+                            + runningTxnNums + ", larger than limit " + Config.max_running_txn_num_per_db
+                            + ". You can raise the limit by executing 'ADMIN SET FRONTEND CONFIG "
+                            + "(\"max_running_txn_num_per_db\" = \"<value>\");', which takes effect "
+                            + "immediately without a restart.");
                 }
                 // Per-table limit: isolate a stalled table so it cannot consume the whole db budget.
                 // Disabled when <= 0. Reject if ANY table the txn touches is already at/over the limit.
@@ -2206,7 +2209,12 @@ public class DatabaseTransactionMgr {
                         int running = getRunningTxnNumOfTable(tableId);
                         if (running >= perTableLimit) {
                             throw new RunningTxnExceedException("current running txns on table " + tableId
-                                    + " (db " + dbId + ") is " + running + ", larger than limit " + perTableLimit);
+                                    + " (db " + dbId + ") is " + running + ", larger than limit " + perTableLimit
+                                    + ". You can raise the limit by executing 'ADMIN SET FRONTEND CONFIG "
+                                    + "(\"max_running_txn_num_per_table\" = \"<value>\");', or set it to 0 to "
+                                    + "disable the per-table limit and bound this database by "
+                                    + "max_running_txn_num_per_db alone. Either takes effect immediately "
+                                    + "without a restart.");
                         }
                     }
                 }
