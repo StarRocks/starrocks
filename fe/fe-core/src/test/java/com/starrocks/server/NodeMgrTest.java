@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.leader.CheckpointController;
+import com.starrocks.persist.EditLog;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
@@ -32,6 +33,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -115,10 +117,10 @@ public class NodeMgrTest {
 
     /**
      * A dropped follower only learns that it was removed by replaying OP_REMOVE_FRONTEND_V2, and
-     * removeElectableNode() shuts down its feeder immediately, so the journal write (and its
-     * in-memory apply) has to happen first. removeUnstableNode() has to come last: it clears the
-     * electable group size override, and while a still-catching-up joiner is a group member it
-     * counts toward the ack quorum without ever acking.
+     * removeElectableNode() shuts down its feeder immediately, so the journal write has to happen
+     * first. removeUnstableNode() has to come last: it clears the electable group size override,
+     * and while a still-catching-up joiner is a group member it counts toward the ack quorum
+     * without ever acking.
      */
     @Test
     public void testDropFollowerJournalsBeforeLeavingReplicationGroup() throws Exception {
@@ -128,8 +130,10 @@ public class NodeMgrTest {
         List<String> calls = new ArrayList<>();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         HAProtocol previousHaProtocol = globalStateMgr.getHaProtocol();
+        EditLog previousEditLog = globalStateMgr.getEditLog();
         CheckpointController previousController = globalStateMgr.getCheckpointController();
-        globalStateMgr.setHaProtocol(new RecordingHAProtocol(calls, nodeMgr));
+        globalStateMgr.setHaProtocol(new RecordingHAProtocol(calls));
+        globalStateMgr.setEditLog(new RecordingEditLog(calls));
         // dropFrontendHook() cancels the checkpoint of the dropped node, and this test does not
         // run a checkpoint controller of its own
         globalStateMgr.setCheckpointController(
@@ -138,36 +142,44 @@ public class NodeMgrTest {
             nodeMgr.dropFrontend(FrontendNodeType.FOLLOWER, "192.168.4.2", 9010);
         } finally {
             globalStateMgr.setHaProtocol(previousHaProtocol);
+            globalStateMgr.setEditLog(previousEditLog);
             globalStateMgr.setCheckpointController(previousController);
         }
 
-        // "journaled=true" means the record was already written and applied when the call was made
         Assertions.assertEquals(
-                List.of("removeElectableNode(journaled=true)", "removeUnstableNode(journaled=true)"), calls);
+                List.of("logRemoveFrontend", "removeElectableNode", "removeUnstableNode"), calls);
+    }
+
+    private static class RecordingEditLog extends EditLog {
+        private final List<String> calls;
+
+        RecordingEditLog(List<String> calls) {
+            super(new ArrayBlockingQueue<>(1));
+            this.calls = calls;
+        }
+
+        @Override
+        public void logRemoveFrontend(Frontend fe) {
+            calls.add("logRemoveFrontend");
+        }
     }
 
     private static class RecordingHAProtocol implements HAProtocol {
         private final List<String> calls;
-        private final NodeMgr nodeMgr;
 
-        RecordingHAProtocol(List<String> calls, NodeMgr nodeMgr) {
+        RecordingHAProtocol(List<String> calls) {
             this.calls = calls;
-            this.nodeMgr = nodeMgr;
-        }
-
-        private void record(String call) {
-            calls.add(call + "(journaled=" + (nodeMgr.checkFeExist("192.168.4.2", 9010) == null) + ")");
         }
 
         @Override
         public boolean removeElectableNode(String nodeName) {
-            record("removeElectableNode");
+            calls.add("removeElectableNode");
             return true;
         }
 
         @Override
         public void removeUnstableNode(String nodeName, int currentFollowerCnt) {
-            record("removeUnstableNode");
+            calls.add("removeUnstableNode");
         }
 
         @Override
@@ -198,11 +210,6 @@ public class NodeMgrTest {
         @Override
         public long getLatestEpoch() {
             return 0;
-        }
-
-        @Override
-        public String transferToLeader(String nodeName, int timeoutMs, boolean force) {
-            return null;
         }
     }
 }

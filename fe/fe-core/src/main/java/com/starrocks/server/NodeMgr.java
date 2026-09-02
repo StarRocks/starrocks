@@ -888,17 +888,6 @@ public class NodeMgr {
             frontendIds.remove(fe.getFid());
             removedFrontends.add(fe.getNodeName());
 
-<<<<<<< HEAD
-            if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
-                helperNodes.remove(Pair.create(host, port));
-
-                HAProtocol ha = GlobalStateMgr.getCurrentState().getHaProtocol();
-                ha.removeUnstableNode(host, getFollowerCnt());
-            }
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(fe);
-=======
-            Frontend finalFE = fe;
             // Write the edit log BEFORE removing the frontend from the bdbje replication group.
             // removeElectableNode() shuts down the feeder to the dropped follower immediately,
             // so if the log were written after it, the dropped follower could never receive
@@ -909,17 +898,18 @@ public class NodeMgr {
             // alive and can ack, or the group has already lost its quorum and every edit log write
             // fails anyway), or it is an unstable joiner still masked by the electable group size
             // override, which is cleared only at the end of this block.
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(
-                    new DropFrontendInfo(fe.getNodeName()), wal -> applyDropFrontend(finalFE));
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveFrontend(fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 GlobalStateMgr.getCurrentState().getHaProtocol().removeElectableNode(fe.getNodeName());
+                helperNodes.remove(Pair.create(host, port));
+
                 // Clear the unstable-node bookkeeping AFTER the member is removed from the
                 // replication group. Doing it before the edit log write would clear the electable
                 // group size override while the (possibly non-acking) dropped joiner still counts
                 // toward the ack group size, making the commit above unachievable.
-                GlobalStateMgr.getCurrentState().getHaProtocol().removeUnstableNode(fe.getNodeName(), getFollowerCnt());
+                HAProtocol ha = GlobalStateMgr.getCurrentState().getHaProtocol();
+                ha.removeUnstableNode(host, getFollowerCnt());
             }
->>>>>>> d152d33 ([BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215))
         } finally {
             unlock();
 

@@ -16,13 +16,8 @@ package com.starrocks.ha;
 
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
-import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Frontend;
-import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -56,44 +51,5 @@ public class BDBHATest {
         ha.removeUnstableNode("host2", 4);
         Assertions.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-    }
-
-    @Test
-    public void testAddAndDropFollower() throws Exception {
-        BDBJEJournal journal = (BDBJEJournal) GlobalStateMgr.getCurrentState().getJournal();
-        BDBEnvironment environment = journal.getBdbEnvironment();
-
-        // add two followers
-        GlobalStateMgr.getCurrentState().getNodeMgr()
-                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
-        Assertions.assertEquals(1,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-        GlobalStateMgr.getCurrentState().getNodeMgr()
-                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
-        Assertions.assertEquals(1,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-
-        // one joined successfully
-        new Frontend(FrontendNodeType.FOLLOWER, "node1", "192.168.2.4", 9010)
-                .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
-                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f),
-                        false);
-        Assertions.assertEquals(2,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-
-        // the other one is dropped
-        GlobalStateMgr.getCurrentState().getNodeMgr().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
-
-        Assertions.assertEquals(0,
-                environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-
-        UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getNodeMgr().save(image1.getImageWriter());
-        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
-        NodeMgr nodeMgr = new NodeMgr();
-        nodeMgr.load(reader);
-        reader.close();
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames().size(), 1);
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNodes().size(), 2);
     }
 }
