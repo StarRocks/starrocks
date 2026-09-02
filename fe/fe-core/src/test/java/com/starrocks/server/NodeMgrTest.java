@@ -199,10 +199,5 @@ public class NodeMgrTest {
         public long getLatestEpoch() {
             return 0;
         }
-
-        @Override
-        public String transferToLeader(String nodeName, int timeoutMs, boolean force) {
-            return null;
-        }
     }
 }
