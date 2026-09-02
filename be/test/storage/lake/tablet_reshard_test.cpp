@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <set>
@@ -9486,6 +9487,107 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_union_rejecte
         EXPECT_EQ(0, range_reads);
         EXPECT_EQ(0, writer_opens);
     }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_ignores_non_live_encrypted_delvec_declaration) {
+    constexpr int64_t kNewVersion = 2;
+    const std::set<std::string> expected_orders = {"plain-first", "stale-first"};
+    std::set<std::string> attempted_orders;
+    std::set<std::string> completed_orders;
+    std::set<std::string> observed_failure_orders;
+
+    auto run_case = [&](bool stale_first) {
+        const std::string order = stale_first ? "stale-first" : "plain-first";
+        attempted_orders.insert(order);
+
+        const int64_t plain_tablet = next_id();
+        const int64_t stale_tablet = next_id();
+        const int64_t target_tablet = next_id();
+        for (int64_t tablet_id : {plain_tablet, stale_tablet, target_tablet}) {
+            prepare_tablet_dirs(tablet_id);
+        }
+
+        const std::string segment_filename = "non_live_encrypted_shared_segment.dat";
+        const std::string stale_filename = fmt::format("non_live_encrypted_{}.delvec", order);
+        auto plain = make_shared_delvec_source(plain_tablet, {segment_filename});
+        auto stale = make_shared_delvec_source(stale_tablet, {segment_filename});
+
+        DelVector live_delvec;
+        const uint32_t live_rowids[] = {2, 5};
+        live_delvec.init(/*version=*/10, live_rowids, std::size(live_rowids));
+        const std::string live_bytes = live_delvec.save();
+        add_delvec(plain.get(), plain_tablet, /*version=*/10, /*segment_id=*/1, "non_live_plain.delvec", live_bytes);
+
+        DelVector stale_delvec;
+        const uint32_t stale_rowid = 7;
+        stale_delvec.init(/*version=*/11, &stale_rowid, 1);
+        add_delvec(stale.get(), stale_tablet, /*version=*/11, /*segment_id=*/99, stale_filename, stale_delvec.save());
+        (*stale->mutable_delvec_meta()->mutable_version_to_file())[11].set_encryption_meta("unused-non-live");
+        EXPECT_FALSE(stale->rowsets(0).segment_metas().empty());
+        EXPECT_EQ(1, stale->rowsets(0).id());
+        EXPECT_FALSE(stale->delvec_meta().delvecs().contains(1));
+
+        const std::string plain_pb_before = plain->SerializeAsString();
+        const std::string stale_pb_before = stale->SerializeAsString();
+        auto shared_inventory_before_or = delvec_inventory(target_tablet);
+        ASSERT_TRUE(shared_inventory_before_or.ok()) << shared_inventory_before_or.status();
+        const auto shared_inventory_before = std::move(shared_inventory_before_or).value();
+
+        const std::vector<TabletMetadataPtr> sources = stale_first ? std::vector<TabletMetadataPtr>{stale, plain}
+                                                                   : std::vector<TabletMetadataPtr>{plain, stale};
+        const std::string expected_stale_diagnostic =
+                fmt::format("encrypted delvec input is unsupported; delvec must be plaintext: {}", stale_filename);
+        auto merged_or = merge_delvec_sources(sources, target_tablet, kNewVersion, next_id());
+        if (!merged_or.ok()) {
+            ADD_FAILURE() << order << ": " << merged_or.status();
+            observed_failure_orders.insert(order);
+            EXPECT_TRUE(merged_or.status().is_not_supported());
+            EXPECT_EQ(expected_stale_diagnostic, merged_or.status().message());
+            expect_target_version_not_published(target_tablet, kNewVersion);
+            auto inventory_after_or = delvec_inventory(target_tablet);
+            ASSERT_TRUE(inventory_after_or.ok()) << inventory_after_or.status();
+            EXPECT_EQ(shared_inventory_before, *inventory_after_or);
+            EXPECT_EQ(plain_pb_before, plain->SerializeAsString());
+            EXPECT_EQ(stale_pb_before, stale->SerializeAsString());
+            return;
+        }
+
+        const auto merged = std::move(merged_or).value();
+        ASSERT_EQ(1, merged->rowsets_size());
+        const uint32_t target_rssid = merged->rowsets(0).id();
+        expect_exact_delvec_output(*merged, target_tablet, kNewVersion, {{target_rssid, live_bytes, std::nullopt}});
+        EXPECT_FALSE(merged->delvec_meta().delvecs().contains(99));
+        const auto& output_file = merged->delvec_meta().version_to_file().at(kNewVersion);
+        EXPECT_NE(stale_filename, output_file.name());
+        EXPECT_FALSE(output_file.name().contains("non_live_encrypted_"));
+
+        DelVector loaded;
+        LakeIOOptions io_options;
+        ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *merged, target_rssid, false, io_options, &loaded));
+        ASSERT_NE(nullptr, loaded.roaring());
+        EXPECT_EQ(2, loaded.cardinality());
+        EXPECT_TRUE(loaded.roaring()->contains(2));
+        EXPECT_TRUE(loaded.roaring()->contains(5));
+
+        EXPECT_EQ(plain_pb_before, plain->SerializeAsString());
+        EXPECT_EQ(stale_pb_before, stale->SerializeAsString());
+        auto shared_inventory_after_or = delvec_inventory(target_tablet);
+        ASSERT_TRUE(shared_inventory_after_or.ok()) << shared_inventory_after_or.status();
+        const auto shared_inventory_after = std::move(shared_inventory_after_or).value();
+        std::set<std::string> shared_root_delta;
+        std::set_difference(shared_inventory_after.begin(), shared_inventory_after.end(),
+                            shared_inventory_before.begin(), shared_inventory_before.end(),
+                            std::inserter(shared_root_delta, shared_root_delta.end()));
+        EXPECT_EQ(std::set<std::string>({output_file.name()}), shared_root_delta);
+        completed_orders.insert(order);
+    };
+
+    run_case(/*stale_first=*/false);
+    run_case(/*stale_first=*/true);
+
+    EXPECT_EQ(expected_orders, attempted_orders);
+    EXPECT_EQ(expected_orders, completed_orders);
+    EXPECT_TRUE(observed_failure_orders.empty());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_duplicate_source_metadata_mismatch_is_rejected) {
