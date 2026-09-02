@@ -705,6 +705,14 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
             string msg;
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
                 msg = "partial update on table with sort key must provide all sort key columns";
+            } else if (_flexible_partial_update) {
+                // Flexible is COLUMN_UPDATE_MODE but inserts, so it reaches this check for the
+                // OPPOSITE reason to a plain column update: not because it touches the sort key,
+                // but because it does NOT provide it and still needs to place a new row. Saying
+                // "cannot update sort key column" would send the reader looking for a column the
+                // load never mentioned.
+                msg = "flexible partial update that inserts rows on a table with a sort key must "
+                      "provide all sort key columns";
             } else {
                 msg = "column mode partial update on table with sort key cannot update sort key column";
             }
