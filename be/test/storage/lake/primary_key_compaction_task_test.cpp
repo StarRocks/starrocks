@@ -617,10 +617,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test_unshare_compaction_claims_a_rewritten_
     ASSIGN_OR_ABORT(auto picked, unshare_policy->pick_rowsets());
     EXPECT_EQ(2, picked.size()) << "the rewritten rowset must be claimed on its range alone";
 
-    // An ordinary compaction must keep its hands off a rewritten rowset meanwhile: its output would
-    // carry neither a shared segment nor a range, so nothing would be left to tell the UNSHARE rewrite
-    // that the siblings' rows are in there. Checked with the shared segment taken away, so it is the
-    // range doing the work and not rowset 0.
+    // Ordinary compaction waits while the split's shared segments are still there, and stops waiting
+    // once they are gone -- it keys on those, never on a rowset's range. A range must not hold it off,
+    // because a tablet merge stamps one onto every rowset it emits and nothing ever clears it, so
+    // waiting on a range would stall every merge product's compaction for good with no UNSHARE
+    // scheduled to release it.
+    //
+    // Laundering the rewritten rowset is not a hazard once it is published: that publish seeds the
+    // segment's delete vector with the rows a sibling owns, so they are already unreadable and any
+    // compaction that folds the rowset in simply drops them. Rowset 1 here is a stand-in stamped onto
+    // an ordinary write and carries no such delete vector, which is why this only asserts the guard's
+    // trigger and not what a compaction of it would produce.
     auto only_rewritten = std::make_shared<TabletMetadataPB>(*staged);
     for (auto& segment : *only_rewritten->mutable_rowsets(0)->mutable_segment_metas()) {
         segment.set_shared(false);
@@ -628,7 +635,12 @@ TEST_P(LakePrimaryKeyCompactionTest, test_unshare_compaction_claims_a_rewritten_
     ASSIGN_OR_ABORT(auto ordinary_policy,
                     CompactionPolicy::create(_tablet_mgr.get(), only_rewritten, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto ordinary_picked, ordinary_policy->pick_rowsets());
-    EXPECT_TRUE(ordinary_picked.empty()) << "ordinary compaction must wait for the UNSHARE rewrite";
+    EXPECT_FALSE(ordinary_picked.empty()) << "a rowset range alone must not hold ordinary compaction off";
+
+    ASSIGN_OR_ABORT(auto blocked_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), staged, false /* force_base_compaction */));
+    ASSIGN_OR_ABORT(auto blocked_picked, blocked_policy->pick_rowsets());
+    EXPECT_TRUE(blocked_picked.empty()) << "ordinary compaction must wait while a shared segment is there";
 
     auto txn_id = next_id();
     auto task_context =
