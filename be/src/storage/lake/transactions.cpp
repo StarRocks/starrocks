@@ -494,7 +494,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     return new_version_metadata_or_error(txn_log_st.status());
                 }
             } // close: if (txn_log_st.status().is_not_found())
-        } // close: else (admin force-skip vs normal path)
+        }     // close: else (admin force-skip vs normal path)
 
         if (!txn_log_st.ok() && !ignore_txn_log) {
             LOG(WARNING) << "Fail to get txn log: " << txn_log_st.status() << " tablet_info=" << tablet_info

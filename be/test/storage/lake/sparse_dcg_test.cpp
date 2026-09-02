@@ -420,7 +420,8 @@ TEST_F(LakeSparseDcgTest, test_sparse_write_read_roundtrip) {
 
     // Update c1 of 10 keys to key*1000 (K=10, M=2000 => K/M=0.005 < 0.3 -> sparse).
     std::vector<int> keys = {5, 17, 42, 100, 333, 777, 999, 1234, 1500, 1999};
-    column_update(keys, [](int k) { return k * 1000; }, &version);
+    column_update(
+            keys, [](int k) { return k * 1000; }, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto stats = collect_dcg_stats(metadata);
@@ -456,9 +457,12 @@ TEST_F(LakeSparseDcgTest, test_multi_version_same_row_newest_wins) {
     write_base(M, &version);
 
     const int target = 500;
-    column_update({target}, [](int) { return 111; }, &version);
-    column_update({target}, [](int) { return 222; }, &version);
-    column_update({target}, [](int) { return 333; }, &version);
+    column_update(
+            {target}, [](int) { return 111; }, &version);
+    column_update(
+            {target}, [](int) { return 222; }, &version);
+    column_update(
+            {target}, [](int) { return 333; }, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto stats = collect_dcg_stats(metadata);
@@ -493,9 +497,12 @@ TEST_F(LakeSparseDcgTest, test_partial_overlap_multi_file_one_dcg_value_exact) {
     //   v1 (oldest): rows {10,20,30} -> c1 = 1000+k
     //   v2 (mid):    rows {20,40}    -> c1 = 2000+k   (row 20 overwrites v1)
     //   v3 (newest): rows {30,50}    -> c1 = 3000+k   (row 30 overwrites v1)
-    column_update({10, 20, 30}, [](int k) { return 1000 + k; }, &version);
-    column_update({20, 40}, [](int k) { return 2000 + k; }, &version);
-    column_update({30, 50}, [](int k) { return 3000 + k; }, &version);
+    column_update(
+            {10, 20, 30}, [](int k) { return 1000 + k; }, &version);
+    column_update(
+            {20, 40}, [](int k) { return 2000 + k; }, &version);
+    column_update(
+            {30, 50}, [](int k) { return 3000 + k; }, &version);
 
     // Three sparse .spcols must coexist in ONE segment's converged DCG (the multi-file-per-DCG topology).
     ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
@@ -527,7 +534,8 @@ TEST_F(LakeSparseDcgTest, test_sparse_then_dense_supersedes_and_orphans) {
 
     // First update: K=5 -> sparse (0.005 < 0.3).
     std::vector<int> sparse_keys = {10, 20, 30, 40, 50};
-    column_update(sparse_keys, [](int k) { return k * 1000; }, &version);
+    column_update(
+            sparse_keys, [](int k) { return k * 1000; }, &version);
     {
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         auto s = collect_dcg_stats(md);
@@ -545,7 +553,8 @@ TEST_F(LakeSparseDcgTest, test_sparse_then_dense_supersedes_and_orphans) {
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         before_orphans = md->orphan_files_size();
     }
-    column_update(dense_keys, [](int k) { return k * 7; }, &version);
+    column_update(
+            dense_keys, [](int k) { return k * 7; }, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto stats = collect_dcg_stats(metadata);
@@ -580,7 +589,8 @@ TEST_F(LakeSparseDcgTest, test_flag_off_reads_existing_sparse) {
     {
         ConfigResetGuard<bool> g_enable(&config::enable_sparse_dcg, true);
         std::vector<int> keys = {909};
-        column_update(keys, [](int k) { return k * 2 + 7; }, &version);
+        column_update(
+                keys, [](int k) { return k * 2 + 7; }, &version);
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         ASSERT_EQ(1, collect_dcg_stats(metadata).sparse) << "precondition: a sparse layer exists";
     }
@@ -598,7 +608,8 @@ TEST_F(LakeSparseDcgTest, test_flag_off_reads_existing_sparse) {
     // And a flag-off (dense) write over the same column must succeed and supersede the chain
     // (its source read goes through the overlay).
     std::vector<int> keys2 = {909};
-    column_update(keys2, [](int k) { return k * 5 + 1; }, &version);
+    column_update(
+            keys2, [](int k) { return k * 5 + 1; }, &version);
     std::map<int, int> c1b, c2b;
     ASSERT_EQ(M, read_table(version, &c1b, &c2b));
     ASSERT_EQ(909 * 5 + 1, c1b[909]);
@@ -618,7 +629,8 @@ TEST_F(LakeSparseDcgTest, test_flag_off_is_dense) {
     write_base(M, &version);
 
     std::vector<int> keys = {5, 17, 42, 100, 333, 777, 999, 1234, 1500, 1999};
-    column_update(keys, [](int k) { return k * 1000; }, &version);
+    column_update(
+            keys, [](int k) { return k * 1000; }, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto stats = collect_dcg_stats(metadata);
@@ -661,7 +673,8 @@ TEST_F(LakeSparseDcgTest, test_presence_emitted_and_bounds_exact) {
     // Touched keys == base rowids (key i lives at ordinal i in the single base segment). min=7,
     // max=1900, K=6.
     std::vector<int> keys = {7, 42, 500, 999, 1234, 1900};
-    column_update(keys, [](int k) { return k * 1000; }, &version);
+    column_update(
+            keys, [](int k) { return k * 1000; }, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto stats = collect_dcg_stats(metadata);
@@ -706,7 +719,8 @@ TEST_F(LakeSparseDcgTest, test_sparse_max_rows_boundary) {
     {
         std::vector<int> keys;
         for (int k = 0; k < 63; ++k) keys.push_back(k);
-        column_update(keys, [](int k) { return k + 100000; }, &version);
+        column_update(
+                keys, [](int k) { return k + 100000; }, &version);
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         auto s = collect_dcg_stats(md);
         EXPECT_EQ(1, s.sparse) << "K=63 < cap=64 must take the sparse path";
@@ -718,7 +732,8 @@ TEST_F(LakeSparseDcgTest, test_sparse_max_rows_boundary) {
     {
         std::vector<int> keys;
         for (int k = 1000; k < 1064; ++k) keys.push_back(k);
-        column_update(keys, [](int k) { return k + 200000; }, &version);
+        column_update(
+                keys, [](int k) { return k + 200000; }, &version);
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         auto s = collect_dcg_stats(md);
         // The K=64 dense write is a ROW-COMPLETE rewrite of c1 that reads THROUGH the current overlay
@@ -791,8 +806,8 @@ TEST_F(LakeSparseDcgTest, test_sparse_explicit_null_update) {
     // keys 10,20 -> NULL ; keys 30,40 -> real value key*1000 ; everything else untouched.
     std::vector<int> keys = {10, 20, 30, 40};
     std::set<int> null_keys = {10, 20};
-    auto chunk =
-            partial_chunk_nullable(keys, [&](int k) { return null_keys.count(k) > 0; }, [](int k) { return k * 1000; });
+    auto chunk = partial_chunk_nullable(
+            keys, [&](int k) { return null_keys.count(k) > 0; }, [](int k) { return k * 1000; });
     column_update_chunk(chunk, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
@@ -834,7 +849,8 @@ TEST_F(LakeSparseDcgTest, test_deep_sparse_chain_20_newest_wins) {
     constexpr int kChain = 20;
     for (int v = 1; v <= kChain; ++v) {
         const int value = 1000 + v; // strictly ascending so the newest is unambiguous
-        column_update({target}, [value](int) { return value; }, &version);
+        column_update(
+                {target}, [value](int) { return value; }, &version);
     }
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
@@ -871,7 +887,8 @@ TEST_F(LakeSparseDcgTest, test_promotion_hard_count_collapses_chain) {
     // Write exactly `cap` sparse overlays (chain grows 0->1->2->3->4). Each must stay sparse.
     for (int v = 1; v <= 4; ++v) {
         const int value = 7000 + v;
-        column_update({target}, [value](int) { return value; }, &version);
+        column_update(
+                {target}, [value](int) { return value; }, &version);
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         auto s = collect_dcg_stats(md);
         EXPECT_EQ(v, s.sparse) << "batch " << v << " (<= cap) must stay sparse, chain depth " << v;
@@ -886,7 +903,8 @@ TEST_F(LakeSparseDcgTest, test_promotion_hard_count_collapses_chain) {
 
     // The (cap+1)th batch: chain_len == 4, 4 + 1 == 5 > cap(4) => promotion forces dense.
     const int promoted_value = 99999;
-    column_update({target}, [](int) { return promoted_value; }, &version);
+    column_update(
+            {target}, [](int) { return promoted_value; }, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto stats = collect_dcg_stats(metadata);
@@ -923,7 +941,8 @@ TEST_F(LakeSparseDcgTest, test_promotion_threshold_collapses_chain) {
     {
         std::vector<int> keys;
         for (int k = 0; k < 20; ++k) keys.push_back(k);
-        column_update(keys, [](int k) { return k + 500000; }, &version);
+        column_update(
+                keys, [](int k) { return k + 500000; }, &version);
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
         auto s = collect_dcg_stats(md);
         EXPECT_EQ(1, s.sparse) << "first batch under threshold stays sparse";
@@ -941,7 +960,8 @@ TEST_F(LakeSparseDcgTest, test_promotion_threshold_collapses_chain) {
     {
         std::vector<int> keys;
         for (int k = 100; k < 120; ++k) keys.push_back(k);
-        column_update(keys, [](int k) { return k + 600000; }, &version);
+        column_update(
+                keys, [](int k) { return k + 600000; }, &version);
     }
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
@@ -989,7 +1009,8 @@ TEST_F(LakeSparseDcgTest, test_compaction_conflict_replays_racing_sparse) {
 
     // Pre-compaction sparse overlay (chain to fold); K=4 over M=2000 => sparse .spcols.
     std::vector<int> pre_keys = {10, 250, 1000, 1999};
-    column_update(pre_keys, [](int k) { return k * 1000; }, &version); // v5
+    column_update(
+            pre_keys, [](int k) { return k * 1000; }, &version); // v5
 
     // Compute (but do NOT publish) a full compaction at compact_version = v5.
     const int64_t compact_version = version;
@@ -1002,7 +1023,8 @@ TEST_F(LakeSparseDcgTest, test_compaction_conflict_replays_racing_sparse) {
     // RACE: a second sparse overlay lands at v6 (> compact_version) on an input segment. Key 10 overlaps
     // pre_keys, so the racing (newest) value must win after replay.
     std::vector<int> racing_keys = {10, 777, 1500};
-    column_update(racing_keys, [](int k) { return k + 7000000; }, &version); // v6
+    column_update(
+            racing_keys, [](int k) { return k + 7000000; }, &version); // v6
 
     const int64_t replayed_before = StorageMetrics::instance()->sdcg_compaction_conflict_replay_executed_total.value();
     const int64_t discard_before = StorageMetrics::instance()->sdcg_compaction_conflict_discard_total.value();
@@ -1050,7 +1072,8 @@ TEST_F(LakeSparseDcgTest, test_compaction_conflict_replays_racing_dense) {
     write_base(M, &version);
 
     const std::vector<int> pre_keys = {10, 250, 1000, 1999};
-    column_update(pre_keys, [](int k) { return k * 1000; }, &version); // v5 sparse pre-overlay (folded)
+    column_update(
+            pre_keys, [](int k) { return k * 1000; }, &version); // v5 sparse pre-overlay (folded)
 
     const int64_t compact_version = version;
     auto compaction_txn = next_id();
@@ -1062,7 +1085,8 @@ TEST_F(LakeSparseDcgTest, test_compaction_conflict_replays_racing_dense) {
     // RACING layer: K=700 of M=2000 => K/M=0.35 >= dense_threshold(0.3) => a DENSE `.cols` overlay.
     std::vector<int> racing_keys;
     for (int k = 0; k < 700; ++k) racing_keys.push_back(k);
-    column_update(racing_keys, [](int k) { return k + 7000000; }, &version); // v6 dense racing
+    column_update(
+            racing_keys, [](int k) { return k + 7000000; }, &version); // v6 dense racing
 
     const int64_t replayed_before = StorageMetrics::instance()->sdcg_compaction_conflict_replay_executed_total.value();
     ASSERT_OK(publish_single_version(tablet_id, version + 1, compaction_txn).status());
@@ -1137,13 +1161,17 @@ TEST_F(LakeSparseDcgTest, test_dcg_overlay_merge_defers_on_dense_below) {
     write_base(M, &version);
 
     const std::vector<int> ck = {5, 100, 900, 1500};
-    column_update(ck, [](int k) { return k + 100; }, &version); // sparse layer 1
-    column_update(ck, [](int k) { return k + 200; }, &version); // sparse layer 2
+    column_update(
+            ck, [](int k) { return k + 100; }, &version); // sparse layer 1
+    column_update(
+            ck, [](int k) { return k + 200; }, &version); // sparse layer 2
     // A DENSE layer (K=700 => K/M>=0.3) interleaved into the chain.
     std::vector<int> dk;
     for (int k = 0; k < 700; ++k) dk.push_back(k);
-    column_update(dk, [](int k) { return k + 300000; }, &version); // DENSE layer (below compact_version)
-    column_update(ck, [](int k) { return k + 400; }, &version);    // sparse layer 3
+    column_update(
+            dk, [](int k) { return k + 300000; }, &version); // DENSE layer (below compact_version)
+    column_update(
+            ck, [](int k) { return k + 400; }, &version); // sparse layer 3
 
     auto compaction_txn = next_id();
     auto ctx = std::make_unique<CompactionTaskContext>(compaction_txn, _tablet_metadata->id(), version, false, false,
@@ -1191,7 +1219,8 @@ TEST_F(LakeSparseDcgTest, test_dcg_overlay_merge_collapses_chain) {
     // Build a sparse chain of depth 3 on the single base segment (overlapping keys exercise LWW).
     std::vector<int> keys = {5, 100, 777, 1500, 1999};
     for (int round = 0; round < 3; ++round) {
-        column_update(keys, [round](int k) { return k + 1000 * (round + 1); }, &version); // v3, v4, v5
+        column_update(
+                keys, [round](int k) { return k + 1000 * (round + 1); }, &version); // v3, v4, v5
     }
     {
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -1256,7 +1285,8 @@ TEST_F(LakeSparseDcgTest, test_dcg_overlay_merge_skipped_for_parallel_subtask) {
 
     std::vector<int> keys = {5, 100, 777, 1500, 1999};
     for (int round = 0; round < 3; ++round) {
-        column_update(keys, [round](int k) { return k + 1000 * (round + 1); }, &version); // v3, v4, v5
+        column_update(
+                keys, [round](int k) { return k + 1000 * (round + 1); }, &version); // v3, v4, v5
     }
     {
         ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -1314,9 +1344,12 @@ TEST_F(LakeSparseDcgTest, test_sparse_overlay_predicate_filtered_read) {
     // 3-deep sparse chain on c1; the newest layer sets all target keys to the SAME value so a
     // c1 == value predicate selects exactly them (newest-wins merged across the layers).
     const std::vector<int> keys = {10, 50, 900, 1500};
-    column_update(keys, [](int k) { return k + 100; }, &version);
-    column_update(keys, [](int k) { return k + 200; }, &version);
-    column_update(keys, [](int) { return 7000020; }, &version);
+    column_update(
+            keys, [](int k) { return k + 100; }, &version);
+    column_update(
+            keys, [](int k) { return k + 200; }, &version);
+    column_update(
+            keys, [](int) { return 7000020; }, &version);
 
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
@@ -1354,11 +1387,12 @@ TEST_F(LakeSparseDcgTest, test_sparse_overlay_filtered_reads_ranges_and_nulls) {
     write_base(M, &version); // base c1 = k*3
 
     const std::vector<int> ks = {10, 20, 30, 40};
-    column_update(ks, [](int k) { return k + 900000; }, &version); // layer 1 (all large)
+    column_update(
+            ks, [](int k) { return k + 900000; }, &version); // layer 1 (all large)
     {
         // layer 2: keys 10,30 -> NULL ; 20,40 -> k+800000 (newest wins)
-        auto ch =
-                partial_chunk_nullable(ks, [](int k) { return k == 10 || k == 30; }, [](int k) { return k + 800000; });
+        auto ch = partial_chunk_nullable(
+                ks, [](int k) { return k == 10 || k == 30; }, [](int k) { return k + 800000; });
         column_update_chunk(ch, &version);
     }
 
@@ -1407,12 +1441,15 @@ TEST_F(LakeSparseDcgTest, test_row_mode_reads_through_sparse_overlay) {
     write_base(M, &version); // c1 = k*3, c2 = k*4
 
     const std::vector<int> ck = {5, 100, 900, 1500};
-    column_update(ck, [](int k) { return k + 500000; }, &version);
-    column_update(ck, [](int k) { return k + 600000; }, &version); // newest c1 for ck = k+600000
+    column_update(
+            ck, [](int k) { return k + 500000; }, &version);
+    column_update(
+            ck, [](int k) { return k + 600000; }, &version); // newest c1 for ck = k+600000
 
     // ROW-mode c2 update over an overlapping+extended key set, omitting c1.
     const std::vector<int> rk = {5, 100, 900, 1500, 250, 1750};
-    row_mode_update_c2(rk, [](int k) { return k + 7000000; }, &version);
+    row_mode_update_c2(
+            rk, [](int k) { return k + 7000000; }, &version);
 
     std::map<int, int> c1, c2;
     int rows = read_table(version, &c1, &c2);
@@ -1446,11 +1483,13 @@ TEST_F(LakeSparseDcgTest, test_row_mode_reads_through_dense_overlay) {
     // DENSE c1 overlay: K=700 of M=2000 => K/M=0.35 => a row-complete dense `.cols`.
     std::vector<int> dk;
     for (int k = 0; k < 700; ++k) dk.push_back(k);
-    column_update(dk, [](int k) { return k + 400000; }, &version);
+    column_update(
+            dk, [](int k) { return k + 400000; }, &version);
 
     // ROW-mode c2 update (omits c1) -> reads c1 through the dense overlay.
     const std::vector<int> rk = {5, 100, 650, 900};
-    row_mode_update_c2(rk, [](int k) { return k + 7000000; }, &version);
+    row_mode_update_c2(
+            rk, [](int k) { return k + 7000000; }, &version);
 
     std::map<int, int> c1, c2;
     int rows = read_table(version, &c1, &c2);
@@ -1483,14 +1522,17 @@ TEST_F(LakeSparseDcgTest, test_row_mode_reads_through_mixed_overlay) {
     // 1) DENSE c1 overlay (K=700 => dense) as the row-complete base.
     std::vector<int> dk;
     for (int k = 0; k < 700; ++k) dk.push_back(k);
-    column_update(dk, [](int k) { return k + 400000; }, &version);
+    column_update(
+            dk, [](int k) { return k + 400000; }, &version);
     // 2) SPARSE c1 overlay ON TOP (K=3 => sparse) -- strictly newer, must win over the dense base.
     const std::vector<int> sk = {5, 100, 1500};
-    column_update(sk, [](int k) { return k + 500000; }, &version);
+    column_update(
+            sk, [](int k) { return k + 500000; }, &version);
 
     // ROW-mode c2 update (omits c1) -> reads c1 through the dense-base + newer-sparse merge.
     const std::vector<int> rk = {5, 100, 650, 900, 1500};
-    row_mode_update_c2(rk, [](int k) { return k + 7000000; }, &version);
+    row_mode_update_c2(
+            rk, [](int k) { return k + 7000000; }, &version);
 
     std::map<int, int> c1, c2;
     int rows = read_table(version, &c1, &c2);
@@ -1572,7 +1614,8 @@ TEST_F(LakeSparseDcgTest, test_compaction_conflict_discards_when_replay_disabled
     write_base(M, &version); // v4
 
     std::vector<int> pre_keys = {10, 250, 1000, 1999};
-    column_update(pre_keys, [](int k) { return k * 1000; }, &version); // v5
+    column_update(
+            pre_keys, [](int k) { return k * 1000; }, &version); // v5
 
     const int64_t compact_version = version;
     auto compaction_txn = next_id();
@@ -1582,7 +1625,8 @@ TEST_F(LakeSparseDcgTest, test_compaction_conflict_discards_when_replay_disabled
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
 
     std::vector<int> racing_keys = {10, 777, 1500};
-    column_update(racing_keys, [](int k) { return k + 7000000; }, &version); // v6
+    column_update(
+            racing_keys, [](int k) { return k + 7000000; }, &version); // v6
 
     const int64_t replayed_before = StorageMetrics::instance()->sdcg_compaction_conflict_replay_executed_total.value();
 
@@ -1864,7 +1908,8 @@ TEST_F(LakeSparseDcgVarcharTest, test_varchar_sparse_roundtrip) {
     write_base(M, &version);
 
     std::vector<int> keys = {3, 77, 512, 1999};
-    column_update(keys, [](int k) { return fmt::format("updated_value_for_key_{}_xyz", k); }, &version);
+    column_update(
+            keys, [](int k) { return fmt::format("updated_value_for_key_{}_xyz", k); }, &version);
 
     {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
@@ -1904,7 +1949,8 @@ TEST_F(LakeSparseDcgVarcharTest, test_varchar_sparse_roundtrip) {
     }
 
     // Chain a second sparse string update of one of the same keys: newest wins.
-    column_update({512}, [](int) { return std::string("second_overlay_wins"); }, &version);
+    column_update(
+            {512}, [](int) { return std::string("second_overlay_wins"); }, &version);
     {
         std::map<int, std::string> c1;
         int rows = read_table(version, &c1);
