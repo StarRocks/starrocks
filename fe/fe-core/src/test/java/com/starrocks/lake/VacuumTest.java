@@ -311,6 +311,46 @@ public class VacuumTest {
     }
 
     /**
+     * The scheduling check must use the clamped floor too. A partition whose lastSuccVacuumVersion has
+     * already caught up with the lower unclamped floor would otherwise be rejected before any round
+     * carrying the takeover floor is ever sent.
+     */
+    @Test
+    public void testShouldVacuumUsesTheClampedRetainFloor() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(100L, System.currentTimeMillis());
+        partition.setMinRetainVersion(0L);
+        partition.setLastVacuumTime(0L);
+        // Vacuum has already reached the unclamped floor of max(1, 100 - 80) = 20.
+        partition.setLastSuccVacuumVersion(20L);
+
+        MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+        long savedTakeover = baseIndex.getTakeoverVersion();
+        int savedMaxPrevious = Config.lake_autovacuum_max_previous_versions;
+        boolean savedDetect = Config.lake_autovacuum_detect_vaccumed_version;
+        try {
+            Config.lake_autovacuum_max_previous_versions = 80;
+            Config.lake_autovacuum_detect_vaccumed_version = true;
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+
+            baseIndex.setTakeoverVersion(0L);
+            Assertions.assertFalse(daemon.shouldVacuum(partition),
+                    "with the floor already vacuumed and no reshard, the partition must stay unscheduled");
+
+            baseIndex.setTakeoverVersion(30L);
+            Assertions.assertTrue(daemon.shouldVacuum(partition),
+                    "the takeover raises the floor above lastSuccVacuumVersion, so a round is still owed");
+        } finally {
+            Config.lake_autovacuum_detect_vaccumed_version = savedDetect;
+            Config.lake_autovacuum_max_previous_versions = savedMaxPrevious;
+            baseIndex.setTakeoverVersion(savedTakeover);
+            partition.setLastSuccVacuumVersion(0L);
+            partition.setLastVacuumTime(0L);
+        }
+    }
+
+    /**
      * Runs one vacuum round and returns the minRetainVersion it sent. The first round only seeds
      * lastMinActiveTxnId; a round runs for real once that value has a confirmed, non-decreasing
      * predecessor, so the seeding round is discarded here.

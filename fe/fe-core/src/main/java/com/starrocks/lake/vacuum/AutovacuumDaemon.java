@@ -287,6 +287,17 @@ public class AutovacuumDaemon extends LeaderDaemon {
                 minRetainVersion = Math.min(minRetainVersion, 
                                         partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
             }
+            // Apply the same takeover clamp the request path applies, so scheduling is decided on the
+            // floor that will actually be sent. Without it a partition whose lastSuccVacuumVersion has
+            // already caught up with the lower unclamped floor is rejected here and never gets a round
+            // carrying the higher one. The OrNull variant is deliberate: this runs both under the
+            // collection's table read lock and lock-free from submitPendingCandidates, and a
+            // schedulability decision does not warrant taking a lock -- the request path re-reads the
+            // takeover under the table lock and remains authoritative.
+            MaterializedIndex latestBaseIndex = partition.getLatestBaseIndexOrNull();
+            if (latestBaseIndex != null && latestBaseIndex.getTakeoverVersion() > minRetainVersion) {
+                minRetainVersion = latestBaseIndex.getTakeoverVersion();
+            }
             // the file before minRetainVersion vacuum success
             if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
                 return false;
