@@ -406,11 +406,16 @@ This topic introduces the following types of BE configurations:
 
 ### object_storage_request_timeout_ms
 
-- Default: -1
+- Default: 10000
 - Type: Int
 - Unit: Milliseconds
+<<<<<<< HEAD
 - Is mutable: No
 - Description: Timeout duration to establish HTTP connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
+=======
+- Is mutable: Yes
+- Description: How long a request to object storage may stay stalled before the client aborts and retries. This is not a deadline on the request: for the curl client it is the low speed time, the time a transfer may stay below 1 byte/s, and for the Poco client it is the socket send/receive timeout. A transfer that keeps making progress is never cut off, however long it runs. `0` disables the check; a negative value leaves the client on its own default, which on the Poco path is 60 seconds.
+>>>>>>> aad2525 ([BugFix] Apply the request timeouts to the pooled Poco session (#78361))
 - Introduced in: v3.0.9
 
 ### parquet_late_materialization_enable

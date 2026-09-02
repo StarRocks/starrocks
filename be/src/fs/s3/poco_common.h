@@ -49,6 +49,9 @@ bool isHTTPS(const Poco::URI& uri);
 
 void setTimeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts);
 
+// Apply only the per-request timeouts, leaving keep-alive to the pool. See the definition.
+void apply_request_timeouts(Poco::Net::HTTPClientSession& session, const ConnectionTimeouts& timeouts);
+
 HTTPSessionPtr makeHTTPSessionImpl(const std::string& host, Poco::UInt16 port, bool https, bool keep_alive);
 
 PooledHTTPSessionPtr makeHTTPSession(const Poco::URI& uri, const ConnectionTimeouts& timeouts, bool resolve_host);

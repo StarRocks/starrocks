@@ -628,6 +628,7 @@
         "be_http_port",
         "be_port",
         "brpc_port",
+        "enable_poco_client_for_aws_sdk",
         "heartbeat_service_port",
         "object_storage_max_connection",
         "object_storage_request_timeout_ms",
