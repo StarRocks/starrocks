@@ -1,0 +1,53 @@
+-- name: test_json_array_agg_distinct_type
+create table t (k int, g int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values
+  (1, 1, parse_json('{"a":1}')),
+  (2, 1, parse_json('{"a":1}')),
+  (3, 1, parse_json('{"a":2}')),
+  (4, 2, parse_json('[1,2]')),
+  (5, 2, parse_json('[1,2]')),
+  (6, 3, null),
+  (7, 3, parse_json('{"a":1}')),
+  (8, 4, parse_json('{"b":9}'));
+-- result:
+-- !result
+select g, array_length(d) as cnt,
+       array_contains(d, parse_json('{"a":1}')) as has_a1,
+       array_contains(d, parse_json('{"a":2}')) as has_a2,
+       array_contains(d, parse_json('[1,2]')) as has_arr,
+       array_contains(d, null) as has_null
+from (select g, array_distinct(array_agg(j)) d from t group by g) x order by g;
+-- result:
+1	2	1	1	0	0
+2	1	0	0	1	0
+3	2	1	0	0	1
+4	1	0	0	0	0
+-- !result
+select g, array_distinct(array_agg(j)) from t where g in (2, 4) group by g order by g;
+-- result:
+2	['[1, 2]']
+4	['{"b": 9}']
+-- !result
+select g from t group by g having array_length(array_distinct(array_agg(j))) > 1 order by g;
+-- result:
+1
+3
+-- !result
+function: assert_explain_not_contains('select g, array_distinct(array_agg(j)) from t group by g', 'array_agg_distinct')
+-- result:
+None
+-- !result
+function: assert_explain_contains('select g, array_distinct(array_agg(k)) from t group by g', 'array_agg_distinct')
+-- result:
+None
+-- !result
+select g, array_length(array_distinct(array_agg(k))) as cnt from t group by g order by g;
+-- result:
+1	3
+2	2
+3	2
+4	1
+-- !result

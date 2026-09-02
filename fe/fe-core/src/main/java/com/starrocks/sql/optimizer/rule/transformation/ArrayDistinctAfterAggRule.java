@@ -170,6 +170,19 @@ public class ArrayDistinctAfterAggRule extends TransformationRule {
                     newFn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction(
                             (AggregateFunction) newFn, oldFn.getArgs()[0], oldFn.getReturnType());
                 }
+                // The lookup above accepts a match reached through an implicit cast, so a non-null
+                // result does not mean array_agg_distinct actually supports this argument. JSON is
+                // implicitly castable to BOOLEAN, and BOOLEAN is the first entry of NUMERIC_TYPES, so a
+                // JSON argument resolves to array_agg_distinct(BOOLEAN) -> ARRAY<BOOLEAN>. Rewriting to
+                // that would leave the aggregation returning ARRAY<BOOLEAN> while the column ref it
+                // replaces still carries ARRAY<JSON>, which the plan validator rejects. Keep
+                // array_distinct(array_agg(x)) instead: it answers correctly for these types.
+                // Checked after the decimal rectification above, which is what aligns the return type
+                // for decimals.
+                if (!newFn.getReturnType().matchesType(oldFn.getReturnType())) {
+                    replaceMap.put(entry.getKey(), entry.getValue());
+                    continue;
+                }
                 CallOperator newCall = new CallOperator(newFn.getFunctionName().getFunction(), newFn.getReturnType(),
                         entry.getValue().getArguments(), newFn);
                 ColumnRefOperator oldCol = entry.getKey();
