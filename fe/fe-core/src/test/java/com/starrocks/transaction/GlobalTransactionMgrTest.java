@@ -1583,6 +1583,32 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+    public void testExistCommittedTxnsFalseWhenTableCommitInfoNull() {
+        // A committed txn can list the table in its tableIdList before its TableCommitInfo is populated.
+        // With a non-null partitionId, the `tableCommitInfo != null` guard must short-circuit and the method
+        // must fall through to return false rather than NPE (it is called lock-free by the optimize gate).
+        long dbId = 222333445L;
+        long tableId = 777L;
+        long partitionId = 888L;
+
+        TransactionState txnState = Mockito.mock(TransactionState.class);
+        Mockito.when(txnState.getTableIdList()).thenReturn(List.of(tableId));
+        Mockito.when(txnState.getTableCommitInfo(tableId)).thenReturn(null);
+        DatabaseTransactionMgr dbTransactionMgr = Mockito.mock(DatabaseTransactionMgr.class);
+        Mockito.when(dbTransactionMgr.getCommittedTxnList()).thenReturn(List.of(txnState));
+
+        Map<Long, DatabaseTransactionMgr> dbMgrs = masterTransMgr.getAllDatabaseTransactionMgrs();
+        dbMgrs.put(dbId, dbTransactionMgr);
+        try {
+            Assertions.assertFalse(masterTransMgr.existCommittedTxns(dbId, tableId, partitionId),
+                    "existCommittedTxns must return false (not NPE) when the committed txn's TableCommitInfo "
+                            + "is not yet populated");
+        } finally {
+            dbMgrs.remove(dbId);
+        }
+    }
+
+    @Test
     public void testGetRunningTxnNumsAggregatesAcrossDatabases() throws Exception {
         // getRunningTxnNums() sums the per-database running-txn counters; it backs the
         // graceful-exit drain check (leader only), so it must reflect every database.
