@@ -807,9 +807,9 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
     // UPDATE path uses for its mask, so the two paths agree cell for cell.
     if (flexible_insert_mask.valid()) {
         if (seg >= flexible_insert_mask.set_ids_by_segment.size()) {
-            return Status::InternalError(strings::Substitute(
-                    "flexible insert: no `__cset__` set-ids for segment $0 (have $1)", seg,
-                    flexible_insert_mask.set_ids_by_segment.size()));
+            return Status::InternalError(
+                    strings::Substitute("flexible insert: no `__cset__` set-ids for segment $0 (have $1)", seg,
+                                        flexible_insert_mask.set_ids_by_segment.size()));
         }
         const auto& set_ids = flexible_insert_mask.set_ids_by_segment[seg];
         const auto& sets = flexible_insert_mask.distinct_column_sets;
@@ -823,14 +823,14 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
         for (uint32_t cid : update_cids) {
             const TabletColumn& tablet_column = tschema->column(cid);
             const ColumnUID uid = static_cast<ColumnUID>(tablet_column.unique_id());
-            std::vector<uint32_t> uncovered;  // positions WITHIN this batch
+            std::vector<uint32_t> uncovered; // positions WITHIN this batch
             uncovered.reserve(insert_rowids.size());
             for (size_t i = 0; i < insert_rowids.size(); ++i) {
                 const uint32_t rowid = insert_rowids[i];
                 if (rowid >= set_ids.size()) {
-                    return Status::InternalError(strings::Substitute(
-                            "flexible insert: rowid $0 outside `__cset__` (size $1) in segment $2", rowid,
-                            set_ids.size(), seg));
+                    return Status::InternalError(
+                            strings::Substitute("flexible insert: rowid $0 outside `__cset__` (size $1) in segment $2",
+                                                rowid, set_ids.size(), seg));
                 }
                 const int32_t sid = set_ids[rowid];
                 if (sid < 0 || static_cast<size_t>(sid) >= set_cover.size()) {

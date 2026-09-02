@@ -20,7 +20,7 @@
 #include "cache/dynamic_cache.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
-#include "storage/lake/column_mode_partial_update_handler.h"  // FlexibleInsertMask
+#include "storage/lake/column_mode_partial_update_handler.h" // FlexibleInsertMask
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
@@ -102,8 +102,7 @@ public:
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
                                       MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
                                       const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
-                                      const FlexibleInsertMask& flexible_insert_mask,
-                                      uint32_t* new_del_rebuild_rssid);
+                                      const FlexibleInsertMask& flexible_insert_mask, uint32_t* new_del_rebuild_rssid);
 
     Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
                                 Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
