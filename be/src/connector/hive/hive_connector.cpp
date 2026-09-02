@@ -934,7 +934,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_paimon_native_reader) {
         // Loads the paimon-cpp shim on first use; fails the query with an
         // actionable error (suggesting paimon_reader_mode='JNI') when the
-        // paimon libraries are absent from be/lib.
+        // paimon libraries are absent from be/lib/paimon-cpp-lib.
         ASSIGN_OR_RETURN(scanner, create_paimon_cpp_scanner());
     } else if (use_paimon_jni_reader) {
         scanner = create_paimon_jni_scanner(jni_scanner_create_options).release();

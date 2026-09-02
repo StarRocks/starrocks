@@ -17,12 +17,11 @@
 // The contract between starrocks_be and the paimon-cpp shim library
 // (libstarrocks_paimon.so). The shim is the only binary linked against
 // libpaimon.so; the BE dlopen()s it lazily on the first paimon-native scan and
-// resolves the two extern "C" entry points below. This header must stay free
-// of paimon includes so the always-compiled loader can use it.
+// resolves the extern "C" entry point below. This header must stay free of
+// paimon includes so the always-compiled loader can use it.
 //
-// Both entry points are only ever called by the BE build they shipped with:
-// the loader compares the shim's build version with its own before touching
-// anything else, so signature drift between builds is rejected up front.
+// The shim compiles BE class layouts (HdfsScanner, Status, Chunk, ...), so it
+// is only valid together with the starrocks_be it was built and packaged with.
 
 namespace starrocks {
 
@@ -34,12 +33,5 @@ class HdfsScanner;
 // mem_hook malloc/free.
 #define STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL "starrocks_paimon_create_scanner"
 using StarRocksPaimonCreateScannerFn = starrocks::HdfsScanner* (*)();
-
-// Returns the build version baked into the shim at compile time. The loader
-// rejects a shim whose build version differs from the running BE: the shim
-// compiles BE class layouts (HdfsScanner, Status, Chunk, ...), so mixing
-// binaries from different builds is ABI-unsafe.
-#define STARROCKS_PAIMON_BUILD_VERSION_SYMBOL "starrocks_paimon_build_version"
-using StarRocksPaimonBuildVersionFn = const char* (*)();
 
 } // namespace starrocks

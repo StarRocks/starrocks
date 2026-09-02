@@ -18,17 +18,6 @@
 #include "connector/hive/paimon/paimon_cpp_shim_api.h"
 #include "connector/hive/paimon/paimon_scanner.h"
 
-#ifndef STARROCKS_PAIMON_SHIM_BUILD_VERSION
-#error "STARROCKS_PAIMON_SHIM_BUILD_VERSION must be defined by the build system"
-#endif
-
 extern "C" starrocks::HdfsScanner* starrocks_paimon_create_scanner() {
     return new starrocks::PaimonScanner();
-}
-
-// Must return the compile-time literal, not starrocks::STARROCKS_COMMIT_HASH:
-// that extern would resolve against the executable's copy at dlopen time and
-// make the check pass trivially.
-extern "C" const char* starrocks_paimon_build_version() {
-    return STARROCKS_PAIMON_SHIM_BUILD_VERSION;
 }

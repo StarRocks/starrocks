@@ -20,7 +20,6 @@
 #include <string>
 
 #include "base/utility/dynamic_util.h"
-#include "common/version.h"
 #include "connector/hive/paimon/paimon_cpp_shim_api.h"
 #include "fmt/format.h"
 
@@ -43,13 +42,9 @@ std::string shim_library_path() {
     return std::string(home) + "/lib/paimon-cpp-lib/" + kShimLibraryName;
 }
 
-std::string be_build_version() {
-    return fmt::format("{}-{}", STARROCKS_COMMIT_HASH, STARROCKS_BUILD_TYPE);
-}
-
-// Set once under _load_mutex, then read lock-free. The shim handle is never
-// dlclose()d: BE code holds vtables and code pointers into it for the process
-// lifetime.
+// Set once under _load_mutex, then read lock-free. A successfully loaded shim
+// is never dlclose()d: BE code holds vtables and code pointers into it for the
+// process lifetime.
 std::atomic<StarRocksPaimonCreateScannerFn> _create_scanner_fn{nullptr};
 std::mutex _load_mutex;
 
@@ -65,19 +60,13 @@ Status load_shim_locked() {
                 st.message()));
     }
 
-    void* build_version_sym = nullptr;
-    RETURN_IF_ERROR(dynamic_lookup(handle, STARROCKS_PAIMON_BUILD_VERSION_SYMBOL, &build_version_sym));
-    const char* shim_build_version = reinterpret_cast<StarRocksPaimonBuildVersionFn>(build_version_sym)();
-    if (const std::string expected = be_build_version();
-        shim_build_version == nullptr || expected != shim_build_version) {
-        return Status::InternalError(
-                fmt::format("Paimon native reader is unavailable: {} was built from '{}' but this BE is '{}'. The shim "
-                            "compiles BE internals, so it must come from the same build as the BE binary.",
-                            path, shim_build_version == nullptr ? "<null>" : shim_build_version, expected));
-    }
-
     void* create_sym = nullptr;
-    RETURN_IF_ERROR(dynamic_lookup(handle, STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL, &create_sym));
+    if (Status st = dynamic_lookup(handle, STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL, &create_sym); !st.ok()) {
+        // Drop the handle again so a retry after the operator fixes be/lib does
+        // not pile up dlopen references on an unusable library.
+        dynamic_close(handle);
+        return st;
+    }
     _create_scanner_fn.store(reinterpret_cast<StarRocksPaimonCreateScannerFn>(create_sym), std::memory_order_release);
     return Status::OK();
 }

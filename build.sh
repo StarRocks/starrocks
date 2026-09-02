@@ -832,6 +832,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
         objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
         strip --strip-debug $BE_BIN
         objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
+        # The thirdparty libpaimon*.so ship with debug info (>1 GB unstripped); strip them in place.
+        for so in paimon-cpp-lib/libpaimon*.so; do
+            [[ -f ${so} ]] || continue
+            echo "Strip $so debug symbol ..."
+            strip --strip-debug $so
+        done
         popd &>/dev/null
     fi
 

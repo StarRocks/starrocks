@@ -1846,7 +1846,10 @@ build_paimon_cpp() {
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     # be/ resolves paimon strictly from <prefix>/lib (CMAKE_INSTALL_LIBDIR pinned above).
-    test -f "${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so"
+    if [[ ! -f "${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so" ]]; then
+        echo "Error: ${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so not found after install; CMAKE_INSTALL_LIBDIR=lib was not honored" >&2
+        exit 1
+    fi
     restore_compile_flags
 }
 
