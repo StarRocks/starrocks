@@ -16969,8 +16969,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         SCOPED_TRACE(seam);
         const int64_t target = next_id();
         prepare_tablet_dirs(target);
-        ASSIGN_OR_ABORT(const auto inventory_a_before, delvec_inventory(child_a));
-        ASSIGN_OR_ABORT(const auto inventory_b_before, delvec_inventory(child_b));
+        ASSIGN_OR_ABORT(const auto shared_inventory_before, delvec_inventory(child_a));
         const std::string message = "injected publish delvec " + std::string(seam);
         int calls = 0;
         auto* sync = SyncPoint::GetInstance();
@@ -16990,11 +16989,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         expect_target_version_not_published(target, kVersion);
         EXPECT_EQ(meta_a_before, meta_a->SerializeAsString());
         EXPECT_EQ(meta_b_before, meta_b->SerializeAsString());
-        ASSIGN_OR_ABORT(const auto inventory_a_after, delvec_inventory(child_a));
-        ASSIGN_OR_ABORT(const auto inventory_b_after, delvec_inventory(child_b));
+        ASSIGN_OR_ABORT(const auto shared_inventory_after, delvec_inventory(child_a));
         std::set<std::string> failed_target_outputs;
-        std::set_difference(inventory_a_after.begin(), inventory_a_after.end(), inventory_a_before.begin(),
-                            inventory_a_before.end(),
+        std::set_difference(shared_inventory_after.begin(), shared_inventory_after.end(),
+                            shared_inventory_before.begin(), shared_inventory_before.end(),
                             std::inserter(failed_target_outputs, failed_target_outputs.end()));
         ASSERT_EQ(1, failed_target_outputs.size());
         const std::string failed_prefix = fmt::format("{:016x}_", failed_txn);
@@ -17004,15 +17002,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
             for (const auto& target_output : allowed_target_outputs) inventory.erase(target_output);
             return inventory;
         };
-        EXPECT_EQ(without_allowed_target_outputs(inventory_a_before),
-                  without_allowed_target_outputs(inventory_a_after));
-        EXPECT_EQ(without_allowed_target_outputs(inventory_b_before),
-                  without_allowed_target_outputs(inventory_b_after));
+        EXPECT_EQ(without_allowed_target_outputs(shared_inventory_before),
+                  without_allowed_target_outputs(shared_inventory_after));
 
         std::unordered_map<int64_t, TabletMetadataPtr> retried;
         const int64_t retry_txn = next_id();
-        ASSIGN_OR_ABORT(const auto inventory_a_before_retry, delvec_inventory(child_a));
-        ASSIGN_OR_ABORT(const auto inventory_b_before_retry, delvec_inventory(child_b));
+        ASSIGN_OR_ABORT(const auto shared_inventory_before_retry, delvec_inventory(child_a));
         ASSERT_OK(publish(target, retry_txn, &retried));
         ASSERT_TRUE(retried.contains(target));
         const auto& merged = *retried.at(target);
@@ -17020,23 +17015,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         ASSERT_TRUE(merged.delvec_meta().version_to_file().contains(kVersion));
         const auto& retry_output = merged.delvec_meta().version_to_file().at(kVersion).name();
         EXPECT_TRUE(retry_output.starts_with(fmt::format("{:016x}_", retry_txn)));
-        ASSIGN_OR_ABORT(const auto inventory_a_after_retry, delvec_inventory(child_a));
-        ASSIGN_OR_ABORT(const auto inventory_b_after_retry, delvec_inventory(child_b));
+        ASSIGN_OR_ABORT(const auto shared_inventory_after_retry, delvec_inventory(child_a));
         std::set<std::string> retry_target_outputs;
-        std::set_difference(inventory_a_after_retry.begin(), inventory_a_after_retry.end(),
-                            inventory_a_before_retry.begin(), inventory_a_before_retry.end(),
+        std::set_difference(shared_inventory_after_retry.begin(), shared_inventory_after_retry.end(),
+                            shared_inventory_before_retry.begin(), shared_inventory_before_retry.end(),
                             std::inserter(retry_target_outputs, retry_target_outputs.end()));
         ASSERT_EQ(std::set<std::string>({retry_output}), retry_target_outputs);
-        std::set<std::string> retry_target_outputs_b;
-        std::set_difference(inventory_b_after_retry.begin(), inventory_b_after_retry.end(),
-                            inventory_b_before_retry.begin(), inventory_b_before_retry.end(),
-                            std::inserter(retry_target_outputs_b, retry_target_outputs_b.end()));
-        EXPECT_EQ(retry_target_outputs, retry_target_outputs_b);
         allowed_target_outputs.insert(retry_output);
-        EXPECT_EQ(without_allowed_target_outputs(inventory_a_before),
-                  without_allowed_target_outputs(inventory_a_after_retry));
-        EXPECT_EQ(without_allowed_target_outputs(inventory_b_before),
-                  without_allowed_target_outputs(inventory_b_after_retry));
+        EXPECT_EQ(without_allowed_target_outputs(shared_inventory_before),
+                  without_allowed_target_outputs(shared_inventory_after_retry));
         DelVector loaded_raw;
         DelVector loaded_union;
         LakeIOOptions options;
