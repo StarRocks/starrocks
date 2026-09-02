@@ -91,7 +91,7 @@ inline bool is_zone_map_key_type(LogicalType type) {
 // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
 inline bool is_support_checksum_type(LogicalType type) {
     return type != TYPE_FLOAT && type != TYPE_DOUBLE && type != TYPE_HLL && type != TYPE_OBJECT &&
-           type != TYPE_PERCENTILE && type != TYPE_JSON && type != TYPE_GEOMETRY;
+           type != TYPE_PERCENTILE && type != TYPE_JSON;
 }
 
 template <LogicalType TYPE>
