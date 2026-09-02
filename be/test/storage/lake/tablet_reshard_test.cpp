@@ -17007,7 +17007,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
 
         std::unordered_map<int64_t, TabletMetadataPtr> retried;
         const int64_t retry_txn = next_id();
-        ASSIGN_OR_ABORT(const auto shared_inventory_before_retry, delvec_inventory(child_a));
         ASSERT_OK(publish(target, retry_txn, &retried));
         ASSERT_TRUE(retried.contains(target));
         const auto& merged = *retried.at(target);
@@ -17018,7 +17017,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_failure_atomic_by_phase
         ASSIGN_OR_ABORT(const auto shared_inventory_after_retry, delvec_inventory(child_a));
         std::set<std::string> retry_target_outputs;
         std::set_difference(shared_inventory_after_retry.begin(), shared_inventory_after_retry.end(),
-                            shared_inventory_before_retry.begin(), shared_inventory_before_retry.end(),
+                            shared_inventory_after.begin(), shared_inventory_after.end(),
                             std::inserter(retry_target_outputs, retry_target_outputs.end()));
         ASSERT_EQ(std::set<std::string>({retry_output}), retry_target_outputs);
         allowed_target_outputs.insert(retry_output);
