@@ -2001,4 +2001,23 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  offset: 0");
     }
 
+    // an ARRAY-returning expr must not define a dictionary: the BE reads the result as a BinaryColumn and crashes
+    @Test
+    public void testNoDictDefineForArrayResultOnScalarDictColumn() throws Exception {
+        String sql = "select upper(S_ADDRESS) as t from supplier limit 10";
+        assertContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select case S_ADDRESS when 'a' then ['123','1234'] end as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select case S_ADDRESS when 'a' then ['123','1234'] else ['x'] end as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select if(S_ADDRESS = 'a', ['123','1234'], null) as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+
+        sql = "select coalesce(if(S_ADDRESS = 'a', ['1'], null), ['2']) as t from supplier limit 10";
+        assertNotContains(getVerboseExplain(sql), "DictDefine");
+    }
+
 }
