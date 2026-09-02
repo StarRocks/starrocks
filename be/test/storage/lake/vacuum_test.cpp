@@ -7203,4 +7203,91 @@ TEST_P(LakeVacuumTest, test_vacuum_no_progress_for_tablets_with_deferred_shared_
     }
 }
 
+// Regression guard for the fix's own hazard: under file bundling a tablet advances its min_version the
+// moment its own walk finishes, but the shared bundle metadata is deleted only in the post-loop step. If
+// that deferred deletion fails (a transient object-storage error -- the very condition this whole bug
+// lives in), the advanced min_versions must NOT be reported to the FE: absorbing them would let the next
+// round walk only the narrow top slice, never re-enqueue the bundle metas below, and orphan them for good
+// while a later "success" advances lastSuccVacuumVersion over them. On a post-loop failure every tablet
+// must fall back to its incoming floor so the next round re-walks the full range and retries the delete.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata_delete_failure_rolls_back_progress) {
+    constexpr int64_t kTabletIds[] = {7300, 7301};
+    constexpr int64_t kGraceTimestamp = 5000;
+
+    for (int64_t version = 2; version <= 5; version++) {
+        std::map<int64_t, TabletMetadataPB> bundle;
+        for (int64_t tablet_id : kTabletIds) {
+            TabletMetadataPB meta;
+            meta.set_id(tablet_id);
+            meta.set_version(version);
+            meta.set_prev_garbage_version(version > 2 ? version - 1 : 0);
+            meta.set_commit_time(version * 1000);
+            meta.mutable_schema()->set_id(0);
+            meta.mutable_schema()->set_keys_type(DUP_KEYS);
+            meta.mutable_schema()->set_num_short_key_columns(1);
+            bundle[tablet_id] = std::move(meta);
+        }
+        ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(bundle));
+    }
+
+    auto build_request = [&](VacuumRequest* request) {
+        request->set_delete_txn_log(false);
+        for (int64_t tablet_id : kTabletIds) {
+            auto* info = request->add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(0);
+        }
+        request->set_min_retain_version(5);
+        request->set_grace_timestamp(kGraceTimestamp);
+        request->set_min_active_txn_id(12345);
+        request->set_enable_file_bundling(true);
+        request->set_enable_shared_file_cleanup(true);
+    };
+
+    // Round 1: the walk completes for every tablet, but the deferred bundle-metadata deletion fails.
+    {
+        SyncPoint::GetInstance()->SetCallBack("vacuum:bundle_metadata_delete", [](void* arg) {
+            *reinterpret_cast<Status*>(arg) = Status::IOError("injected bundle metadata delete failure");
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("vacuum:bundle_metadata_delete");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        VacuumRequest request;
+        VacuumResponse response;
+        build_request(&request);
+        vacuum(_tablet_mgr.get(), request, &response);
+
+        ASSERT_TRUE(response.has_status());
+        EXPECT_NE(0, response.status().status_code()) << "post-loop delete failure must surface as an error";
+        // Nothing was deleted, and -- the crux -- no tablet reports an advanced floor, even though each
+        // one's walk finished. Absorbing an advance here is what would orphan the bundle metas.
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+        ASSERT_EQ(2, response.tablet_infos_size());
+        for (const auto& info : response.tablet_infos()) {
+            EXPECT_EQ(0, info.min_version()) << info.tablet_id();
+        }
+    }
+
+    // Round 2: no injected failure. Because round 1 reported no progress, this round re-walks the full
+    // range and the idempotent retry deletes the bundle metas -- the pre-change self-healing behavior.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        build_request(&request);
+        vacuum(_tablet_mgr.get(), request, &response);
+
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 4)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 5)));
+    }
+}
+
 } // namespace starrocks::lake

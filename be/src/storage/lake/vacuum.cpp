@@ -673,6 +673,26 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             tablet_infos[index].set_min_version(deferred_min_version);
         }
     };
+    // Every tablet's |min_version| as it entered this round. The per-tablet loop advances a tablet's
+    // |min_version| the moment its own walk finishes, but under file bundling the metadata that advance
+    // is predicated on -- the shared bundle meta and the shared data files -- is not deleted until the
+    // post-loop steps below. If either of those deferred deletions fails, none of the advances are
+    // valid: the next round must re-walk the full range and retry the (idempotent) deletion, exactly as
+    // it did before this change. Restoring every tablet to its incoming floor makes the response carry
+    // un-advanced floors, so the FE absorbs nothing and that self-healing retry is preserved. (A
+    // deadline hit DURING the walk returns before the post-loop and keeps the completed tablets'
+    // progress on purpose -- nothing was deleted yet and the range stays covered by the last tablet to
+    // finish, whose floor is still low.)
+    std::vector<int64_t> incoming_min_versions;
+    incoming_min_versions.reserve(tablet_infos.size());
+    for (const auto& info : tablet_infos) {
+        incoming_min_versions.push_back(info.min_version());
+    }
+    auto rollback_all_progress = [&]() {
+        for (size_t k = 0; k < tablet_infos.size(); k++) {
+            tablet_infos[k].set_min_version(incoming_min_versions[k]);
+        }
+    };
     for (size_t i = 0; i < tablet_infos.size(); i++) {
         auto& tablet_info = tablet_infos[i];
         TabletRetainInfo tablet_retain_info;
@@ -732,9 +752,11 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         }
         (*vacuumed_files) += shared_file_deleter.delete_count();
         if (!st.ok()) {
-            // Same reason as inside the loop: the shared files of these tablets may still be on
-            // storage, so their metadata must be walked again rather than skipped.
-            rollback_deferred_shared_progress();
+            // The deferred shared-file deletion did not finish, and the bundle-metadata step below has
+            // not run either. Every tablet that advanced this round did so expecting these deletions to
+            // happen; undo all of them so the next round re-walks and retries, rather than skipping past
+            // shared files (or bundle metas) that are still on storage.
+            rollback_all_progress();
             return st;
         }
     }
@@ -742,24 +764,40 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         // collect meta files to vacuum at partition level
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+        auto st = Status::OK();
+        TEST_SYNC_POINT_CALLBACK("vacuum:bundle_metadata_delete", &st);
         // a special case:
         // if a table enables shared cleanup and finished alter job, the new created tablet will create initial tablet metadata
         // its own tablet_id to avoid overwriting the initial tablet metadata.
         // After that, we need to vacuum these metadata file using its own tablet_id
-        if (vacuum_version_range->min_version <= 1) {
+        if (st.ok() && vacuum_version_range->min_version <= 1) {
             for (auto& tablet_info : tablet_infos) {
-                RETURN_IF_ERROR(metafile_deleter.delete_file(
-                        join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
+                st = metafile_deleter.delete_file(
+                        join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1)));
+                if (!st.ok()) {
+                    break;
+                }
             }
         }
-        for (auto v = vacuum_version_range->min_version; v < vacuum_version_range->max_version; v++) {
+        for (auto v = vacuum_version_range->min_version; st.ok() && v < vacuum_version_range->max_version; v++) {
             if (retain_versions.find(v) != retain_versions.end()) {
                 continue;
             }
-            RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
+            st = metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v)));
         }
-        RETURN_IF_ERROR(metafile_deleter.finish());
+        if (st.ok()) {
+            st = metafile_deleter.finish();
+        }
         (*vacuumed_files) += metafile_deleter.delete_count();
+        if (!st.ok()) {
+            // The shared bundle metadata was not fully deleted. Every tablet advanced its min_version on
+            // the assumption this deletion would happen; undo those advances so the next round re-walks
+            // the full range and retries, instead of skipping past bundle metas that are still on
+            // storage -- which would orphan them permanently and, once a later round reports success,
+            // let the FE advance lastSuccVacuumVersion over versions whose metadata is still present.
+            rollback_all_progress();
+            return st;
+        }
     }
     *vacuumed_version = final_vacuum_version;
     return Status::OK();
