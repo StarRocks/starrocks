@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "base/testutil/parallel_test.h"
+#include "testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -82,7 +82,7 @@ protected:
         Result result;
         result.columns = std::move(result_columns);
         if (copy_count_column != nullptr) {
-            const auto counts = copy_count_column->immutable_data();
+            const auto& counts = copy_count_column->get_data();
             result.copy_counts.assign(counts.begin(), counts.end());
         }
         CHECK(function.close(&runtime_state, state).ok());
@@ -92,8 +92,8 @@ protected:
     // Reads one output column back as {value, is_null} pairs.
     template <LogicalType LT>
     static std::vector<std::pair<int64_t, bool>> read_column(const ColumnPtr& column) {
-        const auto* values = ColumnHelper::get_data_column_by_type<LT>(column);
-        const auto data = values->immutable_data();
+        const auto* values = ColumnHelper::get_data_column_by_type<LT>(column.get());
+        const auto& data = values->get_data();
         std::vector<std::pair<int64_t, bool>> out;
         out.reserve(column->size());
         for (size_t i = 0; i < column->size(); ++i) {
@@ -166,8 +166,8 @@ TEST_F(MultiUnnestCoreTest, zips_arrays_of_unequal_length) {
 // runs, where it would also pay the shadow-memory cost on those two buffers, and enables it in
 // release builds:
 //
-//   BUILD_TYPE=Release ./run-be-ut.sh --build-target expr_test --module expr_test \
-//       --without-java-ext --gtest_filter='MultiUnnestCoreTest.SLOW_offsets_across_int32_boundary'
+//   BUILD_TYPE=Release ./run-be-ut.sh --without-java-ext \
+//       --gtest_filter='MultiUnnestCoreTest.SLOW_offsets_across_int32_boundary'
 //
 // The ArrayColumn constructor does not validate offsets against the elements size, so the offsets
 // can start just below 2^31 instead of accumulating there row by row. That keeps the test to four
