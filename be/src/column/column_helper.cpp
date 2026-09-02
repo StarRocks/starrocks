@@ -110,7 +110,8 @@ void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescri
 
     switch (type.type) {
     case TYPE_BINARY:
-    case TYPE_VARBINARY: {
+    case TYPE_VARBINARY:
+    case TYPE_GEOMETRY: {
         if (data_column->is_binary()) {
             auto* binary_column = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_column));
             binary_column->set_is_binary_type(true);

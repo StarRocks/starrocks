@@ -345,9 +345,9 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
-    // Mark this column as holding BINARY / VARBINARY (rather than VARCHAR/CHAR) data.
-    // When set, put_mysql_row_buffer uses push_binary inside nested types so that
-    // raw bytes are encoded as hex/base64 instead of being emitted verbatim.
+    // Mark this column as holding binary-like data rather than VARCHAR/CHAR data. When set for BINARY,
+    // VARBINARY, or GEOMETRY, put_mysql_row_buffer uses push_binary inside nested types so raw bytes are
+    // encoded as hex/base64 instead of being emitted verbatim.
     void set_is_binary_type(bool v) { _is_binary_type = v; }
     bool is_binary_type() const { return _is_binary_type; }
 
@@ -462,9 +462,8 @@ private:
     mutable GermanStringContainer _german_strings;
     mutable bool _german_strings_cache = false;
 
-    // True when this column holds BINARY / VARBINARY data.  Causes put_mysql_row_buffer to
-    // use push_binary (hex/base64 encoding) instead of push_string when inside a
-    // nested type context.
+    // True when this column holds BINARY / VARBINARY / GEOMETRY data. Causes put_mysql_row_buffer to use
+    // push_binary (hex/base64 encoding) instead of push_string when inside a nested type context.
     bool _is_binary_type = false;
 };
 
