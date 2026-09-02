@@ -61,6 +61,8 @@ public class StarRocksFEServerTest {
                 result = executeEnv;
                 executeEnv.getScheduler();
                 result = connectScheduler;
+                connectScheduler.isDrained();
+                result = true;
                 connectScheduler.getTotalConnCount();
                 result = 0;
                 GlobalStateMgr.getCurrentState();
@@ -72,8 +74,6 @@ public class StarRocksFEServerTest {
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
                 // Accept-new window is already over, so stopAccept is triggered on the first pass.
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
             }
         };
 
@@ -100,6 +100,8 @@ public class StarRocksFEServerTest {
                 result = executeEnv;
                 executeEnv.getScheduler();
                 result = connectScheduler;
+                connectScheduler.isDrained();
+                result = true;
                 connectScheduler.getTotalConnCount();
                 result = 0;
                 GlobalStateMgr.getCurrentState();
@@ -111,8 +113,6 @@ public class StarRocksFEServerTest {
                 // A very large cluster-wide txn count that must NOT block the follower's drain.
                 globalTransactionMgr.getRunningTxnNums();
                 result = 10_000;
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
             }
         };
 
@@ -136,6 +136,8 @@ public class StarRocksFEServerTest {
                 result = executeEnv;
                 executeEnv.getScheduler();
                 result = connectScheduler;
+                connectScheduler.isDrained();
+                result = true;
                 connectScheduler.getTotalConnCount();
                 result = 0;
                 GlobalStateMgr.getCurrentState();
@@ -146,8 +148,6 @@ public class StarRocksFEServerTest {
                 result = globalTransactionMgr;
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
                 qeService.stopAccept();
             }
         };
@@ -189,6 +189,9 @@ public class StarRocksFEServerTest {
                 result = executeEnv;
                 executeEnv.getScheduler();
                 result = connectScheduler;
+                connectScheduler.isDrained();
+                result = false;
+                result = true;
                 connectScheduler.getTotalConnCount();
                 result = 3;
                 result = 0;
@@ -200,8 +203,6 @@ public class StarRocksFEServerTest {
                 result = globalTransactionMgr;
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
             }
         };
 
@@ -224,6 +225,8 @@ public class StarRocksFEServerTest {
                 result = executeEnv;
                 executeEnv.getScheduler();
                 result = connectScheduler;
+                connectScheduler.isDrained();
+                result = true;
                 connectScheduler.getTotalConnCount();
                 result = 0;
                 GlobalStateMgr.getCurrentState();
@@ -235,8 +238,6 @@ public class StarRocksFEServerTest {
                 globalTransactionMgr.getRunningTxnNums();
                 result = 3;
                 result = 0;
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
             }
         };
 
@@ -260,6 +261,8 @@ public class StarRocksFEServerTest {
                 result = executeEnv;
                 executeEnv.getScheduler();
                 result = connectScheduler;
+                connectScheduler.isDrained();
+                result = true;
                 connectScheduler.getTotalConnCount();
                 result = 0;
                 GlobalStateMgr.getCurrentState();
@@ -270,8 +273,6 @@ public class StarRocksFEServerTest {
                 result = globalTransactionMgr;
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
-                GracefulExitFlag.shouldAcceptNewRequest();
-                result = false;
             }
         };
 

@@ -293,8 +293,7 @@ public class StarRocksFEServer {
             boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
             int runningTxnNums = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getRunningTxnNums();
 
-            if (!GracefulExitFlag.shouldAcceptNewRequest()
-                    && totalConns == 0 && (!isLeader || runningTxnNums == 0)
+            if (connectScheduler.isDrained() && (!isLeader || runningTxnNums == 0)
                     && System.nanoTime() - stopAcceptTimeNano
                     > TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second)) {
                 break;

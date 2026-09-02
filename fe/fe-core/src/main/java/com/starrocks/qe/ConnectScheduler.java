@@ -378,6 +378,12 @@ public class ConnectScheduler {
         return connectionMap.size();
     }
 
+    public boolean isDrained() {
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            return !GracefulExitFlag.shouldAcceptNewRequest() && connectionMap.isEmpty();
+        }
+    }
+
     // Transaction ids of connections that are inside an explicit transaction right now. Called by the
     // SIGUSR1 handler before the graceful-exit flag becomes visible: isTerminated() later exempts a
     // connection only if its current txnId is in this set, which is exact on leader and follower
@@ -410,7 +416,7 @@ public class ConnectScheduler {
                 // to finish instead of hitting the hard timeout.
                 boolean explicitTxnExempt = context.inActiveExplicitTransaction()
                         && !GracefulExitFlag.isDrainWindowElapsed();
-                if (!explicitTxnExempt && context.isIdleLastFor(1000)) {
+                if (!explicitTxnExempt && !context.hasPendingTasks() && context.isIdleLastFor(1000)) {
                     toCleanup.add(context);
                 }
             });
@@ -422,7 +428,7 @@ public class ConnectScheduler {
             // cleanup waits on a synchronous rollback RPC). Cleanup without rechecking would
             // close an active client's socket and roll back its explicit transaction
             // mid-statement.
-            if (context.isIdleLastFor(1000)) {
+            if (!context.hasPendingTasks() && context.isIdleLastFor(1000)) {
                 context.cleanup();
             }
         });

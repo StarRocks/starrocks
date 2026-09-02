@@ -31,7 +31,6 @@ import org.xnio.ChannelListener;
 import org.xnio.conduits.ConduitStreamSourceChannel;
 
 import java.nio.ByteBuffer;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class MySQLReadListener implements ChannelListener<ConduitStreamSourceChannel> {
     private static final Logger LOG = LogManager.getLogger(MySQLReadListener.class);
@@ -43,7 +42,6 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
     private final ByteBuffer readBuffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
     private final SSLDecoder sslDecoder;
     private volatile boolean terminated = false;
-    private final AtomicInteger pendingTasks = new AtomicInteger(0);
 
     public MySQLReadListener(ConnectContext connectContext, ConnectProcessor connectProcessor) {
         this.ctx = connectContext;
@@ -93,7 +91,7 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                 RequestPackage pkg;
                 while ((pkg = packageDecoder.poll()) != null) {
                     final RequestPackage req = pkg;
-                    pendingTasks.incrementAndGet();
+                    ctx.incPendingTask();
                     channel.getWorker().execute(() -> {
                         handleRequest(req);
                     });
@@ -107,13 +105,13 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
     }
 
     private void tryCleanup() {
-        if (terminated && pendingTasks.get() == 0) {
+        if (terminated && !ctx.hasPendingTasks()) {
             ctx.cleanup();
         }
     }
 
     private void taskCompleted() {
-        pendingTasks.decrementAndGet();
+        ctx.decPendingTask();
         tryCleanup();
     }
 
