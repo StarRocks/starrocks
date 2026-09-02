@@ -32,6 +32,7 @@
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "formats/parquet/encoding.h"
+#include "runtime/current_thread.h"
 
 namespace {
 // Single-pass min/max bounds check for dictionary indices. Reads the unsigned
@@ -384,7 +385,8 @@ public:
         _dict.resize(num_values);
 
         // reserve enough memory to use append_strings_overflow
-        raw::stl_vector_resize_uninitialized(&_dict_data, total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
+        TRY_CATCH_BAD_ALLOC(
+                raw::stl_vector_resize_uninitialized(&_dict_data, total_length + Column::APPEND_OVERFLOW_MAX_SIZE));
 
         size_t offset = 0;
         _max_value_length = 0;
@@ -400,7 +402,8 @@ public:
     }
 
     Status get_dict_values(Column* column) override {
-        auto ret = column->append_strings_overflow(_dict.data(), _dict.size(), _max_value_length);
+        bool ret = false;
+        TRY_CATCH_BAD_ALLOC(ret = column->append_strings_overflow(_dict.data(), _dict.size(), _max_value_length));
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
         }
@@ -441,7 +444,8 @@ public:
             }
         }
 
-        bool ret = column->append_strings_overflow(slices.data(), slices.size(), _max_value_length);
+        bool ret = false;
+        TRY_CATCH_BAD_ALLOC(ret = column->append_strings_overflow(slices.data(), slices.size(), _max_value_length));
 
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
@@ -577,7 +581,7 @@ private:
             if (read_count == 0) {
                 return Status::OK();
             }
-            binary_column->append_bytes_overflow(datas, lengths, read_count, _max_value_length);
+            TRY_CATCH_BAD_ALLOC(binary_column->append_bytes_overflow(datas, lengths, read_count, _max_value_length));
             DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
         }
 
@@ -602,20 +606,22 @@ private:
                 return Status::InternalError("DictDecoder<Slice> expected a binary destination column");
             }
             auto* binary_column = down_cast<BinaryColumn*>(data_column);
-            for (int i = 0; i < count; ++i) {
-                if (filter[i]) {
-                    binary_column->append(_dict[_indexes[i]]);
-                } else {
-                    binary_column->append_default();
+            TRY_CATCH_BAD_ALLOC({
+                for (int i = 0; i < count; ++i) {
+                    if (filter[i]) {
+                        binary_column->append(_dict[_indexes[i]]);
+                    } else {
+                        binary_column->append_default();
+                    }
                 }
-            }
+            });
         } else {
             _slices.resize(count);
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
             if (UNLIKELY(ret <= 0)) {
                 return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
             }
-            ret = dst->append_strings_overflow(_slices.data(), _slices.size(), _max_value_length);
+            TRY_CATCH_BAD_ALLOC(ret = dst->append_strings_overflow(_slices.data(), _slices.size(), _max_value_length));
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("DictDecoder append strings to column failed");
             }
