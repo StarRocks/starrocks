@@ -25,6 +25,14 @@
 
 #include <condition_variable>
 #include <functional>
+<<<<<<< HEAD:be/test/service/staros_worker_test.cpp
+=======
+#include <limits>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
+>>>>>>> aad2525 ([BugFix] Apply the request timeouts to the pooled Poco session (#78361)):be/test/compute_env/staros/staros_worker_test.cpp
 
 #include "common/config.h"
 #include "common/shutdown_hook.h"
@@ -36,6 +44,29 @@ namespace starrocks {
 static void add_shard_listener(std::vector<StarOSWorker::ShardId>* shardIds, int* counter, StarOSWorker::ShardId id) {
     shardIds->push_back(id);
     ++*counter;
+}
+
+TEST(StarletRequestTimeoutTest, PreserveTimeoutSemanticsForEachHttpClient) {
+    auto positive = starlet_request_timeout_ms(10000, true);
+    ASSERT_TRUE(positive);
+    EXPECT_EQ(10000, *positive);
+
+    auto disabled = starlet_request_timeout_ms(0, true);
+    ASSERT_TRUE(disabled);
+    EXPECT_EQ(0, *disabled);
+
+    auto poco_unset = starlet_request_timeout_ms(-1, true);
+    ASSERT_TRUE(poco_unset);
+    EXPECT_EQ(-1, *poco_unset);
+
+    auto curl_unset = starlet_request_timeout_ms(-1, false);
+    ASSERT_TRUE(curl_unset);
+    EXPECT_EQ(0, *curl_unset);
+
+    auto max = starlet_request_timeout_ms(std::numeric_limits<int32_t>::max(), true);
+    ASSERT_TRUE(max);
+    EXPECT_EQ(std::numeric_limits<int32_t>::max(), *max);
+    EXPECT_FALSE(starlet_request_timeout_ms(static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1, true));
 }
 
 static Aws::SDKOptions _s_options;
