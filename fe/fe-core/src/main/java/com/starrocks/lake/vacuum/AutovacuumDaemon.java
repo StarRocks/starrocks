@@ -492,6 +492,11 @@ public class AutovacuumDaemon extends LeaderDaemon {
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
         long vacuumedVersion = Long.MAX_VALUE;
+        // How many tablets this round moved forward, out of |tablets|. On a healthy partition every
+        // tablet advances every round; a small ratio on a failed round is the signal that the round
+        // ran out of deadline part-way through the tablet list, and its growth across rounds is the
+        // only operator-visible evidence that such a partition is converging.
+        long progressedTablets = 0;
         boolean needDeleteTxnLog = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<TabletInfoPB>> entry : nodeToTablets.entrySet()) {
@@ -517,10 +522,10 @@ public class AutovacuumDaemon extends LeaderDaemon {
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
             vacuumRequest.enableSharedFileCleanup = enableSharedFileCleanup;
-            // The longest this FE waits for the response (the brpc timeout of the vacuum RPC).
-            // The BE checks it periodically during execution and aborts the task once it has
-            // elapsed, instead of running on as a zombie that no caller is waiting for.
-            vacuumRequest.timeoutMs = LakeService.TIMEOUT_VACUUM;
+            // How long the BE may spend on this round. It checks the value periodically during
+            // execution and aborts the task once it has elapsed, instead of running on as a zombie
+            // that no caller is waiting for.
+            vacuumRequest.timeoutMs = vacuumTaskTimeoutMs();
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
@@ -542,28 +547,22 @@ public class AutovacuumDaemon extends LeaderDaemon {
                     hasError = true;
                     LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getId(),
                             response.status.errorMsgs.get(0));
+                    // A failed round is still a partial round: absorb the per-tablet progress and the
+                    // deletion counters it reports. Skipping this is what turns a single round that
+                    // overruns the RPC deadline into a permanent livelock -- the next round would
+                    // re-walk the identical (and by then longer) version chain, and on a file-bundling
+                    // table, where metadata deletion happens only after every tablet of the partition
+                    // has been walked, no metadata would ever be deleted, so the chain break that
+                    // terminates the walk would never advance either.
+                    progressedTablets += absorbTabletProgress(partition, response.tabletInfos);
+                    vacuumedFiles += zeroIfNull(response.vacuumedFiles);
+                    vacuumedFileSize += zeroIfNull(response.vacuumedFileSize);
                 } else {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
                     vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
                     extraFileSize += response.extraFileSize;
-
-                    if (response.tabletInfos != null) {
-                        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-                        for (TabletInfoPB tabletInfo : response.tabletInfos) {
-                            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletInfo.tabletId);
-                            if (tabletMeta != null) {
-                                MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
-                                if (index != null) {
-                                    Tablet tablet = index.getTablet(tabletInfo.tabletId);
-                                    if (tablet != null) {
-                                        LakeTablet lakeTablet = (LakeTablet) tablet;
-                                        lakeTablet.setMinVersion(tabletInfo.minVersion);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    progressedTablets += absorbTabletProgress(partition, response.tabletInfos);
                 }
             } catch (InterruptedException e) {
                 LOG.warn("thread interrupted");
@@ -597,10 +596,67 @@ public class AutovacuumDaemon extends LeaderDaemon {
         MetricRepo.COUNTER_VACUUM_FILES_BYTES.increase(vacuumedFileSize);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} txnLogSweepWatermark={} " +
-                        "vacuumVersion={} extraFileSize={} cost={}ms",
+                        "vacuumVersion={} extraFileSize={} progressedTablets={}/{} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
                 visibleVersion, minRetainVersion, minActiveTxnId, txnLogSweepWatermark,
-                vacuumedVersion, extraFileSize, System.currentTimeMillis() - startTime);
+                vacuumedVersion, extraFileSize, progressedTablets, tablets.size(),
+                System.currentTimeMillis() - startTime);
+    }
+
+    // Records the per-tablet progress a CN reports for a round: LakeTablet.minVersion is the floor of
+    // the next round's version-chain walk for that tablet, so the walk it already did is not repeated.
+    // Returns how many tablets moved forward.
+    //
+    // Only ever advances a floor. A response describes the tablets the round finished together with
+    // the ones it never reached (those carry back the value this FE sent), and on a failed round the
+    // tablet the CN stopped in the middle of is reported with its incoming value as well, so nothing
+    // here may move a floor back. minVersion lives only in memory: after a restart or a failover the
+    // new leader starts from 0 and the walks are done again, which costs time but never correctness.
+    private static long absorbTabletProgress(PhysicalPartition partition, List<TabletInfoPB> tabletInfos) {
+        if (tabletInfos == null) {
+            return 0;
+        }
+        long progressed = 0;
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (TabletInfoPB tabletInfo : tabletInfos) {
+            if (tabletInfo.tabletId == null || tabletInfo.minVersion == null) {
+                continue;
+            }
+            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletInfo.tabletId);
+            if (tabletMeta == null) {
+                continue;
+            }
+            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            if (index == null) {
+                continue;
+            }
+            Tablet tablet = index.getTablet(tabletInfo.tabletId);
+            if (!(tablet instanceof LakeTablet)) {
+                continue;
+            }
+            LakeTablet lakeTablet = (LakeTablet) tablet;
+            if (tabletInfo.minVersion > lakeTablet.getMinVersion()) {
+                lakeTablet.setMinVersion(tabletInfo.minVersion);
+                progressed++;
+            }
+        }
+        return progressed;
+    }
+
+    private static long zeroIfNull(Long value) {
+        return value == null ? 0 : value;
+    }
+
+    // How long a CN may spend on one vacuum round. Clamped to (0, TIMEOUT_VACUUM]: the RPC timeout is
+    // a compile-time annotation constant, so a larger value would only leave the BE working on a
+    // response the FE has already given up on. Lowering it hands the vacuum worker back sooner --
+    // per-tablet progress is reported either way, so a shorter round just means more rounds.
+    private static long vacuumTaskTimeoutMs() {
+        long seconds = Config.lake_autovacuum_task_timeout_seconds;
+        if (seconds <= 0 || seconds > LakeService.TIMEOUT_VACUUM / MILLISECONDS_PER_SECOND) {
+            return LakeService.TIMEOUT_VACUUM;
+        }
+        return seconds * MILLISECONDS_PER_SECOND;
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {

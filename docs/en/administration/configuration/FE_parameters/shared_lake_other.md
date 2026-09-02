@@ -427,6 +427,15 @@ This topic introduces the following types of FE configurations:
 - Description: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - Introduced in: v3.1.0
 
+### `lake_autovacuum_task_timeout_seconds`
+
+- Default: 3600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum time a compute node may spend on a single AutoVacuum round of one partition in a shared-data cluster. When it elapses, the node stops the round and reports the progress it made; the next round resumes from there. Values greater than `3600` (the timeout of the vacuum RPC, which is a compile-time constant) or smaller than `1` are treated as `3600`. Lower this value to release the vacuum worker sooner on a partition whose version chain is too long to be walked in one round - a shorter round only means more rounds, not less progress.
+- Introduced in: v4.2.0
+
 ### `lake_compaction_allow_partial_success`
 
 - Default: true

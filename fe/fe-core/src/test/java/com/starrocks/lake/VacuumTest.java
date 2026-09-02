@@ -30,6 +30,7 @@ import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletInfoPB;
 import com.starrocks.proto.VacuumFullRequest;
 import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
@@ -234,6 +235,108 @@ public class VacuumTest {
             // The BE aborts the vacuum task once this duration has elapsed, so it must match
             // the longest the FE actually waits, i.e. the brpc timeout of the vacuum RPC.
             Assertions.assertEquals(LakeService.TIMEOUT_VACUUM, (long) request.timeoutMs);
+        }
+    }
+
+    @Test
+    public void testFailedRoundAbsorbsPartialTabletProgress() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
+
+        List<LakeTablet> tablets = new ArrayList<>();
+        for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            for (Tablet tablet : index.getTablets()) {
+                tablets.add((LakeTablet) tablet);
+            }
+        }
+        Assertions.assertFalse(tablets.isEmpty());
+        tablets.forEach(t -> t.setMinVersion(0L));
+
+        // A round that ran out of deadline part-way through the tablet list: it failed, but it still
+        // reports the walk floor reached by the tablets it did finish.
+        VacuumResponse mockResponse = new VacuumResponse();
+        mockResponse.status = new StatusPB();
+        mockResponse.status.statusCode = 1;
+        mockResponse.status.errorMsgs = new ArrayList<>(Arrays.asList("vacuum task deadline exceeded"));
+        mockResponse.vacuumedFiles = 7L;
+        mockResponse.vacuumedFileSize = 700L;
+        mockResponse.tabletInfos = new ArrayList<>();
+        for (LakeTablet tablet : tablets) {
+            TabletInfoPB info = new TabletInfoPB();
+            info.tabletId = tablet.getId();
+            info.minVersion = 9L;
+            mockResponse.tabletInfos.add(info);
+        }
+
+        runVacuumRound(mockResponse);
+
+        // The progress has to survive the failure: dropping it is what makes a round that does not
+        // fit in the deadline repeat itself identically for ever.
+        tablets.forEach(t -> Assertions.assertEquals(9L, t.getMinVersion()));
+        // A failed round establishes no partition-wide watermark.
+        Assertions.assertEquals(4L, partition.getLastSuccVacuumVersion());
+
+        // A floor only ever moves forward, whatever a later response reports.
+        mockResponse.tabletInfos.forEach(info -> info.minVersion = 3L);
+        runVacuumRound(mockResponse);
+        tablets.forEach(t -> Assertions.assertEquals(9L, t.getMinVersion()));
+
+        // An older BE fills in neither the counters nor the tablet infos when the round fails.
+        mockResponse.vacuumedFiles = null;
+        mockResponse.vacuumedFileSize = null;
+        mockResponse.tabletInfos = null;
+        runVacuumRound(mockResponse);
+        tablets.forEach(t -> Assertions.assertEquals(9L, t.getMinVersion()));
+        Assertions.assertEquals(4L, partition.getLastSuccVacuumVersion());
+    }
+
+    private void runVacuumRound(VacuumResponse response) throws Exception {
+        Future<VacuumResponse> mockFuture = mock(Future.class);
+        when(mockFuture.get()).thenReturn(response);
+
+        LakeService svc = mock(LakeService.class);
+        when(svc.vacuum(any(VacuumRequest.class))).thenReturn(mockFuture);
+
+        AutovacuumDaemon daemon = new AutovacuumDaemon();
+        try (MockedStatic<BrpcProxy> mockBrpc = mockStatic(BrpcProxy.class)) {
+            mockBrpc.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(svc);
+            daemon.testVacuumPartitionImpl(db, olapTable, partition);
+        }
+    }
+
+    @Test
+    public void testVacuumTaskTimeoutIsConfigurableAndClamped() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        Assertions.assertNotNull(partition);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+        partition.setLastMinActiveTxnId(1L);  // confirmed predecessor so the round runs (Option A debounce)
+
+        long saved = Config.lake_autovacuum_task_timeout_seconds;
+        try {
+            Config.lake_autovacuum_task_timeout_seconds = 600;
+            assertRequestedTimeout(600 * 1000L);
+            // Anything above the RPC timeout would only leave the BE working on a response the FE
+            // has already given up on, and a non-positive value means "no override".
+            Config.lake_autovacuum_task_timeout_seconds = 99999;
+            assertRequestedTimeout(LakeService.TIMEOUT_VACUUM);
+            Config.lake_autovacuum_task_timeout_seconds = 0;
+            assertRequestedTimeout(LakeService.TIMEOUT_VACUUM);
+        } finally {
+            Config.lake_autovacuum_task_timeout_seconds = saved;
+        }
+    }
+
+    private void assertRequestedTimeout(long expectedTimeoutMs) throws Exception {
+        List<VacuumRequest> requests = runVacuumCaptureRequests();
+        Assertions.assertFalse(requests.isEmpty());
+        for (VacuumRequest request : requests) {
+            Assertions.assertEquals(expectedTimeoutMs, (long) request.timeoutMs);
         }
     }
 

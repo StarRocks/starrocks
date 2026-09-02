@@ -3846,6 +3846,16 @@ public class Config extends ConfigBase {
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
     @ConfField(mutable = true, comment =
+            "how long a compute node may spend on a single autovacuum round of one partition, after which " +
+                    "it stops and reports the progress it made.\n" +
+                    "Values above 3600 (the vacuum RPC timeout, a compile-time constant) or below 1 are " +
+                    "treated as 3600. Lowering it releases the vacuum worker sooner on partitions whose " +
+                    "version chain is too long to walk in one round; such a round reports its per-tablet " +
+                    "progress and the next one resumes where it stopped, so a shorter round only means " +
+                    "more rounds.")
+    public static long lake_autovacuum_task_timeout_seconds = 3600;
+
+    @ConfField(mutable = true, comment =
             "History versions within this time range will not be deleted by auto vacuum.\n" +
                     "REMINDER: Set this to a value longer than the maximum possible execution time of queries," +
                     " to avoid deletion of versions still being accessed.\n" +

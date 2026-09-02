@@ -97,8 +97,14 @@ public:
 
     Status delete_file(std::string path) override {
         _pending_files[std::move(path)]++;
+        _enqueued_count++;
         return Status::OK();
     }
+
+    // Number of files handed over so far, duplicates included. Deletion is deferred to finish(), so a
+    // caller that gives up before then uses this to tell whether a given unit of work contributed any
+    // file that is still on storage.
+    int64_t enqueued_count() const { return _enqueued_count; }
 
     Status delay_delete(std::string path) {
         _delay_delete_files.insert(std::move(path));
@@ -118,6 +124,7 @@ private:
     // file to shared count.
     std::unordered_map<std::string, uint32_t> _pending_files;
     std::unordered_set<std::string> _delay_delete_files;
+    int64_t _enqueued_count = 0;
 };
 
 } // namespace starrocks::lake

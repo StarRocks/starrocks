@@ -660,22 +660,57 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     AsyncSharedFileDeleter shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
     int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
     int64_t max_vacuum_version = 0;
-    for (auto& tablet_info : tablet_infos) {
+    // Tablets whose garbage includes shared files, with the |min_version| they came in with. Shared
+    // files can only be deleted with the whole partition at hand (collect_alive_shared_files below),
+    // so their deletion is deferred to the end of the round like the bundle metadata -- but unlike a
+    // bundle metadata file, which is keyed by version and gets deleted as soon as ANY tablet walks
+    // that version, a shared file is reachable only through the metadata of the tablets referencing
+    // it. If the round ends early those tablets have to be walked again: an advanced |min_version|
+    // would skip the only record of a file that is still on storage and orphan it for good.
+    std::vector<std::pair<size_t, int64_t>> tablets_with_deferred_shared_files;
+    auto rollback_deferred_shared_progress = [&]() {
+        for (const auto& [index, deferred_min_version] : tablets_with_deferred_shared_files) {
+            tablet_infos[index].set_min_version(deferred_min_version);
+        }
+    };
+    for (size_t i = 0; i < tablet_infos.size(); i++) {
+        auto& tablet_info = tablet_infos[i];
         TabletRetainInfo tablet_retain_info;
         tablet_retain_info.init(retain_versions);
 
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
-                                                vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
-                                                &shared_file_deleter, vacuumed_file_size, &tablet_vacuumed_version,
-                                                extra_file_size, tablet_retain_info, deadline_ms));
-        RETURN_IF_ERROR(datafile_deleter.finish());
+        // |min_version| is the floor of the NEXT round's walk for this tablet, so it may only advance
+        // once every file this walk collected has been handed over for deletion. Remember the incoming
+        // value and restore it if anything below fails: a half-processed tablet must be walked again,
+        // while the tablets already finished keep the progress they made (see vacuum_impl, which
+        // reports |tablet_infos| to the FE even when the round as a whole fails).
+        const int64_t incoming_min_version = tablet_info.min_version();
+        const int64_t shared_files_enqueued = shared_file_deleter.enqueued_count();
+        auto st = collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
+                                          vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
+                                          &shared_file_deleter, vacuumed_file_size, &tablet_vacuumed_version,
+                                          extra_file_size, tablet_retain_info, deadline_ms);
+        if (st.ok()) {
+            st = datafile_deleter.finish();
+        }
+        // Full batches handed to the deleter are gone from storage even if the walk stopped half-way,
+        // so count them either way: the caller reports them as this round's partial progress.
         (*vacuumed_files) += datafile_deleter.delete_count();
         if (!enable_file_bundling) {
-            RETURN_IF_ERROR(metafile_deleter.finish());
+            if (st.ok()) {
+                st = metafile_deleter.finish();
+            }
             (*vacuumed_files) += metafile_deleter.delete_count();
+        }
+        if (!st.ok()) {
+            tablet_info.set_min_version(incoming_min_version);
+            rollback_deferred_shared_progress();
+            return st;
+        }
+        if (shared_file_deleter.enqueued_count() != shared_files_enqueued) {
+            tablets_with_deferred_shared_files.emplace_back(i, incoming_min_version);
         }
         // set partition vacuumed_version to min tablet vacuumed version
         final_vacuum_version = std::min(final_vacuum_version, tablet_vacuumed_version);
@@ -689,11 +724,19 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     }
     // delete shared files
     if (max_vacuum_version > 0 && !shared_file_deleter.is_empty()) {
-        RETURN_IF_ERROR(collect_alive_shared_files(tablet_mgr, tablet_infos, max_vacuum_version,
-                                                   0 /* step-up bound (unused: floor is materialized here) */, root_dir,
-                                                   &shared_file_deleter));
-        RETURN_IF_ERROR(shared_file_deleter.finish());
+        auto st = collect_alive_shared_files(tablet_mgr, tablet_infos, max_vacuum_version,
+                                             0 /* step-up bound (unused: floor is materialized here) */, root_dir,
+                                             &shared_file_deleter);
+        if (st.ok()) {
+            st = shared_file_deleter.finish();
+        }
         (*vacuumed_files) += shared_file_deleter.delete_count();
+        if (!st.ok()) {
+            // Same reason as inside the loop: the shared files of these tablets may still be on
+            // storage, so their metadata must be walked again rather than skipped.
+            rollback_deferred_shared_progress();
+            return st;
+        }
     }
     if (enable_file_bundling) {
         // collect meta files to vacuum at partition level
@@ -1421,10 +1464,26 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         // extra_file_size is also left at 0: propose computes no orphan-size estimate, so the legacy
         // "extra minus vacuumed" adjustment below is skipped (it would otherwise report a negative).
     } else {
-        RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
-                                               enable_file_bundling, enable_shared_file_cleanup, &vacuumed_files,
-                                               &vacuumed_file_size, &vacuumed_version, &extra_file_size,
-                                               retain_versions, deadline_ms));
+        auto st = vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
+                                         enable_file_bundling, enable_shared_file_cleanup, &vacuumed_files,
+                                         &vacuumed_file_size, &vacuumed_version, &extra_file_size, retain_versions,
+                                         deadline_ms);
+        if (!st.ok()) {
+            // Report the per-tablet progress and the deletion counters of a round that ended early, so a
+            // partial round is not a wasted round. |min_version| is what lets the next round skip the
+            // chain segments this one already walked; without it a partition whose full walk does not fit
+            // in the deadline re-walks the same (ever growing) chain every round, and under file bundling
+            // -- where metadata deletion is deferred to the end of the round and therefore skipped here --
+            // never gets to delete any metadata at all, so the chain break that terminates the walk never
+            // advances and the timeout repeats forever. |vacuumed_version| and |extra_file_size| stay
+            // unset: they are partition-wide watermarks that only a complete round establishes.
+            response->set_vacuumed_files(vacuumed_files);
+            response->set_vacuumed_file_size(vacuumed_file_size);
+            for (const auto& tablet_info : tablet_infos) {
+                response->add_tablet_infos()->CopyFrom(tablet_info);
+            }
+            return st;
+        }
         extra_file_size -= vacuumed_file_size;
     }
     if (request.delete_txn_log()) {

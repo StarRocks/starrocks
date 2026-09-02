@@ -403,6 +403,10 @@ message AbortCompactionResponse {
 
 message TabletInfoPB {
     optional int64 tablet_id = 1;
+    // Floor of the tablet's garbage version chain walk: every version below it has already been
+    // vacuumed, so a walk may stop there instead of following the chain down to the version whose
+    // metadata is missing. In a request it is what the previous round reported, in a response it is
+    // what this round reached.
     optional int64 min_version = 2;
 }
 
@@ -523,15 +527,22 @@ message VacuumRequest {
 
 message VacuumResponse {
     optional StatusPB status = 1;
-    // The number of files vacuumed, value undefined if status is not ok.
+    // The number of files vacuumed. Also set when status is not ok, where it reports what the
+    // failed round had already deleted.
     optional int64 vacuumed_files = 2;
-    // The total size of files vacuumed, value undefined if status is not ok.
+    // The total size of files vacuumed. Also set when status is not ok, where it reports what the
+    // failed round had already deleted.
     optional int64 vacuumed_file_size = 3;
-    // The versions before vacuumed_version are vacuumed
+    // The versions before vacuumed_version are vacuumed. Value undefined if status is not ok:
+    // it is a partition-wide watermark that only a complete round establishes.
     optional int64 vacuumed_version = 4;
-    // The tablet infos of vacuumed tablets.
+    // The tablet infos of vacuumed tablets, carrying back the min_version each tablet reached.
+    // Also set when status is not ok: the tablets the round did finish report their advanced
+    // min_version, the ones it did not reach (and the one it stopped in the middle of) report the
+    // value the request carried. The caller must absorb these on failure too, otherwise a round
+    // that does not fit in timeout_ms leaves no trace and the next round repeats it identically.
     repeated TabletInfoPB tablet_infos = 5;
-    // The total file size need to be vacuumed
+    // The total file size need to be vacuumed. Value undefined if status is not ok.
     optional int64 extra_file_size = 6;
 
     // ---- Incremental vacuum protocol result. ----

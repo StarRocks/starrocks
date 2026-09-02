@@ -428,6 +428,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果分区在此时间范围内没有更新（加载、DELETE 或 Compactions），系统将不会对此分区执行 AutoVacuum。
 - 引入版本: v3.1.0
 
+### `lake_autovacuum_task_timeout_seconds`
+
+- 默认值: 3600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 存算分离集群中，计算节点执行单个分区的一轮 AutoVacuum 的最长时间。超过该时间后，节点会结束本轮并上报已完成的进度，下一轮从该进度继续。大于 `3600`（vacuum RPC 的超时时间，为编译期常量）或小于 `1` 的取值均按 `3600` 处理。当分区的版本链过长、一轮内无法遍历完时，可降低该值以更快释放 vacuum 线程：缩短单轮时长只会增加轮数，不会减少总进度。
+- 引入版本: v4.2.0
+
 ### `lake_compaction_allow_partial_success`
 
 - 默认值: true

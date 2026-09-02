@@ -6969,4 +6969,238 @@ TEST_P(LakeVacuumTest, test_vacuum_min_retain_below_min_version) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+// Regression test: under file bundling the metadata files of a partition are shared by all its
+// tablets, so they can only be deleted once EVERY tablet has been walked. A round that runs out of
+// deadline part-way through the tablet list therefore deletes no metadata at all and leaves the
+// chain break -- the NotFound that terminates each walk -- exactly where it was. If such a round
+// also reported no progress, the next one would re-walk the identical (by then longer) chain, hit
+// the same deadline, and the partition would never vacuum its metadata again. A failed round must
+// report the per-tablet progress it did make, so consecutive rounds walk disjoint slices and one of
+// them eventually gets to the end.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_partial_progress_reported_on_deadline) {
+    constexpr int64_t kTabletIds[] = {7100, 7101, 7102};
+    constexpr int64_t kGraceTimestamp = 5000;
+
+    // Versions 2..5 of every tablet, chained through prev_garbage_version, one bundle metadata file
+    // per version. Version 4 is the last one committed before the grace timestamp, so a complete
+    // round retains versions 4 and 5 and deletes the metadata of versions 2 and 3. The chain of the
+    // oldest version ends at 0, which stops the walk without a metadata read below it (the bundle
+    // layout cannot serve version 1, see TabletManager::get_single_tablet_metadata).
+    for (int64_t version = 2; version <= 5; version++) {
+        std::map<int64_t, TabletMetadataPB> bundle;
+        for (int64_t tablet_id : kTabletIds) {
+            TabletMetadataPB meta;
+            meta.set_id(tablet_id);
+            meta.set_version(version);
+            meta.set_prev_garbage_version(version > 2 ? version - 1 : 0);
+            meta.set_commit_time(version * 1000);
+            meta.mutable_schema()->set_id(0);
+            meta.mutable_schema()->set_keys_type(DUP_KEYS);
+            meta.mutable_schema()->set_num_short_key_columns(1);
+            bundle[tablet_id] = std::move(meta);
+        }
+        ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(bundle));
+    }
+
+    // Expire the deadline as soon as the walk moves on from the first tablet: that tablet finishes
+    // its walk, the second one is abandoned in the middle of its own, the third is never started.
+    bool expired = false;
+    std::map<int64_t, int> reads;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        if (!res->ok()) {
+            return;
+        }
+        const int64_t tablet_id = res->value()->id();
+        reads[tablet_id]++;
+        if (tablet_id != kTabletIds[0]) {
+            expired = true;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline",
+                                          [&](void* arg) { *(int64_t*)arg = expired ? (int64_t{1} << 62) : 0; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::map<int64_t, int64_t> reported;
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        for (int64_t tablet_id : kTabletIds) {
+            auto* info = request.add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(0);
+        }
+        request.set_min_retain_version(5);
+        request.set_grace_timestamp(kGraceTimestamp);
+        request.set_min_active_txn_id(12345);
+        request.set_enable_file_bundling(true);
+        request.set_enable_shared_file_cleanup(true);
+        vacuum(_tablet_mgr.get(), request, &response, /*deadline_ms=*/1);
+
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(4, reads[kTabletIds[0]]);
+        EXPECT_EQ(0, reads[kTabletIds[2]]);
+        // No metadata was deleted: the deletion happens only after the loop over all tablets.
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 4)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 5)));
+
+        // The progress of the tablet that did finish is reported anyway, ...
+        ASSERT_EQ(3, response.tablet_infos_size());
+        for (const auto& info : response.tablet_infos()) {
+            reported[info.tablet_id()] = info.min_version();
+        }
+        EXPECT_EQ(4, reported[kTabletIds[0]]);
+        // ... while the tablet abandoned mid-walk reports the floor it started from, like the one
+        // never started: only part of its garbage was handed over for deletion, so the next round
+        // has to walk it again.
+        EXPECT_EQ(0, reported[kTabletIds[1]]);
+        EXPECT_EQ(0, reported[kTabletIds[2]]);
+    }
+
+    // Next round, with the reported floors fed back in as the FE does. No deadline this time.
+    reads.clear();
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        for (int64_t tablet_id : kTabletIds) {
+            auto* info = request.add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(reported[tablet_id]);
+        }
+        request.set_min_retain_version(5);
+        request.set_grace_timestamp(kGraceTimestamp);
+        request.set_min_active_txn_id(12345);
+        request.set_enable_file_bundling(true);
+        request.set_enable_shared_file_cleanup(true);
+        vacuum(_tablet_mgr.get(), request, &response);
+
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // The first tablet's walk stops at the floor it reported instead of following the chain all
+        // the way down again: versions 5 and 4 only, against all four for the other two tablets.
+        EXPECT_EQ(2, reads[kTabletIds[0]]);
+        EXPECT_EQ(4, reads[kTabletIds[1]]);
+        EXPECT_EQ(4, reads[kTabletIds[2]]);
+        // The round reached the end, so the shared metadata below the retain boundary is deleted --
+        // including the versions the first tablet had already walked in the failed round, which the
+        // other tablets still cover.
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 4)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 5)));
+        EXPECT_EQ(4, response.vacuumed_version());
+    }
+}
+
+// Companion to the test above: a tablet whose garbage includes SHARED files is NOT done when the
+// round ends early, even though its own walk finished. Shared files are deleted only once every
+// tablet has been walked, because their liveness is a partition-wide question -- and unlike a bundle
+// metadata file, which is keyed by version and is deleted as soon as any tablet walks that version, a
+// shared file is reachable only through the metadata of the tablets that reference it. Reporting
+// progress for such a tablet would let the next round skip the only record of a file that is still on
+// storage, orphaning it for good.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_no_progress_for_tablets_with_deferred_shared_files) {
+    constexpr int64_t kTabletIds[] = {7200, 7201};
+    constexpr int64_t kGraceTimestamp = 4000;
+
+    auto shared_file_name = [](int64_t tablet_id) { return std::to_string(tablet_id) + "_shared.dat"; };
+    for (int64_t tablet_id : kTabletIds) {
+        create_data_file(shared_file_name(tablet_id));
+    }
+    for (int64_t version = 2; version <= 4; version++) {
+        std::map<int64_t, TabletMetadataPB> bundle;
+        for (int64_t tablet_id : kTabletIds) {
+            TabletMetadataPB meta;
+            meta.set_id(tablet_id);
+            meta.set_version(version);
+            meta.set_prev_garbage_version(version > 2 ? version - 1 : 0);
+            meta.set_commit_time(version * 1000);
+            meta.mutable_schema()->set_id(0);
+            meta.mutable_schema()->set_keys_type(DUP_KEYS);
+            meta.mutable_schema()->set_num_short_key_columns(1);
+            if (version == 3) {
+                // Compaction garbage living in a bundled data file, i.e. shared with other tablets.
+                auto* segment = meta.add_compaction_inputs()->add_segment_metas();
+                segment->set_filename(shared_file_name(tablet_id));
+                segment->set_bundle_file_offset(0);
+            }
+            bundle[tablet_id] = std::move(meta);
+        }
+        ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(bundle));
+    }
+
+    bool expired = false;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        if (res->ok() && res->value()->id() != kTabletIds[0]) {
+            expired = true;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("vacuum:check_deadline",
+                                          [&](void* arg) { *(int64_t*)arg = expired ? (int64_t{1} << 62) : 0; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+        SyncPoint::GetInstance()->ClearCallBack("vacuum:check_deadline");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto build_request = [&](VacuumRequest* request) {
+        request->set_delete_txn_log(false);
+        for (int64_t tablet_id : kTabletIds) {
+            auto* info = request->add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(0);
+        }
+        request->set_min_retain_version(4);
+        request->set_grace_timestamp(kGraceTimestamp);
+        request->set_min_active_txn_id(12345);
+        request->set_enable_file_bundling(true);
+        request->set_enable_shared_file_cleanup(true);
+    };
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        build_request(&request);
+        vacuum(_tablet_mgr.get(), request, &response, /*deadline_ms=*/1);
+
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(TStatusCode::TIMEOUT, response.status().status_code()) << response.status().error_msgs(0);
+        // The shared files of the tablet that finished its walk are still there: their deletion was
+        // deferred to the end of the round, which never came.
+        EXPECT_TRUE(file_exist(shared_file_name(kTabletIds[0])));
+        EXPECT_TRUE(file_exist(shared_file_name(kTabletIds[1])));
+        // So that tablet reports no progress either, and the next round walks it again.
+        ASSERT_EQ(2, response.tablet_infos_size());
+        for (const auto& info : response.tablet_infos()) {
+            EXPECT_EQ(0, info.min_version()) << info.tablet_id();
+        }
+    }
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        build_request(&request);
+        vacuum(_tablet_mgr.get(), request, &response);
+
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_FALSE(file_exist(shared_file_name(kTabletIds[0])));
+        EXPECT_FALSE(file_exist(shared_file_name(kTabletIds[1])));
+    }
+}
+
 } // namespace starrocks::lake
