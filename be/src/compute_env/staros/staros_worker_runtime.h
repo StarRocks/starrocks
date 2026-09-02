@@ -16,7 +16,9 @@
 
 #ifdef USE_STAROS
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "common/status.h"
@@ -34,6 +36,8 @@ namespace starrocks {
 
 class StarOSWorker;
 class TableMetricsManager;
+
+std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client);
 
 std::shared_ptr<StarOSWorker> get_staros_worker();
 staros::starlet::Starlet* get_starlet();

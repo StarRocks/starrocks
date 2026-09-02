@@ -18,6 +18,7 @@
 #include <fslib/fslib_all_initializer.h>
 #include <starlet.h>
 
+#include <limits>
 #include <utility>
 
 #include "common/config_staros_worker_fwd.h"
@@ -96,6 +97,18 @@ void apply_starlet_upload_threshold_configs() {
 
 namespace fslib = staros::starlet::fslib;
 
+std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client) {
+    if (configured_timeout_ms > std::numeric_limits<int32_t>::max()) {
+        return std::nullopt;
+    }
+    if (configured_timeout_ms < 0) {
+        // Curl uses zero as its SDK default. Poco needs a negative sentinel to distinguish the
+        // unset value from an explicit zero, which disables its send and receive timeouts.
+        return use_poco_client ? -1 : 0;
+    }
+    return static_cast<int32_t>(configured_timeout_ms);
+}
+
 std::shared_ptr<StarOSWorker> get_staros_worker() {
     return g_worker;
 }
@@ -135,8 +148,9 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
     FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
     FLAGS_fslib_s3client_use_list_objects_v1 = config::s3_use_list_objects_v1;
-    if (config::object_storage_request_timeout_ms >= 0) {
-        FLAGS_fslib_s3client_request_timeout_ms = static_cast<int32_t>(config::object_storage_request_timeout_ms);
+    if (auto timeout = starlet_request_timeout_ms(config::object_storage_request_timeout_ms,
+                                                  config::enable_poco_client_for_aws_sdk)) {
+        FLAGS_fslib_s3client_request_timeout_ms = *timeout;
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     fslib::FLAGS_write_cache_rpc_timeout_ms = config::starlet_cache_replication_timeout_ms;
