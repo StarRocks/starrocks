@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "base/testutil/parallel_test.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -176,6 +178,92 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings) {
     auto* c = reinterpret_cast<BinaryColumn*>(c2->data_column_raw_ptr());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], c->immutable_data()[i]);
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
+    // Values longer than 128 bytes take the branch that copies each value at its exact
+    // length. Build the sources in one padded buffer, the way the parquet dict decoder
+    // and binary dict page do, so the fixed-length branches would be legal here too.
+    const std::vector<size_t> lengths{200, 0, 129, 1, 4096};
+    size_t total_length = 0;
+    for (size_t len : lengths) {
+        total_length += len;
+    }
+
+    std::string backing(total_length + Column::APPEND_OVERFLOW_MAX_SIZE, '\0');
+    std::vector<Slice> values;
+    size_t offset = 0;
+    for (size_t i = 0; i < lengths.size(); i++) {
+        for (size_t j = 0; j < lengths[i]; j++) {
+            backing[offset + j] = static_cast<char>('a' + (i * 7 + j) % 26);
+        }
+        values.emplace_back(backing.data() + offset, lengths[i]);
+        offset += lengths[i];
+    }
+    const size_t max_length = *std::max_element(lengths.begin(), lengths.end());
+
+    auto c1 = BinaryColumn::create();
+    ASSERT_TRUE(c1->append_strings_overflow(values.data(), values.size(), max_length));
+    ASSERT_EQ(values.size(), c1->size());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], c1->immutable_data()[i]);
+    }
+    ASSERT_EQ(total_length, c1->get_bytes().size());
+    // The byte buffer is sized from the total up front. Appending value by value would
+    // grow it geometrically and leave the capacity at up to twice the bytes held.
+    ASSERT_EQ(total_length, c1->get_bytes().capacity());
+
+    // Appending onto a non-empty column keeps the existing prefix intact.
+    ASSERT_TRUE(c1->append_strings_overflow(values.data(), values.size(), max_length));
+    ASSERT_EQ(values.size() * 2, c1->size());
+    ASSERT_EQ(total_length * 2, c1->get_bytes().size());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], c1->immutable_data()[i]);
+        ASSERT_EQ(values[i], c1->immutable_data()[i + values.size()]);
+    }
+
+    // Appending nothing is a no-op.
+    ASSERT_TRUE(c1->append_strings_overflow(values.data(), 0, max_length));
+    ASSERT_EQ(values.size() * 2, c1->size());
+    ASSERT_EQ(total_length * 2, c1->get_bytes().size());
+
+    // Nullable BinaryColumn forwards to the same path.
+    auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(c2->append_strings_overflow(values.data(), values.size(), max_length));
+    ASSERT_EQ(values.size(), c2->size());
+    auto* c = reinterpret_cast<BinaryColumn*>(c2->data_column_raw_ptr());
+    for (size_t i = 0; i < values.size(); i++) {
+        ASSERT_FALSE(c2->is_null(i));
+        ASSERT_EQ(values[i], c->immutable_data()[i]);
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_short_values) {
+    // Guard the fixed-length specializations against the long-value branch: both must
+    // produce identical columns.
+    for (size_t max_length : {8, 16, 32, 64, 128}) {
+        std::string backing(max_length * 4 + Column::APPEND_OVERFLOW_MAX_SIZE, '\0');
+        std::vector<Slice> values;
+        size_t offset = 0;
+        for (size_t i = 0; i < 4; i++) {
+            const size_t len = max_length - i;
+            for (size_t j = 0; j < len; j++) {
+                backing[offset + j] = static_cast<char>('a' + (i * 3 + j) % 26);
+            }
+            values.emplace_back(backing.data() + offset, len);
+            offset += len;
+        }
+
+        auto column = BinaryColumn::create();
+        ASSERT_TRUE(column->append_strings_overflow(values.data(), values.size(), max_length));
+        ASSERT_EQ(values.size(), column->size());
+        for (size_t i = 0; i < values.size(); i++) {
+            ASSERT_EQ(values[i], column->immutable_data()[i]);
+        }
+        ASSERT_EQ(offset, column->get_bytes().size());
     }
 }
 
