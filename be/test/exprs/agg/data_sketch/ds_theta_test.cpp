@@ -165,6 +165,16 @@ static std::vector<uint8_t> make_sketch_bytes(int start, int count) {
     return buf;
 }
 
+// Serialize an *empty* compact theta sketch. Unlike a zero-length slice this carries a real
+// 8-byte header with is_empty() == true, which is what a union/intersection over empty inputs
+// produces and what upstream queries feed back into the set-op functions.
+static std::vector<uint8_t> make_empty_sketch_bytes() {
+    int64_t mem = 0;
+    auto sk = DataSketchesTheta::theta_union_type::builder(DataSketchesTheta::alloc_type(&mem)).build().get_result();
+    auto bytes = sk.serialize();
+    return std::vector<uint8_t>(bytes.begin(), bytes.end());
+}
+
 // Deserialize a compact theta sketch and return its cardinality estimate, or -1 on error.
 static double estimate_from_slice(Slice s) {
     int64_t mem = 0;
@@ -237,6 +247,40 @@ TEST_F(DataSketchsThetaTest, TestANotBEmptyRhs) {
     ASSERT_TRUE(result.ok());
     auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
     EXPECT_NEAR(estimate_from_slice(slice), 500.0, 50.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestANotBSerializedEmptySketchRhs) {
+    // Same X \ ∅ = X law, but rhs is a serialized empty sketch instead of a zero-length slice.
+    // theta_a_not_b::compute() short-circuits this case and builds the result with the wrapped
+    // sketch's default-constructed allocator (null byte counter), so it must not reach compute().
+    auto sketch = make_sketch_bytes(0, 500);
+    Slice sk_slice(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+    auto empty = make_empty_sketch_bytes();
+    Slice empty_slice(reinterpret_cast<const char*>(empty.data()), empty.size());
+    ASSERT_GT(empty_slice.size, 0u);
+
+    Columns cols{make_binary_col(sk_slice), make_binary_col(empty_slice)};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok()) << result.status().message();
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 500.0, 50.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestANotBSerializedEmptySketchLhs) {
+    // ∅ \ X = ∅, with lhs a serialized empty sketch instead of a zero-length slice.
+    // compute() answers this from the same shortcut path, and the sketch it returns carries the
+    // wrapped sketch's null-counter allocator -- which only blows up later, when serializing it.
+    auto empty = make_empty_sketch_bytes();
+    Slice empty_slice(reinterpret_cast<const char*>(empty.data()), empty.size());
+    ASSERT_GT(empty_slice.size, 0u);
+    auto sketch = make_sketch_bytes(0, 500);
+    Slice sk_slice(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+
+    Columns cols{make_binary_col(empty_slice), make_binary_col(sk_slice)};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok()) << result.status().message();
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
 }
 
 // ---- Bug fix 2: malformed sketches must surface as errors, not empty results ----

@@ -154,16 +154,30 @@ StatusOr<ColumnPtr> DsThetaFunctions::ds_theta_a_not_b(FunctionContext* context,
                 append_compact(theta_union_type::builder(alloc_type(&mem)).build().get_result(), builder);
                 continue;
             }
-            theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
-            if (b_slice.size == 0) {
-                // X \ ∅ = X: run through the API to validate sketch_a
-                auto empty_b = theta_union_type::builder(alloc_type(&mem)).build().get_result();
-                auto a = wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size);
-                append_compact(anb.compute(a, empty_b), builder);
+            // Validates sketch_a: wrap() parses the header and throws on malformed input.
+            auto a = wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size);
+            // Either operand being empty must short-circuit. theta_a_not_b::compute() answers both
+            // cases from its shortcut path, which builds the result on
+            // wrapped_compact_theta_sketch::get_allocator() -- a default-constructed
+            // STLCountingAllocator whose byte counter is null. Serializing such a result then
+            // dereferences that null counter and segfaults.
+            if (a.is_empty()) {
+                // ∅ \ X = ∅, and sketch_a already is that empty sketch.
+                builder.append(a_slice);
                 continue;
             }
-            auto a = wrapped_compact_theta_sketch::wrap(a_slice.data, a_slice.size);
+            if (b_slice.size == 0) {
+                // X \ ∅ = X
+                builder.append(a_slice);
+                continue;
+            }
             auto b = wrapped_compact_theta_sketch::wrap(b_slice.data, b_slice.size);
+            if (b.is_empty()) {
+                // X \ ∅ = X
+                builder.append(a_slice);
+                continue;
+            }
+            theta_a_not_b_type anb(datasketches::DEFAULT_SEED, alloc_type(&mem));
             append_compact(anb.compute(a, b), builder);
         } catch (const std::exception& e) {
             return Status::InternalError(strings::Substitute("ds_theta_a_not_b failed: $0", e.what()));
