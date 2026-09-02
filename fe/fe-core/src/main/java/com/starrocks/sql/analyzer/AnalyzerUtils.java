@@ -1047,9 +1047,14 @@ public class AnalyzerUtils {
     }
 
     /**
-     * CopySafe:
-     * 1. OlapTable & MaterializedView, that support the copyOnlyForQuery interface
-     * 2. External tables with immutable memory-structure
+     * CopySafe, i.e. the statement does not need the whole planning phase to run under the meta lock. A table
+     * qualifies when either:
+     * 1. the lock cannot protect it anyway, so it has no say -- see {@link Table#isMetaLockTarget}; or
+     * 2. planning can work off a private snapshot of it: native tables and MVs are shadow copied by
+     * copyOnlyForQuery, unless one carries more related MVs than skip_whole_phase_lock_mv_limit.
+     * <p>
+     * A lock target with no snapshot to plan against -- ENGINE=MYSQL / ELASTICSEARCH, ExternalOlapTable, and
+     * resource-mapping external tables -- is copy-unsafe and does hold the lock for the whole phase.
      */
     public static boolean areTablesCopySafe(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
@@ -1185,9 +1190,6 @@ public class AnalyzerUtils {
 
     private static class CopyUnsafeTablesCollector extends TableCollector {
 
-        private static final ImmutableSet<Table.TableType> IMMUTABLE_EXTERNAL_TABLES =
-                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG, Table.TableType.FLUSS);
-
         public CopyUnsafeTablesCollector(Map<TableName, Table> tables) {
             super(tables);
         }
@@ -1203,18 +1205,27 @@ public class AnalyzerUtils {
             if (table instanceof SystemTable) {
                 return null;
             }
+            // A table the meta lock cannot protect has no say in how long that lock is held. Tables in an
+            // external catalog are exactly that set -- PlannerMetaLocker.resolveTable never puts them in the
+            // lock set -- so they abstain. Letting them vote only made the planner hold the *lockable* tables'
+            // locks across connector RPCs while giving the voter itself zero protection: an external table's
+            // planning-phase stability comes from the query-scoped ConnectorMetadata
+            // (MetadataMgr.QueryMetadatas), never from the meta lock.
+            if (!table.isMetaLockTarget()) {
+                return null;
+            }
+            // A lock target that planning can see through a private snapshot does not need the real thing
+            // held: OlapTable and MV are shadow copied by copyOnlyForQuery, and OptimisticVersion revalidates
+            // them on the lock-free path. The MV-count limit is the existing guard on that copy being cheap.
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
-            if ((table.isNativeTableOrMaterializedView() && useNonLockOptimization)) {
-                // OlapTable can be copied via copyOnlyForQuery
+            if (table.isNativeTableOrMaterializedView() && useNonLockOptimization) {
                 return null;
-            } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
-                // Immutable table
-                return null;
-            } else {
-                tables.put(node.getName(), node.getTable());
             }
+
+            // Lockable, and no snapshot to plan against: the lock has to stay for the whole phase.
+            tables.put(node.getName(), node.getTable());
             return null;
         }
     }
