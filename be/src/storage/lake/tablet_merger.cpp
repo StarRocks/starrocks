@@ -150,11 +150,6 @@ struct DelvecSourceRef {
     std::string file_name;
 };
 
-struct SourceDelvecFile {
-    int64_t tablet_id;
-    FileMetaPB file;
-};
-
 struct TargetDelvecState {
     std::optional<DelvecSourceRef> single_source;
     std::unique_ptr<DelVector> merged;
@@ -2053,7 +2048,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     // Phase 1: Scan pages, build TargetDelvecState for each target rssid.
     // File name is resolved inline via each old tablet's version_to_file map.
     std::map<uint32_t, TargetDelvecState> target_states;
-    std::unordered_map<std::string, SourceDelvecFile> actual_page_source_files;
+    bool has_actual_page_source = false;
     const auto target_live_rssids = collect_live_rssids(*new_metadata);
 
     for (size_t context_index = 0; context_index < merge_contexts.size(); ++context_index) {
@@ -2085,18 +2080,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 return Status::InvalidArgument("Delvec file not found for page version");
             }
             const std::string& file_name = file_it->second.name();
-            auto [canonical_file_it, inserted] = actual_page_source_files.emplace(
-                    file_name, SourceDelvecFile{ctx.metadata()->id(), file_it->second});
-            if (!inserted) {
-                const auto& canonical_file = canonical_file_it->second.file;
-                const auto& incoming_file = file_it->second;
-                if (!delvec_file_metadata_matches(canonical_file, incoming_file)) {
-                    return Status::Corruption(
-                            fmt::format("Delvec actual page source metadata mismatch for file {} between tablets {} "
-                                        "and {}",
-                                        file_name, canonical_file_it->second.tablet_id, ctx.metadata()->id()));
-                }
-            }
+            has_actual_page_source = true;
             auto& state = target_states[target];
             auto source_key = std::make_pair(file_name, page.offset());
 
@@ -2108,8 +2092,8 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
                 // single_source state
                 auto seen_it = state.seen_sources.find(source_key);
                 if (seen_it != state.seen_sources.end()) {
-                    // Dedup hit: same file_name + offset. File metadata was
-                    // already validated through actual_page_source_files.
+                    // Dedup hit: same file_name + offset. File metadata was already validated by
+                    // preflight_merge_sources before any merge state was materialized.
                     if (seen_it->second != page.size()) {
                         return Status::Corruption("Delvec page size mismatch for same source");
                     }
@@ -2207,7 +2191,7 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     TEST_SYNC_POINT_CALLBACK("merge_delvecs:writer_invocations", &writer_invocations);
     RETURN_IF_ERROR(write_compacted_delvec_pages(tablet_manager, output_pages, new_metadata->id(), txn_id,
                                                  &new_delvec_file, &offsets));
-    if (actual_page_source_files.empty()) {
+    if (!has_actual_page_source) {
         g_tablet_merge_synthesized_only_delvec_total << 1;
     }
 
