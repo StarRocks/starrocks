@@ -494,7 +494,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     return new_version_metadata_or_error(txn_log_st.status());
                 }
             } // close: if (txn_log_st.status().is_not_found())
-        }     // close: else (admin force-skip vs normal path)
+        } // close: else (admin force-skip vs normal path)
 
         if (!txn_log_st.ok() && !ignore_txn_log) {
             LOG(WARNING) << "Fail to get txn log: " << txn_log_st.status() << " tablet_info=" << tablet_info
@@ -866,6 +866,16 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
             }
             collect_vi_files(rowset);
+        }
+    }
+    // SDCG overlay-chain merge: the merged `.spcols` was written before the log was put and is referenced by
+    // nothing else until publish. An aborted merge must delete it here; no metadata ever lists it, so no
+    // later vacuum can find it.
+    if (txn_log.has_op_dcg_compaction()) {
+        for (const auto& entry : txn_log.op_dcg_compaction().entries()) {
+            if (entry.has_merged_file() && !entry.merged_file().name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, entry.merged_file().name()));
+            }
         }
     }
     if (txn_log.has_op_replication()) {

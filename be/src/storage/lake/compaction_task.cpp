@@ -102,6 +102,16 @@ StatusOr<bool> CompactionTask::try_execute_dcg_overlay_merge() {
     if (_tablet_schema->keys_type() != KeysType::PRIMARY_KEYS) {
         return false;
     }
+    // A parallel-compaction subtask must not take this path. TabletParallelCompactionManager merges the
+    // subtasks' logs by reading each one's op_compaction and silently skips a subtask log that has none
+    // (tablet_parallel_compaction_manager.cpp: `if (!ctx->txn_log->has_op_compaction()) continue;`), so an
+    // op_dcg_compaction produced here would be dropped from the merged log: the compaction reports success,
+    // the chain is never folded, and the merged `.spcols` written below is referenced by nothing. The
+    // UNSHARE flavour is stricter and fails the whole compaction instead. Either way the subtask has to run
+    // the ordinary compaction, which converges the chain through the overlay reader.
+    if (_context != nullptr && _context->subtask_id >= 0) {
+        return false;
+    }
     const auto& metadata = _tablet.metadata();
     if (metadata->dcg_meta().dcgs().empty()) {
         return false;
