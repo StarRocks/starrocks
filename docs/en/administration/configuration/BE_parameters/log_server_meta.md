@@ -372,7 +372,7 @@ This topic introduces the following types of BE configurations:
 
 ### jemalloc_conf
 
-- Default: `percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
+- Default: `percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false`
 - Type: string
 - Unit: -
 - Is mutable: Yes (only some options)
