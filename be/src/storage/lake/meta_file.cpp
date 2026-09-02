@@ -1409,8 +1409,7 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
                         "encrypted delvec input is unsupported; delvec must be plaintext: {}", raw.delvec_file.name()));
             }
             RETURN_IF_ERROR(validate_signed_page_range(raw.page));
-            uint64_t page_end = 0;
-            DCHECK(!__builtin_add_overflow(raw.page.offset(), raw.page.size(), &page_end));
+            const uint64_t page_end = raw.page.offset() + raw.page.size();
             if (raw.delvec_file.has_size()) {
                 RETURN_IF_ERROR(validate_source_size(raw.delvec_file.size(), page_end, false));
             } else {
