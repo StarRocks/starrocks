@@ -77,6 +77,7 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  */
 public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
 
+<<<<<<< HEAD
     // One-shot callback invoked after syncAndCheckPCTPartitions and before plan building. Used by
     // Hybrid fallback to freeze TVR so the pinned state is visible to the plan builder and differ.
     private Runnable afterSyncHook;
@@ -84,6 +85,10 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
     // True when this is a subsequent pinned batch whose job no longer owns the pinning state: a newer
     // job overwrote the owner, or took over and released it when done. Run unpinned, the batch would
     // write past the baseline that job left behind.
+=======
+    // True when this is a subsequent pinned batch whose pinning owner has been overwritten by
+    // a newer job — we must SKIP to avoid touching the newer job's state.
+>>>>>>> 2ca493387a8... [BugFix] Freeze the base-table snapshot before aligning MV partitions (#61580)
     //
     // Gate on PINNED_REFRESH_JOB_ID to confirm the current run is actually a pinned batch.
     // Without this, an unrelated partial refresh running while a prior pinning job's owner
@@ -112,8 +117,24 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         super(db, mv, mvContext, mvEntity, refreshMode, MVPCTRefreshProcessor.class);
     }
 
-    public void setAfterSyncHook(Runnable afterSyncHook) {
-        this.afterSyncHook = afterSyncHook;
+    private Runnable beforePartitionAlignHook;
+
+    public void setBeforePartitionAlignHook(Runnable beforePartitionAlignHook) {
+        this.beforePartitionAlignHook = beforePartitionAlignHook;
+    }
+
+    /**
+     * Clear-before-run, so the sync loop's retries fire the hook exactly once and every retry reuses
+     * the same frozen snapshot.
+     */
+    @Override
+    public void freezeSnapshotBeforePartitionAlign() {
+        final Runnable hook = this.beforePartitionAlignHook;
+        this.beforePartitionAlignHook = null;
+        if (hook != null) {
+            hook.run();
+        }
+        setupPinnedRangesIfNeeded();
     }
 
     @Override
@@ -137,17 +158,8 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             return ProcessExecPlan.skipped(ProcessExecPlan.SkipReason.STALE_PINNED_BATCH);
         }
 
-        // sync and check partitions of base tables
+        // Also freezes TVR and hydrates the pinned ranges, before it aligns partitions against them.
         mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
-
-        // Clear-before-run: if the hook throws, the field is still nulled out on retry.
-        final Runnable hook = this.afterSyncHook;
-        this.afterSyncHook = null;
-        if (hook != null) {
-            hook.run();
-        }
-
-        setupPinnedRangesIfNeeded();
 
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {

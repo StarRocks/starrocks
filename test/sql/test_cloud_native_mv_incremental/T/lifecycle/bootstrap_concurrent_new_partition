@@ -1,0 +1,48 @@
+-- name: test_ivm_bootstrap_concurrent_new_partition @cloud
+-- Regression for bootstrap row loss on a partitioned MV. The first (PCT bootstrap) refresh derives
+-- its scope and partition predicate from the partition topology while the scan reads the frozen
+-- checkpoint, so a topology older than the checkpoint leaves a partition created by a concurrent load
+-- inside the checkpoint but outside the scope: its rows are never materialized, yet the baseline
+-- advances past them and no later refresh brings them back. Concurrent inserts race the bootstrap, so
+-- detection is probabilistic; the completeness assertion (deficit == 0) is deterministic once fixed.
+-- The seeded partition count keeps the bootstrap's partition-alignment phase long enough for a
+-- concurrent load to land inside it. Totals are deliberately not asserted -- only the deficit is, so
+-- the golden does not churn when the concurrent insert count changes.
+CREATE TABLE base_np_${uuid0} (dt DATE NOT NULL, k INT, v BIGINT) DUPLICATE KEY(dt, k)
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ("replication_num" = "1");
+INSERT INTO base_np_${uuid0} SELECT date_add('2030-01-01', INTERVAL generate_series DAY), generate_series, 1
+FROM TABLE(generate_series(1, 200));
+CREATE MATERIALIZED VIEW mv_np_${uuid0}
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL", "partition_refresh_number" = "-1")
+AS SELECT dt, k, v FROM base_np_${uuid0};
+
+CONCURRENCY {
+
+-- inserter(3):
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-01', 1001, 1);
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-02', 1002, 1);
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-03', 1003, 1);
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-04', 1004, 1);
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-05', 1005, 1);
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-06', 1006, 1);
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-07', 1007, 1);
+INSERT INTO base_np_${uuid0} VALUES ('2031-01-08', 1008, 1);
+
+-- refresher:
+REFRESH MATERIALIZED VIEW mv_np_${uuid0} WITH SYNC MODE;
+
+} END CONCURRENCY
+
+REFRESH MATERIALIZED VIEW mv_np_${uuid0} WITH SYNC MODE;
+REFRESH MATERIALIZED VIEW mv_np_${uuid0} WITH SYNC MODE;
+-- Guard against a trivially passing run: the concurrent inserts must have landed.
+SELECT CASE WHEN (SELECT COUNT(*) FROM base_np_${uuid0}) > 200 THEN 'inserts_landed' ELSE 'no_inserts' END AS sanity;
+-- Completeness: every base row must be in the MV. A positive deficit means the bootstrap skipped a
+-- partition that the frozen checkpoint contained.
+SELECT (SELECT COUNT(*) FROM base_np_${uuid0}) - (SELECT COUNT(*) FROM mv_np_${uuid0}) AS deficit;
+DROP MATERIALIZED VIEW mv_np_${uuid0};
+DROP TABLE base_np_${uuid0};
