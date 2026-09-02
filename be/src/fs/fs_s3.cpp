@@ -65,7 +65,8 @@ static Status to_status(Aws::S3::S3Errors error, const std::string& msg) {
 
 bool operator==(const Aws::Client::ClientConfiguration& lhs, const Aws::Client::ClientConfiguration& rhs) {
     return lhs.endpointOverride == rhs.endpointOverride && lhs.region == rhs.region &&
-           lhs.maxConnections == rhs.maxConnections && lhs.scheme == rhs.scheme;
+           lhs.maxConnections == rhs.maxConnections && lhs.scheme == rhs.scheme &&
+           lhs.requestTimeoutMs == rhs.requestTimeoutMs;
 }
 
 bool S3ClientFactory::ClientCacheKey::operator==(const ClientCacheKey& rhs) const {
@@ -124,6 +125,21 @@ static const std::vector<Aws::String> retryable_errors = {
         "ExceedAccountQPSLimit", "ExceedAccountRateLimit", "ExceedBucketQPSLimit", "ExceedBucketRateLimit"};
 // clang-format: on
 
+static void set_request_timeout(Aws::Client::ClientConfiguration& client_config,
+                                S3ClientFactory::OperationType operation_type) {
+    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
+        config::object_storage_rename_file_request_timeout_ms >= 0) {
+        client_config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    } else if (config::object_storage_request_timeout_ms >= 0) {
+        // Zero explicitly disables the timeout.
+        client_config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    } else if (config::enable_poco_client_for_aws_sdk) {
+        // The SDK default and an explicit zero are both represented as zero. Preserve an unset
+        // StarRocks value with a negative sentinel so Poco can restore its own finite default.
+        client_config.requestTimeoutMs = -1;
+    }
+}
+
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration,
                                                          S3ClientFactory::OperationType operation_type) {
     const AWSCloudConfiguration aws_cloud_configuration = CloudConfigurationFactory::create_aws(t_cloud_configuration);
@@ -149,13 +165,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
 
-    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
-        config::object_storage_rename_file_request_timeout_ms >= 0) {
-        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
-    } else if (config::object_storage_request_timeout_ms >= 0) {
-        // 0 is meaningful for object_storage_request_timeout_ms
-        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
-    }
+    set_request_timeout(config, operation_type);
 
     auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
     auto aws_config = std::make_shared<AWSCloudConfiguration>(aws_cloud_configuration);
@@ -344,13 +354,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
     }
 
-    if (operation_type == S3ClientFactory::OperationType::RENAME_FILE &&
-        config::object_storage_rename_file_request_timeout_ms >= 0) {
-        config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
-    } else if (config::object_storage_request_timeout_ms >= 0) {
-        // 0 is meaningful for object_storage_request_timeout_ms
-        config.requestTimeoutMs = config::object_storage_request_timeout_ms;
-    }
+    set_request_timeout(config, operation_type);
 
     return S3ClientFactory::instance().new_client(config, opts);
 } // namespace starrocks
