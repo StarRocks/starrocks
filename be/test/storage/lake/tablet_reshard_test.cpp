@@ -474,8 +474,8 @@ protected:
         const bool identical = shape == MetadataOnlyMergeShape::kIdentical;
         const std::string segment_a = "metadata_only_a.dat";
         const std::string segment_b = identical ? segment_a : "metadata_only_b.dat";
-        const uint64_t segment_a_size =
-                write_two_column_segment(source_a_id, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
+        const uint64_t segment_a_size = write_two_column_segment(
+                source_a_id, segment_a, /*num_rows=*/1, [](int key) { return key * 10; }, 10);
         uint64_t segment_b_size = segment_a_size;
         if (!identical) {
             segment_b_size = write_two_column_segment(
@@ -2211,8 +2211,8 @@ protected:
         prepare_tablet_dirs(target_tablet_id);
         const uint64_t old_size = write_two_column_segment(child_a, old_segment, 1, [](int) { return 100; });
         const uint64_t tail_size = write_two_column_segment(child_a, tail_segment, 1, [](int) { return 200; });
-        const uint64_t sibling_size =
-                write_two_column_segment(child_b, sibling_segment, 1, [](int) { return 600; }, /*key_start=*/60);
+        const uint64_t sibling_size = write_two_column_segment(
+                child_b, sibling_segment, 1, [](int) { return 600; }, /*key_start=*/60);
         const uint32_t tombstone = std::numeric_limits<uint32_t>::max();
         const uint64_t tombstone_size =
                 write_versioned_pk_sstable(_tablet_manager->sst_location(child_a, tombstone_filename),
@@ -12723,8 +12723,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_wr
     auto merged = tablet_metadatas.at(merged_tablet);
     ASSERT_EQ(2, merged->next_rowset_id());
 
-    const uint64_t write_segment_size =
-            write_two_column_segment(merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
+    const uint64_t write_segment_size = write_two_column_segment(
+            merged_tablet, "near_boundary_write.dat", 1, [](int) { return 200; }, 1);
     TxnLogPB write_log;
     write_log.set_tablet_id(merged_tablet);
     write_log.set_txn_id(2);
@@ -13288,8 +13288,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejoins_independently_remapped
     duplicate_source->mutable_range()->set_lower_bound_included(true);
     duplicate_source->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
     duplicate_source->mutable_range()->set_upper_bound_included(false);
-    const uint64_t selected_size = write_two_column_segment(selected_id, "rejoin.dat", 1, [](int) { return 100; }, 10);
-    write_two_column_segment(duplicate_id, "rejoin.dat", 1, [](int) { return 100; }, 10);
+    const uint64_t selected_size = write_two_column_segment(
+            selected_id, "rejoin.dat", 1, [](int) { return 100; }, 10);
+    write_two_column_segment(
+            duplicate_id, "rejoin.dat", 1, [](int) { return 100; }, 10);
     auto* selected = add_allocator_rowset(selected_source.get(), 41, 1, "rejoin.dat", 0);
     selected->mutable_segment_metas(0)->set_size(selected_size);
     selected->mutable_segment_metas(0)->set_shared(true);
@@ -13432,8 +13434,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_overlapped_without_s
     const int64_t duplicate_id = next_id();
     prepare_tablet_dirs(selected_id);
     prepare_tablet_dirs(duplicate_id);
-    const uint64_t high_size =
-            write_two_column_segment(selected_id, "overlapped_same_high.dat", 2, [](int key) { return key * 10; }, 1);
+    const uint64_t high_size = write_two_column_segment(
+            selected_id, "overlapped_same_high.dat", 2, [](int key) { return key * 10; }, 1);
     const uint64_t low_size =
             write_two_column_segment(selected_id, "overlapped_same_low.dat", 2, [](int key) { return key * 10; });
 
@@ -13599,10 +13601,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_equal_recovery_key_e
     source->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
     source->set_enable_persistent_index(true);
     source->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
-    const uint64_t first_size =
-            write_two_column_segment(source_id, "recovery_equal_a.dat", 1, [](int) { return 100; }, 10);
-    const uint64_t second_size =
-            write_two_column_segment(source_id, "recovery_equal_b.dat", 1, [](int) { return 200; }, 20);
+    const uint64_t first_size = write_two_column_segment(
+            source_id, "recovery_equal_a.dat", 1, [](int) { return 100; }, 10);
+    const uint64_t second_size = write_two_column_segment(
+            source_id, "recovery_equal_b.dat", 1, [](int) { return 200; }, 20);
     auto* first = add_allocator_rowset(source.get(), 798, 1, "recovery_equal_a.dat", 0);
     first->mutable_segment_metas(0)->set_size(first_size);
     first->set_max_compact_input_rowset_id(797);
@@ -13660,10 +13662,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_strict_recovery_orde
         source->set_enable_persistent_index(true);
         source->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
     }
-    const uint64_t first_size =
-            write_two_column_segment(first_id, "recovery_strict_2.dat", 1, [](int) { return 100; }, 10);
-    const uint64_t second_size =
-            write_two_column_segment(second_id, "recovery_strict_20.dat", 1, [](int) { return 600; }, 60);
+    const uint64_t first_size = write_two_column_segment(
+            first_id, "recovery_strict_2.dat", 1, [](int) { return 100; }, 10);
+    const uint64_t second_size = write_two_column_segment(
+            second_id, "recovery_strict_20.dat", 1, [](int) { return 600; }, 60);
     auto* first_rowset = add_allocator_rowset(first.get(), 2, 1, "recovery_strict_2.dat", 0);
     first_rowset->mutable_segment_metas(0)->set_size(first_size);
     auto* second_rowset = add_allocator_rowset(second.get(), 20, 2, "recovery_strict_20.dat", 0);
