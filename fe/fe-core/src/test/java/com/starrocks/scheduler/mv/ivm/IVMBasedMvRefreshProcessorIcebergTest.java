@@ -1602,6 +1602,64 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     /**
+     * Only the first batch of a pinned job freezes; every later batch reaches its pin by hydrating the
+     * persisted temp map, because {@code MVRefreshRuntimeState.reset()} empties the runtime map at the
+     * start of each task run. That hydration has to land before the batch aligns partitions, or the
+     * batch enumerates from live while its scan reads the frozen snapshot.
+     *
+     * <p>Not covered by {@code testSubsequentBatchScanPlanUsesFrozenSnapshotNotLive}: the scan side is
+     * satisfied by any hydration before plan building, so only this asserts the ordering against alignment.
+     */
+    @Test
+    public void testSubsequentBatchEnumeratesWithHydratedPin() throws Exception {
+        List<TvrVersionRange> pinnedArgs = new ArrayList<>();
+        new MockUp<MVPartitionCellBuilder>() {
+            @Mock
+            public BaseToMVPartitionMapping getPartitionCells(Invocation invocation,
+                                                             com.starrocks.catalog.Table table,
+                                                             List<Column> partitionColumns,
+                                                             TvrVersionRange pinnedVersionRange)
+                    throws AnalysisException {
+                if (!table.isNativeTableOrMaterializedView()) {
+                    pinnedArgs.add(pinnedVersionRange);
+                }
+                return invocation.proceed();
+            }
+        };
+
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc = (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
+        TaskRun batch2 = pctProc.getNextTaskRun();
+        Assertions.assertNotNull(batch2, "precondition: the pinned job must have generated a second batch");
+
+        // Batch 1 freezes; drop what it recorded so the assertion below is about batch 2 alone.
+        pinnedArgs.clear();
+        initAndExecuteTaskRun(batch2);
+
+        MvTaskRunContext batch2Ctx = getMVTaskRunProcessor(batch2).getMvTaskRunContext();
+        Assertions.assertFalse(batch2Ctx.getRefreshRuntimeState().getPinnedTvrMap().isEmpty(),
+                "precondition: batch 2 must have recognised itself as a pinned batch");
+        Assertions.assertFalse(pinnedArgs.isEmpty(),
+                "precondition: batch 2 must have enumerated the iceberg base table's partitions");
+
+        Assertions.assertTrue(pinnedArgs.stream().anyMatch(Objects::nonNull),
+                String.format("batch 2 enumerated partitions before hydrating its pin: all %d call(s) got null, "
+                                + "so it aligned against live while its scan reads the frozen snapshot",
+                        pinnedArgs.size()));
+    }
+
+    /**
      * Verify the dual of merge isolation: pure PCT multi-batch runs (refresh_mode="pct", not
      * going through Hybrid) must NOT carry PINNED_REFRESH_JOB_ID on the next-batch task run.
      * Only pinned batches should be marked non-mergeable across jobs; pure PCT batches must
