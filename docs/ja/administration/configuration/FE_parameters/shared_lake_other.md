@@ -606,6 +606,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - 導入時期：-
 
+### `lake_scheduler_enable_colocate_group_sample`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：tablet スケジューラが大規模な colocate group のレプリカ分布を、group 内の全 tablet を走査する代わりに tablet のサンプリングによって推定するかどうか。colocate group に属する tablet をスケジュールする際、スケジューラは新しいレプリカの配置先を決めるために group 全体に対して Compute Node ごとのレプリカヒストグラムを構築します。数万個の tablet を含む group では、この全走査がスケジューリングコストの大部分を占めますが、正常な colocate group は均一に配置されており、その中のどの tablet も同じシグナルを返します。この項目が `true` に設定されている場合、スケジューラは `lake_scheduler_colocate_group_sample_threshold` を超える group について `lake_scheduler_colocate_group_sample_size` 個の tablet をランダムに抽出し、サンプリングした Compute Node ごとの件数を group 全体のサイズに線形にスケールアップします。正常で完全に配置された colocate group は全 tablet が同じ Compute Node 上にあるため、サンプルは真の分布を正確に再現します。リバランス中の group では誤差が生じますが、その誤差は有界であり、最悪でも準最適 (不正ではない) な配置になるだけで、バックグラウンドの tablet バランサーが後から調整します。サンプリングの対象は colocate group のみです。常に全 tablet を走査するには `false` に設定します。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- デフォルト：256
+- タイプ：Int
+- 単位：Count
+- 変更可能：Yes
+- 説明：colocate group がサンプリングの対象になるために超えている必要がある tablet 数。このサイズ以下の group は常に全走査されます。全走査のコストがもともと低く、サンプリングは誤差を増やすだけだからです。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- デフォルト：128
+- タイプ：Int
+- 単位：Count
+- 変更可能：Yes
+- 説明：colocate group が `lake_scheduler_colocate_group_sample_threshold` を超えたときにサンプリングされる tablet の数。サンプル数を増やすとリバランス中で偏った group に対する推定誤差は小さくなりますが、スケジューリング判断ごとのコストが増えるため、配置精度とスケジューリング遅延のトレードオフになります。この値は `lake_scheduler_colocate_group_sample_threshold` より十分に小さく保つべきです。そうでないと全走査に対する削減効果がほとんどなくなります。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- デフォルト：40
+- タイプ：Int
+- 単位：Percent
+- 変更可能：Yes
+- 説明：colocate group サンプリングの密度ガードで、許容される空サンプルの最大割合をパーセントで表します。抽出された tablet が候補 Compute Node 上にレプリカを持たない場合 (まだ配置されていない、またはその Compute Node 上にない場合)、その抽出は空サンプルとみなされます。空サンプルの割合がこのパーセンテージを超える場合、その group は配置が疎すぎてサンプルが真の分布を表せない (group が空の状態から一括で埋められている最中に起こります) ため、スケジューラはサンプルを破棄して全走査にフォールバックします。言い換えると、抽出された tablet の少なくとも (100 - この値)% が候補 Compute Node 上に配置されている場合にのみサンプルが信頼されます。したがって値が小さいほど保守的になり、サンプリングを行うためにより密な group が必要になります。安定して完全に配置された group は空サンプルがほぼ 0% になり、この値にかかわらず常に高速なサンプリング経路を通るため、この項目は一括充填中の過渡期のみを制御します。フォールバックを完全に無効にするには `100` に設定します。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
 ## データレイク
 
 ### `files_enable_insert_push_down_column_type`
