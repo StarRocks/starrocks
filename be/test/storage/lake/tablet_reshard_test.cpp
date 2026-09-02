@@ -9555,7 +9555,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_ignores_non_live_encrypted_del
         const auto merged = std::move(merged_or).value();
         ASSERT_EQ(1, merged->rowsets_size());
         const uint32_t target_rssid = merged->rowsets(0).id();
-        expect_exact_delvec_output(*merged, target_tablet, kNewVersion, {{target_rssid, live_bytes, std::nullopt}});
+        ASSERT_NO_FATAL_FAILURE(expect_exact_delvec_output(*merged, target_tablet, kNewVersion,
+                                                           {{target_rssid, live_bytes, std::nullopt}}));
         EXPECT_FALSE(merged->delvec_meta().delvecs().contains(99));
         const auto& output_file = merged->delvec_meta().version_to_file().at(kNewVersion);
         EXPECT_NE(stale_filename, output_file.name());
