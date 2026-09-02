@@ -372,9 +372,15 @@ CLEANUP {
 -- One bookmark, two references: holder "ttl_h" with an explicit TTL,
 -- holder "nottl_h" reusing the same bookmark with no TTL (-1).
 -- ==============================================================
--- name: test_table_bookmarks_ttl @cloud
+-- name: test_table_bookmarks_ttl @cloud @sequential
+-- Writes FE-global bookmark_reference_max_ttl_ms; skip the concurrent pass so it
+-- cannot overlap cases that assume the default ceiling (259200000, i.e. 3 days).
 
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+-- nottl_h's lease reads back as unlimited only while the cluster ceiling is disabled;
+-- the default ceiling would fold -1 into it. Restored in CLEANUP.
+[UC]ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "-1");
 
 CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
   PROPERTIES ('replication_num' = '1');
@@ -407,6 +413,7 @@ SELECT
 CLEANUP {
   SELECT bookmark_release("${db[0]}", "t", "${ttlbm}", "ttl_h");
   SELECT bookmark_release("${db[0]}", "t", "${ttlbm_dup}", "nottl_h");
+  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "259200000");
 } END CLEANUP
 
 -- ==============================================================
@@ -414,7 +421,7 @@ CLEANUP {
 -- ==============================================================
 -- name: test_table_bookmarks_lease_observability @cloud @sequential
 -- Writes FE-global bookmark_reference_max_ttl_ms; skip the concurrent pass so it
--- cannot overlap cases that assume the default ceiling (-1).
+-- cannot overlap cases that assume the default ceiling (259200000, i.e. 3 days).
 
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
@@ -449,7 +456,7 @@ SELECT oldest_reference.ttl_ms FROM information_schema.table_bookmark_summary
 
 CLEANUP {
   SELECT bookmark_release("${db[0]}", "t", "${ob}", "obs_h");
-  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "-1");
+  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "259200000");
 } END CLEANUP
 
 -- ==============================================================
@@ -458,7 +465,7 @@ CLEANUP {
 -- ==============================================================
 -- name: test_table_bookmarks_unlimited_capped @cloud @sequential
 -- Writes FE-global bookmark_reference_max_ttl_ms; skip the concurrent pass so it
--- cannot overlap cases that assume the default ceiling (-1).
+-- cannot overlap cases that assume the default ceiling (259200000, i.e. 3 days).
 
 [UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
 
@@ -487,7 +494,7 @@ SELECT oldest_reference.ttl_ms, newest_reference.ttl_ms
 
 CLEANUP {
   SELECT bookmark_release("${db[0]}", "t", "${capbm}", "cap_h");
-  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "-1");
+  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "259200000");
 } END CLEANUP
 
 -- ==============================================================
