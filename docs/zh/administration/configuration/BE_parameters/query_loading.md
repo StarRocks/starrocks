@@ -366,11 +366,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### object_storage_request_timeout_ms
 
-- 默认值：-1
+- 默认值：10000
 - 类型：Int
 - 单位：毫秒
-- 是否动态：否
-- 描述：对象存储 HTTP 连接的超时时间。`-1` 表示使用 SDK 中的默认时间。
+- 是否动态：是
+- 描述：一次对象存储请求停滞多久后客户端放弃并重试。它不是请求的总时限：对 curl 客户端是低速时间，即传输速率低于 1 字节/秒可以持续的时长；对 Poco 客户端是 socket 的收发超时。只要传输仍在推进就不会被中断，无论持续多久。`0` 表示关闭该检查；负值表示沿用客户端自身的默认值，在 Poco 路径上是 60 秒。
 - 引入版本：v3.0.9
 
 ### parquet_late_materialization_enable

@@ -22,7 +22,14 @@
 
 #include <fstream>
 
+<<<<<<< HEAD
 #include "common/config.h"
+=======
+#include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "base/uid_util.h"
+#include "common/config_object_storage_fwd.h"
+>>>>>>> aad2525 ([BugFix] Apply the request timeouts to the pooled Poco session (#78361))
 #include "common/s3_uri.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
@@ -601,21 +608,127 @@ TEST_F(S3FileSystemTest, test_new_S3_client_with_rename_operation) {
     tCloudConfiguration.__set_cloud_properties(test_properties);
     auto cloud_config = CloudConfigurationFactory::create_aws(tCloudConfiguration);
 
-    config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
+    Aws::Client::ClientConfiguration tcloud_client_config = S3ClientFactory::getClientConfig();
+    tcloud_client_config.scheme = Aws::Http::Scheme::HTTPS;
+    tcloud_client_config.maxConnections = config::object_storage_max_connection;
+    if (config::object_storage_connect_timeout_ms > 0) {
+        tcloud_client_config.connectTimeoutMs = config::object_storage_connect_timeout_ms;
+    }
+    tcloud_client_config.requestTimeoutMs = config::object_storage_rename_file_request_timeout_ms;
     (void)S3ClientFactory::instance().new_client(tCloudConfiguration, S3ClientFactory::OperationType::RENAME_FILE);
-    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(tcloud_client_config, &cloud_config));
 
     old_object_storage_rename_file_request_timeout_ms = config::object_storage_rename_file_request_timeout_ms;
     old_object_storage_request_timeout_ms = config::object_storage_request_timeout_ms;
     config::object_storage_rename_file_request_timeout_ms = -1;
     config::object_storage_request_timeout_ms = 1000;
     (void)S3ClientFactory::instance().new_client(tCloudConfiguration, S3ClientFactory::OperationType::RENAME_FILE);
-    config.requestTimeoutMs = config::object_storage_request_timeout_ms;
-    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config, &cloud_config));
+    tcloud_client_config.requestTimeoutMs = config::object_storage_request_timeout_ms;
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(tcloud_client_config, &cloud_config));
     config::object_storage_rename_file_request_timeout_ms = default_value;
     config::object_storage_request_timeout_ms = old_object_storage_request_timeout_ms;
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(S3FileSystemTest, test_request_timeout_is_part_of_client_cache_key) {
+    close_s3_clients();
+    SCOPED_UPDATE(int64_t, config::object_storage_client_cache_size, 8);
+
+    Aws::Client::ClientConfiguration ordinary = S3ClientFactory::getClientConfig();
+    ordinary.endpointOverride = "s3-request-timeout-cache-key-test";
+    ordinary.region = "us-east-1";
+    ordinary.requestTimeoutMs = 10000;
+    auto rename = ordinary;
+    rename.requestTimeoutMs = 30000;
+
+    auto ordinary_client = S3ClientFactory::instance().new_client(ordinary, FSOptions());
+    auto rename_client = S3ClientFactory::instance().new_client(rename, FSOptions());
+
+    ASSERT_NE(ordinary_client, rename_client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(ordinary));
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(rename));
+    close_s3_clients();
+}
+
+TEST_F(S3FileSystemTest, test_unset_request_timeout_reaches_poco_client) {
+    close_s3_clients();
+    SCOPED_UPDATE(int64_t, config::object_storage_request_timeout_ms, -1);
+    SCOPED_UPDATE(bool, config::enable_poco_client_for_aws_sdk, true);
+
+    std::map<std::string, std::string> test_properties;
+    test_properties[AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR] = "true";
+    TCloudConfiguration t_cloud_configuration;
+    t_cloud_configuration.__set_cloud_type(TCloudType::AWS);
+    t_cloud_configuration.__set_cloud_properties(test_properties);
+    auto cloud_config = CloudConfigurationFactory::create_aws(t_cloud_configuration);
+
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(t_cloud_configuration));
+
+    Aws::Client::ClientConfiguration expected = S3ClientFactory::getClientConfig();
+    expected.scheme = Aws::Http::Scheme::HTTPS;
+    expected.maxConnections = config::object_storage_max_connection;
+    expected.requestTimeoutMs = -1;
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(expected, &cloud_config));
+    close_s3_clients();
+}
+
+TEST_F(S3FileSystemTest, test_s3_client_factory_close_idempotent_and_reusable) {
+    close_s3_clients();
+
+    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    config.endpointOverride = "s3-client-factory-close-test";
+    config.region = "us-east-1";
+    config.maxConnections = 1;
+
+    auto client = S3ClientFactory::instance().new_client(config, FSOptions());
+    ASSERT_NE(nullptr, client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+
+    close_s3_clients();
+    close_s3_clients();
+    ASSERT_FALSE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+
+    auto recreated_client = S3ClientFactory::instance().new_client(config, FSOptions());
+    ASSERT_NE(nullptr, recreated_client);
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(config));
+}
+
+TEST_F(S3FileSystemTest, test_s3_client_factory_cache_size_runtime_mutable) {
+    close_s3_clients();
+    int64_t old_cache_size = config::object_storage_client_cache_size;
+    // Lower the cache capacity at runtime so it holds at most 2 clients.
+    config::object_storage_client_cache_size = 2;
+
+    auto make_config = [](const std::string& endpoint) {
+        Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+        config.endpointOverride = endpoint;
+        config.region = "us-east-1";
+        return config;
+    };
+
+    auto c1 = make_config("s3-cache-size-ep-1");
+    auto c2 = make_config("s3-cache-size-ep-2");
+    auto c3 = make_config("s3-cache-size-ep-3");
+
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(c1, FSOptions()));
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(c2, FSOptions()));
+    ASSERT_NE(nullptr, S3ClientFactory::instance().new_client(c3, FSOptions()));
+
+    int present = 0;
+    present += S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c1) ? 1 : 0;
+    present += S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c2) ? 1 : 0;
+    present += S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c3) ? 1 : 0;
+    // Capacity was lowered to 2 at runtime, so only 2 of the 3 distinct clients remain cached.
+    ASSERT_EQ(2, present);
+    // The most recently created client is always retained after eviction.
+    ASSERT_TRUE(S3ClientFactory::instance().find_client_cache_keys_by_config_TEST(c3));
+
+    config::object_storage_client_cache_size = old_cache_size;
+    close_s3_clients();
+}
+
+>>>>>>> aad2525 ([BugFix] Apply the request timeouts to the pooled Poco session (#78361))
 // Helper function to get object content type via HeadObject
 static std::string get_object_content_type(const std::string& uri) {
     S3URI s3_uri;
