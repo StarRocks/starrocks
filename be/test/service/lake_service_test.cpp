@@ -300,6 +300,44 @@ protected:
         return request;
     }
 
+    void expect_invalid_split_count(bool is_reshard_txn, int split_count) {
+        std::atomic<int> submit_count = 0;
+        SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1",
+                                              [&submit_count](void*) { submit_count.fetch_add(1); });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        brpc::Controller cntl;
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        if (is_reshard_txn) {
+            auto* txn_info = request.add_txn_infos();
+            txn_info->set_txn_id(next_id());
+            txn_info->set_txn_type(TXN_TABLET_RESHARD);
+        } else {
+            request.add_txn_ids(next_id());
+            request.add_tablet_ids(_tablet_id);
+        }
+        auto* splitting = request.add_resharding_tablet_infos()->mutable_splitting_tablet_info();
+        splitting->set_old_tablet_id(_tablet_id);
+        for (int i = 0; i < split_count; ++i) {
+            splitting->add_new_tablet_ids(next_id());
+        }
+
+        _lake_service.publish_version(&cntl, &request, &response, nullptr);
+
+        EXPECT_TRUE(cntl.Failed());
+        EXPECT_EQ(
+                fmt::format("splitting tablet {} requires at least 2 new tablet ids, got {}", _tablet_id, split_count),
+                cntl.ErrorText());
+        EXPECT_EQ(0, submit_count.load());
+    }
+
     void build_schemas_and_metadata(TabletSchemaPB* schema_pb1, TabletSchemaPB* schema_pb2, TabletSchemaPB* schema_pb3,
                                     starrocks::TabletMetadataPB* metadata1, starrocks::TabletMetadataPB* metadata2) {
         // schema 1
@@ -373,6 +411,22 @@ protected:
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     LakeServiceImpl _lake_service;
 };
+
+TEST_F(LakeServiceTest, test_publish_version_rejects_normal_split_count_zero) {
+    expect_invalid_split_count(false, 0);
+}
+
+TEST_F(LakeServiceTest, test_publish_version_rejects_reshard_split_count_zero) {
+    expect_invalid_split_count(true, 0);
+}
+
+TEST_F(LakeServiceTest, test_publish_version_rejects_reshard_split_count_one) {
+    expect_invalid_split_count(true, 1);
+}
+
+TEST_F(LakeServiceTest, test_publish_version_rejects_normal_split_count_one) {
+    expect_invalid_split_count(false, 1);
+}
 
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     brpc::Controller cntl;

@@ -693,7 +693,12 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Level", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Code", TypeFactory.createVarcharType(20)))
-                .addColumn(new Column("Message", TypeFactory.createVarcharType(20)))
+                // MysqlCodec.writeField derives the ColumnDefinition41 column length from the
+                // declared type, so a short VARCHAR would advertise far less room than the values
+                // actually sent: a filtered-rows warning carries a load tracking URL and an
+                // analysis error carries the full message. Declared like the other message columns
+                // in this file (see visitAdminRepairTableStatement).
+                .addColumn(new Column("Message", StringType.STRING))
                 .build();
     }
 

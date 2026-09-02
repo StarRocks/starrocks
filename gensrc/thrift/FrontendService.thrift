@@ -436,8 +436,9 @@ struct TMaterializedViewStatus {
     35: optional string refresh_policy
     36: optional string resource_group
     37: optional string query_rewrite_status_reason
-    38: optional string last_freshness_confirmed_at
-    39: optional string base_table_refresh_version_times
+    // Ids 38/39 must stay as branch-4.1 shipped them in 4.1.4: rolling upgrade runs new BEs against old FEs.
+    38: optional string base_table_refresh_version_times
+    39: optional string last_freshness_confirmed_at
 }
 
 struct TListPipesParams {

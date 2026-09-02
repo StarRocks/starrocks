@@ -44,6 +44,7 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/parallel_task_runner.h"
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "storage/primary_index.h"
@@ -1505,8 +1506,11 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     ThreadPool::ExecutionMode::CONCURRENT);
         }
 
+        // Declared before the runner so it outlives the join in ~ParallelTaskRunner: the tasks lock
+        // it, and reverse declaration order would otherwise destroy it first.
+        // Guards the shared dcg_* result maps only; the status is the runner's business now.
         std::mutex result_mutex;
-        Status shared_status;
+        ParallelTaskRunner runner(token.get());
 
         for (const auto& each : rss_upt_id_to_rowid_pairs) {
             uint32_t rssid = each.first;
@@ -1522,7 +1526,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                          sdcg_enabled, flexible_mode, &distinct_column_sets, source_num_rows, &dcg_column_ids,
                          &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &dcg_column_file_kinds,
                          &dcg_column_sparse_row_counts, &dcg_column_presences, &dcg_column_presence_lists,
-                         &result_mutex, &shared_status]() {
+                         &result_mutex]() -> Status {
                 // SDCG density decision (per (column_batch, rssid)): K = distinct source_rowids for this
                 // rssid; sparse iff K is small both absolutely (< sdcg_sparse_max_rows) and relative to M
                 // (K/M < sdcg_dense_threshold). M==0 (unknown) or no rows => dense fallback.
@@ -1787,11 +1791,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             *upt_pairs_ptr, partial_schema, *sparse_schema, selective_unique_update_column_ids,
                             distinct_column_sets, source_num_rows, &packed_rows, &min_source_rowid, &max_source_rowid,
                             &column_presences);
-                    if (!packed_or.ok()) {
-                        std::lock_guard<std::mutex> l(result_mutex);
-                        shared_status.update(packed_or.status());
-                        return;
-                    }
+                    RETURN_IF_ERROR(packed_or.status());
                     auto packed_chunk_ptr = std::move(packed_or.value());
                     const size_t packed_chunk_size = packed_chunk_ptr->memory_usage();
                     _tracker->consume(packed_chunk_size);
@@ -1800,11 +1800,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     padding_char_columns(*sparse_schema, sparse_tschema, packed_chunk_ptr.get());
 
                     auto writer_or = _prepare_sparse_delta_column_group_writer(params, sparse_tschema);
-                    if (!writer_or.ok()) {
-                        std::lock_guard<std::mutex> l(result_mutex);
-                        shared_status.update(writer_or.status());
-                        return;
-                    }
+                    RETURN_IF_ERROR(writer_or.status());
                     auto packed_writer = std::move(writer_or.value());
                     uint64_t segment_file_size = 0;
                     uint64_t index_size = 0;
@@ -1815,49 +1811,47 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     }
 
                     std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(st);
-                    if (shared_status.ok()) {
-                        // The packed file's DCG entry carries only the UPDATE columns that actually cover >=1
-                        // row (column_presences is exactly that set); a column covering no row is dropped from
-                        // both the uid list and the per-column presence list, so the reader never resolves it
-                        // to this file.
-                        std::vector<ColumnUID> covered_uids;
-                        ColumnPresenceListPB presence_list_pb;
-                        for (const auto& cp : column_presences) {
-                            covered_uids.push_back(cp.column_uid);
-                            auto* entry = presence_list_pb.add_entries();
-                            entry->set_column_uid(static_cast<uint32_t>(cp.column_uid));
-                            entry->set_min_source_rowid(cp.min_source_rowid);
-                            entry->set_max_source_rowid(cp.max_source_rowid);
-                            entry->set_count(cp.count);
-                            entry->set_roaring(cp.roaring);
-                        }
-                        dcg_column_ids[rssid].push_back(std::move(covered_uids));
-                        const std::string spcols_name = file_name(packed_writer->segment_path());
-                        dcg_column_file_with_encryption_metas[rssid].emplace_back(spcols_name,
-                                                                                  packed_writer->encryption_meta());
-                        dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
-                        dcg_column_file_kinds[rssid].push_back(SPARSE_PERCOL);
-                        dcg_column_sparse_row_counts[rssid].push_back(packed_rows);
-                        // File-level presence = the union [min,max]+K_union (cheap range skip). The per-column
-                        // presence list is the authoritative apply gate.
-                        SparsePresencePB presence;
-                        if (min_source_rowid != kSDCGPresenceUnknown) presence.set_min_source_rowid(min_source_rowid);
-                        if (max_source_rowid != kSDCGPresenceUnknown) presence.set_max_source_rowid(max_source_rowid);
-                        presence.set_row_count(packed_rows);
-                        dcg_column_presences[rssid].push_back(std::move(presence));
-                        dcg_column_presence_lists[rssid].push_back(std::move(presence_list_pb));
-                        std::string cols_str;
-                        for (size_t c = 0; c < column_presences.size(); ++c) {
-                            if (c > 0) cols_str += ",";
-                            cols_str += std::to_string(column_presences[c].column_uid);
-                        }
-                        LOG(INFO) << fmt::format(
-                                "SDCG packed sparse write: tablet_id: {} txn_id: {} rssid: {} file: {} K_union: {} "
-                                "M: {} min_rowid: {} max_rowid: {} cols: {}",
-                                params.tablet->id(), _txn_id, rssid, spcols_name, packed_rows, source_num_rows,
-                                min_source_rowid, max_source_rowid, cols_str);
+                    RETURN_IF_ERROR(st);
+                    // The packed file's DCG entry carries only the UPDATE columns that actually cover >=1
+                    // row (column_presences is exactly that set); a column covering no row is dropped from
+                    // both the uid list and the per-column presence list, so the reader never resolves it
+                    // to this file.
+                    std::vector<ColumnUID> covered_uids;
+                    ColumnPresenceListPB presence_list_pb;
+                    for (const auto& cp : column_presences) {
+                        covered_uids.push_back(cp.column_uid);
+                        auto* entry = presence_list_pb.add_entries();
+                        entry->set_column_uid(static_cast<uint32_t>(cp.column_uid));
+                        entry->set_min_source_rowid(cp.min_source_rowid);
+                        entry->set_max_source_rowid(cp.max_source_rowid);
+                        entry->set_count(cp.count);
+                        entry->set_roaring(cp.roaring);
                     }
+                    dcg_column_ids[rssid].push_back(std::move(covered_uids));
+                    const std::string spcols_name = file_name(packed_writer->segment_path());
+                    dcg_column_file_with_encryption_metas[rssid].emplace_back(spcols_name,
+                                                                              packed_writer->encryption_meta());
+                    dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
+                    dcg_column_file_kinds[rssid].push_back(SPARSE_PERCOL);
+                    dcg_column_sparse_row_counts[rssid].push_back(packed_rows);
+                    // File-level presence = the union [min,max]+K_union (cheap range skip). The per-column
+                    // presence list is the authoritative apply gate.
+                    SparsePresencePB presence;
+                    if (min_source_rowid != kSDCGPresenceUnknown) presence.set_min_source_rowid(min_source_rowid);
+                    if (max_source_rowid != kSDCGPresenceUnknown) presence.set_max_source_rowid(max_source_rowid);
+                    presence.set_row_count(packed_rows);
+                    dcg_column_presences[rssid].push_back(std::move(presence));
+                    dcg_column_presence_lists[rssid].push_back(std::move(presence_list_pb));
+                    std::string cols_str;
+                    for (size_t c = 0; c < column_presences.size(); ++c) {
+                        if (c > 0) cols_str += ",";
+                        cols_str += std::to_string(column_presences[c].column_uid);
+                    }
+                    LOG(INFO) << fmt::format(
+                            "SDCG packed sparse write: tablet_id: {} txn_id: {} rssid: {} file: {} K_union: {} "
+                            "M: {} min_rowid: {} max_rowid: {} cols: {}",
+                            params.tablet->id(), _txn_id, rssid, spcols_name, packed_rows, source_num_rows,
+                            min_source_rowid, max_source_rowid, cols_str);
                     TRACE_COUNTER_INCREMENT("pcu_packed_sparse_handle_cnt", 1);
                     return;
                 }
@@ -1872,11 +1866,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     auto sparse_chunk_or = _build_sparse_chunk_from_upt(*upt_pairs_ptr, partial_schema, *sparse_schema,
                                                                         source_num_rows, &sparse_rows,
                                                                         &min_source_rowid, &max_source_rowid);
-                    if (!sparse_chunk_or.ok()) {
-                        std::lock_guard<std::mutex> l(result_mutex);
-                        shared_status.update(sparse_chunk_or.status());
-                        return;
-                    }
+                    RETURN_IF_ERROR(sparse_chunk_or.status());
                     auto sparse_chunk_ptr = std::move(sparse_chunk_or.value());
                     const size_t sparse_chunk_size = sparse_chunk_ptr->memory_usage();
                     _tracker->consume(sparse_chunk_size);
@@ -1886,11 +1876,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     padding_char_columns(*sparse_schema, sparse_tschema, sparse_chunk_ptr.get());
 
                     auto writer_or = _prepare_sparse_delta_column_group_writer(params, sparse_tschema);
-                    if (!writer_or.ok()) {
-                        std::lock_guard<std::mutex> l(result_mutex);
-                        shared_status.update(writer_or.status());
-                        return;
-                    }
+                    RETURN_IF_ERROR(writer_or.status());
                     auto sparse_writer = std::move(writer_or.value());
                     uint64_t segment_file_size = 0;
                     uint64_t index_size = 0;
@@ -1901,39 +1887,37 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                     }
 
                     std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(st);
-                    if (shared_status.ok()) {
-                        // DCG entry carries the UPDATE column uids only (NOT the reserved source_rowid uid).
-                        dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
-                        const std::string spcols_name = file_name(sparse_writer->segment_path());
-                        dcg_column_file_with_encryption_metas[rssid].emplace_back(spcols_name,
-                                                                                  sparse_writer->encryption_meta());
-                        dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
-                        dcg_column_file_kinds[rssid].push_back(SPARSE_PERCOL);
-                        dcg_column_sparse_row_counts[rssid].push_back(sparse_rows);
-                        // Record the presence summary [min, max]+K so readers can skip out-of-range layers.
-                        SparsePresencePB presence;
-                        if (min_source_rowid != kSDCGPresenceUnknown) presence.set_min_source_rowid(min_source_rowid);
-                        if (max_source_rowid != kSDCGPresenceUnknown) presence.set_max_source_rowid(max_source_rowid);
-                        presence.set_row_count(sparse_rows);
-                        dcg_column_presences[rssid].push_back(std::move(presence));
-                        // Homogeneous (single equivalence class) file: no per-column override; the reader
-                        // gates on the file-level presence. Push an empty list to keep the array 1:1 with
-                        // the file list (needed when this rssid also has a packed file).
-                        dcg_column_presence_lists[rssid].push_back(ColumnPresenceListPB());
-                        // Observability: the PoC logged nothing on a sparse write, which made cluster
-                        // verification hard. One INFO line per `.spcols` with filename, K, M and the column set.
-                        std::string cols_str;
-                        for (size_t c = 0; c < selective_unique_update_column_ids.size(); ++c) {
-                            if (c > 0) cols_str += ",";
-                            cols_str += std::to_string(selective_unique_update_column_ids[c]);
-                        }
-                        LOG(INFO) << fmt::format(
-                                "SDCG sparse write: tablet_id: {} txn_id: {} rssid: {} file: {} K: {} M: {} "
-                                "min_rowid: {} max_rowid: {} cols: {}",
-                                params.tablet->id(), _txn_id, rssid, spcols_name, sparse_rows, source_num_rows,
-                                min_source_rowid, max_source_rowid, cols_str);
+                    RETURN_IF_ERROR(st);
+                    // DCG entry carries the UPDATE column uids only (NOT the reserved source_rowid uid).
+                    dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
+                    const std::string spcols_name = file_name(sparse_writer->segment_path());
+                    dcg_column_file_with_encryption_metas[rssid].emplace_back(spcols_name,
+                                                                              sparse_writer->encryption_meta());
+                    dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
+                    dcg_column_file_kinds[rssid].push_back(SPARSE_PERCOL);
+                    dcg_column_sparse_row_counts[rssid].push_back(sparse_rows);
+                    // Record the presence summary [min, max]+K so readers can skip out-of-range layers.
+                    SparsePresencePB presence;
+                    if (min_source_rowid != kSDCGPresenceUnknown) presence.set_min_source_rowid(min_source_rowid);
+                    if (max_source_rowid != kSDCGPresenceUnknown) presence.set_max_source_rowid(max_source_rowid);
+                    presence.set_row_count(sparse_rows);
+                    dcg_column_presences[rssid].push_back(std::move(presence));
+                    // Homogeneous (single equivalence class) file: no per-column override; the reader
+                    // gates on the file-level presence. Push an empty list to keep the array 1:1 with
+                    // the file list (needed when this rssid also has a packed file).
+                    dcg_column_presence_lists[rssid].push_back(ColumnPresenceListPB());
+                    // Observability: the PoC logged nothing on a sparse write, which made cluster
+                    // verification hard. One INFO line per `.spcols` with filename, K, M and the column set.
+                    std::string cols_str;
+                    for (size_t c = 0; c < selective_unique_update_column_ids.size(); ++c) {
+                        if (c > 0) cols_str += ",";
+                        cols_str += std::to_string(selective_unique_update_column_ids[c]);
                     }
+                    LOG(INFO) << fmt::format(
+                            "SDCG sparse write: tablet_id: {} txn_id: {} rssid: {} file: {} K: {} M: {} "
+                            "min_rowid: {} max_rowid: {} cols: {}",
+                            params.tablet->id(), _txn_id, rssid, spcols_name, sparse_rows, source_num_rows,
+                            min_source_rowid, max_source_rowid, cols_str);
                     TRACE_COUNTER_INCREMENT("pcu_sparse_handle_cnt", 1);
                     return;
                 }
@@ -1942,13 +1926,8 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 // `.cols` file. The source is read in bounded row ranges rather than materialized whole,
                 // so every per-range step below works on the container's window.
                 // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
-                auto writer_or = _prepare_delta_column_group_writer(params, partial_tschema);
-                if (!writer_or.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(writer_or.status());
-                    return;
-                }
-                auto delta_column_group_writer = std::move(writer_or.value());
+                ASSIGN_OR_RETURN(auto delta_column_group_writer,
+                                 _prepare_delta_column_group_writer(params, partial_tschema));
                 auto st = _read_from_source_segment_and_update(
                         params, partial_schema, rssid, [&](StreamChunkContainer container) {
                             const size_t source_chunk_size = container.chunk_ptr->memory_usage();
@@ -1975,51 +1954,38 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*container.chunk_ptr));
                             return Status::OK();
                         });
-                if (!st.ok()) {
-                    std::lock_guard<std::mutex> l(result_mutex);
-                    shared_status.update(st);
-                    return;
-                }
+                RETURN_IF_ERROR(st);
 
                 uint64_t segment_file_size = 0;
                 uint64_t index_size = 0;
                 uint64_t footer_position = 0;
-                st = delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position);
+                RETURN_IF_ERROR(delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position));
 
                 // 3.6 collect results under lock
                 std::lock_guard<std::mutex> l(result_mutex);
-                shared_status.update(st);
-                if (shared_status.ok()) {
-                    dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
-                    dcg_column_file_with_encryption_metas[rssid].emplace_back(
-                            file_name(delta_column_group_writer->segment_path()),
-                            delta_column_group_writer->encryption_meta());
-                    dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
-                    dcg_column_file_kinds[rssid].push_back(DENSE_COLS);
-                    dcg_column_sparse_row_counts[rssid].push_back(0);
-                    // Dense entry: empty presence keeps the array 1:1 with the file list (unknown == no skip).
-                    dcg_column_presences[rssid].push_back(SparsePresencePB());
-                    // Dense entry: empty per-column list (reader gates on file-level presence == none).
-                    dcg_column_presence_lists[rssid].push_back(ColumnPresenceListPB());
-                }
+                RETURN_IF_ERROR(st);
+                dcg_column_ids[rssid].push_back(selective_unique_update_column_ids);
+                dcg_column_file_with_encryption_metas[rssid].emplace_back(
+                        file_name(delta_column_group_writer->segment_path()),
+                        delta_column_group_writer->encryption_meta());
+                dcg_column_file_sizes[rssid].push_back(static_cast<int64_t>(segment_file_size));
+                dcg_column_file_kinds[rssid].push_back(DENSE_COLS);
+                dcg_column_sparse_row_counts[rssid].push_back(0);
+                // Dense entry: empty presence keeps the array 1:1 with the file list (unknown == no skip).
+                dcg_column_presences[rssid].push_back(SparsePresencePB());
+                // Dense entry: empty per-column list (reader gates on file-level presence == none).
+                dcg_column_presence_lists[rssid].push_back(ColumnPresenceListPB());
                 TRACE_COUNTER_INCREMENT("pcu_handle_cnt", 1);
+                return Status::OK();
             };
 
-            if (token) {
-                auto submit_st = token->submit_func(func);
-                std::lock_guard<std::mutex> l(result_mutex);
-                shared_status.update(submit_st);
-            } else {
-                func();
-                RETURN_IF_ERROR(shared_status);
-            }
+            runner.run(func);
         }
 
-        if (token) {
+        {
             TRACE_COUNTER_SCOPE_LATENCY_US("pcu_parallel_dcg_wait_us");
-            token->wait();
+            RETURN_IF_ERROR(runner.join());
         }
-        RETURN_IF_ERROR(shared_status);
     }
     // 4 generate delta columngroup
     for (const auto& each : rss_upt_id_to_rowid_pairs) {

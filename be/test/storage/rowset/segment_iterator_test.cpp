@@ -537,6 +537,81 @@ TEST_F(SegmentIteratorTest, TestForceGlobalDictEncodeWithTrailingUnusedColumn) {
     res_chunk->reset();
 }
 
+// The chunk source keeps delete-predicate columns out of the unused set; bypassing it must fail the scan
+// loudly rather than evaluate the delete filter against a column that is not in the outgoing chunk.
+TEST_F(SegmentIteratorTest, TestDeletePredicateColumnPrunedFromOutputFails) {
+    using namespace starrocks::test;
+
+    std::string file_name = kSegmentDir + "/delete_predicate_on_pruned_output_column";
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+    TabletSchemaBuilder builder;
+    std::shared_ptr<TabletSchema> tablet_schema =
+            builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).create(3, false, TYPE_VARCHAR).build();
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 32;
+    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
+
+    const int32_t chunk_size = 64;
+    const size_t num_rows = 40;
+    const std::string kKeep = "keep";
+    const std::string kDeleted = "zdel";
+
+    auto c0_provider = [](int32_t i) { return i; };
+    auto c1_provider = [](int32_t i) { return i * 10; };
+    // Odd rows carry the value the delete predicate matches, so exactly half the rows must disappear.
+    auto c2_provider = [&](int32_t i) { return Slice(i % 2 == 0 ? kKeep : kDeleted); };
+
+    TabletDataBuilder data_builder(writer, tablet_schema, chunk_size, num_rows);
+    ASSERT_OK(data_builder.append(0, c0_provider));
+    ASSERT_OK(data_builder.append(1, c1_provider));
+    ASSERT_OK(data_builder.append(2, c2_provider));
+    ASSERT_OK(data_builder.finalize_footer());
+
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+    ASSERT_EQ(segment->num_rows(), num_rows);
+
+    VecSchemaBuilder schema_builder;
+    schema_builder.add(0, "c0", TYPE_INT).add(1, "c1", TYPE_INT).add(2, "c2", TYPE_VARCHAR);
+    auto vec_schema = schema_builder.build();
+
+    ObjectPool pool;
+    SegmentReadOptions seg_opts;
+    OlapReaderStatistics stats;
+    seg_opts.fs = _fs;
+    seg_opts.stats = &stats;
+    seg_opts.tablet_schema = tablet_schema;
+
+    // Every scanned column carries a predicate, so the schema reaches the iterator as is: with fewer
+    // predicate columns `new_segment_iterator()` reorders it and wraps a projection that hides the pruning.
+    std::unique_ptr<ColumnPredicate> pred_c0(new_column_ge_predicate(get_type_info(TYPE_INT), 0, "0"));
+    std::unique_ptr<ColumnPredicate> pred_c1(new_column_ge_predicate(get_type_info(TYPE_INT), 1, "0"));
+    std::unique_ptr<ColumnPredicate> pred_c2(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 2, kKeep.c_str()));
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{pred_c0.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c1.get()});
+    pred_root.add_child(PredicateColumnNode{pred_c2.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    // DELETE FROM t WHERE c2 = 'zdel'
+    auto* del_pred = pool.add(new ConjunctivePredicates());
+    del_pred->add(pool.add(new_column_eq_predicate(get_type_info(TYPE_VARCHAR), 2, kDeleted.c_str())));
+    seg_opts.delete_predicates.add(*del_pred);
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    // c2 is a predicate-only column, so filter_unused_columns would prune it from the output on its own.
+    std::unordered_set<uint32_t> unused_output_column_ids{2};
+    ASSERT_OK(chunk_iter->init_output_schema(unused_output_column_ids));
+    ASSERT_EQ(2, chunk_iter->output_schema().num_fields());
+
+    auto res_chunk = ChunkFactory::new_chunk(chunk_iter->output_schema(), chunk_size);
+    auto st = chunk_iter->get_next(res_chunk.get());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error()) << st.to_string();
+    ASSERT_NE(std::string::npos, st.to_string().find("missing from the output schema")) << st.to_string();
+}
+
 // Verify predicate late materialization keeps non-predicate columns correct.
 TEST_F(SegmentIteratorTest, TestPredicateLateMaterializationMaterializesRestColumns) {
     using namespace starrocks::test;

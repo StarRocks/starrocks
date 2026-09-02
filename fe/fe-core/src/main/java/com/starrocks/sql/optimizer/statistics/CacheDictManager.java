@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
@@ -26,6 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -104,6 +106,26 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     public static void clearReplayDicts() {
         REPLAY_DICTS.clear();
     }
+    // Thrash guard: per-column history of recent dictionary invalidation timestamps (millis). Used to
+    // detect "rolling low-cardinality" columns whose dictionary keeps being invalidated and re-collected;
+    // such columns are forbidden (added to NO_DICT_STRING_COLUMNS) so they stop wasting MetaScans.
+    // Bounded so idle / rarely-thrashing columns cannot accumulate forever. maximumSize caps the entry
+    // count and Caffeine LRU-evicts the least-recently-touched columns; a column that keeps thrashing is
+    // touched on every invalidation and is therefore never evicted while it still matters.
+    // Fixed-window invalidation counter per column -- far lighter than a Deque of boxed timestamps: one
+    // small object (window start + count), O(1) per invalidation, no boxing, no queue scanning. A fixed
+    // window (reset every window_sec) is enough to detect a persistently thrashing column, which
+    // invalidates far more often than the threshold; the only imprecision is that a burst straddling a
+    // window boundary may take one extra window to trip -- irrelevant for sustained thrash.
+    private static final class InvalidationWindow {
+        long windowStartMs;
+        int count;
+    }
+
+    private static final Cache<ColumnIdentifier, InvalidationWindow> DICT_INVALIDATION_HISTORY =
+            Caffeine.newBuilder()
+                    .maximumSize(Config.statistic_dict_columns)
+                    .build();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
 
@@ -255,6 +277,15 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             return false;
         }
 
+        // Column-level persisted forbid (survives FE restart / leader failover): the dictionary thrash
+        // guard records such columns as a table property, checked here so they stop being collected.
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(columnIdentifier.getDbId(), tableId);
+        if (table instanceof OlapTable olapTable && olapTable.isNoDictColumn(columnName.getId())) {
+            LOG.debug("table {} column {} is a persisted no-dict column", tableId, columnName);
+            return false;
+        }
+
         CompletableFuture<Optional<ColumnDict>> result = dictStatistics.get(columnIdentifier);
         if (result.isDone()) {
             Optional<ColumnDict> realResult;
@@ -314,6 +345,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         LOG.info("remove dict for table:{} column:{}", tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
 
+        // A real present->invalidated transition just happened (the containsKey guard above skips the
+        // no-op case where the dictionary is already absent). Record it and, if this column keeps
+        // thrashing, forbid it so it stops being collected.
+        recordInvalidationAndMaybeForbid(table, columnName, columnIdentifier);
+
         // Remove all subfields' dicts if the column is a JSON type
         try {
             List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnName.getId());
@@ -337,6 +373,79 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         }
     }
 
+    // Track one dictionary invalidation for a column and, when a column is invalidated too frequently,
+    // forbid collecting its dictionary. Frequent invalidation signals a column unsuited to the global
+    // dictionary: a rolling low-cardinality column whose values keep turning over, and/or the
+    // high-concurrency version race it triggers (each re-collection bumps the collected version, so
+    // in-flight loads that carry the older version invalidate it again on commit). Both funnel through
+    // removeGlobalDict and are counted here; either way the remedy is the same -- stop collecting it.
+    // Forbidding only disables an optimization, so it is always correctness-safe. The in-memory entry
+    // takes effect immediately; the forbid is also persisted (asynchronously) as a table property so it
+    // survives FE restart / leader failover.
+    private void recordInvalidationAndMaybeForbid(OlapTable table, ColumnId columnName,
+                                                  ColumnIdentifier columnIdentifier) {
+        if (recordInvalidationAndCheckThreshold(columnIdentifier)) {
+            NO_DICT_STRING_COLUMNS.add(columnIdentifier);
+            DICT_INVALIDATION_HISTORY.invalidate(columnIdentifier);
+            LOG.info("forbid global dict for table:{} column:{} due to dictionary thrashing " +
+                            "(>= {} invalidations within {}s); it will stop being collected",
+                    columnIdentifier.getTableId(), columnName,
+                    Config.dict_thrash_guard_threshold, Config.dict_thrash_guard_window_sec);
+            persistNoDictColumnAsync(table, columnName);
+        }
+    }
+
+    // Record one invalidation of this column and return true once it has been invalidated at least
+    // dict_thrash_guard_threshold times within dict_thrash_guard_window_sec (the thrash condition).
+    private boolean recordInvalidationAndCheckThreshold(ColumnIdentifier columnIdentifier) {
+        if (!Config.enable_dict_thrash_guard || Config.dict_thrash_guard_threshold <= 0) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        long windowMs = Math.max(1, Config.dict_thrash_guard_window_sec) * 1000L;
+        InvalidationWindow w = DICT_INVALIDATION_HISTORY.get(columnIdentifier, k -> new InvalidationWindow());
+        int count;
+        synchronized (w) {
+            if (w.count == 0 || now - w.windowStartMs > windowMs) {
+                w.windowStartMs = now;
+                w.count = 1;
+            } else {
+                w.count++;
+            }
+            count = w.count;
+        }
+        return count >= Config.dict_thrash_guard_threshold;
+    }
+
+    // Persist the column-level forbid so it survives restart. MUST run off the caller's thread:
+    // removeGlobalDict is invoked from the transaction-apply path, which may hold db/txn locks, while
+    // the persist takes a table WRITE lock and writes an edit log -- doing that inline risks a deadlock
+    // or lock-order violation. Running it on a separate thread (with no other locks held) is safe, and
+    // leader-only because only the leader writes edit logs (followers get it via replay).
+    private void persistNoDictColumnAsync(OlapTable table, ColumnId columnName) {
+        if (table == null || !GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
+        long dbId = MetaUtils.lookupDbIdByTable(table);
+        if (dbId == -1) {
+            return;
+        }
+        long tableId = table.getId();
+        String col = columnName.getId();
+        try {
+            ThreadPoolManager.getStatsCacheThread().execute(() -> {
+                try {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .disableGlobalDictForColumn(dbId, tableId, col);
+                } catch (Exception e) {
+                    LOG.warn("failed to persist no-dict column table:{} column:{}", tableId, col, e);
+                }
+            });
+        } catch (Exception e) {
+            LOG.warn("failed to submit no-dict persist task table:{} column:{}", tableId, col, e);
+        }
+    }
+
     @Override
     public void disableGlobalDict(long tableId) {
         LOG.debug("disable dict optimize for table {}", tableId);
@@ -346,6 +455,33 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public void enableGlobalDict(long tableId) {
         FORBIDDEN_DICT_TABLE_IDS.remove(tableId);
+        // Give this table a clean slate: drop any of its columns that the thrash guard (or the
+        // cardinality check) previously forbade, so collection can be retried after an explicit enable.
+        NO_DICT_STRING_COLUMNS.removeIf(columnIdentifier -> columnIdentifier.getTableId() == tableId);
+        DICT_INVALIDATION_HISTORY.asMap().keySet().removeIf(columnIdentifier -> columnIdentifier.getTableId() == tableId);
+    }
+
+    // Clear the in-memory forbid state for specific columns. Called from ALTER TABLE ... ENABLE DICTIONARY
+    // (and its edit-log replay) so an explicit ENABLE takes effect on every FE immediately, without waiting
+    // for a restart. hasGlobalDict() checks NO_DICT_STRING_COLUMNS before the persisted noDictColumns, so
+    // clearing the persisted property alone is not enough. Only the named columns are cleared, so a
+    // cardinality-based forbid on some other column is untouched; if one of these columns was actually
+    // high-cardinality it is simply re-derived on the next collection (correctness-safe).
+    @Override
+    public void clearForbiddenColumns(long tableId, Set<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
+        NO_DICT_STRING_COLUMNS.removeIf(ci -> ci.getTableId() == tableId
+                && columnNames.contains(ci.getColumnName().getId()));
+        DICT_INVALIDATION_HISTORY.asMap().keySet().removeIf(ci -> ci.getTableId() == tableId
+                && columnNames.contains(ci.getColumnName().getId()));
+    }
+
+    @Override
+    public boolean isColumnForbidden(long tableId, String columnName) {
+        return NO_DICT_STRING_COLUMNS.stream()
+                .anyMatch(ci -> ci.getTableId() == tableId && ci.getColumnName().getId().equals(columnName));
     }
 
     @Override

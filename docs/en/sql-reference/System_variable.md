@@ -368,6 +368,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
 
+### cbo_push_down_count_aggregate
+
+* **Description**: Controls whether `count(*)`/`count(col)` aggregates participate in `PushDownAggregateRule`'s push-down-below-join optimization, alongside the already-pushable `sum`/`max`/`min`/`hll_union`/`bitmap_union`/`percentile_union` functions. When enabled (default), the optimizer may push a `count` down to a narrower, join-key-only group-by on one side of an `INNER`/`CROSS` join (only the left/child-0 side, since count over a join is a cross product and cannot be recovered by summing partials from both sides) before rebuilding the top-level aggregate via the existing `COUNT -> SUM` rollup; whether the push-down is actually applied to a given query still depends on the `cbo_push_down_aggregate_mode` cost heuristic, exactly as for the other pushable functions. `count(col)` is never pushed when `col` comes from a `CASE WHEN`/`IF()` branch, because a never-firing branch must roll up to `0` for `count` (not `NULL`, as for `sum`). Disable this to fall back to the prior behavior of leaving `count` above the join.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: Boolean
+
 ### cbo_use_correlated_predicate_estimate
 
 * **Description**: Session flag that controls whether the optimizer applies a correlation-aware heuristic when estimating selectivity for conjunctive equality predicates across multiple columns. When enabled (default), the estimator applies exponential-decay weights to the selectivities of additional columns beyond the primary multi-column stats or most selective predicate, reducing the multiplicative impact of further predicates (weights: 0.5, 0.25, 0.125 for up to three additional columns). When disabled, no decay is applied (decay factor = 1) and the estimator multiplies full selectivities for those columns (stronger independence assumption). This flag is checked by StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity to choose the decay factor in both the multi-column-statistics path and the fallback path, thereby affecting cardinality estimates used by the CBO.
@@ -448,6 +455,33 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`.
 * **Default**: 1024
 * **Introduced in**: v2.5
+
+### count_distinct_implementation
+
+* **Description**: Controls the function implementation when `COUNT(DISTINCT expr)` contains only one parameter. Valid values (case-insensitive):
+  * `default`: Reserves the `COUNT(DISTINCT expr)` implementation. The optimizer chooses the suitable aggregation plan based on query form, statistics, and costs.
+  * `multi_count_distinct`: Changes the `COUNT(DISTINCT expr)` implementation to `multi_distinct_count` for precise counting. For counting on low- and medium-cardinality columns, this implementation can reduce a shuffle and deduplication phase, and thereby increase the speed. However, it will reserve the distinct values in HashSet, causing excessive memory consumption and even OOM when deduplicating high-cardinality columns. Do not set this value globally without first verifying it using representative loads.
+  * `ndv`:Changes the `COUNT(DISTINCT expr)` implementation to `ndv(expr)`. This function uses HyperLogLog, which returns approximate results with lower memory overhead.
+* **Default**: `default`
+* **Introduced in**: v3.3.6、v3.4.0
+
+:::note[Usage Notes for `multi_distinct_count`]
+`multi_distinct_count()` returns precise results.
+
+For most queries, `COUNT(DISTINCT expr)` is recommended. Set `count_distinct_implementation` to `default` to allow the optimizer to choose a suitable aggregation plan.
+
+When deduplicating low- and medium-cardinality columns, you can test and use `multi_distinct_count()`. This function uses two phases of aggregation, and can reduce a shuffle and deduplication phase for better performance. However, its HashSet status and final merging can cause excessive memory consumption and even OOM when deduplicating high-cardinality columns.
+
+If you want to test this implementation on one `COUNT(DISTINCT expr)` instead of changing the whole session, you can set `count_distinct_implementation` in a query hint:
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+Setting this value with hints applies only to `COUNT(DISTINCT)` with a single parameter. It will not affect multi-column deduplication expressions such as `COUNT(DISTINCT expr1, expr2)`.
+:::
 
 ### custom_query_id (session)
 
@@ -1527,6 +1561,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
+
+### paimon_reader_mode
+
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Default**: AUTO
+* **Data type**: String
+* **Introduced in**: v4.2
 
 ### parallel_exchange_instance_num
 

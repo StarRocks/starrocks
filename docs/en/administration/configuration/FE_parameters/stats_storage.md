@@ -88,6 +88,34 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
 - Introduced in: v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the global-dictionary thrash guard. A "rolling" low-cardinality column—whose instantaneous distinct value count stays below the dictionary threshold but whose value set keeps rotating (for example, a daily-partitioned column that is reloaded with fresh values)—never trips the cardinality blacklist, yet every load introduces values missing from the current global dictionary and invalidates it. Each invalidation forces a full-table dictionary re-collection, which wastes IO and, in shared-data clusters, contends heavily on the segment metadata cache lock. When this guard is enabled, StarRocks counts how often each column's dictionary is invalidated within `dict_thrash_guard_window_sec`; once a column reaches `dict_thrash_guard_threshold` invalidations, StarRocks forbids collecting that column's global dictionary. The forbid takes effect immediately and is persisted as the table's `no_dict_columns` property, so it survives FE restart and leader failover. To re-enable dictionary collection for a column, run `ALTER TABLE ... ENABLE DICTIONARY (column)`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The length of the time window (in seconds) over which the global-dictionary thrash guard counts how often a column's dictionary is invalidated. This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of dictionary invalidations within `dict_thrash_guard_window_sec` at which the global-dictionary thrash guard forbids collecting a column's global dictionary. Set to `0` to disable the count check while keeping the guard enabled (no column is automatically forbidden). This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - Default: true
@@ -569,8 +597,17 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to use the Range-based Distribution semantic as the default table distribution when a table or materialized view is created without a `DISTRIBUTED BY` clause. This configuration only takes effect in shared-data mode; it has no effect in shared-nothing mode. Set it to `false` to disable this default, so such a table uses the previous default distribution behavior instead (a PRIMARY KEY table defaults to hash, a DUPLICATE KEY table to random, and an AGGREGATE or UNIQUE KEY table requires an explicit `DISTRIBUTED BY` clause).
+- Description: Whether to use the Range-based Distribution semantic as the default table distribution when a table is created without a `DISTRIBUTED BY` clause. This configuration only takes effect in shared-data mode; it has no effect in shared-nothing mode. Set it to `false` to disable this default, so such a table uses the previous default distribution behavior instead (a PRIMARY KEY table defaults to hash, a DUPLICATE KEY table to random, and an AGGREGATE or UNIQUE KEY table requires an explicit `DISTRIBUTED BY` clause). A materialized view created without a `DISTRIBUTED BY` clause additionally requires `enable_mv_range_distribution`.
 - Introduced in: v4.1.0
+
+### `enable_mv_range_distribution`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the Range-based Distribution semantic as the default distribution of an asynchronous materialized view that is created without a `DISTRIBUTED BY` clause. Tables are not affected by this configuration. The default selects the Range-based Distribution semantic only when this configuration and `enable_range_distribution` are both `true`, in shared-data mode. Otherwise the materialized view uses the previous default distribution behavior (a materialized view that is maintained incrementally defaults to hash over its key columns, and any other materialized view to random), even where a table would be range-distributed.
+- Introduced in: v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 

@@ -44,6 +44,7 @@ import com.starrocks.sql.optimizer.rule.ivm.IvmRewriter;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
+import com.starrocks.sql.optimizer.rule.transformation.AiFunctionExtractor;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.CTEProduceAddProjectionRule;
@@ -104,6 +105,8 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.ExtractRangePredic
 import com.starrocks.sql.optimizer.rule.transformation.pruner.PrimaryKeyUpdateTableRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.RboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.UniquenessBasedTablePruneRule;
+import com.starrocks.sql.optimizer.rule.tree.AIFunctionLoweringRule;
+import com.starrocks.sql.optimizer.rule.tree.AIQuantifiedApplyLoweringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.AddIndexOnlyPredicateRule;
 import com.starrocks.sql.optimizer.rule.tree.ApplyMinMaxStatisticRule;
@@ -143,6 +146,7 @@ import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.PrepareCollectMetaTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
+import com.starrocks.sql.optimizer.validate.AIFunctionPlacementValidator;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import com.starrocks.sql.util.Util;
@@ -323,6 +327,7 @@ public class QueryOptimizer extends Optimizer {
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
+            AIFunctionPlacementValidator.validate(finalPlan);
             rootTaskContext.getPlanValidator().enableAllCheckers();
             // valid the final plan
             rootTaskContext.getPlanValidator().validatePlan(finalPlan, rootTaskContext);
@@ -544,6 +549,8 @@ public class QueryOptimizer extends Optimizer {
 
         scheduler.rewriteIterative(tree, rootTaskContext, new EliminateConstantCTERule());
         CTEUtils.collectCteOperators(tree, context);
+        scheduler.rewriteOnce(tree, rootTaskContext,
+                ForceCTEReuseRule.forCallsMatching(AiFunctionExtractor::isAICall));
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.INLINE_CTE_RULES);
@@ -558,6 +565,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_EXTRACT_CORRELATION_PREDICATE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_WINDOW_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new ExtractRangePredicateFromScalarApplyRule());
+        // Quantified Apply operands must be normalized before Apply is decorrelated into a join.
+        tree = new AIQuantifiedApplyLoweringRule().rewrite(tree, rootTaskContext);
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
@@ -581,6 +590,11 @@ public class QueryOptimizer extends Optimizer {
         }
         // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES
         scheduler.rewriteOnce(tree, rootTaskContext, new LargeInPredicateToJoinRule());
+
+        // AI execution boundaries are mandatory and must be materialized before predicate pushdown.
+        tree = new AIFunctionLoweringRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        AIFunctionPlacementValidator.validate(tree);
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node

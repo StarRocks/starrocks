@@ -895,6 +895,8 @@ public class CreateTableAnalyzer {
                         new RelationFields(columns.stream().map(col -> new Field(
                                         col.getName(), col.getType(), tableNameObject, null))
                                 .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();

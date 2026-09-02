@@ -926,8 +926,7 @@ void Segment::turn_off_batch_update_cache_size() {
                 // a path-only key would miss for bundled slices (non-zero bundle_file_offset) and
                 // their cache entries would never get the post-open memory cost, defeating
                 // metacache capacity control.
-                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
-                                                           reinterpret_cast<intptr_t>(this));
+                _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
             }
         }
     }
@@ -938,8 +937,7 @@ void Segment::update_cache_size() {
         // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
         if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
             auto mem_cost = mem_usage();
-            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost,
-                                                       reinterpret_cast<intptr_t>(this));
+            _tablet_manager->update_segment_cache_size(_segment_file_info.cache_key(), mem_cost, this);
         } else {
             // under batch mode, only increase the _dirty_cache_counter
             _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);

@@ -250,6 +250,21 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | RuntimeFilterEvalTime | Parquetリーダー内でデコード済みの行に対してJoin Runtime Filterを評価するのにかかった時間。 |
 | RuntimeFilterInputRows | ParquetリーダーのJoin Runtime Filter評価に入力された行数。 |
 | RuntimeFilterOutputRows | ParquetリーダーのJoin Runtime Filter評価を通過した行数。`RuntimeFilterInputRows` との差が大きいほど、Lazy列がマテリアライズされる前に多くの行がフィルタリングされたことを意味します。 |
+| PaimonFSAppIOCount | Paimonファイルシステムアダプターが受け取った有効な読み取り試行回数。順次読み取り、位置指定読み取り、非同期読み取りの合計です。 |
+| PaimonFSAppIOBytes | Paimonファイルシステムアダプター境界で正常に返された読み取りバイト数。 |
+| PaimonFSAppIOTime | Paimonファイルシステムアダプター境界での読み取りのエンドツーエンド時間。 |
+| PaimonFSIOCount | Data CacheおよびShared Buffered Input Streamより下層のファイルシステム読み取り回数。リモートオブジェクトストレージのRPC回数と一致するとは限りません。 |
+| PaimonFSIOBytes | Paimon Native Scanの下層ファイルシステム読み取りで正常に返されたバイト数。 |
+| PaimonFSIOTime | Paimon Native Scanの下層ファイルシステム読み取りに費やした時間。 |
+| PaimonFSSequentialReadCount | Paimonファイルシステムアダプターの順次読み取り試行回数。 |
+| PaimonFSSequentialReadBytes | 順次読み取りで正常に返されたバイト数。 |
+| PaimonFSSequentialReadTime | 順次読み取りに費やした時間。 |
+| PaimonFSPositionalReadCount | Paimonファイルシステムアダプターの位置指定読み取り試行回数。 |
+| PaimonFSPositionalReadBytes | 位置指定読み取りで正常に返されたバイト数。 |
+| PaimonFSPositionalReadTime | 位置指定読み取りに費やした時間。 |
+| PaimonFSAsyncReadCount | Paimonファイルシステムアダプターの非同期読み取り試行回数。 |
+| PaimonFSAsyncReadBytes | 非同期読み取りで正常に返されたバイト数。 |
+| PaimonFSAsyncReadTime | 非同期読み取りに費やした時間。 |
 
 ### エクスチェンジオペレーター
 

@@ -88,6 +88,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：低基数グローバル辞書キャッシュ（`CacheDictManager`）の最大合計サイズ（バイト単位）。このキャッシュはエントリ数ではなくキャッシュされた辞書の合計バイトサイズで上限が設定されるため、メモリ使用量が直接制限されます（各辞書は最大約 1 MB）。上限に達すると、価値の低い辞書が退避され、影響を受ける列は再収集されるまで非辞書クエリプランにフォールバックします。変更は 1 回の設定リフレッシュサイクル内でライブキャッシュに適用されます。現在追跡されているサイズは `low_cardinality_dict_cache_bytes` メトリクスとしてエクスポートされます。
 - 導入時期：v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：グローバル辞書スラッシングガード（thrash guard）を有効にするかどうかを指定します。「ローリング」低基数列——瞬間的な異なる値の数は辞書のしきい値を下回り続けるものの、値の集合が回転し続ける列（例：日次パーティションで毎日新しい値がロードされる列）——は基数ブラックリストに引っかかりませんが、ロードのたびに現在のグローバル辞書に存在しない値が導入され、辞書が無効化されます。無効化のたびにテーブル全体の辞書の再収集が発生し、IO を浪費し、存算分離クラスタでは segment メタデータキャッシュロックを激しく競合させます。このガードを有効にすると、StarRocks は各列の辞書が `dict_thrash_guard_window_sec` 以内に無効化される回数をカウントします。ある列が `dict_thrash_guard_threshold` 回の無効化に達すると、StarRocks はその列のグローバル辞書の収集を禁止します。この禁止は即座に有効になり、テーブルの `no_dict_columns` プロパティとして永続化されるため、FE の再起動や Leader のフェイルオーバー後も保持されます。列の辞書収集を再度有効にするには、`ALTER TABLE ... ENABLE DICTIONARY (column)` を実行します。
+- 導入時期：v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- デフォルト：60
+- タイプ：Int
+- 単位：Seconds
+- 変更可能：Yes
+- 説明：グローバル辞書スラッシングガードが列の辞書の無効化回数をカウントする時間ウィンドウの長さ（秒）です。`enable_dict_thrash_guard` が `true` の場合にのみ有効です。
+- 導入時期：v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- デフォルト：5
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：`dict_thrash_guard_window_sec` の時間ウィンドウ内で、グローバル辞書スラッシングガードが列のグローバル辞書の収集を禁止する無効化回数のしきい値です。`0` に設定すると、ガードを有効にしたまま回数チェックを無効にできます（どの列も自動的に禁止されません）。`enable_dict_thrash_guard` が `true` の場合にのみ有効です。
+- 導入時期：v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - デフォルト：true
@@ -569,8 +597,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：テーブルまたはマテリアライズドビューを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトのテーブル分散方法として使用するかどうか。この設定は共有データモードでのみ有効であり、共有なしモードでは効果がありません。`false` に設定すると、このデフォルト動作が無効になり、そのようなテーブルは代わりに従来のデフォルト分散動作を使用します（PRIMARY KEY テーブルはデフォルトで hash、DUPLICATE KEY テーブルは random となり、AGGREGATE KEY または UNIQUE KEY テーブルは明示的な `DISTRIBUTED BY` 句が必要です）。
+- 説明：テーブルを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトのテーブル分散方法として使用するかどうか。この設定は共有データモードでのみ有効であり、共有なしモードでは効果がありません。`false` に設定すると、このデフォルト動作が無効になり、そのようなテーブルは代わりに従来のデフォルト分散動作を使用します（PRIMARY KEY テーブルはデフォルトで hash、DUPLICATE KEY テーブルは random となり、AGGREGATE KEY または UNIQUE KEY テーブルは明示的な `DISTRIBUTED BY` 句が必要です）。`DISTRIBUTED BY` 句なしで作成されたマテリアライズドビューにはさらに `enable_mv_range_distribution` が必要です。
 - 導入時期：v4.1.0
+
+### `enable_mv_range_distribution`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：非同期マテリアライズドビューを `DISTRIBUTED BY` 句なしで作成する場合に、Range-based Distribution セマンティクスをデフォルトの分散方法として使用するかどうか。この設定はテーブルには影響しません。この設定と `enable_range_distribution` の両方が `true` で、かつ共有データモードである場合にのみ、デフォルトで Range-based Distribution セマンティクスが選択されます。それ以外の場合、テーブルが range 分散になる環境であっても、マテリアライズドビューは従来のデフォルト分散動作（増分維持されるマテリアライズドビューはキー列による hash、それ以外は random）を使用します。
+- 導入時期：v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 

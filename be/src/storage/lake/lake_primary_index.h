@@ -26,10 +26,7 @@
 
 namespace starrocks {
 
-class ParallelPublishContext;
-// Declared here rather than included: persistent_index_parallel_publish_context.h is not
-// self-contained (it needs MutableColumnPtr and a complete Buffer<Slice>), so pulling it in from a
-// header breaks the include order. The .cpp has it.
+class ParallelUpsertContext;
 struct ParallelPublishSlot;
 
 namespace lake {
@@ -37,6 +34,7 @@ namespace lake {
 class Tablet;
 class MetaFileBuilder;
 class TabletManager;
+class LakePersistentIndex;
 class LakePersistentIndexParallelCompactMgr;
 class SegmentPKIterator;
 
@@ -85,23 +83,15 @@ public:
     Status commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t generation_version = 0);
 
     // Force any in-memory memtables of the cloud-native persistent index to
-    // be flushed into sstables on shared storage. A no-op for LOCAL /
-    // in-memory index types. Used by the reshard flush path where the
-    // default commit()'s heuristic flush is not sufficient.
+    // be flushed into sstables on shared storage. Used by the reshard flush
+    // path where the default commit()'s heuristic flush is not sufficient.
     Status sync_flush_persistent_index(int64_t wait_timeout_us);
 
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
-    double get_local_pk_index_write_amp_score();
-
-    void set_local_pk_index_write_amp_score(double score);
-
     // This function is used for handling delete operation in cloud native PK table.
-    // It is different from another pk index implementation (such as in-memory index or local persistent index),
-    // because it need `rowset_id` to setup the rebuild point.
-    //
-    // |metadata| Used to decide the index type.
+    // Unlike the base PrimaryIndex::erase, it needs `del_rssid` to set up the rebuild point.
     //
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
@@ -159,9 +149,9 @@ public:
     //
     // The slot belongs to the caller: it also carries the encoded column, whose bytes the index
     // keeps referencing after this returns when the upsert runs asynchronously. Both call sites hand
-    // over a freshly extended slot, so the append-only scratch inside it always starts empty.
+    // over a fresh slot, so the append-only scratch inside it always starts empty.
     Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
-                        ParallelPublishContext* context);
+                        ParallelUpsertContext* context);
 
     Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
                            DeletesMap* new_deletes);
@@ -177,6 +167,11 @@ public:
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
+
+    // The cloud-native index this class delegates to, or nullptr when the index is not loaded.
+    // Shared-data primary-key tablets have no other implementation, so the downcast is
+    // unconditional -- see the definition for why that holds.
+    LakePersistentIndex* _lake_index() const;
 
 private:
     // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking

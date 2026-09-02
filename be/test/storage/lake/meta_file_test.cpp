@@ -18,21 +18,24 @@
 
 #include <ctime>
 #include <set>
+#include <unordered_map>
 
 #include "base/hash/crc32c.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_metrics.h"
@@ -71,20 +74,84 @@ public:
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
 
 protected:
-    void ensure_kek_in_key_cache() {
-        if (KeyCache::instance().get_key("0000000000000000") != nullptr) {
-            return;
+    void write_file(const std::string& path, const std::string& content) {
+        WritableFileOptions options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto writer, fs::new_writable_file(options, path));
+        ASSERT_OK(writer->append(Slice(content)));
+        ASSERT_OK(writer->close());
+    }
+
+    DelvecFileInfo add_test_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
+                                   const std::string& filename, const std::string& content) {
+        FileMetaPB file_meta;
+        file_meta.set_name(filename);
+        file_meta.set_size(content.size());
+        (*metadata->mutable_delvec_meta()->mutable_version_to_file())[version] = file_meta;
+
+        DelvecPagePB page;
+        page.set_version(version);
+        page.set_offset(0);
+        page.set_size(content.size());
+        (*metadata->mutable_delvec_meta()->mutable_delvecs())[segment_id] = page;
+        write_file(_tablet_manager->delvec_location(tablet_id, filename), content);
+        return DelvecFileInfo{tablet_id, std::move(file_meta)};
+    }
+
+    std::shared_ptr<TabletMetadataPB> make_shared_delvec_source(int64_t tablet_id, int segment_count) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(segment_count + 1);
+        metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+        metadata->mutable_schema()->set_id(1001);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(10 * segment_count);
+        rowset->set_data_size(100 * segment_count);
+        rowset->mutable_uid()->set_hi(0x1234);
+        rowset->mutable_uid()->set_lo(0x5678);
+        for (int i = 0; i < segment_count; ++i) {
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(fmt::format("atomic_shared_{}.dat", i));
+            segment->set_size(100);
+            segment->set_shared(true);
         }
-        EncryptionKeyPB pb;
-        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
-        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
-        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
-        pb.set_plain_key("0000000000000000");
-        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
-        auto kek = root_encryption_key->generate_key().value();
-        kek->set_id(2);
-        KeyCache::instance().add_key(root_encryption_key);
-        KeyCache::instance().add_key(kek);
+        return metadata;
+    }
+
+    Status publish_delvec_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet, int64_t txn_id,
+                                std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
+        for (const auto& source : sources) {
+            RETURN_IF_ERROR(_tablet_manager->put_tablet_metadata(source));
+        }
+        ReshardingTabletInfoPB resharding;
+        auto& merging = *resharding.mutable_merging_tablet_info();
+        for (const auto& source : sources) {
+            merging.add_old_tablet_ids(source->id());
+        }
+        merging.set_new_tablet_id(merged_tablet);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+        return lake::publish_resharding_tablet(_tablet_manager.get(), resharding, /*base_version=*/1,
+                                               /*new_version=*/2, txn_info, false, *published_metadatas, tablet_ranges);
+    }
+
+    StatusOr<std::set<std::string>> delvec_inventory() {
+        std::set<std::string> files;
+        RETURN_IF_ERROR(FileSystem::Default()->iterate_dir(
+                _location_provider->segment_root_location(1), [&](std::string_view filename) {
+                    constexpr std::string_view kSuffix = ".delvec";
+                    if (filename.size() >= kSuffix.size() &&
+                        filename.substr(filename.size() - kSuffix.size()) == kSuffix) {
+                        files.emplace(filename);
+                    }
+                    return true;
+                }));
+        return files;
     }
 
     constexpr static const char* const kTestDir = "./lake_meta_test";
@@ -171,42 +238,197 @@ TEST_F(MetaFileTest, test_merge_delvec_files_empty) {
     EXPECT_TRUE(offsets.empty());
 }
 
-TEST_F(MetaFileTest, test_merge_delvec_files_encrypted) {
-    ensure_kek_in_key_cache();
+TEST_F(MetaFileTest, test_get_delvec_ignores_encryption_metadata) {
+    const int64_t tablet_id = next_id();
+    const int64_t version = 11;
+    const uint32_t segment_id = 7;
+    const std::string file_name = "plain-delvec-with-stale-encryption-meta.delvec";
 
-    const int64_t tablet_id = 2001;
-    const int64_t new_tablet_id = 2002;
-    const int64_t txn_id = 5;
+    DelVector expected;
+    const uint32_t deleted_rowids[] = {3, 9};
+    expected.init(version, deleted_rowids, std::size(deleted_rowids));
+    const std::string content = expected.save();
+    write_file(_tablet_manager->delvec_location(tablet_id, file_name), content);
 
-    ASSIGN_OR_ABORT(auto pair, KeyCache::instance().create_plain_random_encryption_meta_pair());
-    const std::string content = "encrypted-delvec";
-    const std::string file_name = "delvec-encrypted";
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(version);
+    auto& file = (*metadata.mutable_delvec_meta()->mutable_version_to_file())[version];
+    file.set_name(file_name);
+    file.set_size(content.size());
+    file.set_encryption_meta(std::string(1, static_cast<char>(0xff)));
+    auto& page = (*metadata.mutable_delvec_meta()->mutable_delvecs())[segment_id];
+    page.set_version(version);
+    page.set_offset(0);
+    page.set_size(content.size());
 
-    const std::string file_path = _tablet_manager->delvec_location(tablet_id, file_name);
-    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    wopts.encryption_info = pair.info;
-    ASSIGN_OR_ABORT(auto writer, fs::new_writable_file(wopts, file_path));
-    ASSERT_OK(writer->append(Slice(content)));
-    ASSERT_OK(writer->close());
+    DelVector actual;
+    LakeIOOptions io_options;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), metadata, segment_id, false, io_options, &actual));
+    EXPECT_EQ(expected.save(), actual.save());
+}
 
-    DelvecFileInfo file_info;
-    file_info.tablet_id = tablet_id;
-    file_info.delvec_file.set_name(file_name);
-    file_info.delvec_file.set_size(content.size());
-    file_info.delvec_file.set_encryption_meta(pair.encryption_meta);
+TEST_F(MetaFileTest, test_merge_delvec_files_writes_plaintext) {
+    const int64_t source_tablet_id = next_id();
+    const int64_t target_tablet_id = next_id();
+    const int64_t txn_id = next_id();
+    const int64_t version = 11;
+    const uint32_t segment_id = 7;
+    const std::string file_name = "plain-merge-source-with-stale-encryption-meta.delvec";
 
-    std::vector<DelvecFileInfo> old_delvec_files{file_info};
-    FileMetaPB new_delvec_file;
+    DelVector expected;
+    const uint32_t deleted_rowids[] = {2, 8};
+    expected.init(version, deleted_rowids, std::size(deleted_rowids));
+    const std::string content = expected.save();
+    write_file(_tablet_manager->delvec_location(source_tablet_id, file_name), content);
+
+    DelvecFileInfo source;
+    source.tablet_id = source_tablet_id;
+    source.delvec_file.set_name(file_name);
+    source.delvec_file.set_size(content.size());
+    source.delvec_file.set_encryption_meta(std::string(1, static_cast<char>(0xff)));
+
+    FileMetaPB output;
     std::vector<uint64_t> offsets;
+    ASSERT_OK(merge_delvec_files(_tablet_manager.get(), {source}, target_tablet_id, txn_id, &output, &offsets));
+    ASSERT_EQ(std::vector<uint64_t>({0}), offsets);
+    EXPECT_TRUE(output.encryption_meta().empty());
 
-    EXPECT_OK(merge_delvec_files(_tablet_manager.get(), old_delvec_files, new_tablet_id, txn_id, &new_delvec_file,
-                                 &offsets));
-    ASSERT_EQ(1, offsets.size());
-    EXPECT_EQ(0, offsets[0]);
-    EXPECT_FALSE(new_delvec_file.name().empty());
-    EXPECT_EQ(static_cast<int64_t>(content.size()), new_delvec_file.size());
-    EXPECT_FALSE(new_delvec_file.encryption_meta().empty());
-    EXPECT_FALSE(new_delvec_file.shared());
+    TabletMetadataPB metadata;
+    metadata.set_id(target_tablet_id);
+    metadata.set_version(version);
+    (*metadata.mutable_delvec_meta()->mutable_version_to_file())[version] = output;
+    auto& page = (*metadata.mutable_delvec_meta()->mutable_delvecs())[segment_id];
+    page.set_version(version);
+    page.set_offset(0);
+    page.set_size(content.size());
+    DelVector actual;
+    LakeIOOptions io_options;
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), metadata, segment_id, false, io_options, &actual));
+    EXPECT_EQ(expected.save(), actual.save());
+}
+
+TEST_F(MetaFileTest, test_write_delvec_buffer_writes_plaintext) {
+    const int64_t tablet_id = next_id();
+    const int64_t txn_id = next_id();
+    DelVector expected;
+    const uint32_t deleted = 1;
+    expected.init(/*version=*/2, &deleted, 1);
+
+    FileMetaPB output;
+    ASSERT_OK(write_delvec_file_from_buffer(_tablet_manager.get(), tablet_id, txn_id, Slice(expected.save()), &output));
+    EXPECT_TRUE(output.encryption_meta().empty());
+}
+
+TEST_F(MetaFileTest, test_delvec_output_append_failure_is_atomic) {
+    constexpr std::string_view kInjectedError = "injected delvec append failure";
+    int injection_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("write_delvec_output:append", [&](void* arg) {
+        ++injection_count;
+        *static_cast<Status*>(arg) = Status::InternalError(kInjectedError);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DelVector direct_delvec;
+    const uint32_t direct_deleted = 2;
+    direct_delvec.init(/*version=*/2, &direct_deleted, 1);
+    FileMetaPB direct_output;
+    const std::string direct_output_before = direct_output.SerializeAsString();
+    auto direct_status = write_delvec_file_from_buffer(_tablet_manager.get(), next_id(), next_id(),
+                                                       Slice(direct_delvec.save()), &direct_output);
+    EXPECT_FALSE(direct_status.ok());
+    EXPECT_TRUE(direct_status.message().contains(kInjectedError)) << direct_status;
+    EXPECT_EQ(direct_output_before, direct_output.SerializeAsString());
+
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    auto meta_a = make_shared_delvec_source(child_a, /*segment_count=*/1);
+    auto meta_b = make_shared_delvec_source(child_b, /*segment_count=*/1);
+    DelVector delvec_a;
+    const uint32_t deleted_a = 4;
+    delvec_a.init(/*version=*/10, &deleted_a, 1);
+    add_test_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "append_atomic_a.delvec", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_b = 7;
+    delvec_b.init(/*version=*/11, &deleted_b, 1);
+    add_test_delvec(meta_b.get(), child_b, /*version=*/11, /*segment_id=*/1, "append_atomic_b.delvec", delvec_b.save());
+
+    std::unordered_map<int64_t, TabletMetadataPtr> published_metadatas;
+    auto publish_status = publish_delvec_merge({meta_a, meta_b}, merged_tablet, next_id(), &published_metadatas);
+    EXPECT_FALSE(publish_status.ok());
+    EXPECT_TRUE(publish_status.message().contains(kInjectedError)) << publish_status;
+    EXPECT_FALSE(published_metadatas.contains(merged_tablet));
+    EXPECT_TRUE(_tablet_manager->get_tablet_metadata(merged_tablet, /*version=*/2).status().is_not_found());
+    EXPECT_EQ(2, injection_count);
+}
+
+TEST_F(MetaFileTest, test_delvec_output_close_failure_is_atomic) {
+    constexpr std::string_view kInjectedError = "injected delvec close failure";
+    int injection_count = 0;
+    SyncPoint::GetInstance()->SetCallBack("write_delvec_output:close", [&](void* arg) {
+        ++injection_count;
+        *static_cast<Status*>(arg) = Status::InternalError(kInjectedError);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_points([&] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    DelVector direct_raw_delvec;
+    const uint32_t direct_raw_deleted = 1;
+    direct_raw_delvec.init(/*version=*/10, &direct_raw_deleted, 1);
+    auto direct_metadata = make_shared_delvec_source(next_id(), /*segment_count=*/1);
+    auto direct_source = add_test_delvec(direct_metadata.get(), direct_metadata->id(), /*version=*/10,
+                                         /*segment_id=*/1, "close_atomic_direct.delvec", direct_raw_delvec.save());
+    DelVector direct_union_delvec;
+    const uint32_t direct_union_deleted = 3;
+    direct_union_delvec.init(/*version=*/2, &direct_union_deleted, 1);
+    const std::string direct_union_content = direct_union_delvec.save();
+    FileMetaPB direct_output;
+    const std::string direct_output_before = direct_output.SerializeAsString();
+    std::vector<uint64_t> direct_offsets;
+    uint64_t direct_union_offset = 0;
+    auto direct_status =
+            merge_delvec_files(_tablet_manager.get(), {direct_source}, next_id(), next_id(), &direct_output,
+                               &direct_offsets, Slice(direct_union_content), &direct_union_offset);
+    EXPECT_FALSE(direct_status.ok());
+    EXPECT_TRUE(direct_status.message().contains(kInjectedError)) << direct_status;
+    EXPECT_EQ(direct_output_before, direct_output.SerializeAsString());
+
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    auto meta_a = make_shared_delvec_source(child_a, /*segment_count=*/2);
+    auto meta_b = make_shared_delvec_source(child_b, /*segment_count=*/2);
+    DelVector plain_single;
+    const uint32_t plain_deleted = 2;
+    plain_single.init(/*version=*/10, &plain_deleted, 1);
+    add_test_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "close_atomic_plain.delvec",
+                    plain_single.save());
+    DelVector merged_a;
+    const uint32_t merged_deleted_a = 5;
+    merged_a.init(/*version=*/11, &merged_deleted_a, 1);
+    add_test_delvec(meta_a.get(), child_a, /*version=*/11, /*segment_id=*/2, "close_atomic_merged_a.delvec",
+                    merged_a.save());
+    DelVector merged_b;
+    const uint32_t merged_deleted_b = 8;
+    merged_b.init(/*version=*/12, &merged_deleted_b, 1);
+    add_test_delvec(meta_b.get(), child_b, /*version=*/12, /*segment_id=*/2, "close_atomic_merged_b.delvec",
+                    merged_b.save());
+
+    std::unordered_map<int64_t, TabletMetadataPtr> published_metadatas;
+    auto publish_status = publish_delvec_merge({meta_a, meta_b}, merged_tablet, next_id(), &published_metadatas);
+    EXPECT_FALSE(publish_status.ok());
+    EXPECT_TRUE(publish_status.message().contains(kInjectedError)) << publish_status;
+    EXPECT_FALSE(published_metadatas.contains(merged_tablet));
+    EXPECT_TRUE(_tablet_manager->get_tablet_metadata(merged_tablet, /*version=*/2).status().is_not_found());
+    EXPECT_EQ(2, injection_count);
 }
 
 TEST_F(MetaFileTest, test_delvec_rw) {
@@ -1262,11 +1484,20 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     EXPECT_EQ(9, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(14, final_rowset.segment_metas(2).segment_idx());
     ASSERT_EQ(3, final_rowset.del_files_size());
+    // A del's op_offset names the last segment of the op_write that PRODUCED it, in the merged
+    // rowset's segment-id space -- not the merged rowset's last segment. batch 1's segments land at
+    // 3 and 9, so its two dels resolve to 9; batch 2's single segment lands at 14, so its del
+    // resolves to 14. Recording all three at 14 (what an unresolved -1 used to produce in
+    // set_final_rowset) would sort batch 1's deletes after batch 2's segment, which is not where
+    // apply put them.
     std::set<std::string> del_names;
+    std::map<std::string, uint32_t> expected_op_offset{{"d1.del", 9}, {"d2.del", 9}, {"d3.del", 14}};
     for (int i = 0; i < final_rowset.del_files_size(); ++i) {
-        del_names.insert(final_rowset.del_files(i).name());
+        const auto& name = final_rowset.del_files(i).name();
+        del_names.insert(name);
         EXPECT_EQ(final_rowset.id(), final_rowset.del_files(i).origin_rowset_id());
-        EXPECT_EQ(14, final_rowset.del_files(i).op_offset());
+        ASSERT_TRUE(expected_op_offset.count(name) > 0) << name;
+        EXPECT_EQ(expected_op_offset[name], final_rowset.del_files(i).op_offset()) << name;
     }
     EXPECT_TRUE(del_names.count("d1.del") > 0);
     EXPECT_TRUE(del_names.count("d2.del") > 0);
@@ -1315,7 +1546,10 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(1, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(2, final_rowset.segment_metas(2).segment_idx());
     ASSERT_EQ(2, final_rowset.del_files_size());
-    EXPECT_EQ(2, final_rowset.del_files(0).op_offset());
+    // Same contract as test_batch_apply_opwrite_merge_dels: each del follows its own op_write's last
+    // segment. batch 1's segments are positional 0 and 1, so d1 resolves to 1; batch 2's single
+    // segment is remapped to 2, so d2 resolves to 2.
+    EXPECT_EQ(1, final_rowset.del_files(0).op_offset());
     EXPECT_EQ(2, final_rowset.del_files(1).op_offset());
     EXPECT_EQ(603, metadata->next_rowset_id());
 }

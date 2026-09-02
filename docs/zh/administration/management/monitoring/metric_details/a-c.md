@@ -22,6 +22,27 @@ description: "Alphabetical a - c"
 - 单位：计数
 - 描述：Flink/Spark SQL 创建的扫描任务总数。
 
+## `ai_http_requests_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：传输层已接受的 AI HTTP attempt 总数，包含首次和重试 attempt。仅当 `AIHttpClient::submit` 成功返回时计数；等待准入和同步拒绝的提交不计数。
+
+## `ai_http_retries_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：已接受的 AI HTTP 重试 attempt 总数，不包含首次 attempt。已安排但在传输层接受前被取消的重试不计数，因此该计数器始终小于或等于 `ai_http_requests_total`。
+
+## `ai_http_timeouts_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：因传输超时或 request/query deadline 到期而结束的已接受 AI HTTP attempt 总数。每个已接受 attempt 最多计数一次。取消、关闭以及 HTTP attempt 被接受前到期的 deadline 不计数。
+
 ## `async_delta_writer_queue_count`
 
 - 单位：计数

@@ -867,6 +867,18 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
+     * The amount of free space (in bytes) bdb-je tries to keep on the volume holding `meta_dir`.
+     * The same value gates FE startup: the FE refuses to start when the free space is below it.
+     * <p>
+     * The default equals the bdb-je default. Lowering it is the recovery path for an FE that cannot
+     * start on a nearly full metadata volume: it lets bdb-je open and reclaim its own reserved files.
+     * Note that bdb-je needs this headroom for its housekeeping, so a value far below the default
+     * leaves an FE that starts but may reject metadata writes. Takes effect after a restart.
+     */
+    @ConfField
+    public static long bdbje_free_disk_size = 5L * 1024 * 1024 * 1024;
+
+    /**
      * Timeout seconds for doing checkpoint
      */
     @ConfField(mutable = true)
@@ -2710,6 +2722,26 @@ public class Config extends ConfigBase {
     @ConfField
     public static int low_cardinality_threshold = 255;
 
+    // Global-dictionary thrash guard.
+    // A "rolling low-cardinality" column (distinct values stay under low_cardinality_threshold at any
+    // instant but the value set keeps rotating, e.g. an id whose active set churns) never trips the
+    // cardinality blacklist, yet every load introduces values missing from the current global dict and
+    // invalidates it. Each invalidation forces a full MetaScan re-collection, wasting IO and, on
+    // shared-data, hammering the segment metadata cache lock. This guard detects a dictionary that is
+    // invalidated too often and forbids collecting it, so it stops thrashing.
+    @ConfField(mutable = true, comment = "Enable the global-dictionary thrash guard that forbids " +
+            "dictionaries which keep getting invalidated and re-collected.")
+    public static boolean enable_dict_thrash_guard = true;
+
+    @ConfField(mutable = true, comment = "Sliding time window (in seconds) used by the global-dictionary " +
+            "thrash guard to count how often a column dictionary is invalidated.")
+    public static int dict_thrash_guard_window_sec = 60;
+
+    @ConfField(mutable = true, comment = "If a column dictionary is invalidated at least this many times " +
+            "within dict_thrash_guard_window_sec, the thrash guard forbids collecting it. Set to 0 to " +
+            "disable the count check while keeping the guard enabled.")
+    public static int dict_thrash_guard_threshold = 5;
+
     /**
      * The column statistic cache update interval
      */
@@ -3812,6 +3844,31 @@ public class Config extends ConfigBase {
                     "if f > lake_balance_tablets_threshold, balancing will be triggered. Default: 0.15")
     public static double lake_balance_tablets_threshold = 0.15;
 
+    @ConfField(mutable = true, comment =
+            "Whether the tablet scheduler estimates a large colocate group's replica distribution " +
+                    "from a random sample of its tablets instead of scanning every tablet, which " +
+                    "markedly cuts the per-schedule cost in shared-data clusters. Default: true")
+    public static boolean lake_scheduler_enable_colocate_group_sample = true;
+
+    @ConfField(mutable = true, comment =
+            "A colocate group is sampled only when it holds more than this many tablets. Takes " +
+                    "effect only when lake_scheduler_enable_colocate_group_sample is true. " +
+                    "Default: 256")
+    public static int lake_scheduler_colocate_group_sample_threshold = 256;
+
+    @ConfField(mutable = true, comment =
+            "Number of tablets sampled when a colocate group exceeds " +
+                    "lake_scheduler_colocate_group_sample_threshold. Larger values reduce the " +
+                    "sampling error at a higher scan cost. Default: 128")
+    public static int lake_scheduler_colocate_group_sample_size = 128;
+
+    @ConfField(mutable = true, comment =
+            "Density guard for colocate group sampling: if more than this percentage of the sampled " +
+                    "tablets hold no replica on a candidate compute node, the group is too sparsely " +
+                    "placed for the sample to be representative, so the scheduler discards it and " +
+                    "falls back to a full scan. Lower is more conservative. Default: 40")
+    public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
+
     /**
      * Default lake compaction txn timeout
      */
@@ -4808,6 +4865,24 @@ public class Config extends ConfigBase {
     public static boolean enable_range_distribution = true;
 
     /**
+     * Whether to use range distribution as the default distribution of an asynchronous materialized
+     * view created without an explicit DISTRIBUTED BY clause. This is the materialized view half of
+     * enable_range_distribution, split off so that a cluster can adopt range-distributed tables
+     * without changing how its materialized views are distributed.
+     * <p>
+     * The default selects range distribution only when this config and enable_range_distribution are
+     * both true, in shared-data mode. Otherwise a materialized view created without a DISTRIBUTED BY
+     * clause uses the previous default distribution behavior (incrementally refreshed -> hash over
+     * its key columns, otherwise random), even where a table would be range-distributed. Range
+     * distribution has no DISTRIBUTED BY syntax, so with this config off the INVISIBLE session
+     * variable enable_range_distribution is the only remaining way to ask for it.
+     */
+    @ConfField(mutable = true, comment = "Whether to use range distribution as the default "
+            + "materialized view distribution in shared-data mode. Takes effect only when "
+            + "enable_range_distribution is also true. Has no effect in shared-nothing mode.")
+    public static boolean enable_mv_range_distribution = false;
+
+    /**
      * The default scheduler interval for tablet reshard jobs.
      */
     @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs. "
@@ -5081,4 +5156,13 @@ public class Config extends ConfigBase {
             "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
             "timeout.")
     public static int failpoint_pause_timeout_second = 300;
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
+    public static String ai_default_chat_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    public static String ai_default_chat_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    public static String ai_default_chat_provider = "";
 }

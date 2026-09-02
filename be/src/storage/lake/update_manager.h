@@ -244,8 +244,6 @@ public:
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
-    Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
-
     bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
 
     int64_t get_index_memory_size(int64_t tablet_id) const;
@@ -280,10 +278,12 @@ private:
     // Processes a single chunk during parallel condition merge.
     // Compares condition column values between old and new rows to decide which rows to delete.
     // This is called concurrently by multiple worker threads, with mutex protecting shared state.
-    Status _process_single_chunk_update_with_condition(
-            const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-            SegmentPKIterator* segment_pk_iterator, ParallelPublishContext* context, const SegmentPKChunkRef& current,
-            const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index);
+    Status _process_single_chunk_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
+                                                       int32_t upsert_idx, SegmentPKIterator* segment_pk_iterator,
+                                                       ParallelUpsertContext* context, const SegmentPKChunkRef& current,
+                                                       const TabletColumn& tablet_column,
+                                                       const std::vector<uint32_t>& read_column_ids,
+                                                       LakePrimaryIndex& index);
 
     // Performs condition-based merge update using parallel execution for segments with SST files.
     // This optimized path leverages pre-materialized condition values in SST files to enable

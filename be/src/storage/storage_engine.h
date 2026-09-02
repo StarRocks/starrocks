@@ -67,10 +67,6 @@ namespace bthread {
 class Executor;
 }
 
-namespace starrocks::lake {
-class LocalPkIndexManager;
-} // namespace starrocks::lake
-
 namespace starrocks {
 
 class DataDir;
@@ -256,10 +252,6 @@ public:
     void wait_storage_cleanup_tasks();
 
     UpdateManager* update_manager() { return _update_manager.get(); }
-
-#ifdef USE_STAROS
-    lake::LocalPkIndexManager* local_pk_index_manager() { return _local_pk_index_manager.get(); }
-#endif
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
 
@@ -533,10 +525,6 @@ private:
     std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>,
                         std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>>, std::greater<>>
             _schedule_apply_tasks;
-
-#ifdef USE_STAROS
-    std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
-#endif
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

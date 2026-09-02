@@ -15,6 +15,7 @@
 package com.starrocks.connector.paimon;
 
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
@@ -165,6 +166,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -397,7 +399,114 @@ public class PaimonMetadataTest {
         Options options = new Options();
         // default max-num is 0, i.e. no partition cache at all
         options.set(CatalogOptions.CACHE_PARTITION_MAX_NUM, 1000L);
-        return new CachingPaimonCatalog("paimon_catalog", wrapped, options);
+        // inline executor: the queued refresh runs before maybeRefreshAsync returns
+        return newCachingCatalog(wrapped, 60L);
+    }
+
+    private static CachingPaimonCatalog newCachingCatalog(Catalog wrapped, long refreshIntervalSec) {
+        Options options = new Options();
+        options.set(CatalogOptions.CACHE_PARTITION_MAX_NUM, 1000L);
+        // inline executor: the queued refresh runs before maybeRefreshAsync returns
+        return new CachingPaimonCatalog("paimon_catalog", wrapped, options,
+                MoreExecutors.newDirectExecutorService(), refreshIntervalSec);
+    }
+
+    @Test
+    public void testAccessQueuesRefresh(@Mocked FileStoreTable paimonTable,
+                                        @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = 6L;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+
+        // the access itself queues the refresh, no caller has to ask for it
+        cachingCatalog.getTable(id);
+        assertEquals(CachingPaimonCatalog.revision(6L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
+    }
+
+    @Test
+    public void testRefreshQueueHonorsMinInterval(@Mocked FileStoreTable paimonTable,
+                                                  @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                returns(5L, 9L);
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog, 3600L);
+
+        // the first access refreshes and stamps the time
+        cachingCatalog.getTable(id);
+        assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
+
+        // within the interval further accesses leave the lake alone, the daemon still covers it:
+        // had a refresh run, the revision would have moved to the lake's snapshot 9
+        cachingCatalog.getTable(id);
+        cachingCatalog.getTable(id);
+        assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
+    }
+
+    @Test
+    public void testRefreshQueueOffWhenIntervalNotPositive(@Mocked FileStoreTable paimonTable,
+                                                           @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                minTimes = 0;
+                snapshotManager.latestSnapshotId();
+                result = 6L;
+                minTimes = 0;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog, 0L);
+
+        cachingCatalog.getTable(id);
+        assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
+    }
+
+    @Test
+    public void testRefreshQueueSkipsSystemAndBranchTables(@Mocked FileStoreTable paimonTable,
+                                                           @Mocked SnapshotManager snapshotManager) throws Exception {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                minTimes = 0;
+                snapshotManager.latestSnapshotId();
+                result = 6L;
+                minTimes = 0;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+
+        // a branch pins a fixed version, it never goes stale
+        Identifier branch = new Identifier("db", "tbl$branch_dev");
+        cachingCatalog.getTable(branch);
+        assertNull(cachingCatalog.getLastRefreshedRevision().get(branch));
+
+        // a system table has no snapshot of its own; the base table it reads through still counts
+        Identifier system = new Identifier("db", "tbl$snapshots");
+        cachingCatalog.getTable(system);
+        assertNull(cachingCatalog.getLastRefreshedRevision().get(system));
     }
 
     @Test
@@ -682,7 +791,8 @@ public class PaimonMetadataTest {
         CatalogContext context = CatalogContext.create(catalogOptions);
         // same chain PaimonConnector builds
         Catalog unwrapped = CatalogFactory.createUnwrappedCatalog(context, CatalogFactory.class.getClassLoader());
-        CachingPaimonCatalog realCatalog = new CachingPaimonCatalog("paimon_catalog", unwrapped, catalogOptions);
+        CachingPaimonCatalog realCatalog = new CachingPaimonCatalog("paimon_catalog", unwrapped, catalogOptions,
+                MoreExecutors.newDirectExecutorService(), 60L);
 
         realCatalog.createDatabase("test_db", true);
         Schema.Builder schemaBuilder = Schema.newBuilder();

@@ -135,6 +135,12 @@ public:
     METRIC_DEFINE_INT_COUNTER(lake_add_index_requests_failed, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(lake_drop_index_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(lake_idg_files_written_total, MetricUnit::OPERATIONS);
+    // Counts remote lake tablet metadata read attempts that return NotFound,
+    // including each failed fallback attempt. A tablet's metadata lives either
+    // in its own metadata object or in a bundled metadata file, never in both,
+    // and reads of either location count. Replication reads of a source
+    // cluster and restore reads of a snapshot are not counted.
+    METRIC_DEFINE_INT_COUNTER(lake_tablet_metadata_get_not_found_total, MetricUnit::REQUESTS);
 
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_failed, MetricUnit::REQUESTS);

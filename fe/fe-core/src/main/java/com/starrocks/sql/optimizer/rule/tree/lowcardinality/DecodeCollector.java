@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -777,8 +778,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         DistributionProperty leftDistribution = optExpression.getRequiredProperties().get(0).getDistributionProperty();
         DistributionProperty rightDistribution = optExpression.getRequiredProperties().get(1).getDistributionProperty();
-        // Currently only supports broadcast join.
+        // Only broadcast hash join keeps its ON columns dict-encoded: DecodeRewriter rewrites the ON
+        // predicate to dict refs only in visitPhysicalHashJoin. For any non-hash join (NestLoop, Merge)
+        // the generic rewriter never touches onPredicate, so keeping those ON columns encoded would
+        // leave the onPredicate referencing string refs the dict-encoded scan no longer emits, which
+        // fails planning with "Invalid plan: Input dependency cols check failed".
         if (!sessionVariable.isEnableLowCardinalityOptimizeForJoin() ||
+                !(join instanceof PhysicalHashJoinOperator) ||
                 (leftDistribution.isShuffle() && rightDistribution.isShuffle())) {
             onColumns.getStream().forEach(disableRewriteStringColumns::union);
         } else {
@@ -1622,8 +1628,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         private ScalarOperator merge(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
-            if (collectors.stream().anyMatch(s -> s.getType().isArrayType()
-                    || s.getType().isStructType())) {
+            // the result becomes a new dictionary, so it must be a scalar string; the collectors are
+            // BOOLEAN sentinels for constant operands and cannot report the operator's own type
+            Type selfType = scalarOperator.getType();
+            if (selfType.isArrayType() || selfType.isStructType()
+                    || collectors.stream().anyMatch(s -> s.getType().isArrayType()
+                        || s.getType().isStructType())) {
                 return forbidden(collectors, scalarOperator);
             }
             return mergeWithArray(collectors, scalarOperator);

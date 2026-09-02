@@ -4253,10 +4253,15 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_has_force_dict_encode |= _column_decoders[cid].need_force_encode_to_global_id();
     }
 
+    // The chunk source keeps delete-predicate columns out of the unused set, so they must reach the output.
+    for (ColumnId cid : delete_pred_columns) {
+        RETURN_IF(output_columns.count(cid) == 0,
+                  Status::InternalError(
+                          strings::Substitute("delete predicate column $0 is missing from the output schema", cid)));
+    }
+
     // build index map
     DCHECK_LE(output_schema().num_fields(), _schema.num_fields());
-    DCHECK(!(output_schema().num_fields() < _schema.num_fields()) || _opts.delete_predicates.empty())
-            << "delete condition couldn't work with filter_unused_columns";
 
     // skip dict_decode column in _read_schema would not be mapping
     std::unordered_map<ColumnId, size_t> read_indexes;   // fid -> read schema index
@@ -4267,12 +4272,25 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         }
     }
 
-    // map output_schema[cid, index] to read_schema[cid index]
-    ctx->_read_index_map.resize(read_indexes.size());
-    for (size_t i = 0; i < read_indexes.size(); i++) {
-        ctx->_read_index_map[i] = read_indexes[output_schema().field(i)->id()];
-        output_indexes[output_schema().field(i)->id()] = i;
+    // |_read_index_map| is indexed by output schema position, so size and walk it by the output schema.
+    const size_t num_output_fields = output_schema().num_fields();
+    ctx->_read_index_map.reserve(num_output_fields);
+    for (size_t i = 0; i < num_output_fields; i++) {
+        const ColumnId ocid = output_schema().field(i)->id();
+        auto read_it = read_indexes.find(ocid);
+        if (read_it == read_indexes.end()) {
+            // Late-materialized output columns start here; _finish_late_materialization fills them.
+            break;
+        }
+        ctx->_read_index_map.emplace_back(read_it->second);
+        output_indexes[ocid] = i;
     }
+    // _finish_late_materialization resumes at |_read_index_map.size()|, so the walk must stop at the late tail.
+    RETURN_IF(ctx->_read_index_map.size() + num_fields - early_materialize_fields != num_output_fields,
+              Status::InternalError(strings::Substitute(
+                      "output schema is not an early-materialized prefix plus the late tail: mapped=$0 late=$1 "
+                      "output=$2",
+                      ctx->_read_index_map.size(), num_fields - early_materialize_fields, num_output_fields)));
 
     // convert the read schema index to output scheam index for subfield
     for (size_t i = 0; i < ctx->_subfield_columns.size(); i++) {

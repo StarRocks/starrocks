@@ -102,7 +102,7 @@ void VariantEncoder::append_object_container(std::string* out, const std::vector
     out->append(payload.data(), payload.size());
 }
 
-static std::string key_datum_to_string(TypeInfo* type_info, const Datum& datum) {
+std::string VariantEncoder::map_key_to_string(TypeInfo* type_info, const Datum& datum) {
     if (datum.is_null()) {
         return "null";
     }
@@ -546,7 +546,7 @@ Status collect_object_keys_from_datum(const Datum& datum, const TypeDescriptor& 
             if (key_datum.is_null()) {
                 return Status::NotSupported("Map key is null");
             }
-            keys->insert(key_datum_to_string(key_type_info.get(), key_datum));
+            keys->insert(VariantEncoder::map_key_to_string(key_type_info.get(), key_datum));
             RETURN_IF_ERROR(collect_object_keys_from_datum(value, value_type, keys));
         }
         return Status::OK();
@@ -716,7 +716,7 @@ Status encode_datum_to_variant_value(const Datum& datum, const TypeDescriptor& t
             if (key_datum.is_null()) {
                 return Status::NotSupported("Map key is null");
             }
-            std::string key_str = key_datum_to_string(key_type_info.get(), key_datum);
+            std::string key_str = VariantEncoder::map_key_to_string(key_type_info.get(), key_datum);
             auto it = key_to_id.find(key_str);
             if (it == key_to_id.end()) {
                 return Status::VariantError("Variant metadata missing field: " + key_str);

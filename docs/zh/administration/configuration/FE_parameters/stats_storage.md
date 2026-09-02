@@ -88,6 +88,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。
 - 引入版本: v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用全局字典抖动守卫（thrash guard）。对于"滚动"低基数列——其瞬时不同值数量始终低于字典阈值，但取值集合持续轮换（例如按天分区、每天导入新值的列）——不会触发基数黑名单，但每次导入都会引入当前全局字典中缺失的值并使其失效。每次失效都会触发一次全表字典重采集，浪费 IO，并在存算分离集群中严重争用 segment 元数据缓存锁。启用该守卫后，StarRocks 会统计每个列的字典在 `dict_thrash_guard_window_sec` 时间窗口内的失效次数；当某列达到 `dict_thrash_guard_threshold` 次失效时，StarRocks 会禁止采集该列的全局字典。该禁用立即生效，并作为表的 `no_dict_columns` 属性持久化，因此能在 FE 重启和 Leader 切换后保留。如需重新启用某列的字典采集，执行 `ALTER TABLE ... ENABLE DICTIONARY (column)`。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 全局字典抖动守卫统计某列字典失效次数所用的时间窗口长度（秒）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 在 `dict_thrash_guard_window_sec` 时间窗口内，触发全局字典抖动守卫禁止采集某列全局字典的失效次数阈值。设置为 `0` 可在保持守卫启用的同时禁用次数检查（不会自动禁用任何列）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true
@@ -569,8 +597,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在创建表或物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。
+- 描述: 在创建表时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。未指定 `DISTRIBUTED BY` 子句的物化视图还需同时启用 `enable_mv_range_distribution`。
 - 引入版本: v4.1.0
+
+### `enable_mv_range_distribution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在创建异步物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的数据分布方式。该配置不影响表。仅当该配置与 `enable_range_distribution` 同时为 `true` 且处于存算分离模式时，默认分布才会选择 Range-based Distribution 语意；否则物化视图使用此前的默认分布行为（增量维护的物化视图默认按其 Key 列使用 hash 分布，其他物化视图默认使用 random 分布），即使同一集群中的表会使用 Range 分布。
+- 引入版本: v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 
