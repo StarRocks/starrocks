@@ -48,6 +48,7 @@ import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
+import com.starrocks.catalog.system.information.RunningTransactionsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
@@ -277,7 +278,8 @@ public class PlanFragmentBuilder {
             LoadsSystemTable.NAME,
             LoadTrackingLogsSystemTable.NAME,
             StreamLoadsSystemTable.NAME,
-            RoutineLoadJobsSystemTable.NAME
+            RoutineLoadJobsSystemTable.NAME,
+            RunningTransactionsSystemTable.NAME
     );
 
     public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,

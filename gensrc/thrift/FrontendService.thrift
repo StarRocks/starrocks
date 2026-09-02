@@ -2556,7 +2556,7 @@ service FrontendService {
     TGetKeysResponse getKeys(1:TGetKeysRequest params);
 
     TGetLoadsResult getLoads(1:TGetLoadsParams params)
-    TGetRunningTxnsResult getRunningTransactions(1:TGetRunningTxnsParams params)
+    TGetRunningTxnsResult getRunningTransactions(1: optional TGetRunningTxnsParams params)
     TGetTrackingLoadsResult getTrackingLoads(1:TGetLoadsParams params)
     TGetRoutineLoadJobsResult getRoutineLoadJobs(1:TGetLoadsParams params)
     TGetStreamLoadsResult getStreamLoads(1:TGetLoadsParams params)

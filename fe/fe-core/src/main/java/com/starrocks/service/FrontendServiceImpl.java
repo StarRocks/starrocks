@@ -3288,11 +3288,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetRunningTxnsResult getRunningTransactions(TGetRunningTxnsParams request) throws TException {
         LOG.debug("Receive getRunningTransactions: {}", request);
+        // The parameter is declared optional, so a caller may omit it entirely. Substitute an empty
+        // params object rather than dereferencing null: with no identity on it the query fails closed
+        // and returns no rows, which is the same answer an unauthenticated caller already gets.
+        TGetRunningTxnsParams params = request != null ? request : new TGetRunningTxnsParams();
         ConnectContext context = new ConnectContext();
-        if (request.isSetCurrent_user_ident()) {
-            UserIdentityUtils.setAuthInfoFromThrift(context, request.getCurrent_user_ident());
+        if (params.isSetCurrent_user_ident()) {
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         }
-        return RunningTransactionsSystemTable.query(request, context);
+        return RunningTransactionsSystemTable.query(params, context);
     }
 
     @Override
