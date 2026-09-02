@@ -15,7 +15,11 @@ permissions:
 
 jobs:
   assign-reviewer:
-    runs-on: [self-hosted, normal]
+    # Runs on the dedicated AI host (bare `claude`, claudeci pre-authed, the
+    # starrocks-assign-pr-reviewer skill installed) instead of the shared build pool
+    # + the claude-cli docker sandbox. Isolates this pull_request_target job away from
+    # the general build fleet (defense-in-depth) and drops the container dependency.
+    runs-on: [self-hosted, ubuntu, ai]
     continue-on-error: true
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -47,14 +51,12 @@ jobs:
           echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
           echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
           echo "=== RUN ==="
-          # Runs inside claude-cli docker; produces only "Recommended reviewer: <login>"
-          # output. The host-side "Apply Reviewer" step below actually attaches it
-          # (gh is not available inside the container).
-          # tee captures the skill's stdout for the downstream steps to parse.
-          docker exec -i -u claudeuser \
-            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
-            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
-            claude-cli claude --dangerously-skip-permissions \
+          # Bare `claude` on the [ubuntu, ai] host (claudeci is pre-authed via its own
+          # credentials; the starrocks-assign-pr-reviewer skill is installed there).
+          # Produces only "Recommended reviewer: <login>" lines; the host-side
+          # "Apply Reviewer" step below does the actual attach (kept separate so this
+          # model-running step needs no write token). tee captures stdout for parsing.
+          claude --dangerously-skip-permissions \
             -p "/starrocks-assign-pr-reviewer https://github.com/${REPO}/pull/${PR_NUMBER}" \
             2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
 
