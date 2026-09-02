@@ -14,13 +14,16 @@
 package com.starrocks.http;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.http.rest.ExecuteSqlAction;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.service.ExecuteEnv;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -270,6 +273,38 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
             String responseBody = Objects.requireNonNull(response.body()).string();
             Assertions.assertEquals(503, response.code());
             Assertions.assertTrue(responseBody.contains("no longer accepting new requests"));
+            // The rejection must also drop the keep-alive channel: a surviving connection stays
+            // registered in ConnectScheduler (totalConns > 0) and blocks waitForDraining() until
+            // the hard shutdown timeout.
+            Assertions.assertEquals("close", response.header("Connection"));
+        } finally {
+            // Reset the flag so other tests in this JVM are unaffected.
+            Field flagField = GracefulExitFlag.class.getDeclaredField("GRACEFUL_EXIT");
+            flagField.setAccessible(true);
+            ((AtomicBoolean) flagField.get(null)).set(false);
+            beginField.setAccessible(true);
+            ((AtomicLong) beginField.get(null)).set(0L);
+        }
+    }
+
+    @Test
+    public void testRegisterRejectsWhenWindowElapsedBetweenGateAndRegistration() throws Exception {
+        // The fast-fail gate in executeWithoutPassword() runs before changeCatalog/parse; if the
+        // accept-new window expires in that gap, registerContextOnce() must still reject the request
+        // (503) BEFORE registering it -- otherwise waitForDraining() could observe zero connections
+        // and exit the process while the request is being registered/executed. Drive the recheck
+        // directly with the window already elapsed.
+        GracefulExitFlag.markGracefulExit();
+        long acceptWindowNanos = TimeUnit.NANOSECONDS.convert(
+                Config.graceful_exit_accept_new_window_ms, TimeUnit.MILLISECONDS);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(System.nanoTime() - acceptWindowNanos - 1L);
+        try {
+            StarRocksHttpException ex = Assertions.assertThrows(StarRocksHttpException.class, () ->
+                    Deencapsulation.invoke(new ExecuteSqlAction(null), "registerContextOnce",
+                            "select 1", new HttpConnectContext()));
+            Assertions.assertEquals(HttpResponseStatus.SERVICE_UNAVAILABLE, ex.getCode());
         } finally {
             // Reset the flag so other tests in this JVM are unaffected.
             Field flagField = GracefulExitFlag.class.getDeclaredField("GRACEFUL_EXIT");

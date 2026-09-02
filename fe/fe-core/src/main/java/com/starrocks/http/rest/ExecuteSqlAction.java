@@ -174,6 +174,15 @@ public class ExecuteSqlAction extends RestBaseAction {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
             response.getContent().append(failResult.toJson());
+            // A graceful-exit rejection (either the fast-fail gate at the top of this method or the
+            // recheck inside registerContextOnce) must not leave a keep-alive channel open: the
+            // request was refused because the accept-new window has elapsed, and the surviving
+            // connection would keep sitting in connectionMap (totalConns > 0), blocking
+            // waitForDraining() until the hard shutdown timeout. writeResponse() closes the channel
+            // after flushing only when keep-alive is disabled, so force it here.
+            if (SERVICE_UNAVAILABLE.equals(e.getCode()) && !GracefulExitFlag.shouldAcceptNewRequest()) {
+                response.setForceCloseConnection(true);
+            }
             writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
         }
     }
@@ -248,6 +257,19 @@ public class ExecuteSqlAction extends RestBaseAction {
     private void registerContextOnce(String sql, HttpConnectContext context) throws StarRocksHttpException {
         if (context.isRegistered()) {
             return;
+        }
+
+        // Re-validate admission immediately before registering. The fast-fail gate at the top of
+        // executeWithoutPassword() can pass while the accept-new window is still open, but
+        // changeCatalogAndDB()/validatePostBody()/parse() run in between; if the window expires in
+        // that gap, waitForDraining() may observe shouldAcceptNewRequest()==false && totalConns==0
+        // (this context is not in connectionMap yet) and exit the process while the request is still
+        // registering/executing. Checking here, adjacent to registerConnection(), makes admission
+        // and registration effectively atomic: once registered, totalConns >= 1 so the drain cannot
+        // exit on a zero-connection observation for this request.
+        if (!GracefulExitFlag.shouldAcceptNewRequest()) {
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE,
+                    "FE is in graceful shutdown, no longer accepting new requests");
         }
 
         // now register this request in connectScheduler
