@@ -81,21 +81,43 @@ FlexiblePartialUpdateRegistry* FlexiblePartialUpdateRegistry::instance() {
     return &s_instance;
 }
 
-ColumnSetDictPtr FlexiblePartialUpdateRegistry::get_or_create(int64_t txn_id) {
+ColumnSetDictPtr FlexiblePartialUpdateRegistry::retain(int64_t txn_id) {
+    std::lock_guard<std::mutex> l(_mu);
+    auto& entry = _by_txn[txn_id];
+    if (entry.dict == nullptr) {
+        entry.dict = std::make_shared<ColumnSetDict>();
+    }
+    ++entry.refs;
+    return entry.dict;
+}
+
+void FlexiblePartialUpdateRegistry::release(int64_t txn_id) {
     std::lock_guard<std::mutex> l(_mu);
     auto it = _by_txn.find(txn_id);
-    if (it != _by_txn.end()) {
-        return it->second;
+    if (it == _by_txn.end()) {
+        return;
     }
-    auto dict = std::make_shared<ColumnSetDict>();
-    _by_txn.emplace(txn_id, dict);
-    return dict;
+    if (it->second.refs > 0) {
+        --it->second.refs;
+    }
+    if (it->second.refs == 0) {
+        _by_txn.erase(it);
+    }
+}
+
+ColumnSetDictPtr FlexiblePartialUpdateRegistry::get_or_create(int64_t txn_id) {
+    std::lock_guard<std::mutex> l(_mu);
+    auto& entry = _by_txn[txn_id];
+    if (entry.dict == nullptr) {
+        entry.dict = std::make_shared<ColumnSetDict>();
+    }
+    return entry.dict;
 }
 
 ColumnSetDictPtr FlexiblePartialUpdateRegistry::get(int64_t txn_id) {
     std::lock_guard<std::mutex> l(_mu);
     auto it = _by_txn.find(txn_id);
-    return it != _by_txn.end() ? it->second : nullptr;
+    return it != _by_txn.end() ? it->second.dict : nullptr;
 }
 
 void FlexiblePartialUpdateRegistry::erase(int64_t txn_id) {

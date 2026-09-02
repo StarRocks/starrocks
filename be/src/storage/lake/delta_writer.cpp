@@ -1123,25 +1123,44 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 }
             }
             // SDCG flexible partial update: fold the per-load set-id dictionary (interned by
-            // the JSON scanner, keyed by txn_id) into txn_meta.distinct_column_sets. The
-            // registry's presence-with-sets is the flexible signal (see rowset_writer.cpp
-            // and the registry cross-node note). partial_update_column_unique_ids above keep
-            // meaning the UNION, so legacy / old-CN readers degrade to one wider homogeneous
-            // partial update. _tablet_schema is the full schema, authoritative for uids.
-            if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(_txn_id);
-                dict != nullptr && dict->size() > 0) {
-                auto sets = dict->snapshot();
-                for (const auto& names : sets) {
-                    auto* set_pb = op_write->mutable_txn_meta()->add_distinct_column_sets();
-                    for (const auto& name : names) {
-                        size_t idx = _tablet_schema->field_index(name);
-                        if (idx >= _tablet_schema->num_columns()) {
-                            continue;
-                        }
-                        set_pb->add_column_unique_ids(_tablet_schema->column(idx).unique_id());
+            // the JSON scanner, keyed by txn_id) into txn_meta.distinct_column_sets.
+            // partial_update_column_unique_ids above keep meaning the UNION, so legacy / old-CN
+            // readers degrade to one wider homogeneous partial update. _tablet_schema is the full
+            // schema, authoritative for uids.
+            //
+            // The `__cset__` slot, not the registry, is the flexible signal. The registry is keyed by
+            // txn_id alone, and a txn_id outlives one load: a later statement of a multi-statement
+            // transaction, or a flexible plan the FE degraded to homogeneous after the scanner had
+            // already interned sets, can find a dictionary for a payload that carries no set-ids.
+            // Folding it would stamp flexible_partial_update on a rowset without `__cset__`, and the
+            // apply would fail reading the column. Conversely a payload WITH set-ids and NO dictionary
+            // cannot be applied as homogeneous either -- that overwrites every column a row did not
+            // declare with its NULL placeholder -- so it fails here, loudly, instead of at apply.
+            if (_flexible_partial_update) {
+                auto dict = FlexiblePartialUpdateRegistry::instance()->get(_txn_id);
+                if (dict == nullptr || dict->size() == 0) {
+                    if (op_write->rowset().num_rows() > 0) {
+                        return Status::InternalError(fmt::format(
+                                "flexible partial update: the per-row column-set dictionary for txn {} is "
+                                "missing on this node; refusing to write the rowset as a homogeneous partial "
+                                "update (it would overwrite the columns a row did not declare)",
+                                _txn_id));
                     }
+                    // Nothing was written, so there is nothing whose column set could be misread.
+                } else {
+                    auto sets = dict->snapshot();
+                    for (const auto& names : sets) {
+                        auto* set_pb = op_write->mutable_txn_meta()->add_distinct_column_sets();
+                        for (const auto& name : names) {
+                            size_t idx = _tablet_schema->field_index(name);
+                            if (idx >= _tablet_schema->num_columns()) {
+                                continue;
+                            }
+                            set_pb->add_column_unique_ids(_tablet_schema->column(idx).unique_id());
+                        }
+                    }
+                    op_write->mutable_txn_meta()->set_flexible_partial_update(true);
                 }
-                op_write->mutable_txn_meta()->set_flexible_partial_update(true);
             }
         }
         // handle condition update

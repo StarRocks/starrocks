@@ -150,6 +150,9 @@ DeltaWriterOptions LocalTabletsChannel::_build_delta_writer_options(const PTable
 LocalTabletsChannel::~LocalTabletsChannel() {
     _s_tablet_writer_count -= _delta_writers.size();
     _mem_pool.reset();
+    if (_cset_dict_retained.load()) {
+        FlexiblePartialUpdateRegistry::instance()->release(_txn_id);
+    }
 }
 
 Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
@@ -428,6 +431,11 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         sets.reserve(request.column_set_dict().sets_size());
         for (const auto& set_pb : request.column_set_dict().sets()) {
             sets.emplace_back(set_pb.column_names().begin(), set_pb.column_names().end());
+        }
+        // Hold a reference for the life of this channel (released in the destructor) so the entry outlives
+        // every writer that folds it; senders' eos requests may arrive concurrently, so take it exactly once.
+        if (!_cset_dict_retained.exchange(true)) {
+            FlexiblePartialUpdateRegistry::instance()->retain(_txn_id);
         }
         FlexiblePartialUpdateRegistry::instance()->get_or_create(_txn_id)->populate_from_snapshot(sets);
     }

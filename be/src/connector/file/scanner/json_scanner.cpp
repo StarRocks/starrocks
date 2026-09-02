@@ -351,7 +351,11 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
             }
             idx++;
         }
-        _cset_dict = FlexiblePartialUpdateRegistry::instance()->get_or_create(_scanner->_params.txn_id);
+        // Hold a reference for as long as this reader interns into the dictionary; the sink of this plan
+        // holds its own (OlapTableSink::prepare .. close_wait), so the entry survives the readers and is
+        // released once every holder is done. Balanced in the destructor.
+        _cset_txn_id = _scanner->_params.txn_id;
+        _cset_dict = FlexiblePartialUpdateRegistry::instance()->retain(_cset_txn_id);
     }
 }
 
@@ -372,6 +376,10 @@ Status JsonReader::open() {
 
 JsonReader::~JsonReader() {
     (void)close();
+    if (_cset_dict != nullptr) {
+        _cset_dict.reset();
+        FlexiblePartialUpdateRegistry::instance()->release(_cset_txn_id);
+    }
 }
 
 Status JsonReader::close() {

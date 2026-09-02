@@ -124,22 +124,44 @@ using ColumnSetDictPtr = std::shared_ptr<ColumnSetDict>;
 // ColumnSetDict snapshot in PTabletWriterOpenRequest (or piggy-back on the first
 // add-chunk) keyed by txn_id. The on-disk contract (__cset__ + distinct_column_sets) is
 // unchanged by that follow-up; only the in-flight carrier changes.
+//
+// LIFETIME: an entry is reference-counted by its holders, because a txn_id is shared by more than one
+// load pipeline on one node and none of them can know it is the last: the json scanners of every load
+// in the transaction (a multi-table transaction stream load runs several plans under one txn_id on
+// one BE), the OlapTableSink of each plan (which ships the dictionary on eos, so the entry must outlive
+// the scanners that filled it), and every tablets channel that received the dictionary on an eos
+// request (the writers fold it when they finish). Each of those calls retain() when it starts using
+// the entry and release() when it is done; the entry is dropped when the last holder releases it.
+// Without that, every flexible load leaked one dictionary per node for the life of the process.
 class FlexiblePartialUpdateRegistry {
 public:
     static FlexiblePartialUpdateRegistry* instance();
 
-    // Get (creating if absent) the dictionary for a load.
+    // Take a reference to the load's dictionary, creating it if absent. Every retain() must be balanced
+    // by exactly one release(txn_id) from the same holder.
+    ColumnSetDictPtr retain(int64_t txn_id);
+
+    // Give back a reference taken by retain(); the entry is dropped when the count reaches zero. A
+    // release without a matching retain is a no-op (the entry may already be gone).
+    void release(int64_t txn_id);
+
+    // Get (creating if absent) the dictionary for a load WITHOUT taking a reference: the entry lives
+    // only as long as some holder keeps it retained. Prefer retain() for anything longer than a call.
     ColumnSetDictPtr get_or_create(int64_t txn_id);
 
     // Look up the dictionary for a load; nullptr if none was registered.
     ColumnSetDictPtr get(int64_t txn_id);
 
-    // Drop a load's dictionary (called when the load's writers are all done).
+    // Drop a load's dictionary unconditionally, ignoring outstanding references (tests / last resort).
     void erase(int64_t txn_id);
 
 private:
+    struct Entry {
+        ColumnSetDictPtr dict;
+        int64_t refs = 0;
+    };
     std::mutex _mu;
-    std::unordered_map<int64_t, ColumnSetDictPtr> _by_txn;
+    std::unordered_map<int64_t, Entry> _by_txn;
 };
 
 } // namespace starrocks

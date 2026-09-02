@@ -17,6 +17,7 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
+#include <atomic>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -312,6 +313,9 @@ private:
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
     std::shared_ptr<OlapTableSchemaParam> _schema;
+    // SDCG flexible partial update: set once this channel received the per-load column-set dictionary
+    // on an eos request and took its registry reference (released in the destructor).
+    std::atomic<bool> _cset_dict_retained{false};
 
     std::vector<Sender> _senders;
 
@@ -410,6 +414,9 @@ LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, cons
 
 LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
+    if (_cset_dict_retained.load()) {
+        FlexiblePartialUpdateRegistry::instance()->release(_txn_id);
+    }
 }
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
@@ -622,6 +629,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             sets.reserve(request.column_set_dict().sets_size());
             for (const auto& set_pb : request.column_set_dict().sets()) {
                 sets.emplace_back(set_pb.column_names().begin(), set_pb.column_names().end());
+            }
+            // Hold a reference for the life of this channel (released in the destructor) so the entry
+            // outlives every writer that folds it; senders' eos requests may arrive concurrently, so
+            // take it exactly once.
+            if (!_cset_dict_retained.exchange(true)) {
+                FlexiblePartialUpdateRegistry::instance()->retain(_txn_id);
             }
             FlexiblePartialUpdateRegistry::instance()->get_or_create(_txn_id)->populate_from_snapshot(sets);
         }

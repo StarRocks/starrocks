@@ -187,8 +187,9 @@ private:
     int _cset_col_index{-1};
     // Per-load dictionary (set-id <-> present value-column name-set). Interned by the
     // scanner; read by the co-located tablet writer when building RowsetTxnMetaPB.
-    // Looked up from FlexiblePartialUpdateRegistry by txn_id.
+    // Retained from FlexiblePartialUpdateRegistry by txn_id; released in the destructor.
     std::shared_ptr<ColumnSetDict> _cset_dict;
+    int64_t _cset_txn_id = 0;
     // Reusable scratch: the present value-column names of the current row.
     std::vector<std::string> _row_present_cols;
     // Chunk-column-index -> column name, for columns that participate in a set's mask
