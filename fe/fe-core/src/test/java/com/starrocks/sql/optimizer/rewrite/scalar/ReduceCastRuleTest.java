@@ -116,6 +116,57 @@ public class ReduceCastRuleTest {
     }
 
     @Test
+    public void testBoundedCharCastIsNotReducedWhenTruncating() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        // CAST(varchar(20) AS CHAR(5)) truncates to 5 chars (MySQL semantics) -> must NOT be reduced away.
+        ScalarOperator truncating = new CastOperator(new CharType(5),
+                new ColumnRefOperator(0, TypeFactory.createVarcharType(20), "s", false));
+        ScalarOperator kept = rule.apply(truncating, null);
+        assertTrue(kept instanceof CastOperator);
+        assertTrue(kept.getType().isChar());
+        assertEquals(5, ((ScalarType) kept.getType()).getLength());
+
+        // Wildcard CHAR (no length) does not truncate -> still reducible.
+        ScalarOperator wildcard = new CastOperator(CharType.CHAR,
+                new ColumnRefOperator(1, TypeFactory.createVarcharType(20), "s2", false));
+        Assertions.assertFalse(rule.apply(wildcard, null) instanceof CastOperator);
+
+        // A source whose declared length fits in N is still kept: the declared length is not an
+        // upper bound on the runtime value, so it cannot be used to prove the cast is a no-op.
+        ScalarOperator shorterSource = new CastOperator(new CharType(10),
+                new ColumnRefOperator(2, TypeFactory.createVarcharType(3), "s3", false));
+        ScalarOperator keptShorter = rule.apply(shorterSource, null);
+        assertTrue(keptShorter instanceof CastOperator);
+        assertEquals(10, ((ScalarType) keptShorter.getType()).getLength());
+    }
+
+    @Test
+    public void testBoundedCharCastIsNotReducedOverNonTruncatingVarcharCast() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+
+        // CAST(CAST(s AS VARCHAR(10)) AS CHAR(10)): the inner VARCHAR cast does not enforce its
+        // length, so the outer CHAR(10) cast is the only thing that truncates and must survive.
+        ScalarOperator nested = new CastOperator(new CharType(10),
+                new CastOperator(TypeFactory.createVarcharType(10),
+                        new ColumnRefOperator(3, TypeFactory.createVarcharType(50), "s", false)));
+        ScalarOperator kept = rule.apply(nested, null);
+        assertTrue(kept instanceof CastOperator);
+        assertTrue(kept.getType().isChar());
+        assertEquals(10, ((ScalarType) kept.getType()).getLength());
+
+        // Same shape with a non-string leaf: CAST(CAST(n AS VARCHAR(10)) AS CHAR(10)) where a BIGINT
+        // formats to up to 20 characters.
+        ScalarOperator nestedNumeric = new CastOperator(new CharType(10),
+                new CastOperator(TypeFactory.createVarcharType(10),
+                        new ColumnRefOperator(4, IntegerType.BIGINT, "n", false)));
+        ScalarOperator keptNumeric = rule.apply(nestedNumeric, null);
+        assertTrue(keptNumeric instanceof CastOperator);
+        assertTrue(keptNumeric.getType().isChar());
+        assertEquals(10, ((ScalarType) keptNumeric.getType()).getLength());
+    }
+
+    @Test
     public void testVarcharLengthIsNotInheritedByDefault() {
         ScalarOperatorRewriteRule rule = new ReduceCastRule();
         ScalarOperator child =
