@@ -91,7 +91,9 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                 RequestPackage pkg;
                 while ((pkg = packageDecoder.poll()) != null) {
                     final RequestPackage req = pkg;
-                    ctx.incPendingTask();
+                    if (!ctx.tryIncPendingTask()) {
+                        return;
+                    }
                     channel.getWorker().execute(() -> {
                         handleRequest(req);
                     });

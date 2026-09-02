@@ -258,6 +258,7 @@ public class ConnectContext {
     private String proxyHostName;
     private AtomicInteger pendingForwardRequests = new AtomicInteger(0);
     private final AtomicInteger pendingTasks = new AtomicInteger(0);
+    private boolean cleanupClaimed;
 
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
@@ -897,12 +898,24 @@ public class ConnectContext {
         return pendingTasks.intValue() > 0;
     }
 
-    public void incPendingTask() {
+    public synchronized boolean tryIncPendingTask() {
+        if (closed || cleanupClaimed) {
+            return false;
+        }
         pendingTasks.incrementAndGet();
+        return true;
     }
 
-    public void decPendingTask() {
+    public synchronized void decPendingTask() {
         pendingTasks.decrementAndGet();
+    }
+
+    public synchronized boolean tryClaimCleanup() {
+        if (closed || cleanupClaimed || pendingTasks.get() > 0) {
+            return false;
+        }
+        cleanupClaimed = true;
+        return true;
     }
 
     public void incPendingForwardRequest() {

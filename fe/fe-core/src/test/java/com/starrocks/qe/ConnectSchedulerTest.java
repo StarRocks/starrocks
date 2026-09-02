@@ -64,18 +64,11 @@ public class ConnectSchedulerTest {
     private static class TestContext extends ConnectContext {
         private final boolean inExplicitTxn;
         private final boolean idle;
-        private final boolean pendingTasks;
         private final Runnable cleanupAction;
 
         TestContext(long connectionId, boolean inExplicitTxn, boolean idle, Runnable cleanupAction) {
-            this(connectionId, inExplicitTxn, idle, false, cleanupAction);
-        }
-
-        TestContext(long connectionId, boolean inExplicitTxn, boolean idle, boolean pendingTasks,
-                    Runnable cleanupAction) {
             this.inExplicitTxn = inExplicitTxn;
             this.idle = idle;
-            this.pendingTasks = pendingTasks;
             this.cleanupAction = cleanupAction;
             setConnectionId((int) connectionId);
         }
@@ -88,11 +81,6 @@ public class ConnectSchedulerTest {
         @Override
         public boolean isIdleLastFor(long milliSeconds) {
             return idle;
-        }
-
-        @Override
-        public boolean hasPendingTasks() {
-            return pendingTasks;
         }
 
         @Override
@@ -146,13 +134,27 @@ public class ConnectSchedulerTest {
         Map<Long, ConnectContext> connectionMap = Deencapsulation.getField(scheduler, "connectionMap");
 
         int[] cleanups = {0};
-        connectionMap.put(1L, new TestContext(1L, false, true, true, () -> cleanups[0]++));
+        TestContext context = new TestContext(1L, false, true, () -> cleanups[0]++);
+        Assertions.assertTrue(context.tryIncPendingTask());
+        connectionMap.put(1L, context);
 
         scheduler.closeAllIdleConnection();
 
         // A queued packet has already been admitted to a worker but has not yet reached dispatch;
         // its context still looks idle and must not be cleaned up.
         Assertions.assertEquals(0, cleanups[0]);
+    }
+
+    @Test
+    public void testCleanupClaimExcludesPendingAndFutureTasks() {
+        ConnectContext context = new ConnectContext();
+        Assertions.assertTrue(context.tryIncPendingTask());
+
+        Assertions.assertFalse(context.tryClaimCleanup());
+
+        context.decPendingTask();
+        Assertions.assertTrue(context.tryClaimCleanup());
+        Assertions.assertFalse(context.tryIncPendingTask());
     }
 
     @Test

@@ -428,7 +428,7 @@ public class ConnectScheduler {
             // cleanup waits on a synchronous rollback RPC). Cleanup without rechecking would
             // close an active client's socket and roll back its explicit transaction
             // mid-statement.
-            if (!context.hasPendingTasks() && context.isIdleLastFor(1000)) {
+            if (context.isIdleLastFor(1000) && context.tryClaimCleanup()) {
                 context.cleanup();
             }
         });
