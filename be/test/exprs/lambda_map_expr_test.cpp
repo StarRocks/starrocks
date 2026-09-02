@@ -265,6 +265,55 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
     }
 }
 
+// map_apply evaluates its lambda over the entry-level chunk - one row per map entry, so
+// sum(map sizes) rows - and only slices that chunk when it is more than 8x the input chunk. Both of
+// the cases above stay far under that threshold, so the slicing loop was never executed by a test;
+// this one drives it, with an input wide enough to need more than one slice (5 rows x 1000 entries =
+// 5000 entry rows, against a slice of DEFAULT_CHUNK_SIZE = 4096).
+//
+// The lambda is the identity (k,v)->(k,v), so the assertion is the strongest one available: the
+// result must equal the input, whatever the slice boundaries were. A loop that dropped, duplicated or
+// misaligned a slice shows up as a mismatch, and one that mis-sized the last slice shows up as a
+// different row count.
+//
+// NOLINTNEXTLINE
+TEST_F(MapApplyExprTest, test_map_wider_than_one_slice) {
+    TypeDescriptor type_map_int_int;
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+    type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
+
+    create_lambda_expr(type_map_int_int);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
+
+    // One row per row of `cur_chunk`, so the capture-column size check inside map_apply passes.
+    constexpr int32_t kRows = 5;
+    constexpr int32_t kEntriesPerRow = 1000;
+    for (int32_t row = 0; row < kRows; ++row) {
+        DatumMap entries;
+        for (int32_t i = 0; i < kEntriesPerRow; ++i) {
+            entries[(int32_t)(row * kEntriesPerRow + i)] = (int32_t)(i * 7 + 1);
+        }
+        column->append_datum(entries);
+    }
+
+    std::unique_ptr<MapApplyExpr> map_apply_expr = create_map_apply_expr(type_map_int_int);
+    map_apply_expr->add_child(_lambda_func[0]);
+    map_apply_expr->add_child(new_fake_const_expr(column, type_map_int_int));
+
+    ExprContext exprContext(map_apply_expr.get());
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
+    ColumnPtr result = map_apply_expr->evaluate(&exprContext, &cur_chunk);
+
+    ASSERT_TRUE(result->is_nullable());
+    ASSERT_EQ(column->size(), result->size());
+    EXPECT_EQ(column->debug_string(), result->debug_string());
+
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
+}
+
 // NOLINTNEXTLINE
 TEST_F(MapApplyExprTest, test_map_varchar_int) {
     TypeDescriptor type_map_varchar_int;
