@@ -94,35 +94,6 @@ void archive_current_schema_into_history(TabletMetadataPB* metadata) {
 
 Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
-<<<<<<< HEAD
-        if (alter_meta.has_enable_persistent_index()) {
-            auto update_mgr = tablet_mgr->update_mgr();
-            metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
-            // Try remove index from index cache
-            // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
-            // because the primary index is available in cache
-            // But it will be remove from index cache after apply is finished
-            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
-        }
-        if (alter_meta.has_enable_change_data_capture()) {
-            alter_cdc(metadata, alter_meta.enable_change_data_capture());
-        }
-        // Check if the alter_meta has a persistent index type change
-        if (alter_meta.has_persistent_index_type()) {
-            // Get the previous and new persistent index types
-            PersistentIndexTypePB prev_type = metadata->persistent_index_type();
-            PersistentIndexTypePB new_type = alter_meta.persistent_index_type();
-            // Apply the changes to the persistent index type
-            metadata->set_persistent_index_type(new_type);
-            LOG(INFO) << fmt::format("alter persistent index type from {} to {} for tablet id: {}",
-                                     PersistentIndexTypePB_Name(prev_type), PersistentIndexTypePB_Name(new_type),
-                                     metadata->id());
-            // Get the update manager
-            auto update_mgr = tablet_mgr->update_mgr();
-            // Try to remove the index from the index cache
-            (void)update_mgr->index_cache().try_remove_by_key(metadata->id());
-        }
-=======
         // `enable_persistent_index` and `persistent_index_type` are deliberately NOT applied.
         //
         // A shared-data tablet has exactly one primary-key index implementation left, the cloud-native
@@ -140,7 +111,9 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         // fields are inert -- every reader of them requires enabled + CLOUD_NATIVE, i.e. asks "is this a
         // cloud-native primary-key index".
         //
->>>>>>> b736f83d64e... [Refactor] Stop applying the PK persistent index type from an alter-meta log (#78264)
+        if (alter_meta.has_enable_change_data_capture()) {
+            alter_cdc(metadata, alter_meta.enable_change_data_capture());
+        }
         // A range-carrying update is a metadata-only trailing sort-key ADD: the schema arity grows by
         // one or more and every tablet bound gains one trailing NULL sentinel per added column.
         // Validate the change against the
@@ -524,21 +497,11 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
-<<<<<<< HEAD
-        // local persistent index will update index version, so we need to load first
-        // still need prepare primary index even when this iteration produced no
-        // rowset changes (legacy "empty compaction", admin no-op publish, or
-        // CelerData empty publish from restore)
-        if (_index_entry == nullptr && (_has_no_op_apply || _has_empty_publish ||
-                                        (_metadata->enable_persistent_index() &&
-                                         _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
-=======
         // Still need to prepare the primary index even when this iteration produced no rowset changes
-        // (legacy "empty compaction" or admin no-op publish). The old companion condition -- a LOCAL
-        // persistent index, which had to be loaded so that its index version could be updated -- went
-        // away with the LOCAL implementation itself.
-        if (_index_entry == nullptr && _has_no_op_apply) {
->>>>>>> b736f83d64e... [Refactor] Stop applying the PK persistent index type from an alter-meta log (#78264)
+        // (legacy "empty compaction", admin no-op publish, or CelerData empty publish from restore).
+        // The old companion condition -- a LOCAL persistent index, which had to be loaded so that its
+        // index version could be updated -- went away with the LOCAL implementation itself.
+        if (_index_entry == nullptr && (_has_no_op_apply || _has_empty_publish)) {
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
