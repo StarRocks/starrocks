@@ -62,6 +62,13 @@ description: "Alphabetical s"
 - Unit: -
 - Description: Metrics returned by `/proc/net/snmp`.
 
+## `starrocks_be_build_info`
+
+- Unit: -
+- Type: Instantaneous
+- Labels: `version`, `commit_hash`
+- Description: Build information for the BE node. The metric value is always `1`.
+
 ## `starrocks_be_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -348,6 +355,13 @@ description: "Alphabetical s"
 - Unit: Count
 - Type: Cumulative
 - Description: The total number of backup snapshots deleted from their repository, whether by automatic TTL cleanup or by DROP SNAPSHOT.
+
+## `starrocks_fe_build_info`
+
+- Unit: -
+- Type: Instantaneous
+- Labels: `version`, `commit_hash`
+- Description: Build information for the FE node. The metric value is always `1`.
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
