@@ -160,14 +160,20 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       GH_TOKEN: ${{ secrets.PAT }}
-      # Ingest target (ci-api on ciu). If the secret is unset the recorder logs the record and
-      # no-ops the POST, so the job stays green even before the endpoint/secret are provisioned.
-      BACKPORT_METRICS_INGEST_URL: ${{ secrets.BACKPORT_METRICS_INGEST_URL }}
-      BACKPORT_METRICS_INGEST_TOKEN: ${{ secrets.CI_METRICS_INGEST_TOKEN }}
+      # Reuse the SAME CI Metrics secrets as the report-metrics jobs (already provisioned):
+      # CI_METRICS_TOKEN (write) + CI_METRICS_CA (self-signed CA, verified via --cacert, not -k).
+      # Base URL is hardcoded like report-metrics' METRICS_BASE. If a secret is empty the recorder
+      # just logs the record and no-ops the POST, so the job stays green.
+      CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+      CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
     steps:
       - name: record AI backport recommendation vs author selection
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          CA="${RUNNER_TEMP:-/tmp}/ci_metrics_ca.pem"; printf '%s' "${CI_METRICS_CA}" > "$CA"
+          BACKPORT_METRICS_INGEST_URL="https://47.236.49.47:8080/ingest/backport-recommendations" \
+          BACKPORT_METRICS_INGEST_TOKEN="${CI_METRICS_TOKEN}" \
+          BACKPORT_METRICS_CACERT="$CA" \
           python3 lib/backport_record.py --repo ${GITHUB_REPOSITORY} --pr ${PR_NUMBER}
 
   thirdparty-filter:
