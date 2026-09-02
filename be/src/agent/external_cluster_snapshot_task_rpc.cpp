@@ -26,6 +26,7 @@
 
 #include "agent/external_cluster_snapshot_task_helper.h"
 #include "agent/finish_task.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/statusor.h"
@@ -104,6 +105,14 @@ void cluster_snapshot_rpc_cb(brpc::Controller* cntl, UploadSnapshotFilesResponse
 
 void send_snapshot_rpc_to_backend(const TBackend& backend, const std::vector<int64_t>& tablet_ids,
                                   const UploadSnapshotFilesRequestPB& node_req, ClusterSnapshotRpcCtx& rpc_ctx) {
+#ifdef BE_TEST
+    bool skip_rpc = false;
+    TEST_SYNC_POINT_CALLBACK("cluster_snapshot_task::upload_snapshot_files", &skip_rpc);
+    if (skip_rpc) {
+        rpc_ctx.count_down();
+        return;
+    }
+#endif
 #ifdef __APPLE__
     rpc_ctx.handle_failure("LakeService snapshot RPC is not supported on macOS builds", tablet_ids);
     rpc_ctx.count_down();

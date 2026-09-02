@@ -59,9 +59,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     private ClusterSnapshotDiff snapshotDiff;
 
     @SerializedName(value = "cleaningCompleted")
-    private boolean cleaningCompleted = true;
+    private volatile boolean cleaningCompleted = true;
 
     private AgentBatchTask lakeSnapshotBatchTask = new AgentBatchTask();
+    private long cleanupTaskBatchCreatedTimeMs = 0;
 
     // for deserialization
     public ExternalClusterSnapshotJob() {
@@ -173,18 +174,25 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         } catch (StarRocksException e) {
             throw new StarRocksException("upload image failed, err msg: " + e.getMessage());
         }
-        ClusterSnapshot snapshot = getSnapshot();
-        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                .setLastSuccFullSnapshotInfo(snapshot.getClusterSnapshotInfo());
         persistStateChange(ClusterSnapshotJobState.CLEANING);
         LOG.info("Finish upload snapshot meta file for Cluster Snapshot, job: {}", getId());
     }
 
     @Override
     protected void runCleaningJob(SnapshotJobContext context) throws StarRocksException {
-        createDeleteClusterSnasphotTasks();
-        cleaningCompleted = getLakeSnapshotBatchTask().getTaskNum() == 0;
+        cleaningCompleted = !hasPendingCleanup();
         persistStateChange(ClusterSnapshotJobState.FINISHED);
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                .setLastSuccFullSnapshotInfo(getSnapshot().getClusterSnapshotInfo());
+        if (!cleaningCompleted) {
+            try {
+                createDeleteClusterSnasphotTasks();
+            } catch (Exception e) {
+                // FINISHED(false) is the durable cleanup intent. Dispatch failures are retried by
+                // ClusterSnapshotJobScheduler and must not turn a committed snapshot into ERROR.
+                LOG.warn("Failed to dispatch cleanup tasks for snapshot job: {}", getId(), e);
+            }
+        }
         if (feImageCreatedTimeMs > 0) {
             MetricRepo.GAUGE_EXTERNAL_LAST_SUCCESS_SNAPSHOT_TIME.setValue(feImageCreatedTimeMs);
         }
@@ -208,9 +216,20 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                 && (!snapshotDiff.getAddedPartitions().isEmpty() || !snapshotDiff.getChangedPartitions().isEmpty());
     }
 
+    private boolean hasPendingCleanup() {
+        return snapshotDiff != null
+                && (!snapshotDiff.getDeletedPartitions().isEmpty() || !snapshotDiff.getChangedPartitions().isEmpty());
+    }
+
     boolean hasCorruptedChangedPartitions() {
         return snapshotDiff != null && snapshotDiff.getChangedPartitions().stream()
                 .anyMatch(change -> change.getCurrentPartitionInfo() == null);
+    }
+
+    boolean isCleanupTaskBatchTimedOut(long nowMs) {
+        return cleanupTaskBatchCreatedTimeMs > 0
+                && nowMs - cleanupTaskBatchCreatedTimeMs
+                        > Config.automated_cluster_snapshot_timeout_seconds * 1000L;
     }
 
     @Override
@@ -254,9 +273,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         // TODO(zhangqiang)
         // handle failed tablets
         if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
+            task.setFailed(false);
             task.setFinished(true);
-        } else {
-            task.failed();
+        } else if (!task.isFinished()) {
+            // LeaderImpl owns failedTimes. Incrementing it again here made one failed response count
+            // twice and exhausted the nominal three retries after only two attempts.
             task.setFailed(true);
             String errorMsg = "Unknown error";
             if (request.getTask_status().isSetError_msgs() && !request.getTask_status().getError_msgs().isEmpty()) {
@@ -404,6 +425,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     }
 
     void createDeleteClusterSnasphotTasks() throws StarRocksException {
+        if (!hasPendingCleanup()) {
+            lakeSnapshotBatchTask = new AgentBatchTask();
+            cleanupTaskBatchCreatedTimeMs = 0;
+            return;
+        }
         long vTabletId = getVirtualTabletId();
         // See createUploadClusterSnapshotTasks: publish the batch only once it is complete.
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -433,13 +459,13 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(),
                     -1, -1, partition.isPreviousFileBundling(), false, vTabletId, GlobalStateMgr.getCurrentState().getNextId());
-            List<TComputeNodeTablets> computeNodeTablets =
-                            collectComputeNodeTablets(partition.getCurrentPartitionInfo().getTabletIds());
-            task.setComputeNodeTablets(computeNodeTablets);
+            task.setComputeNodeTablets(
+                    buildDeleteLogCandidates(partition.getCurrentPartitionInfo().getTabletIds()));
             batchTask.addTask(task);
         }
 
         lakeSnapshotBatchTask = batchTask;
+        cleanupTaskBatchCreatedTimeMs = System.currentTimeMillis();
         AgentTaskQueue.addBatchTask(lakeSnapshotBatchTask);
         AgentTaskExecutor.submit(lakeSnapshotBatchTask);
         LOG.debug("Finish create delete cluster snapshot tasks. job: {}, vTabletId: {}, task count: {}", getId(), vTabletId,
@@ -448,8 +474,9 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
     private long chooseAggregatorNodeId(long preAggregatorNodeId) {
         if (preAggregatorNodeId != 0) {
-            if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                    .checkComputeNodeAlive(preAggregatorNodeId)) {
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getBackendOrComputeNode(preAggregatorNodeId);
+            if (node != null && node.isAlive()) {
                 return preAggregatorNodeId;
             }
         }
@@ -458,6 +485,15 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             return 0;
         }
         return computeNode.getId();
+    }
+
+    private List<TComputeNodeTablets> buildDeleteLogCandidates(List<Long> tabletIds) {
+        if (tabletIds.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        TComputeNodeTablets candidates = new TComputeNodeTablets();
+        candidates.setTablets(Lists.newArrayList(tabletIds));
+        return Lists.newArrayList(candidates);
     }
 
     private List<TComputeNodeTablets> collectComputeNodeTablets(List<Long> tabletIds) throws StarRocksException {

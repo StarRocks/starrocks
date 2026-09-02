@@ -1399,6 +1399,24 @@ public class ClusterSnapshotTest {
     }
 
     @Test
+    public void testDropRejectsPendingExternalSnapshotCleanup() {
+        ClusterSnapshotMgrEPack mgr = new ClusterSnapshotMgrEPack();
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(
+                9001L, ClusterSnapshotMgr.AUTOMATED_NAME_PREFIX + "pending_cleanup",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false);
+        mgr.getAutomatedSnapshotJobs().put(job.getId(), job);
+
+        DropClusterSnapshotStmt stmt = new DropClusterSnapshotStmt(job.getSnapshotName(), false);
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Cannot drop cluster snapshot '" + job.getSnapshotName()
+                        + "' because snapshot cleanup is still pending",
+                () -> mgr.dropClusterSnapshot(stmt));
+        Assertions.assertSame(job, mgr.getAutomatedSnapshotJobs().get(job.getId()));
+    }
+
+    @Test
     public void testRetainVersionsIncludesCommittedAfterVisible() {
         final ClusterSnapshotMgrEPack localClusterSnapshotMgr = new ClusterSnapshotMgrEPack();
         localClusterSnapshotMgr.clusterSnapshotJobScheduler = new ClusterSnapshotJobScheduler(null, null);

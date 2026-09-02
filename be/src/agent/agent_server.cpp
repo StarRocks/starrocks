@@ -454,6 +454,7 @@ void AgentServer::Impl::submit_task_batch(TTaskType::type task_type,
                     std::bind(task_func, std::make_shared<AgentTaskRequest>(*task, task->*request, time(nullptr)),
                               task_func_args...));
             if (!submit_status->ok()) {
+                remove_task_info(task_type, signature);
                 LOG(WARNING) << "fail to submit task. reason: " << submit_status->message() << ", task: " << task;
             }
         } else {

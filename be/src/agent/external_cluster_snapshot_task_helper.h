@@ -15,10 +15,12 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "base/phmap/phmap.h"
+#include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
@@ -94,5 +96,10 @@ void prepare_unused_files_for_log(int64_t pre_version, const FileSet& pre_bundle
                                   const FileSet& unused_meta_files, const phmap::flat_hash_set<int64_t>& pre_schema_ids,
                                   const phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_schema_files,
                                   const FileSet& partition_live_files);
+
+// Ordered delete-log roots: the destination tablet for new requests, followed by sorted source-tablet
+// fallbacks for requests/logs written by older versions.
+std::optional<int64_t> get_snapshot_log_tablet_id(const TExternalClusterSnapshotRequest& request);
+std::vector<int64_t> get_snapshot_log_tablet_ids(const TExternalClusterSnapshotRequest& request);
 
 } // namespace starrocks::lake

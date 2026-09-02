@@ -43,6 +43,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -753,21 +754,32 @@ public class ExternalClusterSnapshotJobTest {
     public void testFinishSnapshotTaskStatusHandling() {
         ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
                 storageVolumeName, System.currentTimeMillis());
-        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, false,
+        ExternalClusterSnapshotTask succeededTask = new ExternalClusterSnapshotTask(
+                1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, false,
                 false,
                 100L, 1L);
 
         TFinishTaskRequest okReq = new TFinishTaskRequest();
         okReq.setTask_status(new TStatus(TStatusCode.OK));
-        job.finishSnapshotTask(task, okReq);
-        Assertions.assertTrue(task.isFinished());
-        Assertions.assertFalse(task.isFailed());
+        job.finishSnapshotTask(succeededTask, okReq);
+        Assertions.assertTrue(succeededTask.isFinished());
+        Assertions.assertFalse(succeededTask.isFailed());
 
+        ExternalClusterSnapshotTask retriedTask = new ExternalClusterSnapshotTask(
+                1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, false,
+                false, 100L, 2L);
         TFinishTaskRequest failReq = new TFinishTaskRequest();
         failReq.setTask_status(new TStatus(TStatusCode.TIMEOUT));
         failReq.getTask_status().addToError_msgs("err");
-        job.finishSnapshotTask(task, failReq);
-        Assertions.assertTrue(task.isFailed());
+        // LeaderImpl increments failedTimes before forwarding the response to the job.
+        retriedTask.failed();
+        job.finishSnapshotTask(retriedTask, failReq);
+        Assertions.assertEquals(1, retriedTask.getFailedTimes());
+        Assertions.assertTrue(retriedTask.isFailed());
+
+        job.finishSnapshotTask(retriedTask, okReq);
+        Assertions.assertTrue(retriedTask.isFinished());
+        Assertions.assertFalse(retriedTask.isFailed());
     }
 
     @Test
@@ -872,7 +884,6 @@ public class ExternalClusterSnapshotJobTest {
         // null currentPartitionInfo, leaving the snapshot un-expirable and its remote files undeleted.
         mockAggregatorSuccess();
         mockWarehouseAliveNodes();
-        mockWarehouseAssign();
         mockGetVirtualTabletId();
 
         restored.createDeleteClusterSnasphotTasks();
@@ -1389,6 +1400,17 @@ public class ExternalClusterSnapshotJobTest {
         };
     }
 
+    private void mockNodeAlive(boolean alive) {
+        ComputeNode node = new ComputeNode(9L, "127.0.0.1", 9050);
+        node.setAlive(alive);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return node;
+            }
+        };
+    }
+
     private void mockGetVirtualTabletId() {
         new MockUp<ExternalClusterSnapshotJob>() {
             @Mock
@@ -1535,6 +1557,12 @@ public class ExternalClusterSnapshotJobTest {
 
         Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
         Assertions.assertFalse(job.isCleaningCompleted());
+        ExternalClusterSnapshotTask changedTask = (ExternalClusterSnapshotTask) job.getLakeSnapshotBatchTask()
+                .getAllTasks().get(1);
+        List<TComputeNodeTablets> candidates = changedTask.toThrift().getCompute_node_tablets();
+        Assertions.assertEquals(1, candidates.size());
+        Assertions.assertFalse(candidates.get(0).isSetCompute_node());
+        Assertions.assertEquals(Lists.newArrayList(2001L), candidates.get(0).getTablets());
     }
 
     @Test
@@ -1554,10 +1582,12 @@ public class ExternalClusterSnapshotJobTest {
         CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
-        // run() catches the exception and sets ERROR state
+        // The snapshot is committed before cleanup dispatch. A dispatch failure leaves a durable
+        // FINISHED(false) intent for the scheduler to retry.
         job.run(context);
 
-        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        Assertions.assertFalse(job.isCleaningCompleted());
     }
 
     @Test
@@ -1706,6 +1736,8 @@ public class ExternalClusterSnapshotJobTest {
         batchTask.addTask(task);
         // task is not finished yet
 
+        mockNodeAlive(true);
+
         java.lang.reflect.Field batchField = ExternalClusterSnapshotJob.class.getDeclaredField("lakeSnapshotBatchTask");
         batchField.setAccessible(true);
         batchField.set(job, batchTask);
@@ -1723,6 +1755,78 @@ public class ExternalClusterSnapshotJobTest {
         // Should still be not completed since tasks are still running
         Assertions.assertFalse(job.isCleaningCompleted());
         clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupReassignsTaskFromDeadBackend() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.FINISHED);
+        job.setCleaningCompleted(false);
+        setSnapshotDiff(job, createSnapshotDiffWithDeletedPartition());
+
+        AgentBatchTask oldBatchTask = new AgentBatchTask();
+        oldBatchTask.addTask(new ExternalClusterSnapshotTask(9L, 1L, 2L, 3L, 4L, 1L,
+                -1L, -1L, true, true, 100L, 1L));
+        java.lang.reflect.Field batchField = ExternalClusterSnapshotJob.class.getDeclaredField("lakeSnapshotBatchTask");
+        batchField.setAccessible(true);
+        batchField.set(job, oldBatchTask);
+
+        mockNodeAlive(false);
+        mockAggregatorSuccess();
+        mockGetVirtualTabletId();
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(null, null);
+        java.lang.reflect.Method method = ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+        method.setAccessible(true);
+        method.invoke(scheduler);
+
+        Assertions.assertNotSame(oldBatchTask, job.getLakeSnapshotBatchTask());
+        Assertions.assertTrue(job.getLakeSnapshotBatchTask().getTaskNum() > 0);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testRetryPendingCleanupReassignsTimedOutTaskFromLiveBackend() throws Exception {
+        long originalTimeout = Config.automated_cluster_snapshot_timeout_seconds;
+        try {
+            Config.automated_cluster_snapshot_timeout_seconds = 1;
+            ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                    storageVolumeName, System.currentTimeMillis());
+            job.setState(ClusterSnapshotJobState.FINISHED);
+            job.setCleaningCompleted(false);
+            setSnapshotDiff(job, createSnapshotDiffWithDeletedPartition());
+
+            AgentBatchTask oldBatchTask = new AgentBatchTask();
+            oldBatchTask.addTask(new ExternalClusterSnapshotTask(9L, 1L, 2L, 3L, 4L, 1L,
+                    -1L, -1L, true, true, 100L, 1L));
+            java.lang.reflect.Field batchField =
+                    ExternalClusterSnapshotJob.class.getDeclaredField("lakeSnapshotBatchTask");
+            batchField.setAccessible(true);
+            batchField.set(job, oldBatchTask);
+            java.lang.reflect.Field createdTimeField =
+                    ExternalClusterSnapshotJob.class.getDeclaredField("cleanupTaskBatchCreatedTimeMs");
+            createdTimeField.setAccessible(true);
+            createdTimeField.set(job, System.currentTimeMillis() - 2000);
+
+            mockNodeAlive(true);
+            mockAggregatorSuccess();
+            mockGetVirtualTabletId();
+            clusterSnapshotMgr.getAutomatedSnapshotJobs().put(1L, job);
+
+            ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(null, null);
+            java.lang.reflect.Method method =
+                    ClusterSnapshotJobScheduler.class.getDeclaredMethod("retryPendingCleanup");
+            method.setAccessible(true);
+            method.invoke(scheduler);
+
+            Assertions.assertNotSame(oldBatchTask, job.getLakeSnapshotBatchTask());
+            Assertions.assertTrue(job.getLakeSnapshotBatchTask().getTaskNum() > 0);
+            clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+        } finally {
+            Config.automated_cluster_snapshot_timeout_seconds = originalTimeout;
+        }
     }
 
     @Test
@@ -1771,12 +1875,14 @@ public class ExternalClusterSnapshotJobTest {
         mockAggregatorSuccess();
         mockGetVirtualTabletId();
 
-        // Create a batch task with finished but failed task
+        // Create a batch task that exhausted the three heartbeat retries.
         AgentBatchTask batchTask = new AgentBatchTask();
         ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, -1L, true,
                 true, 100L, 1L);
-        task.setFinished(true);
         task.setFailed(true);
+        task.failed();
+        task.failed();
+        task.failed();
         task.setErrorMsg("delete failed on CN");
         batchTask.addTask(task);
 
@@ -1922,8 +2028,28 @@ public class ExternalClusterSnapshotJobTest {
 
         clusterSnapshotMgr.clearFinishedAutomatedClusterSnapshot(null);
 
-        // Job should be expired since cleaningCompleted is true
+        // Job should be expired and deleted since cleaningCompleted is true.
         Assertions.assertEquals(ClusterSnapshotJobState.DELETED, job.getState());
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
+    }
+
+    @Test
+    public void testCleanupSuccessExpiresHistoricalJob() {
+        ExternalClusterSnapshotJob historical = new ExternalClusterSnapshotJob(
+                1L, "historical", storageVolumeName, System.currentTimeMillis());
+        historical.setState(ClusterSnapshotJobState.FINISHED);
+        historical.setCleaningCompleted(false);
+        ExternalClusterSnapshotJob latest = new ExternalClusterSnapshotJob(
+                2L, "latest", storageVolumeName, System.currentTimeMillis() + 1);
+        latest.setState(ClusterSnapshotJobState.FINISHED);
+        latest.setCleaningCompleted(false);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(historical.getId(), historical);
+        clusterSnapshotMgr.getAutomatedSnapshotJobs().put(latest.getId(), latest);
+
+        clusterSnapshotMgr.finishExternalSnapshotCleanup(historical);
+
+        Assertions.assertEquals(ClusterSnapshotJobState.EXPIRED, historical.getState());
+        Assertions.assertFalse(historical.isCleaningCompleted());
         clusterSnapshotMgr.getAutomatedSnapshotJobs().clear();
     }
 }

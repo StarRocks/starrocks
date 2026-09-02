@@ -29,6 +29,11 @@ const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 void finish_task(const TFinishTaskRequest& finish_task_request) {
     TEST_SYNC_POINT_CALLBACK("FinishAgentTask::input",
                              const_cast<void*>(static_cast<const void*>(&finish_task_request)));
+    bool skip = false;
+    TEST_SYNC_POINT_CALLBACK("FinishAgentTask::skip", &skip);
+    if (skip) {
+        return;
+    }
     // Return result to FE
     TMasterResult result;
     uint32_t try_time = 0;

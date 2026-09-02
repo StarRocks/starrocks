@@ -16,10 +16,33 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 
 namespace starrocks::lake {
+
+std::optional<int64_t> get_snapshot_log_tablet_id(const TExternalClusterSnapshotRequest& request) {
+    auto tablet_ids = get_snapshot_log_tablet_ids(request);
+    return tablet_ids.empty() ? std::nullopt : std::optional<int64_t>(tablet_ids.front());
+}
+
+std::vector<int64_t> get_snapshot_log_tablet_ids(const TExternalClusterSnapshotRequest& request) {
+    std::vector<int64_t> tablet_ids;
+    for (const auto& compute_node_tablets : request.compute_node_tablets) {
+        for (int64_t candidate : compute_node_tablets.tablets) {
+            tablet_ids.emplace_back(candidate);
+        }
+    }
+    std::sort(tablet_ids.begin(), tablet_ids.end());
+    tablet_ids.erase(std::unique(tablet_ids.begin(), tablet_ids.end()), tablet_ids.end());
+    if (request.__isset.dest_tablet_id) {
+        tablet_ids.erase(std::remove(tablet_ids.begin(), tablet_ids.end(), request.dest_tablet_id), tablet_ids.end());
+        tablet_ids.insert(tablet_ids.begin(), request.dest_tablet_id);
+    }
+    return tablet_ids;
+}
 
 RowsetIndex build_rowset_index(const TabletMetadataPtr& metadata) {
     RowsetIndex index;

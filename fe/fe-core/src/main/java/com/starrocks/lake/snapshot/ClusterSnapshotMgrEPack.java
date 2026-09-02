@@ -87,8 +87,20 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
     }
 
     public void dropClusterSnapshot(DropClusterSnapshotStmt stmt) {
-        String snapshotName = stmt.getSnapshotName();
         ClusterSnapshotJob job = getClusterSnapshotJobByName(stmt.getSnapshotName());
+        if (job instanceof ExternalClusterSnapshotJob) {
+            dropExternalClusterSnapshot(stmt);
+        } else {
+            dropClusterSnapshot(stmt, job);
+        }
+    }
+
+    private synchronized void dropExternalClusterSnapshot(DropClusterSnapshotStmt stmt) {
+        dropClusterSnapshot(stmt, getClusterSnapshotJobByName(stmt.getSnapshotName()));
+    }
+
+    private void dropClusterSnapshot(DropClusterSnapshotStmt stmt, ClusterSnapshotJob job) {
+        String snapshotName = stmt.getSnapshotName();
         if (job == null) {
             if (stmt.getIfExists()) {
                 LOG.warn("Cluster snapshot does not exist, snapshot name: " + snapshotName);
@@ -106,6 +118,12 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
                     snapshotName, job.getState().name());
             // TODO: Support CANCEL CLUSTER SNAPSHOT statement to allow users to cancel
             // running snapshot jobs
+        }
+        if (job instanceof ExternalClusterSnapshotJob
+                && !((ExternalClusterSnapshotJob) job).isCleaningCompleted()
+                && !job.isExpired() && !job.isDeleted() && !job.isError()) {
+            throw new SemanticException(
+                    "Cannot drop cluster snapshot '%s' because snapshot cleanup is still pending", snapshotName);
         }
 
         try {

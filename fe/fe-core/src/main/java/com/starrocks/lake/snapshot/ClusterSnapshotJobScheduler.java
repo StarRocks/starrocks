@@ -19,8 +19,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -142,6 +145,7 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
      * the main snapshot job lifecycle.
      */
     private void retryPendingCleanup() {
+        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().retryExpiredExternalSnapshotDeletion();
         for (ClusterSnapshotJob job : GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                 .getAutomatedSnapshotJobs().values()) {
             if (!(job instanceof ExternalClusterSnapshotJob)) {
@@ -154,7 +158,11 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
             if (extJob.hasCorruptedChangedPartitions()) {
                 // The details were lost by an older serializer and cannot be used to build a cleanup
                 // request. Abandon this best-effort cleanup instead of retrying the same error forever.
-                extJob.setCleaningCompleted(true);
+                try {
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().finishExternalSnapshotCleanup(extJob);
+                } catch (RuntimeException e) {
+                    LOG.warn("Failed to finalize malformed legacy snapshot job: {}", extJob.getId(), e);
+                }
                 LOG.warn("Skip pending cleanup for malformed legacy external snapshot job: {}", extJob.getId());
                 continue;
             }
@@ -162,31 +170,39 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
             try {
                 AgentBatchTask batchTask = extJob.getLakeSnapshotBatchTask();
                 if (batchTask.getTaskNum() > 0) {
-                    // Check if all tasks have received responses (finished or failed)
-                    boolean allResponded = batchTask.getAllTasks().stream()
-                            .allMatch(t -> t.isFinished() || t.isFailed());
-                    if (!allResponded) {
-                        // Some tasks still running, skip
-                        continue;
-                    }
-                    boolean anyFailed = batchTask.getAllTasks().stream().anyMatch(AgentTask::isFailed);
-                    if (!anyFailed) {
-                        extJob.setCleaningCompleted(true);
+                    boolean allSucceeded = batchTask.getAllTasks().stream().allMatch(AgentTask::isFinished);
+                    if (allSucceeded) {
+                        GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                                .finishExternalSnapshotCleanup(extJob);
                         LOG.info("Cleanup completed for snapshot job: {}", extJob.getId());
                         continue;
                     }
-                    LOG.info("Some cleanup tasks failed for job: {}, will retry", extJob.getId());
+
+                    // A failed response is retryable until LeaderImpl has counted three attempts.
+                    // While its backend is alive, heartbeat task reports re-dispatch the same task.
+                    boolean allTerminal = batchTask.getAllTasks().stream()
+                            .allMatch(t -> t.isFinished() || t.getFailedTimes() >= 3);
+                    boolean hasUnavailableBackend = batchTask.getAllTasks().stream().anyMatch(t ->
+                            !t.isFinished() && !isNodeAlive(t.getBackendId()));
+                    boolean batchTimedOut = extJob.isCleanupTaskBatchTimedOut(System.currentTimeMillis());
+                    if (!allTerminal && !hasUnavailableBackend && !batchTimedOut) {
+                        continue;
+                    }
+                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.EXTERNAL_CLUSTER_SNAPSHOT);
+                    LOG.info("Cleanup tasks need reassignment for job: {}, will retry", extJob.getId());
                 }
 
                 // (Re)create and dispatch delete tasks
                 if (extJob.getSnapshotDiff() == null) {
                     LOG.warn("snapshotDiff is null for job: {}, marking cleaning as completed", extJob.getId());
-                    extJob.setCleaningCompleted(true);
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .finishExternalSnapshotCleanup(extJob);
                     continue;
                 }
                 extJob.createDeleteClusterSnasphotTasks();
                 if (extJob.getLakeSnapshotBatchTask().getTaskNum() == 0) {
-                    extJob.setCleaningCompleted(true);
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                            .finishExternalSnapshotCleanup(extJob);
                     LOG.info("Cleanup completed for snapshot job {} because no delete tasks are needed", extJob.getId());
                 } else {
                     LOG.info("Dispatched cleanup retry tasks for snapshot job: {}", extJob.getId());
@@ -195,6 +211,12 @@ public class ClusterSnapshotJobScheduler extends LeaderDaemon implements Snapsho
                 LOG.warn("Failed to retry cleanup for snapshot job: {}", extJob.getId(), e);
             }
         }
+    }
+
+    private boolean isNodeAlive(long nodeId) {
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .getBackendOrComputeNode(nodeId);
+        return node != null && node.isAlive();
     }
 
     /**

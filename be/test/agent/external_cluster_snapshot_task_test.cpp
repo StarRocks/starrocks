@@ -20,16 +20,61 @@
 #include "agent/external_cluster_snapshot_task_rpc.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "exec/exec_env.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/snapshot_file_syncer.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/test_util.h"
+#include "storage/protobuf_file.h"
+#include "storage/storage_env.h"
 
 namespace starrocks::lake {
 
 using namespace starrocks;
+
+class SnapshotDeleteFileSystem final : public MemoryFileSystem {
+public:
+    void set_delete_dir_status(Status status) { _delete_dir_status = std::move(status); }
+    void set_delete_files_status(Status status) { _delete_files_status = std::move(status); }
+
+    Status delete_dir_recursive(const std::string& dirname) override {
+        _deleted_dir = dirname;
+        return _delete_dir_status;
+    }
+
+    Status delete_files(std::span<const std::string> paths) override {
+        _deleted_files.assign(paths.begin(), paths.end());
+        return _delete_files_status;
+    }
+
+    const std::string& deleted_dir() const { return _deleted_dir; }
+    const std::vector<std::string>& deleted_files() const { return _deleted_files; }
+
+private:
+    Status _delete_dir_status = Status::OK();
+    Status _delete_files_status = Status::OK();
+    std::string _deleted_dir;
+    std::vector<std::string> _deleted_files;
+};
+
+class DeleteLogFileSystem final : public MemoryFileSystem {
+public:
+    void set_delete_file_status(Status status) { _delete_file_status = std::move(status); }
+
+    Status delete_file(const std::string& path) override {
+        if (!_delete_file_status.ok()) {
+            return _delete_file_status;
+        }
+        return MemoryFileSystem::delete_file(path);
+    }
+
+private:
+    Status _delete_file_status = Status::OK();
+};
 
 class ExternalClusterSnapshotTaskTest : public TestBase {
 public:
@@ -38,9 +83,26 @@ public:
     void SetUp() override {
         clear_and_init_test_dir();
         _exec_env = ExecEnv::GetInstance();
+        _snapshot_delete_fs = std::make_shared<SnapshotDeleteFileSystem>();
+        _snapshot_delete_fs->set_delete_dir_status(Status::NotFound("already deleted"));
+        _snapshot_delete_fs->set_delete_files_status(Status::NotFound("already deleted"));
+        SyncPoint::GetInstance()->SetCallBack("SnapshotFileSyncer::file_system", [&](void* arg) {
+            auto* fs_or = reinterpret_cast<StatusOr<std::shared_ptr<FileSystem>>*>(arg);
+            *fs_or = _snapshot_delete_fs;
+        });
+        SyncPoint::GetInstance()->SetCallBack("ExternalClusterSnapshotTask::tablet_manager", [&](void* arg) {
+            *reinterpret_cast<TabletManager**>(arg) = _tablet_mgr.get();
+        });
+        SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::skip",
+                                              [](void* arg) { *reinterpret_cast<bool*>(arg) = true; });
+        SyncPoint::GetInstance()->EnableProcessing();
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        remove_test_dir_ignore_error();
+    }
 
     MutableTabletMetadataPtr create_tablet_metadata(int64_t tablet_id, int64_t version, int64_t rowset_id,
                                                     const std::vector<std::string>& segments = {},
@@ -125,7 +187,7 @@ public:
         request.__set_pre_version(pre_version);
         request.__set_new_version(new_version);
         request.__set_job_id(job_id);
-        request.__set_dest_tablet_id(0);
+        request.__set_dest_tablet_id(9000);
         // Build compute_node_tablets according to the new thrift definition.
         // For test purposes we put all source tablets on the first backend.
         if (!backends.empty() && !src_tablets.empty()) {
@@ -142,6 +204,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_cluster_snapshot_task";
     ExecEnv* _exec_env = nullptr;
+    std::shared_ptr<SnapshotDeleteFileSystem> _snapshot_delete_fs;
 };
 
 // Test basic snapshot task with new segments
@@ -298,7 +361,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_new_version_not_found) {
     int64_t signature = next_id();
 
     SyncPoint::GetInstance()->SetCallBack("cluster_snapshot_task::upload_snapshot_files",
-                                          [](void* arg) { /* Skip RPC */ });
+                                          [](void* arg) { *reinterpret_cast<bool*>(arg) = true; });
     SyncPoint::GetInstance()->EnableProcessing();
 
     // Should handle the error gracefully
@@ -320,7 +383,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_empty_tablets) {
     int64_t signature = next_id();
 
     SyncPoint::GetInstance()->SetCallBack("cluster_snapshot_task::upload_snapshot_files",
-                                          [](void* arg) { /* Skip RPC */ });
+                                          [](void* arg) { *reinterpret_cast<bool*>(arg) = true; });
     SyncPoint::GetInstance()->EnableProcessing();
 
     // Should complete without errors
@@ -328,6 +391,25 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_empty_tablets) {
 
     SyncPoint::GetInstance()->DisableProcessing();
     SyncPoint::GetInstance()->ClearAllCallBacks();
+}
+
+TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_empty_tablets_uses_default_tablet_manager) {
+    TExternalClusterSnapshotRequest request;
+    request.__set_db_id(100);
+    request.__set_table_id(200);
+    request.__set_partition_id(300);
+    request.__set_physical_partition_id(400);
+    request.__set_pre_version(-1);
+    request.__set_new_version(1);
+
+    TStatusCode::type reported_status = TStatusCode::RUNTIME_ERROR;
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&](void* arg) {
+        auto* finish_request = reinterpret_cast<TFinishTaskRequest*>(arg);
+        reported_status = finish_request->task_status.status_code;
+    });
+    run_external_cluster_snapshot_task(request, next_id(), _exec_env);
+    SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+    ASSERT_EQ(TStatusCode::OK, reported_status);
 }
 
 // Test snapshot task with multiple tablets
@@ -420,7 +502,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_no_new_files) {
     int64_t signature = next_id();
 
     SyncPoint::GetInstance()->SetCallBack("cluster_snapshot_task::upload_snapshot_files",
-                                          [](void* arg) { /* Skip RPC */ });
+                                          [](void* arg) { *reinterpret_cast<bool*>(arg) = true; });
     SyncPoint::GetInstance()->EnableProcessing();
 
     // Should complete without sending RPC (no new files)
@@ -1014,7 +1096,75 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_prepare_unused_files_for_log_with_n
     ASSERT_TRUE(unused_schema_files.empty());
 }
 
+TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_log_tablet_id_is_stable_across_cn_regrouping) {
+    TExternalClusterSnapshotRequest request;
+    TBackend backend1;
+    backend1.__set_host("127.0.0.1");
+    backend1.__set_be_port(9060);
+    TBackend backend2;
+    backend2.__set_host("127.0.0.2");
+    backend2.__set_be_port(9060);
+
+    TComputeNodeTablets group1;
+    group1.__set_compute_node(backend1);
+    group1.__set_tablets({9, 3});
+    TComputeNodeTablets group2;
+    group2.__set_compute_node(backend2);
+    group2.__set_tablets({7, 5});
+    request.__set_compute_node_tablets({group1, group2});
+    ASSERT_EQ(3, get_snapshot_log_tablet_id(request).value());
+    ASSERT_EQ((std::vector<int64_t>{3, 5, 7, 9}), get_snapshot_log_tablet_ids(request));
+
+    group1.__set_tablets({7, 9});
+    group2.__set_tablets({5, 3});
+    request.__set_compute_node_tablets({group2, group1});
+    ASSERT_EQ(3, get_snapshot_log_tablet_id(request).value());
+
+    request.__set_dest_tablet_id(11);
+    ASSERT_EQ(11, get_snapshot_log_tablet_id(request).value());
+    ASSERT_EQ((std::vector<int64_t>{11, 3, 5, 7, 9}), get_snapshot_log_tablet_ids(request));
+
+    request.__isset.dest_tablet_id = false;
+    request.__set_compute_node_tablets({});
+    ASSERT_FALSE(get_snapshot_log_tablet_id(request).has_value());
+    ASSERT_TRUE(get_snapshot_log_tablet_ids(request).empty());
+}
+
 // ==================== Tests for delete partition task ====================
+
+TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_file_syncer_delete_statuses) {
+    auto fs = std::make_shared<SnapshotDeleteFileSystem>();
+    SyncPoint::GetInstance()->SetCallBack("SnapshotFileSyncer::file_system", [&](void* arg) {
+        auto* fs_or = reinterpret_cast<StatusOr<std::shared_ptr<FileSystem>>*>(arg);
+        *fs_or = fs;
+    });
+
+    SnapshotFileSyncer syncer;
+    fs->set_delete_dir_status(Status::NotFound("already deleted"));
+    ASSERT_OK(syncer.delete_partition(500, 100, 200, 300, 400));
+    ASSERT_EQ("staros://500/db100/200/400", fs->deleted_dir());
+
+    fs->set_delete_dir_status(Status::IOError("delete directory failed"));
+    auto st = syncer.delete_partition(500, 100, 200, 300, 400);
+    ASSERT_TRUE(st.is_io_error());
+
+    ExternalClusterSnapshotLogPB log_pb;
+    log_pb.set_db_id(100);
+    log_pb.set_table_id(200);
+    log_pb.set_physical_partition_id(400);
+    log_pb.add_delete_data_files("segment.dat");
+    log_pb.add_delete_meta_files("meta.pb");
+    log_pb.add_delete_schema_files("schema.pb");
+
+    fs->set_delete_files_status(Status::NotFound("already deleted"));
+    ASSERT_OK(syncer.delete_files(600, log_pb));
+    ASSERT_EQ(3, fs->deleted_files().size());
+
+    fs->set_delete_files_status(Status::IOError("delete files failed"));
+    st = syncer.delete_files(600, log_pb);
+    ASSERT_TRUE(st.is_io_error());
+    SyncPoint::GetInstance()->ClearCallBack("SnapshotFileSyncer::file_system");
+}
 
 // Test run_delete_partition_task
 TEST_F(ExternalClusterSnapshotTaskTest, test_run_delete_partition_task) {
@@ -1059,9 +1209,149 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_run_delete_files_task) {
 
     int64_t signature = next_id();
 
-    // The function will attempt to load and delete files, which may fail in test environment
-    // but we can verify that the function completes
+    TStatusCode::type reported_status = TStatusCode::RUNTIME_ERROR;
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&](void* arg) {
+        auto* finish_request = reinterpret_cast<TFinishTaskRequest*>(arg);
+        reported_status = finish_request->task_status.status_code;
+    });
+
+    // No candidate root has a delete log, which means an earlier idempotent cleanup consumed it.
     run_delete_files_task(request, signature, _exec_env);
+    SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+    ASSERT_EQ(TStatusCode::OK, reported_status);
+}
+
+TEST_F(ExternalClusterSnapshotTaskTest, test_run_delete_files_task_error_and_success_paths) {
+    auto log_fs = std::make_shared<DeleteLogFileSystem>();
+    auto log_location_provider = std::make_shared<FixedLocationProvider>("/snapshot");
+    auto delete_fs = std::make_shared<SnapshotDeleteFileSystem>();
+    SyncPoint::GetInstance()->SetCallBack("ExternalClusterSnapshotTask::delete_log_location_provider", [&](void* arg) {
+        auto* provider = reinterpret_cast<std::shared_ptr<LocationProvider>*>(arg);
+        *provider = log_location_provider;
+    });
+    SyncPoint::GetInstance()->SetCallBack("SnapshotFileSyncer::file_system", [&](void* arg) {
+        auto* fs_or = reinterpret_cast<StatusOr<std::shared_ptr<FileSystem>>*>(arg);
+        *fs_or = delete_fs;
+    });
+
+    TExternalClusterSnapshotRequest request;
+    request.__set_db_id(100);
+    request.__set_table_id(200);
+    request.__set_partition_id(300);
+    request.__set_physical_partition_id(400);
+    request.__set_dest_tablet_id(600);
+    request.__set_new_version(-1);
+    TComputeNodeTablets cn_tablets;
+    cn_tablets.__set_tablets({500});
+    request.__set_compute_node_tablets({cn_tablets});
+
+    TStatusCode::type reported_status = TStatusCode::OK;
+    std::string reported_error;
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&](void* arg) {
+        auto* finish_request = reinterpret_cast<TFinishTaskRequest*>(arg);
+        reported_status = finish_request->task_status.status_code;
+        reported_error =
+                finish_request->task_status.error_msgs.empty() ? "" : finish_request->task_status.error_msgs.front();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("ExternalClusterSnapshotTask::delete_log_file_system", [](void* arg) {
+        auto* fs_or = reinterpret_cast<StatusOr<std::shared_ptr<FileSystem>>*>(arg);
+        *fs_or = Status::IOError("create delete-log filesystem failed");
+    });
+    request.__set_job_id(501);
+    run_delete_files_task(request, next_id(), _exec_env);
+    ASSERT_EQ(TStatusCode::RUNTIME_ERROR, reported_status);
+    ASSERT_NE(std::string::npos, reported_error.find("create delete-log filesystem failed"));
+
+    SyncPoint::GetInstance()->SetCallBack("ExternalClusterSnapshotTask::delete_log_file_system", [&](void* arg) {
+        auto* fs_or = reinterpret_cast<StatusOr<std::shared_ptr<FileSystem>>*>(arg);
+        *fs_or = log_fs;
+    });
+    request.__set_job_id(502);
+    auto log_path = log_location_provider->snapshot_log_location(request.dest_tablet_id, request.job_id,
+                                                                 request.physical_partition_id);
+    ASSERT_OK(log_fs->create_dir_recursive(log_location_provider->snapshot_log_root_location(request.dest_tablet_id)));
+    ASSERT_OK(log_fs->create_file(log_path));
+    ASSERT_OK(log_fs->append_file(log_path, Slice("\xff", 1)));
+    run_delete_files_task(request, next_id(), _exec_env);
+    ASSERT_EQ(TStatusCode::RUNTIME_ERROR, reported_status);
+    ASSERT_NE(std::string::npos, reported_error.find("failed to parse protobuf"));
+
+    ExternalClusterSnapshotLogPB log_pb;
+    log_pb.set_db_id(request.db_id);
+    log_pb.set_table_id(request.table_id);
+    log_pb.set_physical_partition_id(request.physical_partition_id);
+    log_pb.add_delete_data_files("segment.dat");
+    log_pb.add_delete_meta_files("meta.pb");
+    log_pb.add_delete_schema_files("schema.pb");
+
+    request.__set_job_id(503);
+    log_path = log_location_provider->snapshot_log_location(request.dest_tablet_id, request.job_id,
+                                                            request.physical_partition_id);
+    ASSERT_OK(ProtobufFile(log_path, log_fs).save(log_pb, false));
+    delete_fs->set_delete_files_status(Status::IOError("delete snapshot files failed"));
+    run_delete_files_task(request, next_id(), _exec_env);
+    ASSERT_EQ(TStatusCode::RUNTIME_ERROR, reported_status);
+    ASSERT_NE(std::string::npos, reported_error.find("delete snapshot files failed"));
+    ASSERT_OK(log_fs->path_exists(log_path));
+
+    request.__set_job_id(504);
+    log_path = log_location_provider->snapshot_log_location(request.dest_tablet_id, request.job_id,
+                                                            request.physical_partition_id);
+    ASSERT_OK(ProtobufFile(log_path, log_fs).save(log_pb, false));
+    delete_fs->set_delete_files_status(Status::OK());
+    run_delete_files_task(request, next_id(), _exec_env);
+    ASSERT_EQ(TStatusCode::OK, reported_status);
+    ASSERT_TRUE(log_fs->path_exists(log_path).is_not_found());
+
+    SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+    SyncPoint::GetInstance()->ClearCallBack("SnapshotFileSyncer::file_system");
+    SyncPoint::GetInstance()->ClearCallBack("ExternalClusterSnapshotTask::delete_log_file_system");
+    SyncPoint::GetInstance()->ClearCallBack("ExternalClusterSnapshotTask::delete_log_location_provider");
+}
+
+TEST_F(ExternalClusterSnapshotTaskTest, test_delete_log_failure_is_retryable) {
+    auto log_fs = std::make_shared<DeleteLogFileSystem>();
+    auto log_location_provider = std::make_shared<FixedLocationProvider>("/snapshot");
+    SyncPoint::GetInstance()->SetCallBack("ExternalClusterSnapshotTask::delete_log_location_provider", [&](void* arg) {
+        *reinterpret_cast<std::shared_ptr<LocationProvider>*>(arg) = log_location_provider;
+    });
+    SyncPoint::GetInstance()->SetCallBack("ExternalClusterSnapshotTask::delete_log_file_system", [&](void* arg) {
+        *reinterpret_cast<StatusOr<std::shared_ptr<FileSystem>>*>(arg) = log_fs;
+    });
+
+    TExternalClusterSnapshotRequest request;
+    request.__set_db_id(100);
+    request.__set_table_id(200);
+    request.__set_partition_id(300);
+    request.__set_physical_partition_id(400);
+    request.__set_job_id(505);
+    request.__set_dest_tablet_id(600);
+    request.__set_new_version(-1);
+
+    ExternalClusterSnapshotLogPB log_pb;
+    log_pb.set_db_id(request.db_id);
+    log_pb.set_table_id(request.table_id);
+    log_pb.set_physical_partition_id(request.physical_partition_id);
+    auto log_path = log_location_provider->snapshot_log_location(request.dest_tablet_id, request.job_id,
+                                                                 request.physical_partition_id);
+    ASSERT_OK(log_fs->create_dir_recursive(log_location_provider->snapshot_log_root_location(request.dest_tablet_id)));
+    ASSERT_OK(ProtobufFile(log_path, log_fs).save(log_pb, false));
+
+    TStatusCode::type reported_status = TStatusCode::OK;
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&](void* arg) {
+        reported_status = reinterpret_cast<TFinishTaskRequest*>(arg)->task_status.status_code;
+    });
+
+    log_fs->set_delete_file_status(Status::IOError("delete snapshot log failed"));
+    run_delete_files_task(request, next_id(), _exec_env);
+    ASSERT_EQ(TStatusCode::RUNTIME_ERROR, reported_status);
+    ASSERT_OK(log_fs->path_exists(log_path));
+
+    log_fs->set_delete_file_status(Status::OK());
+    run_delete_files_task(request, next_id(), _exec_env);
+    ASSERT_EQ(TStatusCode::OK, reported_status);
+    ASSERT_TRUE(log_fs->path_exists(log_path).is_not_found());
 }
 
 // ==================== Tests for snapshot task with new delete logic ====================
@@ -1134,9 +1424,52 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_task_with_unused_files_col
     auto request = create_snapshot_request(100, 200, 300, 400, pre_version, new_version, 500, src_tablets, backends);
     int64_t signature = next_id();
 
-    // The function will collect unused files and write snapshot log
-    // RPC call may fail in test environment, but function should complete
+    auto log_fs = std::make_shared<MemoryFileSystem>();
+    auto log_location_provider = std::make_shared<FixedLocationProvider>("/snapshot");
+    ASSERT_OK(log_fs->create_dir_recursive(log_location_provider->snapshot_log_root_location(request.dest_tablet_id)));
+    SyncPoint::GetInstance()->SetCallBack("cluster_snapshot_task::upload_snapshot_files",
+                                          [](void* arg) { *reinterpret_cast<bool*>(arg) = true; });
+    SyncPoint::GetInstance()->SetCallBack(
+            "ExternalClusterSnapshotTask::snapshot_log_location_provider", [&](void* arg) {
+                auto* provider = reinterpret_cast<std::shared_ptr<LocationProvider>*>(arg);
+                *provider = log_location_provider;
+            });
+    SyncPoint::GetInstance()->SetCallBack("ExternalClusterSnapshotTask::snapshot_log_file_system", [&](void* arg) {
+        *reinterpret_cast<std::shared_ptr<FileSystem>*>(arg) = log_fs;
+    });
+    TStatusCode::type reported_status = TStatusCode::RUNTIME_ERROR;
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&](void* arg) {
+        auto* finish_request = reinterpret_cast<TFinishTaskRequest*>(arg);
+        reported_status = finish_request->task_status.status_code;
+    });
+
     run_external_cluster_snapshot_task(request, signature, _exec_env);
+
+    auto log_path = log_location_provider->snapshot_log_location(request.dest_tablet_id, request.job_id,
+                                                                 request.physical_partition_id);
+    ExternalClusterSnapshotLogPB log_pb;
+    ASSERT_OK(ProtobufFile(log_path, log_fs).load(&log_pb, false));
+    ASSERT_EQ(request.job_id, log_pb.job_id());
+    ASSERT_GT(log_pb.delete_data_files_size(), 0);
+    ASSERT_EQ(TStatusCode::OK, reported_status);
+
+    // Rolling-upgrade compatibility: requests without the optional destination tablet keep using
+    // the stable minimum source-tablet root used by older FEs.
+    request.__set_job_id(501);
+    request.__isset.dest_tablet_id = false;
+    ASSERT_OK(log_fs->create_dir_recursive(log_location_provider->snapshot_log_root_location(tablet_id)));
+    reported_status = TStatusCode::RUNTIME_ERROR;
+    run_external_cluster_snapshot_task(request, next_id(), _exec_env);
+    auto legacy_log_path =
+            log_location_provider->snapshot_log_location(tablet_id, request.job_id, request.physical_partition_id);
+    ASSERT_OK(ProtobufFile(legacy_log_path, log_fs).load(&log_pb, false));
+    ASSERT_EQ(request.job_id, log_pb.job_id());
+    ASSERT_EQ(TStatusCode::OK, reported_status);
+
+    SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+    SyncPoint::GetInstance()->ClearCallBack("ExternalClusterSnapshotTask::snapshot_log_file_system");
+    SyncPoint::GetInstance()->ClearCallBack("ExternalClusterSnapshotTask::snapshot_log_location_provider");
+    SyncPoint::GetInstance()->ClearCallBack("cluster_snapshot_task::upload_snapshot_files");
 }
 
 // Test snapshot task with bundle files handling

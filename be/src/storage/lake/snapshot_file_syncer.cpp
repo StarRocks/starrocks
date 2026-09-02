@@ -15,7 +15,9 @@
 #include "storage/lake/snapshot_file_syncer.h"
 
 #include <string_view>
+#include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "glog/logging.h"
@@ -116,13 +118,20 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
 
 Status SnapshotFileSyncer::delete_partition(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
                                             int64_t physical_partition_id) {
-#if defined(USE_STAROS) && !defined(BE_TEST)
+#ifdef USE_STAROS
     auto remote_starlet_location_provider = StorageEnv::GetInstance()->remote_starlet_location_provider();
     auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_root));
+    auto fs_or = FileSystemFactory::CreateSharedFromString(tablet_root);
+#ifdef BE_TEST
+    TEST_SYNC_POINT_CALLBACK("SnapshotFileSyncer::file_system", &fs_or);
+#endif
+    ASSIGN_OR_RETURN(auto fs, std::move(fs_or));
     auto dir_path = remote_starlet_location_provider->partition_directory_location(tablet_id, db_id, table_id,
                                                                                    physical_partition_id);
-    RETURN_IF_ERROR(fs->delete_dir_recursive(dir_path));
+    auto st = fs->delete_dir_recursive(dir_path);
+    if (!st.ok() && !st.is_not_found()) {
+        return st;
+    }
 #endif
     return Status::OK();
 }
@@ -131,7 +140,11 @@ Status SnapshotFileSyncer::delete_files(int64_t tablet_id, const ExternalCluster
 #ifdef USE_STAROS
     auto remote_starlet_location_provider = StorageEnv::GetInstance()->remote_starlet_location_provider();
     auto tablet_root = remote_starlet_location_provider->root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(tablet_root));
+    auto fs_or = FileSystemFactory::CreateSharedFromString(tablet_root);
+#ifdef BE_TEST
+    TEST_SYNC_POINT_CALLBACK("SnapshotFileSyncer::file_system", &fs_or);
+#endif
+    ASSIGN_OR_RETURN(auto fs, std::move(fs_or));
 
     std::vector<std::string> files;
     files.reserve(log_pb.delete_data_files_size() + log_pb.delete_meta_files_size() +
@@ -154,7 +167,8 @@ Status SnapshotFileSyncer::delete_files(int64_t tablet_id, const ExternalCluster
         LOG(INFO) << "delete file: " << file;
     }
 
-    return fs->delete_files(files);
+    auto st = fs->delete_files(files);
+    return st.is_not_found() ? Status::OK() : st;
 #else
     return Status::OK();
 #endif

@@ -90,4 +90,5 @@ public class ClusterSnapshotJobEditLogTest {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
     }
+
 }

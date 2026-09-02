@@ -255,30 +255,82 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     protected void clearFinishedAutomatedClusterSnapshot(String keepSnapshotName) {
         for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
-            if (!job.isFinished() && !job.isExpired() && !job.isError()) {
-                continue;
-            }
-
-            if (keepSnapshotName != null && job.getSnapshotName().equals(keepSnapshotName)) {
-                continue;
-            }
-
-            if (job.isFinished()) {
-                // Don't expire jobs that still have pending cleanup work
-                if (job instanceof ExternalClusterSnapshotJob
-                        && !((ExternalClusterSnapshotJob) job).isCleaningCompleted()) {
-                    continue;
+            if (job instanceof ExternalClusterSnapshotJob) {
+                synchronized (this) {
+                    clearFinishedAutomatedClusterSnapshot(job, keepSnapshotName);
                 }
-                job.persistStateChange(ClusterSnapshotJobState.EXPIRED);
+            } else {
+                clearFinishedAutomatedClusterSnapshot(job, keepSnapshotName);
             }
+        }
+    }
 
+    private void clearFinishedAutomatedClusterSnapshot(ClusterSnapshotJob job, String keepSnapshotName) {
+        if (!job.isFinished() && !job.isExpired() && !job.isError()) {
+            return;
+        }
+
+        if (keepSnapshotName != null && job.getSnapshotName().equals(keepSnapshotName)) {
+            return;
+        }
+
+        if (job.isFinished()) {
+            if (job instanceof ExternalClusterSnapshotJob
+                    && !((ExternalClusterSnapshotJob) job).isCleaningCompleted()) {
+                return;
+            }
+            job.persistStateChange(ClusterSnapshotJobState.EXPIRED);
+        }
+
+        try {
+            ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
+            if (job.isExpired()) {
+                job.persistStateChange(ClusterSnapshotJobState.DELETED);
+            }
+        } catch (StarRocksException e) {
+            LOG.warn("Cluster Snapshot delete failed, ", e);
+        }
+    }
+
+    public synchronized void finishExternalSnapshotCleanup(ExternalClusterSnapshotJob job) {
+        ClusterSnapshotJob current = automatedSnapshotJobs.get(job.getId());
+        if (current != job || !job.isFinished() || job.isCleaningCompleted()) {
+            return;
+        }
+
+        ClusterSnapshotJob latest = getLastFinishedAutomatedClusterSnapshotJob();
+        if (latest != null && latest.getId() == job.getId()) {
+            // Completion of the latest restore point is an in-memory acknowledgement. A new leader
+            // safely repeats the idempotent cleanup from FINISHED(false).
+            job.setCleaningCompleted(true);
+        } else {
+            // Do not set cleaningCompleted first. If the EXPIRED WAL fails, FINISHED(false) remains
+            // retryable on the next scheduler cycle.
+            job.persistStateChange(ClusterSnapshotJobState.EXPIRED);
+        }
+    }
+
+    public void retryExpiredExternalSnapshotDeletion() {
+        for (ClusterSnapshotJob candidate : automatedSnapshotJobs.values()) {
+            if (!(candidate instanceof ExternalClusterSnapshotJob) || !candidate.isExpired()) {
+                continue;
+            }
             try {
-                ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
-                if (job.isExpired()) {
-                    job.persistStateChange(ClusterSnapshotJobState.DELETED);
+                ClusterSnapshotUtils.clearClusterSnapshotFromRemote(candidate);
+            } catch (Exception e) {
+                LOG.warn("Failed to delete expired external snapshot {}", candidate.getId(), e);
+                continue;
+            }
+
+            synchronized (this) {
+                ClusterSnapshotJob current = automatedSnapshotJobs.get(candidate.getId());
+                if (current == candidate && current.isExpired()) {
+                    try {
+                        current.persistStateChange(ClusterSnapshotJobState.DELETED);
+                    } catch (RuntimeException e) {
+                        LOG.warn("Failed to persist deletion of external snapshot {}", candidate.getId(), e);
+                    }
                 }
-            } catch (StarRocksException e) {
-                LOG.warn("Cluster Snapshot delete failed, ", e);
             }
         }
     }

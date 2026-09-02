@@ -76,9 +76,16 @@ Status write_snapshot_log(int64_t job_id, int64_t db_id, int64_t table_id, int64
 
     // Get log location and save
     auto location_provider = StorageEnv::GetInstance()->lake_location_provider();
+#ifdef BE_TEST
+    TEST_SYNC_POINT_CALLBACK("ExternalClusterSnapshotTask::snapshot_log_location_provider", &location_provider);
+#endif
     auto log_location = location_provider->snapshot_log_location(tablet_id, job_id, physical_partition_id);
 
-    ProtobufFile file(log_location);
+    std::shared_ptr<FileSystem> log_fs;
+#ifdef BE_TEST
+    TEST_SYNC_POINT_CALLBACK("ExternalClusterSnapshotTask::snapshot_log_file_system", &log_fs);
+#endif
+    ProtobufFile file(log_location, std::move(log_fs));
     auto log_status = file.save(log_pb);
 
     // Log result
@@ -114,6 +121,9 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
 
     // Initialize core variables
     auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+#ifdef BE_TEST
+    TEST_SYNC_POINT_CALLBACK("ExternalClusterSnapshotTask::tablet_manager", &tablet_mgr);
+#endif
     const int64_t pre_version = request.pre_version;
     const int64_t new_version = request.new_version;
     const int64_t table_id = request.table_id;
@@ -209,15 +219,15 @@ void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& r
         prepare_unused_files_for_log(pre_version, pre_bundle_data_files, unused_data_files, unused_meta_files,
                                      pre_schema_ids, new_schema_ids, unused_schema_files, partition_live_files);
 
-        // Get first tablet ID for log
-        int64_t first_tablet_id = 0;
-        if (!request.compute_node_tablets.empty() && !request.compute_node_tablets[0].tablets.empty()) {
-            first_tablet_id = request.compute_node_tablets[0].tablets[0];
+        auto log_tablet_id = get_snapshot_log_tablet_id(request);
+        if (log_tablet_id.has_value()) {
+            log_status = write_snapshot_log(request.job_id, request.db_id, request.table_id, request.partition_id,
+                                            physical_partition_id, log_tablet_id.value(), unused_data_files,
+                                            unused_meta_files, unused_schema_files);
+        } else {
+            log_status = Status::InvalidArgument(
+                    "external snapshot request has no destination or source tablet for delete log");
         }
-
-        log_status = write_snapshot_log(request.job_id, request.db_id, request.table_id, request.partition_id,
-                                        physical_partition_id, first_tablet_id, unused_data_files, unused_meta_files,
-                                        unused_schema_files);
     }
 
     // Update finish task status if log write failed
@@ -272,8 +282,11 @@ void run_delete_files_task(const TExternalClusterSnapshotRequest& request, int64
     finish_task_request.__set_signature(signature);
 
     auto location_provider = StorageEnv::GetInstance()->lake_location_provider();
-    auto tablet_id = 0L;
-    if (request.compute_node_tablets.size() == 0 || request.compute_node_tablets[0].tablets.size() == 0) {
+#ifdef BE_TEST
+    TEST_SYNC_POINT_CALLBACK("ExternalClusterSnapshotTask::delete_log_location_provider", &location_provider);
+#endif
+    auto log_tablet_ids = get_snapshot_log_tablet_ids(request);
+    if (log_tablet_ids.empty()) {
         LOG(WARNING) << "no compute node tablets or tablets found, job_id=" << request.job_id
                      << ", physical_partition_id=" << request.physical_partition_id;
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
@@ -283,38 +296,56 @@ void run_delete_files_task(const TExternalClusterSnapshotRequest& request, int64
         remove_task_info(finish_task_request.task_type, finish_task_request.signature);
         return;
     }
-    tablet_id = request.compute_node_tablets[0].tablets[0];
-    auto log_path = location_provider->snapshot_log_location(tablet_id, request.job_id, request.physical_partition_id);
 
-    auto fs = FileSystemFactory::CreateSharedFromString(log_path);
-    if (!fs.ok()) {
-        LOG(WARNING) << "create file system failed, path=" << log_path << ", status=" << fs.status().to_string();
-        task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
-        task_status.__set_error_msgs(std::vector<std::string>{fs.status().to_string()});
-        finish_task_request.__set_task_status(task_status);
-    } else {
+    Status cleanup_status = Status::NotFound("external snapshot delete log not found");
+    std::string log_path;
+    bool log_found = false;
+    for (int64_t tablet_id : log_tablet_ids) {
+        log_path = location_provider->snapshot_log_location(tablet_id, request.job_id, request.physical_partition_id);
+        auto fs = FileSystemFactory::CreateSharedFromString(log_path);
+#ifdef BE_TEST
+        TEST_SYNC_POINT_CALLBACK("ExternalClusterSnapshotTask::delete_log_file_system", &fs);
+#endif
+        if (!fs.ok()) {
+            cleanup_status = fs.status();
+            break;
+        }
+
         ExternalClusterSnapshotLogPB log_pb;
         ProtobufFile file(log_path, fs.value());
-        auto st = file.load(&log_pb, false);
-        if (!st.ok()) {
-            LOG(WARNING) << "load external snapshot delete log failed, path=" << log_path
-                         << ", status=" << st.to_string();
-            task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
-            task_status.__set_error_msgs(std::vector<std::string>{st.to_string()});
-            finish_task_request.__set_task_status(task_status);
-        } else {
-            auto snapshot_file_syncer = lake::SnapshotFileSyncer();
-            st = snapshot_file_syncer.delete_files(request.dest_tablet_id, log_pb);
-            if (!st.ok()) {
-                LOG(WARNING) << "delete files according to snapshot log failed, path=" << log_path
-                             << ", status=" << st.to_string();
-                task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
-                task_status.__set_error_msgs(std::vector<std::string>{st.to_string()});
-                finish_task_request.__set_task_status(task_status);
-            } else {
-                (void)(*fs)->delete_file(log_path);
+        cleanup_status = file.load(&log_pb, false);
+        if (cleanup_status.is_not_found()) {
+            continue;
+        }
+        if (!cleanup_status.ok()) {
+            break;
+        }
+
+        log_found = true;
+        auto snapshot_file_syncer = lake::SnapshotFileSyncer();
+        cleanup_status = snapshot_file_syncer.delete_files(request.dest_tablet_id, log_pb);
+        if (cleanup_status.ok()) {
+            auto delete_log_status = (*fs)->delete_file(log_path);
+            if (!delete_log_status.ok() && !delete_log_status.is_not_found()) {
+                cleanup_status = std::move(delete_log_status);
             }
         }
+        break;
+    }
+
+    if (!log_found && cleanup_status.is_not_found()) {
+        // Upload reports success only after persisting this log. If none of the source tablet roots
+        // contains it, an earlier cleanup consumed it but the FE completion was lost.
+        LOG(INFO) << "external snapshot delete log is already consumed, job_id=" << request.job_id
+                  << ", physical_partition_id=" << request.physical_partition_id;
+        cleanup_status = Status::OK();
+    }
+    if (!cleanup_status.ok()) {
+        LOG(WARNING) << "delete files according to snapshot log failed, path=" << log_path
+                     << ", status=" << cleanup_status.to_string();
+        task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
+        task_status.__set_error_msgs(std::vector<std::string>{cleanup_status.to_string()});
+        finish_task_request.__set_task_status(task_status);
     }
 
     finish_task(finish_task_request);
