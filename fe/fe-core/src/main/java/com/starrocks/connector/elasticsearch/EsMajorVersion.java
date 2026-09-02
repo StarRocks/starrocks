@@ -52,7 +52,7 @@ public class EsMajorVersion {
     public static final EsMajorVersion V_8_X  = new EsMajorVersion((byte) 8,  "8.x");
     public static final EsMajorVersion V_9_X  = new EsMajorVersion((byte) 9,  "9.x");
     public static final EsMajorVersion V_10_X = new EsMajorVersion((byte) 10, "10.x");
-    public static final EsMajorVersion LATEST = V_7_X;
+    public static final EsMajorVersion LATEST = V_9_X;
 
     public final byte major;
     private final String version;
