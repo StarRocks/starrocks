@@ -220,7 +220,7 @@ public class BookmarkManager extends LeaderDaemon {
             }
         }
         if (releasedRefs > 0) {
-            LOG.info("bookmark TTL sweep released {} reference(s) across {} bookmark(s)",
+            LOG.info("bookmark TTL sweep expired {} reference(s) across {} bookmark(s)",
                     releasedRefs, affectedBookmarks);
         }
     }

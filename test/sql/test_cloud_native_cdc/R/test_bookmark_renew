@@ -37,6 +37,24 @@ SELECT LAST_RENEW_TIME IS NOT NULL FROM information_schema.table_bookmark_refere
 -- result:
 0
 -- !result
+SELECT RENEW_COUNT FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b0} AND HOLDER_ID = 'rn';
+-- result:
+3
+-- !result
+SELECT RENEW_COUNT FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b1} AND HOLDER_ID = 'rn';
+-- result:
+0
+-- !result
+SELECT unix_timestamp(EXPIRE_TIME) - unix_timestamp(LAST_RENEW_TIME)
+  FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b0} AND HOLDER_ID = 'rn';
+-- result:
+1800
+-- !result
+SELECT unix_timestamp(EXPIRE_TIME) - unix_timestamp(CREATE_TIME)
+  FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b1} AND HOLDER_ID = 'rn';
+-- result:
+1800
+-- !result
 SELECT k, v, __CHANGE_TYPE__ FROM rn_t [_CHANGES_${b0}_${b1}_] ORDER BY k;
 -- result:
 2	20	0

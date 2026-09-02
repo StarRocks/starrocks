@@ -150,8 +150,14 @@ public abstract class BookmarkLogEntry implements Writable {
         public static RenewReference of(long dbId, long tableId, long bookmarkId, BookmarkHolder holder,
                                         HolderInfo holderInfo, long acquiredAtMs, long renewedAtMs,
                                         long ttlMs) {
+            return of(dbId, tableId, bookmarkId, holder, holderInfo, acquiredAtMs, renewedAtMs, ttlMs, 0L);
+        }
+
+        public static RenewReference of(long dbId, long tableId, long bookmarkId, BookmarkHolder holder,
+                                        HolderInfo holderInfo, long acquiredAtMs, long renewedAtMs,
+                                        long ttlMs, long renewCount) {
             Map<HolderId, Reference> map = new HashMap<>(1);
-            map.put(holder.getHolderId(), new Reference(acquiredAtMs, holderInfo, ttlMs, renewedAtMs));
+            map.put(holder.getHolderId(), new Reference(acquiredAtMs, holderInfo, ttlMs, renewedAtMs, renewCount));
             return new RenewReference(dbId, tableId, bookmarkId, map);
         }
     }
@@ -162,14 +168,31 @@ public abstract class BookmarkLogEntry implements Writable {
         private long bookmarkId;
         @SerializedName("rs")
         private Map<HolderId, Reference> references;
+        /**
+         * True when the cleanup sweep expired the lease. Apply increments
+         * {@code bookmark_reference_ttl_expired_total} on both live apply and replay,
+         * matching {@code bookmark_reference_released_total}.
+         */
+        @SerializedName("exp")
+        private boolean expiredByTtl;
 
         public ReleaseReference() {
         }
 
         public ReleaseReference(long dbId, long tableId, long bookmarkId, Map<HolderId, Reference> references) {
+            this(dbId, tableId, bookmarkId, references, false);
+        }
+
+        public ReleaseReference(long dbId, long tableId, long bookmarkId, Map<HolderId, Reference> references,
+                                boolean expiredByTtl) {
             super(dbId, tableId);
             this.bookmarkId = bookmarkId;
             this.references = references;
+            this.expiredByTtl = expiredByTtl;
+        }
+
+        public boolean isExpiredByTtl() {
+            return expiredByTtl;
         }
 
         public long getBookmarkId() {

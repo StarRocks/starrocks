@@ -128,6 +128,8 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         Reference.View before = referenceOf(mgr, tableId, bid, h1.getHolderId().getId());
         assertEquals(1000L, before.getTtlMs());
 
+        assertEquals(0L, before.getRenewCount());
+
         Bookmark renewed = mgr.renewReference(dbId, tableId, bid, h1, 600000L);
         assertEquals(bid, renewed.getBookmarkId());
 
@@ -136,6 +138,10 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         Reference.View after = referenceOf(mgr, tableId, bid, h1.getHolderId().getId());
         assertEquals(600000L, after.getTtlMs());
         assertTrue(after.getRenewedAtMs() > 0, "the live path must stamp renewedAtMs");
+        assertEquals(1L, after.getRenewCount());
+
+        mgr.renewReference(dbId, tableId, bid, h1, 600000L);
+        assertEquals(2L, referenceOf(mgr, tableId, bid, h1.getHolderId().getId()).getRenewCount());
 
         // Exactly one reference to give back.
         mgr.releaseReference(dbId, tableId, bid, h1.getHolderId());
@@ -188,13 +194,14 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         long bid = b.getBookmarkId();
 
         mgr.replay(BookmarkLogEntry.RenewReference.of(
-                dbId, tableId, bid, h1, HolderInfo.EmptyInfo.INSTANCE, 1111L, 4242L, 900000L));
+                dbId, tableId, bid, h1, HolderInfo.EmptyInfo.INSTANCE, 1111L, 4242L, 900000L, 1L));
 
         assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
         Reference.View after = referenceOf(mgr, tableId, bid, h1.getHolderId().getId());
         assertEquals(900000L, after.getTtlMs());
         assertEquals(1111L, after.getAcquiredAtMs());
         assertEquals(4242L, after.getRenewedAtMs()); // LAST_RENEW_TIME reads this
+        assertEquals(1L, after.getRenewCount());
     }
 
     /**
@@ -802,13 +809,55 @@ public class BookmarkManagerTest extends BookmarkTestBase {
         long acq = b.getBookmarkTimeMs();
 
         // Before expiry: nothing happens.
+        long expiredBefore = mgr.metrics().bookmarkReferenceTtlExpiredTotal.longValue();
         sweep(mgr, acq + 50, -1L);
         assertEquals(1, mgr.referenceCount(dbId, tableId, bid));
+        assertEquals(expiredBefore, mgr.metrics().bookmarkReferenceTtlExpiredTotal.longValue());
 
         // At/after expiry: reference released, bookmark + tracker reclaimed.
+        // Sweep increments both released_total and ttl_expired_total.
+        long releasedBefore = mgr.metrics().bookmarkReferenceReleasedTotal.longValue();
         sweep(mgr, acq + 100, -1L);
         assertFalse(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
         assertEquals(0, mgr.activeBookmarkCount(dbId, tableId));
+        assertEquals(expiredBefore + 1, mgr.metrics().bookmarkReferenceTtlExpiredTotal.longValue());
+        assertEquals(releasedBefore + 1, mgr.metrics().bookmarkReferenceReleasedTotal.longValue());
+    }
+
+    @Test
+    public void testExplicitReleaseDoesNotCountAsTtlExpiry() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("explicit_h1");
+
+        Bookmark b = mgr.create(dbId, tableId, h, 100L);
+        long expiredBefore = mgr.metrics().bookmarkReferenceTtlExpiredTotal.longValue();
+        long releasedBefore = mgr.metrics().bookmarkReferenceReleasedTotal.longValue();
+        // Explicit release is a release, not a TTL expiry: released_total +1, ttl_expired_total unchanged.
+        mgr.releaseReference(dbId, tableId, b.getBookmarkId(), h.getHolderId());
+        assertEquals(expiredBefore, mgr.metrics().bookmarkReferenceTtlExpiredTotal.longValue());
+        assertEquals(releasedBefore + 1, mgr.metrics().bookmarkReferenceReleasedTotal.longValue());
+    }
+
+    @Test
+    public void testReplayOfTtlExpiryBumpsTtlExpiredTotal() throws Exception {
+        long tableId = createDefaultTable();
+        BookmarkManager mgr = manager();
+        BookmarkHolder h = BookmarkHolder.forEmptyInfo("replay_ttl_h");
+
+        Bookmark b = mgr.create(dbId, tableId, h, 100L);
+        long bid = b.getBookmarkId();
+        long expiredBefore = mgr.metrics().bookmarkReferenceTtlExpiredTotal.longValue();
+        long releasedBefore = mgr.metrics().bookmarkReferenceReleasedTotal.longValue();
+
+        // Replay uses the same counters as live apply: a TTL-sweep journal bumps both.
+        Map<HolderId, Reference> expired = new HashMap<>();
+        expired.put(h.getHolderId(), new Reference(b.getBookmarkTimeMs(), h.getHolderInfo(), 100L));
+        mgr.replay(new BookmarkLogEntry.ReleaseReference(dbId, tableId, bid, expired, true));
+
+        assertFalse(mgr.findBookmarkById(dbId, tableId, bid).isPresent());
+        assertEquals(expiredBefore + 1, mgr.metrics().bookmarkReferenceTtlExpiredTotal.longValue());
+        assertEquals(releasedBefore + 1, mgr.metrics().bookmarkReferenceReleasedTotal.longValue());
     }
 
     /**

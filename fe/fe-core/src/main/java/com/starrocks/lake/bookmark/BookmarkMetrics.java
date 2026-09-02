@@ -40,9 +40,15 @@ final class BookmarkMetrics {
     private static final String NAME_BOOKMARK_REFERENCE_ADDED_TOTAL = "bookmark_reference_added_total";
     final LongAdder bookmarkReferenceAddedTotal = new LongAdder();
 
-    // Cumulative count of bookmark references released since process start.
+    // Every actual removal of a live reference: explicit bookmark_release and TTL-sweep
+    // expiry both land here. This is the reclaim-volume counter.
     private static final String NAME_BOOKMARK_REFERENCE_RELEASED_TOTAL = "bookmark_reference_released_total";
     final LongAdder bookmarkReferenceReleasedTotal = new LongAdder();
+
+    // TTL-sweep subset of bookmarkReferenceReleasedTotal. A sweep expiry increments both
+    // (live apply and journal replay); an explicit release increments only released_total.
+    private static final String NAME_BOOKMARK_REFERENCE_TTL_EXPIRED_TOTAL = "bookmark_reference_ttl_expired_total";
+    final LongAdder bookmarkReferenceTtlExpiredTotal = new LongAdder();
 
     // Current count of active bookmarks.
     private static final String NAME_BOOKMARK_COUNT = "bookmark_count";
@@ -110,10 +116,24 @@ final class BookmarkMetrics {
         bookmarkReferenceCount.increment();
     }
 
+    /**
+     * A live reference was removed. Always called for that removal, including TTL sweep:
+     * this keeps {@code bookmark_reference_count} and the lifetime histogram honest for
+     * every path. TTL sweep then also calls {@link #onReferenceTtlExpired()}.
+     */
     void onReferenceReleased(long ageMs) {
         bookmarkReferenceReleasedTotal.increment();
         bookmarkReferenceCount.decrement();
         bookmarkReferenceCompletedAgeMs.ifPresent(h -> h.update(ageMs));
+    }
+
+    /**
+     * Extra counter for a removal that the TTL sweep performed. Caller must already have
+     * invoked {@link #onReferenceReleased(long)}; this does not decrement cardinality.
+     * Invoked on the same apply paths as {@link #onReferenceReleased(long)}, including replay.
+     */
+    void onReferenceTtlExpired() {
+        bookmarkReferenceTtlExpiredTotal.increment();
     }
 
     /**
@@ -155,7 +175,11 @@ final class BookmarkMetrics {
         registerCounter(NAME_BOOKMARK_REFERENCE_ADDED_TOTAL, MetricUnit.OPERATIONS,
                 "total bookmark references added", bookmarkReferenceAddedTotal);
         registerCounter(NAME_BOOKMARK_REFERENCE_RELEASED_TOTAL, MetricUnit.OPERATIONS,
-                "total bookmark references released", bookmarkReferenceReleasedTotal);
+                "total bookmark references released, including TTL-sweep expiry",
+                bookmarkReferenceReleasedTotal);
+        registerCounter(NAME_BOOKMARK_REFERENCE_TTL_EXPIRED_TOTAL, MetricUnit.OPERATIONS,
+                "TTL-sweep subset of bookmark_reference_released_total",
+                bookmarkReferenceTtlExpiredTotal);
 
         registerGauge(NAME_BOOKMARK_COUNT, MetricUnit.NOUNIT,
                 "current count of active bookmarks", bookmarkCount);

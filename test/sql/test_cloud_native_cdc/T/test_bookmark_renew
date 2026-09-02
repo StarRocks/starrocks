@@ -27,6 +27,13 @@ SELECT bookmark_renew("${db[0]}", "rn_t", "${b0}", "rn2", "1800000");
 -- LAST_RENEW_TIME: set for the renewed reference, NULL for one never renewed.
 SELECT LAST_RENEW_TIME IS NOT NULL FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b0} AND HOLDER_ID = 'rn';
 SELECT LAST_RENEW_TIME IS NOT NULL FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b1} AND HOLDER_ID = 'rn';
+SELECT RENEW_COUNT FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b0} AND HOLDER_ID = 'rn';
+SELECT RENEW_COUNT FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b1} AND HOLDER_ID = 'rn';
+-- Renewed lease expires 1800s after LAST_RENEW_TIME; never-renewed expires 1800s after CREATE_TIME.
+SELECT unix_timestamp(EXPIRE_TIME) - unix_timestamp(LAST_RENEW_TIME)
+  FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b0} AND HOLDER_ID = 'rn';
+SELECT unix_timestamp(EXPIRE_TIME) - unix_timestamp(CREATE_TIME)
+  FROM information_schema.table_bookmark_references WHERE BOOKMARK_ID = ${b1} AND HOLDER_ID = 'rn';
 
 -- Renewal leaves the pinned state alone: the window from the renewed bookmark still reads.
 SELECT k, v, __CHANGE_TYPE__ FROM rn_t [_CHANGES_${b0}_${b1}_] ORDER BY k;

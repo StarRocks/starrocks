@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.Config;
 import com.starrocks.epack.catalog.system.SystemIdEPack;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkManager;
@@ -176,7 +177,7 @@ public class TableBookmarkSummarySystemTable {
         TBookmarkReferenceSummary out = new TBookmarkReferenceSummary();
         out.setId(best.getHolderId());
         out.setTime(best.getAcquiredAtMs());
-        out.setTtl(best.getTtlMs());
+        out.setTtl(Reference.effectiveTtlMs(best.getTtlMs(), Config.bookmark_reference_max_ttl_ms));
         return out;
     }
 
@@ -195,7 +196,7 @@ public class TableBookmarkSummarySystemTable {
         TBookmarkReferenceSummary out = new TBookmarkReferenceSummary();
         out.setId(best.getHolderId());
         out.setTime(best.getAcquiredAtMs());
-        out.setTtl(best.getTtlMs());
+        out.setTtl(Reference.effectiveTtlMs(best.getTtlMs(), Config.bookmark_reference_max_ttl_ms));
         return out;
     }
 }

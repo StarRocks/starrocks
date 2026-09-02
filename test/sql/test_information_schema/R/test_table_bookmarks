@@ -386,13 +386,13 @@ SELECT SLEEP(1);
 1
 -- !result
 [UC]ttlbm_dup=SELECT bookmark_create("${db[0]}", "t", "nottl_h", "-1");
-SELECT holder_id, ttl_ms
+SELECT holder_id, ttl_ms, expire_time IS NOT NULL AS has_expire, renew_count
   FROM information_schema.table_bookmark_references
   WHERE bookmark_id = ${ttlbm}
   ORDER BY holder_id;
 -- result:
-nottl_h	-1
-ttl_h	123456789
+nottl_h	-1	0	0
+ttl_h	123456789	1	0
 -- !result
 SELECT
   oldest_reference.id AS oldest_holder,
@@ -407,4 +407,156 @@ ttl_h	123456789	nottl_h	-1
 CLEANUP {
   SELECT bookmark_release("${db[0]}", "t", "${ttlbm}", "ttl_h");
   SELECT bookmark_release("${db[0]}", "t", "${ttlbm_dup}", "nottl_h");
+} END CLEANUP
+
+-- name: test_table_bookmarks_lease_observability @cloud @sequential
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]ob=SELECT bookmark_create("${db[0]}", "t", "obs_h", "1800000");
+SELECT ttl_ms, renew_count,
+       unix_timestamp(expire_time) - unix_timestamp(create_time) AS expire_offset_s
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ob};
+-- result:
+1800000	0	1800
+-- !result
+SELECT bookmark_renew("${db[0]}", "t", "${ob}", "obs_h", "1800000");
+-- result:
+1800000
+-- !result
+SELECT renew_count FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ob} AND holder_id = 'obs_h';
+-- result:
+1
+-- !result
+[UC]ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "60000");
+SELECT ttl_ms,
+       unix_timestamp(expire_time) - unix_timestamp(COALESCE(last_renew_time, create_time)) AS expire_offset_s
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ob};
+-- result:
+60000	60
+-- !result
+SELECT oldest_reference.ttl_ms FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${ob};
+-- result:
+60000
+-- !result
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${ob}", "obs_h");
+  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "-1");
+} END CLEANUP
+
+-- name: test_table_bookmarks_unlimited_capped @cloud @sequential
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]capbm=SELECT bookmark_create("${db[0]}", "t", "cap_h", "-1");
+SELECT ttl_ms, expire_time IS NOT NULL AS has_expire, renew_count
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${capbm};
+-- result:
+-1	0	0
+-- !result
+[UC]ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "3600000");
+SELECT ttl_ms, expire_time IS NOT NULL AS has_expire,
+       unix_timestamp(expire_time) - unix_timestamp(create_time) AS expire_offset_s
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${capbm};
+-- result:
+3600000	1	3600
+-- !result
+SELECT oldest_reference.ttl_ms, newest_reference.ttl_ms
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${capbm};
+-- result:
+3600000	3600000
+-- !result
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${capbm}", "cap_h");
+  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "-1");
+} END CLEANUP
+
+-- name: test_table_bookmarks_renew_moves_expire @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]mv=SELECT bookmark_create("${db[0]}", "t", "mv_h", "1800000");
+SELECT SLEEP(2);
+-- result:
+1
+-- !result
+SELECT bookmark_renew("${db[0]}", "t", "${mv}", "mv_h", "1800000");
+-- result:
+1800000
+-- !result
+SELECT renew_count,
+       unix_timestamp(expire_time) - unix_timestamp(last_renew_time) AS from_renew_s,
+       (unix_timestamp(expire_time) - unix_timestamp(create_time)) > 1800 AS later_than_create
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${mv} AND holder_id = 'mv_h';
+-- result:
+1	1800	1
+-- !result
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${mv}", "mv_h");
+} END CLEANUP
+
+-- name: test_table_bookmarks_ttl_sweep @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t VALUES (1);
+-- result:
+-- !result
+[UC]short_bm=SELECT bookmark_create("${db[0]}", "t", "sweep_short", "1000");
+INSERT INTO t VALUES (2);
+-- result:
+-- !result
+[UC]long_bm=SELECT bookmark_create("${db[0]}", "t", "sweep_long", "1800000");
+SELECT COUNT(*) FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${short_bm};
+-- result:
+1
+-- !result
+SELECT holder_id FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${long_bm};
+-- result:
+sweep_long
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 90, "interval": 2, "desc": "wait for TTL sweep to expire the 1s lease"}
+  result=SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE bookmark_id = ${short_bm};
+  CHECK: int(${result}[-1][0]) == 0
+} END LOOP
+SELECT holder_id, renew_count FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${long_bm};
+-- result:
+sweep_long	0
+-- !result
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${short_bm};
+-- result:
+0
+-- !result
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${long_bm}", "sweep_long");
 } END CLEANUP

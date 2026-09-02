@@ -373,7 +373,13 @@ description: "Alphabetical a - c"
 
 - 单位：计数
 - 类型：Counter
-- 描述：自 FE 启动以来累计释放的 bookmark reference 数。
+- 描述：自 FE 启动以来实际摘掉的 bookmark reference 总数，包括主动 `bookmark_release` 和 TTL 清理任务过期。重启后的 journal replay 也会加一，与其它 bookmark `*_total` 计数器一致。
+
+## `bookmark_reference_ttl_expired_total`
+
+- 单位：计数
+- 类型：Counter
+- 描述：`bookmark_reference_released_total` 的子集，仅统计 TTL 清理过期。TTL 过期时两个计数器都加一（live apply 与 journal replay 相同）；主动 `bookmark_release` 只加 `bookmark_reference_released_total`。主动释放量 = `released_total - ttl_expired_total`。
 
 ## `bookmark_count`
 

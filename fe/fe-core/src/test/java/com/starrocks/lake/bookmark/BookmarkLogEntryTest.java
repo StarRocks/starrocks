@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -47,13 +48,15 @@ public class BookmarkLogEntryTest {
         // An unregistered "rn" falls back to the reflective adapter, which writes no discriminator:
         // the entry serializes fine and only fails on replay, after it is durable.
         RenewReference rn = RenewReference.of(1L, 2L, 30L, holder,
-                HolderInfo.EmptyInfo.INSTANCE, 1111L, 2222L, 7_000L);
+                HolderInfo.EmptyInfo.INSTANCE, 1111L, 2222L, 7_000L, 4L);
         assertEquals(30L, rn.getBookmarkId());
         assertEquals(1111L, rn.getReferences().get(holderId).getAcquiredAtMs());
         assertEquals(2222L, rn.getReferences().get(holderId).getRenewedAtMs());
+        assertEquals(4L, rn.getReferences().get(holderId).getRenewCount());
         BookmarkLogEntry rnBack = gson.fromJson(gson.toJson(rn, BookmarkLogEntry.class), BookmarkLogEntry.class);
         assertInstanceOf(RenewReference.class, rnBack);
         assertEquals(2222L, ((RenewReference) rnBack).getReferences().get(holderId).getRenewedAtMs());
+        assertEquals(4L, ((RenewReference) rnBack).getReferences().get(holderId).getRenewCount());
         assertTrue(new RenewReference().getReferences().isEmpty());
 
         // AddBookmark.of()
@@ -98,6 +101,13 @@ public class BookmarkLogEntryTest {
         ReleaseReference rel = ReleaseReference.of(1L, 2L, 30L, holderId, existing);
         assertEquals(30L, rel.getBookmarkId());
         assertEquals(1, rel.getReferences().size());
+        assertFalse(rel.isExpiredByTtl());
+
+        ReleaseReference expired = new ReleaseReference(1L, 2L, 30L, rel.getReferences(), true);
+        assertTrue(expired.isExpiredByTtl());
+        ReleaseReference expiredBack = assertInstanceOf(ReleaseReference.class,
+                gson.fromJson(gson.toJson(expired, BookmarkLogEntry.class), BookmarkLogEntry.class));
+        assertTrue(expiredBack.isExpiredByTtl());
 
         String relJson = gson.toJson(rel, BookmarkLogEntry.class);
         assertInstanceOf(ReleaseReference.class, gson.fromJson(relJson, BookmarkLogEntry.class));

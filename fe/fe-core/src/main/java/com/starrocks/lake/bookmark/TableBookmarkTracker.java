@@ -250,7 +250,8 @@ public class TableBookmarkTracker {
             }
             long now = System.currentTimeMillis();
             journalAndApply(BookmarkLogEntry.RenewReference.of(
-                    dbId, tableId, bookmarkId, holder, existing.getHolderInfo(), existing.getAcquiredAtMs(), now, ttlMs));
+                    dbId, tableId, bookmarkId, holder, existing.getHolderInfo(), existing.getAcquiredAtMs(), now, ttlMs,
+                    existing.getRenewCount() + 1));
             return b;
         } finally {
             rwLock.writeLock().unlock();
@@ -313,7 +314,7 @@ public class TableBookmarkTracker {
             if (expired.isEmpty()) {
                 return 0;
             }
-            journalAndApply(new BookmarkLogEntry.ReleaseReference(dbId, tableId, bookmarkId, expired));
+            journalAndApply(new BookmarkLogEntry.ReleaseReference(dbId, tableId, bookmarkId, expired, true));
             return expired.size();
         } finally {
             rwLock.writeLock().unlock();
@@ -447,7 +448,7 @@ public class TableBookmarkTracker {
         if (refSet != null) {
             for (Map.Entry<HolderId, Reference> r : refSet.entries().entrySet()) {
                 refs.add(new Reference.View(r.getKey().getId(), r.getValue().getAcquiredAtMs(),
-                        r.getValue().getTtlMs(), r.getValue().getRenewedAtMs()));
+                        r.getValue().getTtlMs(), r.getValue().getRenewedAtMs(), r.getValue().getRenewCount()));
             }
         }
         return refs;
@@ -745,10 +746,17 @@ public class TableBookmarkTracker {
             Reference released = refSet.remove(holderId);
             if (released != null) {
                 long refAgeMs = Math.max(0L, now - released.getAcquiredAtMs());
+                // Every actual removal counts as a release (cardinality + lifetime), including
+                // journal replay. TTL-sweep expiry additionally bumps ttl_expired_total on the
+                // same paths, so the two counters share live vs replay rules.
                 metrics.ifPresent(m -> m.onReferenceReleased(refAgeMs));
+                if (entry.isExpiredByTtl()) {
+                    metrics.ifPresent(BookmarkMetrics::onReferenceTtlExpired);
+                }
             }
-            LOG.log(level, "bookmark reference released: db={}, table={}, bookmarkId={}, holder={}",
-                    dbId, tableId, bookmarkId, holderId);
+            String action = entry.isExpiredByTtl() ? "expired" : "released";
+            LOG.log(level, "bookmark reference {}: db={}, table={}, bookmarkId={}, holder={}",
+                    action, dbId, tableId, bookmarkId, holderId);
         }
         if (refSet.isEmpty()) {
             Bookmark removed = activeBookmarks.remove(bookmarkId);

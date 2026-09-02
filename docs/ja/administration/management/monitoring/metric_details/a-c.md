@@ -373,7 +373,13 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: カウント
 - タイプ: Counter
-- 説明: FE 起動以降に解放されたブックマーク参照の累計数。
+- 説明: FE 起動以降に実際に外されたブックマーク参照の累計です。明示的な `bookmark_release` と TTL スイープによる期限切れの両方を含みます。再起動後のジャーナル replay でも増加します（他の bookmark `*_total` と同じ）。
+
+## `bookmark_reference_ttl_expired_total`
+
+- 単位: カウント
+- タイプ: Counter
+- 説明: `bookmark_reference_released_total` の部分集合で、TTL スイープによる期限切れだけを数えます。TTL 期限切れは両方のカウンタを増やします（ライブ apply とジャーナル replay で同じ）。明示的な `bookmark_release` は `bookmark_reference_released_total` だけを増やします。明示的解放量は `released_total - ttl_expired_total` です。
 
 ## `bookmark_count`
 

@@ -33,6 +33,8 @@ SchemaScanner::ColumnDesc SchemaTableBookmarkReferencesScanner::_s_columns_desc[
         {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
         {"TTL_MS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
         {"LAST_RENEW_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"RENEW_COUNT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaTableBookmarkReferencesScanner::SchemaTableBookmarkReferencesScanner()
@@ -142,15 +144,15 @@ Status SchemaTableBookmarkReferencesScanner::_fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 6: {
-            // TTL: raw per-reference value in ms (<= 0 means disabled). Default
-            // -1 if an older FE did not set it, for version-skew safety.
+            // TTL_MS: effective lease in ms as computed by FE (<= 0 means no expiry).
+            // Default -1 if the field is unset.
             int64_t ttl = info.__isset.ttl ? info.ttl : -1;
             fill_column_with_slot<TYPE_BIGINT>(column, (void*)&ttl);
             break;
         }
         case 7: {
             // LAST_RENEW_TIME: epoch-millis like CREATE_TIME. NULL when the reference
-            // was never renewed, or when an older FE does not send the field.
+            // was never renewed, or when the field is unset.
             if (info.__isset.last_renew_time && info.last_renew_time > 0) {
                 DateTimeValue ts;
                 ts.from_unixtime(info.last_renew_time / 1000, _ctz);
@@ -158,6 +160,23 @@ Status SchemaTableBookmarkReferencesScanner::_fill_chunk(ChunkPtr* chunk) {
             } else {
                 fill_data_column_with_null(column);
             }
+            break;
+        }
+        case 8: {
+            // EXPIRE_TIME: epoch-millis of lease start + effective TTL. NULL when there
+            // is no expiry (TTL_MS <= 0) or when the field is unset.
+            if (info.__isset.expire_time && info.expire_time > 0) {
+                DateTimeValue ts;
+                ts.from_unixtime(info.expire_time / 1000, _ctz);
+                fill_column_with_slot<TYPE_DATETIME>(column, (void*)&ts);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 9: {
+            int64_t renew_count = info.__isset.renew_count ? info.renew_count : 0;
+            fill_column_with_slot<TYPE_BIGINT>(column, (void*)&renew_count);
             break;
         }
         default:

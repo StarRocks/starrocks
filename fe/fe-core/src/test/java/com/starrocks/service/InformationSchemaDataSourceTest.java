@@ -1109,15 +1109,65 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
         Assertions.assertEquals("test-holder", row.getHolder_id());
         Assertions.assertEquals(12345L, row.getTtl());
         Assertions.assertFalse(row.isSetLast_renew_time(), "a never-renewed reference reports NULL");
+        Assertions.assertEquals(0L, row.getRenew_count());
+        Assertions.assertTrue(row.isSetExpire_time());
+        Assertions.assertEquals(row.getCreate_time() + 12345L, row.getExpire_time());
 
         // Distinct seeds: wiring LAST_RENEW_TIME to acquiredAtMs survives any presence-only check.
         GlobalStateMgr.getCurrentState().getBookmarkManager().replay(
                 BookmarkLogEntry.RenewReference.of(dbId, tableId, bookmarkId, holder,
-                        HolderInfo.EmptyInfo.INSTANCE, 1111L, 2222L, 12345L));
+                        HolderInfo.EmptyInfo.INSTANCE, 1111L, 2222L, 12345L, 1L));
         TTableBookmarkReferenceInfo renewed = TableBookmarkReferencesSystemTable.query(req)
                 .getTable_bookmark_reference_infos().get(0);
         Assertions.assertEquals(1111L, renewed.getCreate_time());
         Assertions.assertEquals(2222L, renewed.getLast_renew_time());
+        Assertions.assertEquals(1L, renewed.getRenew_count());
+        Assertions.assertEquals(2222L + 12345L, renewed.getExpire_time());
+    }
+
+    @Test
+    public void testGetTableBookmarkReferencesAppliesClusterCeiling() throws Exception {
+        starRocksAssert.withDatabase("test_db_bookmark_refs_cap").useDatabase("test_db_bookmark_refs_cap");
+        starRocksAssert.withTable("CREATE TABLE t (k INT) " +
+                "DISTRIBUTED BY HASH(k) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\")");
+
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db_bookmark_refs_cap").getId();
+        long tableId = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test_db_bookmark_refs_cap").getTable("t").getId();
+
+        BookmarkHolder holder = BookmarkHolder.forEmptyInfo("cap-holder");
+        Bookmark b = GlobalStateMgr.getCurrentState().getBookmarkManager()
+                .create(dbId, tableId, holder, -1L);
+
+        TGetTableBookmarkReferencesRequest req = new TGetTableBookmarkReferencesRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("test_db_bookmark_refs_cap");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        long savedCap = Config.bookmark_reference_max_ttl_ms;
+        try {
+            Config.bookmark_reference_max_ttl_ms = 3_600_000L;
+            TTableBookmarkReferenceInfo row = TableBookmarkReferencesSystemTable.query(req)
+                    .getTable_bookmark_reference_infos().get(0);
+            Assertions.assertEquals(3_600_000L, row.getTtl());
+            Assertions.assertEquals(row.getCreate_time() + 3_600_000L, row.getExpire_time());
+
+            TGetTableBookmarkSummaryRequest summaryReq = new TGetTableBookmarkSummaryRequest();
+            summaryReq.setAuth_info(authInfo);
+            TTableBookmarkSummaryInfo summary = TableBookmarkSummarySystemTable.query(summaryReq)
+                    .getTable_bookmark_summary_infos().stream()
+                    .filter(s -> s.getBookmark_id() == b.getBookmarkId())
+                    .findFirst()
+                    .orElseThrow();
+            Assertions.assertEquals(3_600_000L, summary.getOldest_reference().getTtl());
+            Assertions.assertEquals(3_600_000L, summary.getNewest_reference().getTtl());
+        } finally {
+            Config.bookmark_reference_max_ttl_ms = savedCap;
+        }
     }
 
     @Test

@@ -26,8 +26,8 @@ Bookmark 是 OlapTable 分区状态的一份不可变记录，在某一时刻取
 | PHYSICAL_PARTITION_COUNT | BIGINT | 该 Bookmark 捕获的物理分区数量。 |
 | REFERENCE_COUNT | BIGINT | 当前引用此 Bookmark 的持有者数量。 |
 | LATEST_CHANGED_PHYSICAL_PARTITIONS | `ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>>` | 最多返回 3 个 `visible_version_time` 最新的物理分区，按时间倒序排列。时间相同时，按 `physical_partition_id` 从大到小排序。若 Bookmark 未捕获任何分区，返回空数组；分区不足 3 个时，返回的数组长度也相应少于 3。 |
-| OLDEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 当前 acquire 时间最早的持有者。时间相同时，按持有者 ID 字典序最小的优先。`ttl_ms` 为该持有者的引用级 TTL，单位为毫秒（`<= 0` 表示不设引用级上限，集群上限仍生效）。`time + ttl_ms` 不是过期时刻：持续续租的持有者会活过它——请查看 `table_bookmark_references.LAST_RENEW_TIME`。 |
-| NEWEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 当前 acquire 时间最新的持有者。并列时的处理规则同上。`ttl_ms` 为该持有者的引用级 TTL，单位为毫秒（`<= 0` 表示不设引用级上限，集群上限仍生效）。 |
+| OLDEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 当前 acquire 时间最早的持有者。时间相同时，按持有者 ID 字典序最小的优先。`ttl_ms` 为该持有者的有效租约（毫秒）：取引用级 TTL 与集群上限 `bookmark_reference_max_ttl_ms` 中较小的一个（仅当两侧都不设上限时为 `-1`）。`time + ttl_ms` 不是过期时刻：持续续租的持有者会活过它——请查看 `table_bookmark_references.EXPIRE_TIME`。 |
+| NEWEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 当前 acquire 时间最新的持有者。并列时的处理规则同上。`ttl_ms` 为该持有者的有效租约（毫秒），规则与 `OLDEST_REFERENCE` 相同。 |
 
 ## table_bookmark_partitions
 
@@ -52,8 +52,10 @@ Bookmark 是 OlapTable 分区状态的一份不可变记录，在某一时刻取
 | DB_ID, TABLE_ID, BOOKMARK_ID | （同 summary） | 关联键。 |
 | HOLDER_ID | VARCHAR | 持有者标识。物化视图的编码形式为 `mv:<dbId>-<mvId>`。 |
 | CREATE_TIME | DATETIME | 该持有者获取此 Bookmark 的时间。续租不会改变该时间。 |
-| TTL_MS | BIGINT | 引用级生存时间（TTL），单位为毫秒，在 acquire 时设置、每次 `bookmark_renew` 都会替换。实际租约取此值与集群上限 `bookmark_reference_max_ttl_ms` 中较小的一个，任一侧 `<= 0` 均表示不限——因此自身无 TTL 的引用仍会在上限处过期，只有两侧都不设的引用才永不过期。起算点为 `LAST_RENEW_TIME`（从未续租则为 `CREATE_TIME`）。 |
-| LAST_RENEW_TIME | DATETIME | 持有者最近一次通过 `bookmark_renew` 续租的时间；从未续租则为 NULL。若 `CREATE_TIME + TTL_MS` 已过而 `LAST_RENEW_TIME + TTL_MS` 未到，说明该引用正被续租维持存活，而不是清理任务卡住了——设了集群上限时，实际过期可能早于该和。 |
+| TTL_MS | BIGINT | 有效租约时长，单位为毫秒。取引用级 TTL（acquire 时设置、每次 `bookmark_renew` 替换）与集群上限 `bookmark_reference_max_ttl_ms` 中较小的一个；任一侧 `<= 0` 表示该侧不限，因此仅当两侧都不设上限时本列为 `-1`。起算点为 `LAST_RENEW_TIME`（从未续租则为 `CREATE_TIME`）。 |
+| LAST_RENEW_TIME | DATETIME | 持有者最近一次通过 `bookmark_renew` 续租的时间；从未续租则为 NULL。 |
+| EXPIRE_TIME | DATETIME | 清理任务将回收该引用的时刻：租约起点加上 `TTL_MS`。`TTL_MS` 为 `-1`（永不过期）时为 NULL。 |
+| RENEW_COUNT | BIGINT | 该引用成功执行 `bookmark_renew` 的次数。从未续租则为 `0`。 |
 
 ## 查询示例
 
@@ -81,6 +83,15 @@ LIMIT 100;
 ```sql
 SELECT * FROM information_schema.table_bookmark_references
 WHERE holder_id = 'mv:1001-2003';
+```
+
+### 租约：哪些引用即将过期
+
+```sql
+SELECT holder_id, ttl_ms, renew_count, expire_time
+FROM information_schema.table_bookmark_references
+WHERE expire_time IS NOT NULL
+ORDER BY expire_time;
 ```
 
 ## 注意事项

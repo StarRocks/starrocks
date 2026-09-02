@@ -396,6 +396,7 @@ public class TableBookmarkTrackerTest extends BookmarkTestBase {
 
         tracker.renewReference(bid, h1, 600000L);
         assertEquals(afterCreate, metrics.bookmarkReferenceCount.sum(), "the replace leg adds nothing");
+        assertEquals(1L, tracker.referencesByBookmark().get(bid).get(h1.getHolderId()).getRenewCount());
 
         assertThrows(ReferenceNotFoundException.class, () -> tracker.renewReference(bid, h2, 600000L));
         assertEquals(afterCreate, metrics.bookmarkReferenceCount.sum());

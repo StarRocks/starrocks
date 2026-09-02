@@ -49,12 +49,18 @@ public class BookmarkMetricsTest extends BookmarkTestBase {
         assertEquals(3L, m.bookmarkReferenceCount.longValue());
         assertEquals(3L, m.bookmarkReferenceAddedTotal.longValue());
 
-        // 3. onReferenceReleased decrements the cardinality, bumps the
-        //    cumulative + records the reference-age histogram.
+        // 3. onReferenceReleased decrements the cardinality, bumps released_total
+        //    and the reference-age histogram. TTL expiry is a separate extra bump
+        //    (ttl_expired_total), not a substitute for this hook.
         m.onReferenceReleased(45L);
         assertEquals(2L, m.bookmarkReferenceCount.longValue());
         assertEquals(1L, m.bookmarkReferenceReleasedTotal.longValue());
         assertEquals(1L, registry.histogram("bookmark_reference_completed_age_ms").getCount());
+        assertEquals(0L, m.bookmarkReferenceTtlExpiredTotal.longValue());
+
+        m.onReferenceTtlExpired();
+        assertEquals(1L, m.bookmarkReferenceTtlExpiredTotal.longValue());
+        assertEquals(1L, m.bookmarkReferenceReleasedTotal.longValue());
 
         // 4. onBookmarkRemoved decrements bookmark + logical/physical partition
         //    cardinality, bumps cumulative, records the bookmark-age histogram.

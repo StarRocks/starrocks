@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.information;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.Config;
 import com.starrocks.epack.catalog.system.SystemIdEPack;
 import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkManager;
@@ -51,6 +52,8 @@ public class TableBookmarkReferencesSystemTable {
                         .column("CREATE_TIME", DateType.DATETIME)
                         .column("TTL_MS", IntegerType.BIGINT)
                         .column("LAST_RENEW_TIME", DateType.DATETIME)
+                        .column("EXPIRE_TIME", DateType.DATETIME)
+                        .column("RENEW_COUNT", IntegerType.BIGINT)
                         .build(),
                 TSchemaTableType.SCH_TABLE_BOOKMARK_REFERENCES);
     }
@@ -67,6 +70,7 @@ public class TableBookmarkReferencesSystemTable {
 
         BookmarkManager mgr = GlobalStateMgr.getCurrentState().getBookmarkManager();
         List<Bookmark.View> views = mgr.listAllBookmarks(dbIdFilter, tableIdFilter, bookmarkIdFilter);
+        long maxTtlMs = Config.bookmark_reference_max_ttl_ms;
 
         BookmarkTableAccessFilter authzFilter = new BookmarkTableAccessFilter(request.getAuth_info());
         for (Bookmark.View s : views) {
@@ -81,10 +85,12 @@ public class TableBookmarkReferencesSystemTable {
                 info.setBookmark_id(b.getBookmarkId());
                 info.setHolder_id(ref.getHolderId());
                 info.setCreate_time(ref.getAcquiredAtMs());
-                info.setTtl(ref.getTtlMs());
+                info.setTtl(Reference.effectiveTtlMs(ref.getTtlMs(), maxTtlMs));
                 if (ref.getRenewedAtMs() > 0) {
                     info.setLast_renew_time(ref.getRenewedAtMs());
                 }
+                ref.expireAtMs(maxTtlMs).ifPresent(ms -> info.setExpire_time(ms));
+                info.setRenew_count(ref.getRenewCount());
                 out.add(info);
             }
         }

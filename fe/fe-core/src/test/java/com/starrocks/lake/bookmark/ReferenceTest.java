@@ -14,6 +14,8 @@
 
 package com.starrocks.lake.bookmark;
 
+import com.google.gson.JsonObject;
+import com.starrocks.persist.gson.GsonUtils;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +31,11 @@ public class ReferenceTest {
         assertEquals(123_456_789L, r.getAcquiredAtMs());
         assertSame(HolderInfo.EmptyInfo.INSTANCE, r.getHolderInfo());
         assertEquals(5_000L, r.getTtlMs());
+        assertEquals(0L, r.getRenewCount());
+        assertTrue(r.expireAtMs(-1L).isPresent());
+        assertEquals(123_456_789L + 5_000L, r.expireAtMs(-1L).getAsLong());
+        assertTrue(r.expireAtMs(1_000L).isPresent());
+        assertEquals(123_456_789L + 1_000L, r.expireAtMs(1_000L).getAsLong());
     }
 
     @Test
@@ -70,6 +77,30 @@ public class ReferenceTest {
         Reference disabled = new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, -1L);
         assertFalse(disabled.isExpired(Long.MAX_VALUE, -1L));   // disabled, no ceiling
         assertTrue(disabled.isExpired(1_100L, 100L));           // ceiling forces expiry
+        assertTrue(disabled.expireAtMs(-1L).isEmpty());
+        assertEquals(1_100L, disabled.expireAtMs(100L).getAsLong());
+    }
+
+    @Test
+    public void testRenewCountDefaultsToZero() {
+        assertEquals(0L, new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, 100L).getRenewCount());
+        assertEquals(1L, new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, 100L, 5_000L).getRenewCount());
+        assertEquals(3L, new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, 100L, 5_000L, 3L).getRenewCount());
+    }
+
+    @Test
+    public void testLegacyImageWithoutRenewCountTreatsRenewalAsAtLeastOne() {
+        Reference current = new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, 100L, 5_000L, 3L);
+        JsonObject missingRc = GsonUtils.GSON.toJsonTree(current).getAsJsonObject();
+        missingRc.remove("rc");
+        Reference loaded = GsonUtils.GSON.fromJson(missingRc, Reference.class);
+        assertEquals(5_000L, loaded.getRenewedAtMs());
+        assertEquals(1L, loaded.getRenewCount());
+
+        JsonObject neverRenewed = GsonUtils.GSON.toJsonTree(
+                new Reference(1_000L, HolderInfo.EmptyInfo.INSTANCE, 100L)).getAsJsonObject();
+        neverRenewed.remove("rc");
+        assertEquals(0L, GsonUtils.GSON.fromJson(neverRenewed, Reference.class).getRenewCount());
     }
 
     @Test
@@ -89,7 +120,10 @@ public class ReferenceTest {
         assertEquals(500L, v.getTtlMs());
         assertEquals(0L, v.getRenewedAtMs());
 
-        Reference.View renewed = new Reference.View("h1", 1_000L, 500L, 9_000L);
+        Reference.View renewed = new Reference.View("h1", 1_000L, 500L, 9_000L, 4L);
         assertEquals(9_000L, renewed.getRenewedAtMs());
+        assertEquals(4L, renewed.getRenewCount());
+        assertEquals(9_000L, renewed.leaseStartMs());
+        assertEquals(9_500L, renewed.expireAtMs(-1L).getAsLong());
     }
 }

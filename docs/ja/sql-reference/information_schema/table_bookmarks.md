@@ -23,8 +23,8 @@ description: OlapTable のアクティブなブックマーク（インベント
 | PHYSICAL_PARTITION_COUNT | BIGINT | キャプチャされた物理パーティション数。 |
 | REFERENCE_COUNT | BIGINT | このブックマークを参照している保持者の現在数。 |
 | LATEST_CHANGED_PHYSICAL_PARTITIONS | `ARRAY<STRUCT<id BIGINT, version BIGINT, time DATETIME>>` | `visible_version_time` が最も新しい物理パーティションを最大 3 件、時刻の降順で返します。同値の場合は `physical_partition_id` が大きい方を優先します。ブックマークがパーティションをキャプチャしていない場合は空配列。パーティション数が 3 未満の場合は要素数も少なくなります。 |
-| OLDEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 現在の取得時刻が最も古い保持者。同値の場合は保持者 ID が辞書順で最小の方を優先します。`ttl_ms` はその保持者の参照単位の TTL（ミリ秒）です（`<= 0` は参照単位の上限なしを意味し、クラスター上限は引き続き適用されます）。`time + ttl_ms` は有効期限ではありません。更新し続ける保持者はそれを超えて存続します。`table_bookmark_references.LAST_RENEW_TIME` を参照してください。 |
-| NEWEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 現在の取得時刻が最も新しい保持者。同値の場合の優先ルールは同じ。`ttl_ms` はその保持者の参照単位の TTL（ミリ秒）です（`<= 0` は参照単位の上限なしを意味し、クラスター上限は引き続き適用されます）。 |
+| OLDEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 現在の取得時刻が最も古い保持者。同値の場合は保持者 ID が辞書順で最小の方を優先します。`ttl_ms` はその保持者の実効リース（ミリ秒）です。参照単位の TTL とクラスター上限 `bookmark_reference_max_ttl_ms` のうち小さい方（両方とも未設定の場合のみ `-1`）。`time + ttl_ms` は有効期限ではありません。更新し続ける保持者はそれを超えて存続します。`table_bookmark_references.EXPIRE_TIME` を参照してください。 |
+| NEWEST_REFERENCE | `STRUCT<id VARCHAR, time DATETIME, ttl_ms BIGINT>` | 現在の取得時刻が最も新しい保持者。同値の場合の優先ルールは同じ。`ttl_ms` はその保持者の実効リース（ミリ秒）で、規則は `OLDEST_REFERENCE` と同じです。 |
 
 ## table_bookmark_partitions
 
@@ -49,8 +49,10 @@ description: OlapTable のアクティブなブックマーク（インベント
 | DB_ID, TABLE_ID, BOOKMARK_ID | (summary と同じ) | 結合キー。 |
 | HOLDER_ID | VARCHAR | 保持者の識別子。マテリアライズドビューは `mv:<dbId>-<mvId>` の形式でエンコードされます。 |
 | CREATE_TIME | DATETIME | この保持者がブックマークを取得した時刻。更新（renew）では変わりません。 |
-| TTL_MS | BIGINT | 参照単位の有効期限（TTL、ミリ秒）。取得時に設定され、`bookmark_renew` のたびに置き換えられます。実際のリースはこの値とクラスター上限 `bookmark_reference_max_ttl_ms` のうち小さい方ですが、どちらか一方が `<= 0` の場合はその側を制限なしとして扱います。したがって自身の TTL がない参照も上限で期限切れになり、両方とも設定されていない参照だけが期限切れになりません。起点は `LAST_RENEW_TIME`（更新されたことがない場合は `CREATE_TIME`）です。 |
-| LAST_RENEW_TIME | DATETIME | 保持者が `bookmark_renew` で最後にリースを更新した時刻。一度も更新されていない場合は NULL。`CREATE_TIME + TTL_MS` は過ぎているが `LAST_RENEW_TIME + TTL_MS` はまだ先である参照は、スイープが停止しているのではなく更新によって維持されています。クラスター上限が設定されている場合、実際の期限はこの和より早くなることがあります。 |
+| TTL_MS | BIGINT | 実効リース期間（ミリ秒）。取得時に設定され `bookmark_renew` のたびに置き換えられる参照単位 TTL と、クラスター上限 `bookmark_reference_max_ttl_ms` のうち小さい方です。どちらか一方が `<= 0` の場合はその側を制限なしとして扱うため、本カラムが `-1` になるのは両方とも未設定のときだけです。起点は `LAST_RENEW_TIME`（更新されたことがない場合は `CREATE_TIME`）です。 |
+| LAST_RENEW_TIME | DATETIME | 保持者が `bookmark_renew` で最後にリースを更新した時刻。一度も更新されていない場合は NULL。 |
+| EXPIRE_TIME | DATETIME | クリーンアップスイープがこの参照を回収する時刻。リース起点に `TTL_MS` を加えた値です。`TTL_MS` が `-1`（期限なし）の場合は NULL。 |
+| RENEW_COUNT | BIGINT | この参照に対する成功した `bookmark_renew` の回数。一度も更新されていない場合は `0`。 |
 
 ## クエリパターン
 
@@ -78,6 +80,15 @@ LIMIT 100;
 ```sql
 SELECT * FROM information_schema.table_bookmark_references
 WHERE holder_id = 'mv:1001-2003';
+```
+
+### リース: まもなく期限切れになる参照
+
+```sql
+SELECT holder_id, ttl_ms, renew_count, expire_time
+FROM information_schema.table_bookmark_references
+WHERE expire_time IS NOT NULL
+ORDER BY expire_time;
 ```
 
 ## 注意事項

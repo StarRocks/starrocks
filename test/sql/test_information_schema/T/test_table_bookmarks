@@ -389,7 +389,8 @@ SELECT SLEEP(1);
 [UC]ttlbm_dup=SELECT bookmark_create("${db[0]}", "t", "nottl_h", "-1");
 
 -- References: each holder reports its own TTL (ttl_h = 123456789, nottl_h = -1).
-SELECT holder_id, ttl_ms
+-- Unlimited lease -> EXPIRE_TIME NULL; bounded lease -> EXPIRE_TIME set. Never renewed -> RENEW_COUNT 0.
+SELECT holder_id, ttl_ms, expire_time IS NOT NULL AS has_expire, renew_count
   FROM information_schema.table_bookmark_references
   WHERE bookmark_id = ${ttlbm}
   ORDER BY holder_id;
@@ -406,4 +407,149 @@ SELECT
 CLEANUP {
   SELECT bookmark_release("${db[0]}", "t", "${ttlbm}", "ttl_h");
   SELECT bookmark_release("${db[0]}", "t", "${ttlbm_dup}", "nottl_h");
+} END CLEANUP
+
+-- ==============================================================
+-- Section 9: cluster ceiling is folded into TTL_MS / EXPIRE_TIME; RENEW_COUNT increments
+-- ==============================================================
+-- name: test_table_bookmarks_lease_observability @cloud @sequential
+-- Writes FE-global bookmark_reference_max_ttl_ms; skip the concurrent pass so it
+-- cannot overlap cases that assume the default ceiling (-1).
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+[UC]ob=SELECT bookmark_create("${db[0]}", "t", "obs_h", "1800000");
+
+-- Default cap -1: TTL_MS is the per-reference 1800000ms; expire is 1800s after CREATE_TIME.
+SELECT ttl_ms, renew_count,
+       unix_timestamp(expire_time) - unix_timestamp(create_time) AS expire_offset_s
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ob};
+
+SELECT bookmark_renew("${db[0]}", "t", "${ob}", "obs_h", "1800000");
+
+SELECT renew_count FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ob} AND holder_id = 'obs_h';
+
+[UC]ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "60000");
+
+-- 60s ceiling caps the 1800s lease. Keep it well above sweep latency so lowering the
+-- ceiling cannot let the daemon drop the pin before these assertions.
+SELECT ttl_ms,
+       unix_timestamp(expire_time) - unix_timestamp(COALESCE(last_renew_time, create_time)) AS expire_offset_s
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${ob};
+
+SELECT oldest_reference.ttl_ms FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${ob};
+
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${ob}", "obs_h");
+  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "-1");
+} END CLEANUP
+
+-- ==============================================================
+-- Section 10: stored TTL -1 is folded by the cluster ceiling into TTL_MS / EXPIRE_TIME
+-- This is the "TTL_MS used to lie" case: unlimited per-reference lease, cap on.
+-- ==============================================================
+-- name: test_table_bookmarks_unlimited_capped @cloud @sequential
+-- Writes FE-global bookmark_reference_max_ttl_ms; skip the concurrent pass so it
+-- cannot overlap cases that assume the default ceiling (-1).
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+[UC]capbm=SELECT bookmark_create("${db[0]}", "t", "cap_h", "-1");
+
+-- Cap off: stored -1 stays -1 and EXPIRE_TIME is NULL.
+SELECT ttl_ms, expire_time IS NOT NULL AS has_expire, renew_count
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${capbm};
+
+[UC]ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "3600000");
+
+-- 1h ceiling becomes the effective lease; EXPIRE_TIME is 3600s after CREATE_TIME.
+SELECT ttl_ms, expire_time IS NOT NULL AS has_expire,
+       unix_timestamp(expire_time) - unix_timestamp(create_time) AS expire_offset_s
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${capbm};
+
+SELECT oldest_reference.ttl_ms, newest_reference.ttl_ms
+  FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${capbm};
+
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${capbm}", "cap_h");
+  ADMIN SET FRONTEND CONFIG ("bookmark_reference_max_ttl_ms" = "-1");
+} END CLEANUP
+
+-- ==============================================================
+-- Section 11: renew moves EXPIRE_TIME to last_renew + TTL, not create + TTL
+-- ==============================================================
+-- name: test_table_bookmarks_renew_moves_expire @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+[UC]mv=SELECT bookmark_create("${db[0]}", "t", "mv_h", "1800000");
+SELECT SLEEP(2);
+SELECT bookmark_renew("${db[0]}", "t", "${mv}", "mv_h", "1800000");
+
+-- Lease start is LAST_RENEW_TIME, so expire is 1800s after renew, strictly after create+1800s.
+SELECT renew_count,
+       unix_timestamp(expire_time) - unix_timestamp(last_renew_time) AS from_renew_s,
+       (unix_timestamp(expire_time) - unix_timestamp(create_time)) > 1800 AS later_than_create
+  FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${mv} AND holder_id = 'mv_h';
+
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${mv}", "mv_h");
+} END CLEANUP
+
+-- ==============================================================
+-- Section 12: TTL sweep drops an expired reference and leaves a live sibling
+-- Waits for the BookmarkManager cleanup daemon (default 60s).
+-- ==============================================================
+-- name: test_table_bookmarks_ttl_sweep @cloud
+
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+
+CREATE TABLE t (k BIGINT) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES ('replication_num' = '1');
+INSERT INTO t VALUES (1);
+
+-- 1s lease on the first bookmark; 30min lease on a later bookmark of the same table.
+[UC]short_bm=SELECT bookmark_create("${db[0]}", "t", "sweep_short", "1000");
+INSERT INTO t VALUES (2);
+[UC]long_bm=SELECT bookmark_create("${db[0]}", "t", "sweep_long", "1800000");
+
+SELECT COUNT(*) FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${short_bm};
+SELECT holder_id FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${long_bm};
+
+LOOP {
+  PROPERTY: {"timeout": 90, "interval": 2, "desc": "wait for TTL sweep to expire the 1s lease"}
+  result=SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE bookmark_id = ${short_bm};
+  CHECK: int(${result}[-1][0]) == 0
+} END LOOP
+
+-- The 30min sibling is still pinned; the expired bookmark is gone from summary too.
+SELECT holder_id, renew_count FROM information_schema.table_bookmark_references
+  WHERE bookmark_id = ${long_bm};
+SELECT COUNT(*) FROM information_schema.table_bookmark_summary
+  WHERE bookmark_id = ${short_bm};
+
+CLEANUP {
+  SELECT bookmark_release("${db[0]}", "t", "${long_bm}", "sweep_long");
 } END CLEANUP

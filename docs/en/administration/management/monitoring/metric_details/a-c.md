@@ -373,7 +373,13 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Counter
-- Description: Total number of bookmark references released since FE start.
+- Description: Total number of bookmark references actually removed since FE start. Includes both explicit `bookmark_release` and TTL-sweep expiry. Journal replay after restart also increments this counter, same as other bookmark `*_total` counters.
+
+## `bookmark_reference_ttl_expired_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Subset of `bookmark_reference_released_total` for TTL-sweep expiry. A TTL expiry increments both counters (live apply and journal replay); an explicit `bookmark_release` increments only `bookmark_reference_released_total`. Explicit-release volume is `released_total - ttl_expired_total`.
 
 ## `bookmark_count`
 

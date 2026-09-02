@@ -187,4 +187,82 @@ TEST_F(SchemaTableBookmarkReferencesScannerTest, fillCreateTimeColumn) {
     EXPECT_EQ("2025-05-14 05:59:23", column->get(0).get_timestamp().to_string(/*ignore_microsecond=*/true));
 }
 
+TEST_F(SchemaTableBookmarkReferencesScannerTest, fillExpireTimeColumn) {
+    SchemaTableBookmarkReferencesScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    ASSERT_OK(scanner.init(&params, &pool));
+
+    TTableBookmarkReferenceInfo with_expire;
+    with_expire.__set_expire_time(1700000000123);
+    TTableBookmarkReferenceInfo without_expire;
+    TTableBookmarkReferenceInfo zero_expire;
+    zero_expire.__set_expire_time(0);
+    set_rows(scanner, {with_expire, without_expire, zero_expire});
+
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    for (auto* slot : scanner.get_slot_descs()) {
+        if (slot->id() == 8) {
+            chunk->append_column(ColumnHelper::create_column(slot->type(), slot->is_nullable()), slot->id());
+        }
+    }
+    ASSERT_EQ(1, chunk->num_columns());
+
+    bool eos = false;
+    for (int i = 0; i < 3; i++) {
+        ASSERT_OK(scanner.get_next(&chunk, &eos));
+        ASSERT_FALSE(eos);
+    }
+
+    auto column = chunk->get_column_by_slot_id(8);
+    ASSERT_EQ(3, column->size());
+    EXPECT_FALSE(column->is_null(0));
+    EXPECT_EQ("2023-11-14 22:13:20", column->get(0).get_timestamp().to_string(/*ignore_microsecond=*/true));
+    EXPECT_TRUE(column->is_null(1));
+    EXPECT_TRUE(column->is_null(2));
+
+    ASSERT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+}
+
+TEST_F(SchemaTableBookmarkReferencesScannerTest, fillRenewCountColumn) {
+    SchemaTableBookmarkReferencesScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    ASSERT_OK(scanner.init(&params, &pool));
+
+    TTableBookmarkReferenceInfo with_count;
+    with_count.__set_renew_count(7);
+    TTableBookmarkReferenceInfo without_count; // unset -> 0
+    set_rows(scanner, {with_count, without_count});
+
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    for (auto* slot : scanner.get_slot_descs()) {
+        if (slot->id() == 9) {
+            chunk->append_column(ColumnHelper::create_column(slot->type(), slot->is_nullable()), slot->id());
+        }
+    }
+    ASSERT_EQ(1, chunk->num_columns());
+
+    bool eos = false;
+    ASSERT_OK(scanner.get_next(&chunk, &eos));
+    ASSERT_FALSE(eos);
+    ASSERT_OK(scanner.get_next(&chunk, &eos));
+    ASSERT_FALSE(eos);
+
+    auto column = chunk->get_column_by_slot_id(9);
+    ASSERT_EQ(2, column->size());
+    EXPECT_EQ(7, column->get(0).get_int64());
+    EXPECT_EQ(0, column->get(1).get_int64());
+
+    ASSERT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+}
+
 } // namespace starrocks
