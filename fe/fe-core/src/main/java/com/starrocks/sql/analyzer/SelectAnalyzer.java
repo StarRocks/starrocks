@@ -525,6 +525,10 @@ public class SelectAnalyzer {
         for (FunctionCallExpr agg : aggregations) {
             if (agg.isDistinct() && agg.getChildren().size() > 0) {
                 Type[] args = agg.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                if (Arrays.stream(args).anyMatch(Type::containsGeometry)) {
+                    throw new SemanticException(
+                            "DISTINCT aggregate functions do not support GEOMETRY arguments");
+                }
                 if (Arrays.stream(args).anyMatch(t -> (t.isJsonType() || t.isComplexType()) && !t.canGroupBy())) {
                     throw new SemanticException(ExprToSql.toSql(agg) + " can't rewrite distinct to group by on (" +
                             Arrays.stream(args).map(Type::toSql).collect(Collectors.joining(",")) + ")");
