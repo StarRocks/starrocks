@@ -113,8 +113,6 @@ import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1004,17 +1002,26 @@ public class OlapTable extends Table {
         return partitionInfo;
     }
 
+    /**
+     * Ask every node to drop its cached auto-increment map for this table.
+     *
+     * <p>Dead nodes are skipped on purpose. {@link AgentBatchTask#run()} silently drops a task whose
+     * target node is gone or not alive, so no BE response ever arrives for it and nobody counts the
+     * latch down - the caller then burns the full latch timeout per table. DROP DATABASE runs this
+     * once per auto-increment table while holding the database WRITE lock, so a single dead node
+     * turns into (table count * timeout) of lock hold time and stalls every other operation on the
+     * database. Skipping is safe: the map is BE-local memory that a restart clears anyway, and table
+     * ids are never reused, so a stale entry on an unreachable node can never be hit again.
+     *
+     * <p>{@code getBackendIds(true)} filters on {@code isAlive()} - the same predicate
+     * {@code AgentBatchTask.run()} applies - and not on {@code isAvailable()}: a decommissioning node
+     * is alive, still serves loads, and may already hold a cached map that has to be dropped.
+     */
     public boolean sendDropAutoIncrementMapTask() {
         Set<Long> nodeIds = Sets.newHashSet();
-        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
-        for (Backend backend : backends) {
-            nodeIds.add(backend.getId());
-        }
-
-        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
-        for (ComputeNode cn : computeNodes) {
-            nodeIds.add(cn.getId());
-        }
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        nodeIds.addAll(clusterInfo.getBackendIds(true));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(true));
 
         AgentBatchTask batchTask = new AgentBatchTask();
 
