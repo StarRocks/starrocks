@@ -298,7 +298,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             prepareForPersist(db, table);
             // Must run before updateVisibleVersion(), which stamps finishedTimeMs onto EVERY touched
             // physical partition and therefore destroys the pre-alter version times.
-            capturePreAlterPartitionStates(table);
+            capturePreAlterLatestPartitions(table);
             persistStateChange(this, JobState.FINISHED, () -> {
                 updateCatalog(db, table, false);
                 // set visible version
@@ -507,44 +507,61 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
-    /** Version and version time a physical partition carried before this job rewrote them. */
-    private static class PreAlterPartitionState {
+    /**
+     * The physical partition that decided staleness before this job ran, i.e. the one
+     * {@link Partition#getLatestPhysicalPartition()} resolved to, together with the version and version
+     * time it carried then.
+     */
+    private static class PreAlterLatestPartition {
+        private final long physicalPartitionId;
         private final long visibleVersion;
         private final long visibleVersionTime;
 
-        private PreAlterPartitionState(long visibleVersion, long visibleVersionTime) {
+        private PreAlterLatestPartition(long physicalPartitionId, long visibleVersion, long visibleVersionTime) {
+            this.physicalPartitionId = physicalPartitionId;
             this.visibleVersion = visibleVersion;
             this.visibleVersionTime = visibleVersionTime;
         }
     }
 
-    // Runtime-only snapshot for handleMVRepair, keyed by PHYSICAL partition id; never persisted and
-    // never replayed. A resumed job therefore finds it empty and skips the repair, which leaves the MV
-    // to refresh rather than advancing a watermark whose staleness cannot be proven.
-    private transient Map<Long, PreAlterPartitionState> preAlterPartitionStates = Maps.newHashMap();
+    // Runtime-only snapshot for handleMVRepair, keyed by LOGICAL partition id; never persisted and never
+    // replayed. A resumed job therefore finds it empty and skips the repair, which leaves the MV to
+    // refresh rather than advancing a watermark whose staleness cannot be proven.
+    private transient Map<Long, PreAlterLatestPartition> preAlterLatestPartitions = Maps.newHashMap();
 
     /**
-     * Records the pre-alter version and version time of every physical partition this job touches.
+     * Records, per logical partition, which physical partition MV staleness detection was reading before
+     * this job ran, and the version/version time it had.
      *
-     * updateVisibleVersion() overwrites the version time of all of them with finishedTimeMs, so the
-     * pre-alter values are unrecoverable afterwards -- and MVMetaVersionRepairer needs the pre-alter
-     * version time to tell an up-to-date MV from one already stale through isBaseTableChanged's
-     * version-time disjunct.
-     *
-     * Note this snapshot deliberately does NOT decide which physical partition represents the logical
-     * partition; handleMVRepair makes that choice with the same call the reader uses.
+     * Both halves are needed and neither survives updateVisibleVersion(), which stamps one finishedTimeMs
+     * onto every touched physical partition: that erases the pre-alter version times, and it collapses
+     * getLatestPhysicalPartition()'s max-by-version-time into a tie. The MV's recorded watermark was
+     * compared against THIS partition, so this is the partition the repair filter must validate against.
      */
-    private void capturePreAlterPartitionStates(@NotNull OlapTable table) {
-        Map<Long, PreAlterPartitionState> snapshot = Maps.newHashMap();
+    // Package-private for tests, like updateNextVersion/updateVisibleVersion in this class.
+    void capturePreAlterLatestPartitions(@NotNull OlapTable table) {
+        Map<Long, PreAlterLatestPartition> snapshot = Maps.newHashMap();
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
             if (physicalPartition == null) {
                 continue;
             }
-            snapshot.put(physicalPartitionId, new PreAlterPartitionState(
-                    physicalPartition.getVisibleVersion(), physicalPartition.getVisibleVersionTime()));
+            long partitionId = physicalPartition.getParentId();
+            if (snapshot.containsKey(partitionId)) {
+                continue;
+            }
+            Partition partition = table.getPartition(partitionId);
+            if (partition == null || table.isTempPartition(partitionId)) {
+                continue;
+            }
+            PhysicalPartition preAlterLatest = partition.getLatestPhysicalPartition();
+            if (preAlterLatest == null) {
+                continue;
+            }
+            snapshot.put(partitionId, new PreAlterLatestPartition(preAlterLatest.getId(),
+                    preAlterLatest.getVisibleVersion(), preAlterLatest.getVisibleVersionTime()));
         }
-        preAlterPartitionStates = snapshot;
+        preAlterLatestPartitions = snapshot;
     }
 
     void updateVisibleVersion(@NotNull OlapTable table) {
@@ -820,58 +837,54 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 
-    private void handleMVRepair(Database db, OlapTable table) {
+    // Package-private for tests, like updateNextVersion/updateVisibleVersion in this class.
+    void handleMVRepair(Database db, OlapTable table) {
         if (table.getRelatedMaterializedViews().isEmpty()) {
             return;
         }
 
-        List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(commitVersionMap.size());
+        List<PartitionRepairInfo> partitionRepairInfos =
+                Lists.newArrayListWithCapacity(preAlterLatestPartitions.size());
 
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            // commitVersionMap is keyed by PHYSICAL partition id (built from
-            // physicalPartitionIndexMap.rowKeySet()) while MaterializedView.BasePartitionInfo is keyed on
-            // the LOGICAL partition, so the physical id has to be resolved through getPhysicalPartition()
-            // first; feeding it straight to getPartition(), which only looks up idToPartition, returned
-            // null for every entry and left this repair unreachable.
-            Set<Long> visitedPartitionIds = Sets.newHashSet();
-            for (long committedPhysicalPartitionId : commitVersionMap.keySet()) {
-                PhysicalPartition committedPartition = table.getPhysicalPartition(committedPhysicalPartitionId);
-                if (committedPartition == null) {
-                    continue;
-                }
-                long partitionId = committedPartition.getParentId();
-                if (!visitedPartitionIds.add(partitionId)) {
-                    // One watermark slot per logical partition; its representative is chosen below.
-                    continue;
-                }
+            // One entry per LOGICAL partition, because MaterializedView.BasePartitionInfo has one slot per
+            // logical partition. commitVersionMap cannot drive this loop directly: it is keyed by PHYSICAL
+            // partition id, and feeding such an id to getPartition() -- which only looks up idToPartition --
+            // returned null for every entry and left this repair unreachable.
+            for (Map.Entry<Long, PreAlterLatestPartition> entry : preAlterLatestPartitions.entrySet()) {
+                long partitionId = entry.getKey();
+                PreAlterLatestPartition preAlterLatest = entry.getValue();
                 Partition partition = table.getPartition(partitionId);
                 if (partition == null || table.isTempPartition(partitionId)) {
                     continue;
                 }
-                // Choose the representative with the SAME call MV staleness detection uses
-                // (OlapPartitionTraits#isBaseTableChanged -> getLatestPhysicalPartition()), so the version
-                // recorded here is the version the MV reads back. Picking a different physical partition --
-                // for instance the one that was latest before the alter -- makes the watermark disagree with
-                // the reader whenever the post-alter version-time tie resolves elsewhere, and the MV then
-                // refreshes anyway.
-                PhysicalPartition latest = partition.getLatestPhysicalPartition();
-                if (latest == null) {
+                // Two different physical partitions are involved, and conflating them is what the review
+                // findings on this method were about:
+                //
+                //   * the NEW watermark must be the version the MV will read back, i.e. the version of the
+                //     partition getLatestPhysicalPartition() resolves to now -- after updateVisibleVersion()
+                //     turned that call into a version-time tie;
+                //   * the VALIDATION values must describe the partition that decided staleness BEFORE this
+                //     job ran, because that is the partition the MV's recorded watermark was compared
+                //     against. Validating against the post-alter winner instead accepts an MV that was
+                //     already stale on the pre-alter latest partition and silently erases that change.
+                //
+                // With a single physical partition the two coincide, which is why this only shows up on
+                // sub-partitioned tables.
+                PhysicalPartition postAlterLatest = partition.getLatestPhysicalPartition();
+                if (postAlterLatest == null) {
                     continue;
                 }
-                Long commitVersion = commitVersionMap.get(latest.getId());
-                if (commitVersion == null) {
+                Long newVersion = commitVersionMap.get(postAlterLatest.getId());
+                if (newVersion == null) {
                     // This job did not touch the physical partition the MV reads back.
                     continue;
                 }
-                PreAlterPartitionState preAlter = preAlterPartitionStates.get(latest.getId());
-                if (preAlter == null) {
-                    continue;
-                }
                 PartitionRepairInfo partitionRepairInfo = new PartitionRepairInfo(partition.getId(),
-                        partition.getName(), preAlter.visibleVersion, commitVersion, finishedTimeMs,
-                        preAlter.visibleVersionTime);
+                        partition.getName(), preAlterLatest.visibleVersion, newVersion, finishedTimeMs,
+                        preAlterLatest.visibleVersionTime);
                 partitionRepairInfos.add(partitionRepairInfo);
             }
         } finally {
