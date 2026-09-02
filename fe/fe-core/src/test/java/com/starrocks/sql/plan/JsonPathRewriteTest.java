@@ -673,4 +673,60 @@ public class JsonPathRewriteTest extends PlanTestBase {
     }
 
 
+
+    /**
+     * One JSON path read at two value types cannot be served by one extended column: the column's name
+     * is the linear path and carries no type, so the second access claims the name the first one already
+     * took. getOrCreateColumn() threw on that, and the throw was not recoverable -- the bottom-up scalar
+     * rewriter splices each rewritten child into the live expression tree with setChild(), so by then the
+     * first access had already been replaced, and transform()'s catch handed back a tree still carrying a
+     * column ref that no scan produces. Planning then failed somewhere else entirely, as
+     * "missing statistic of col: N: j.v" or as "Invalid plan".
+     *
+     * The conflict is now found by the side-effect-free pre-pass, before anything is created, and only
+     * the offending path is dropped.
+     */
+    @Test
+    public void testMixedTypeAccessDeclinesOnlyTheConflictingPath() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        starRocksAssert.withTable("CREATE TABLE json_mixed_type (k INT, j JSON) DUPLICATE KEY(k)"
+                + " DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES (\"replication_num\" = \"1\");");
+        try {
+            // The query that used to fail outright. It must plan, and it must not synthesize an
+            // extended column for the path it reads at two types.
+            String plan = getVerboseExplain("select k, cast(j->'$.v' as int), cast(j->'$.v' as string)"
+                    + " from json_mixed_type");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+            // Per-path, not per-scan: $.other is read at one type in the same query and keeps its
+            // pushdown while $.v is left on the JSON column.
+            plan = getVerboseExplain("select cast(j->'$.v' as int), cast(j->'$.v' as string),"
+                    + " cast(j->'$.other' as int) from json_mixed_type");
+            assertContains(plan, "ExtendedColumnAccessPath");
+            assertContains(plan, "/other");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath: [/j(bigint(20))/v"), plan);
+
+            // A path read at one type is untouched by any of this.
+            plan = getVerboseExplain("select cast(j->'$.v' as int) from json_mixed_type");
+            assertContains(plan, "ExtendedColumnAccessPath");
+            assertContains(plan, "/v");
+
+            // Three types collide on the same name just as two do.
+            plan = getVerboseExplain("select cast(j->'$.v' as int), cast(j->'$.v' as string),"
+                    + " cast(j->'$.v' as double) from json_mixed_type");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+            // The predicate side goes through the same pre-pass as the projection.
+            plan = getVerboseExplain("select cast(j->'$.v' as string) from json_mixed_type"
+                    + " where cast(j->'$.v' as int) = 1");
+            Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+        } finally {
+            starRocksAssert.dropTable("json_mixed_type");
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+        }
+    }
+
 }

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
@@ -135,6 +136,8 @@ public class JsonPathRewriteRule extends TransformationRule {
         private final ColumnRefFactory columnRefFactory;
         // The actual table of the scan operator (may differ from columnRefFactory's table after MV rewrite)
         private Table scanTable;
+        // Paths read at more than one value type; filled by the pre-pass, consulted before creating.
+        private Set<String> mixedTypePaths = Set.of();
 
         public JsonPathRewriteContext(ColumnRefFactory factory) {
             this.columnRefFactory = factory;
@@ -142,6 +145,14 @@ public class JsonPathRewriteRule extends TransformationRule {
 
         public void setScanTable(Table table) {
             this.scanTable = table;
+        }
+
+        public void setMixedTypePaths(Set<String> paths) {
+            this.mixedTypePaths = paths;
+        }
+
+        public boolean isMixedTypePath(String name) {
+            return mixedTypePaths.contains(name);
         }
 
         public ColumnRefFactory getColumnRefFactory() {
@@ -262,18 +273,16 @@ public class JsonPathRewriteRule extends TransformationRule {
             LogicalProjectOperator project = (LogicalProjectOperator) optExpr.getOp();
             LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
 
-            // Skip the JSON-path pushdown when the extended column cannot own its name: the table
-            // already has a real column called that, or two subfields collide case-insensitively.
-            // See hasCollidingJsonSubfieldName.
-            if (hasCollidingJsonSubfieldName(new ArrayList<>(project.getColumnRefMap().values()), columnRefFactory,
-                    metaScan.getTable())) {
+            // See collectJsonSubfieldConflicts: some conflicts skip the scan, others only a path.
+            JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
+            if (collectJsonSubfieldConflicts(new ArrayList<>(project.getColumnRefMap().values()), columnRefFactory,
+                    metaScan.getTable(), context)) {
                 return optExpr;
             }
 
             LogicalMetaScanOperator.Builder scanBuilder =
                     LogicalMetaScanOperator.builder().withOperator(metaScan);
 
-            JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
             JsonPathExpressionRewriter rewriter = new JsonPathExpressionRewriter(context);
 
             // rewrite project
@@ -331,9 +340,7 @@ public class JsonPathRewriteRule extends TransformationRule {
         private OptExpression rewriteLogicalScan(OptExpression optExpr, Void v) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) optExpr.getOp();
 
-            // Skip the JSON-path pushdown when the extended column cannot own its name: the table
-            // already has a real column called that, or two subfields collide case-insensitively.
-            // See hasCollidingJsonSubfieldName.
+            // See collectJsonSubfieldConflicts: some conflicts skip the scan, others only a path.
             List<ScalarOperator> jsonRoots = new ArrayList<>();
             if (scanOperator.getPredicate() != null) {
                 jsonRoots.add(scanOperator.getPredicate());
@@ -341,7 +348,9 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (scanOperator.getProjection() != null) {
                 jsonRoots.addAll(scanOperator.getProjection().getColumnRefMap().values());
             }
-            if (hasCollidingJsonSubfieldName(jsonRoots, columnRefFactory, scanOperator.getTable())) {
+            JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
+            context.setScanTable(scanOperator.getTable());
+            if (collectJsonSubfieldConflicts(jsonRoots, columnRefFactory, scanOperator.getTable(), context)) {
                 return optExpr;
             }
 
@@ -349,11 +358,6 @@ public class JsonPathRewriteRule extends TransformationRule {
                     (LogicalScanOperator.Builder) OperatorBuilderFactory.build(scanOperator)
                             .withOperator(scanOperator);
 
-            JsonPathRewriteContext context = new JsonPathRewriteContext(columnRefFactory);
-            // Set the scan operator's table to ensure extended columns are created for the correct table
-            // This fixes the issue where transparent MV rewrite rewrites MV scan to base table scan,
-            // but JsonPathRewriteRule still uses MV table from columnRefFactory
-            context.setScanTable(scanOperator.getTable());
             JsonPathExpressionRewriter rewriter = new JsonPathExpressionRewriter(context);
 
             // Rewrite predicate
@@ -414,29 +418,26 @@ public class JsonPathRewriteRule extends TransformationRule {
     }
 
     /**
-     * Returns true if the extended column a JSON subfield access would synthesize cannot safely own its
-     * name, in which case the caller skips the rewrite for that scan.
+     * Records, without creating anything, the JSON subfield accesses under {@code roots} whose extended
+     * column could not safely own its name. Returns true when the whole scan must be skipped; per-path
+     * conflicts are left on {@code context} for the rewrite to consult.
      *
-     * <p>Two ways that happens. The name may already belong to a real column of the table -- a table can
-     * legally have a varchar called {@code j.a} beside a JSON column {@code j} -- so the synthesized
-     * column and the real one would coexist under one name with different types. Or two subfields of one
-     * JSON column may have access paths that differ only by case, e.g.
-     * {@code get_json_string(c,'Campaign')} and {@code get_json_string(c,'campaign')}.
+     * <p>Three ways the name is unsafe. It may already belong to a real column of the table, or two
+     * subfields may differ only by case ('Campaign' vs 'campaign') -- both make two columns share one
+     * name downstream, which is a BE crash or a wrong global-dict mapping, so the whole scan is skipped.
+     * Or one path may be read at two value types, e.g. get_json_int(j,'$.x') beside
+     * get_json_string(j,'$.x'): the name carries no type, so both claim the same column. Only that path
+     * is dropped.
      *
-     * <p>JSON object keys are case-sensitive, so those are two distinct fields with distinct values.
-     * The pushdown, however, materializes each as an extended {@link Column} whose name is the
-     * subfield path; those names collide in every downstream name-keyed lookup (global-dict, min/max
-     * statistics). The result is a scan chunk with mismatched column row counts (BE crash) or a wrong
-     * global-dict mapping ("Dict Decode failed"). When such a collision is present we skip the rewrite
-     * for that scan entirely and let
-     * the query read the JSON column whole (identical to running with cbo_json_v2_rewrite=false),
-     * which is correct — only the (rare) colliding query loses the subfield-pushdown optimization.
-     *
-     * <p>This is a side-effect-free pre-pass: it must run before any extended column is created,
-     * because a partially-applied rewrite leaves dangling column refs that break later stages.
+     * <p>Running before anything is created is the point. {@link ScalarOperatorRewriter} rewrites
+     * bottom-up with setChild(), so a rewrite that gives up halfway has already spliced a column ref no
+     * scan produces into the live expression tree, and the failure surfaces later and elsewhere.
      */
-    private static boolean hasCollidingJsonSubfieldName(List<ScalarOperator> roots, ColumnRefFactory factory,
-                                                       Table scanTable) {
+    private static boolean collectJsonSubfieldConflicts(List<ScalarOperator> roots, ColumnRefFactory factory,
+                                                        Table scanTable, JsonPathRewriteContext context) {
+        // key: extended-column name -> the value type the first access claimed it at.
+        Map<String, Type> typeClaims = Maps.newHashMap();
+        Set<String> mixedTypePaths = Sets.newHashSet();
         // key: case-folded extended-column name -> the actual (case-sensitive) name that first claimed it.
         Map<String, String> claimed = Maps.newHashMap();
         Deque<ScalarOperator> stack = new ArrayDeque<>();
@@ -471,12 +472,7 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (fields == null || !JsonPathExpressionRewriter.isValidJsonPath(fields)) {
                 continue;
             }
-            // The extended column name is the linear path columnId.field1.field2...; build it exactly as
-            // createColumnAccessExpression()/createExtendedColumn() do, so it matches what gets stored.
-            List<String> fullPath = Lists.newArrayList();
-            fullPath.add(tableAndColumn.second.getColumnId().getId());
-            fullPath.addAll(fields);
-            String name = ColumnAccessPath.createLinearPath(fullPath, call.getType()).getLinearPath();
+            String name = extendedColumnName(tableAndColumn.second, fields, call.getType());
 
             // Collision with a real column of the table. A table may legally own a column whose name is
             // literally a JSON path -- a varchar "j.a" sitting next to a JSON column "j" -- and the
@@ -517,8 +513,27 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (prior != null && !prior.equals(name)) {
                 return true;
             }
+
+            // Same name, second type: one extended column cannot be both.
+            Type claimedType = typeClaims.putIfAbsent(name, call.getType());
+            if (claimedType != null && !claimedType.equals(call.getType())) {
+                mixedTypePaths.add(name);
+            }
         }
+        context.setMixedTypePaths(mixedTypePaths);
         return false;
+    }
+
+    /**
+     * The extended column's name: the linear path columnId.field1.field2... Built in one place so the
+     * pre-pass and the column that gets created cannot disagree about it. The value type does not enter
+     * the name, which is why one path read at two types collides with itself.
+     */
+    private static String extendedColumnName(Column jsonColumn, List<String> fields, Type valueType) {
+        List<String> fullPath = Lists.newArrayList();
+        fullPath.add(jsonColumn.getColumnId().getId());
+        fullPath.addAll(fields);
+        return ColumnAccessPath.createLinearPath(fullPath, valueType).getLinearPath();
     }
 
     private static ScalarOperator rewriteScalar(ScalarOperator scalar,
@@ -584,6 +599,12 @@ public class JsonPathRewriteRule extends TransformationRule {
             }
 
             if (!isValidJsonPath(fields)) {
+                return call;
+            }
+
+            // Read at more than one type in this scan, so no extended column can serve it. Leave the
+            // expression on the JSON column, the way an unsupported function is left alone above.
+            if (context.isMixedTypePath(extendedColumnName(tableAndColumn.second, fields, call.getType()))) {
                 return call;
             }
 

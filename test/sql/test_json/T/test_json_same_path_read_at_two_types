@@ -1,0 +1,38 @@
+-- name: test_json_same_path_read_at_two_types
+-- An extended column's name is its linear path and carries no value type, so one path read at two types
+-- has both accesses claiming the same column. getOrCreateColumn() threw on the second, and the throw was
+-- not recoverable: the bottom-up scalar rewriter had already spliced the first access's column ref into
+-- the live expression tree, so the tree handed back by transform()'s catch still carried a ref no scan
+-- produces. The query then failed somewhere else entirely, as "missing statistic of col: N: j.v" or as
+-- "Invalid plan" -- on a table that need not even be flattened, since this is the v2 rewrite, not flat
+-- JSON storage.
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values
+  (1, parse_json('{"v":10,"other":1}')),
+  (2, parse_json('{"v":"10","other":2}')),
+  (3, parse_json('{"v":true,"other":3}')),
+  (4, parse_json('{"v":null,"other":4}')),
+  (5, parse_json('{"v":-3,"other":5}')),
+  (6, parse_json('{"other":6}'));
+set cbo_json_v2_rewrite = true;
+-- The query that used to fail outright. Every value shape is here because the answer now comes from the
+-- JSON column rather than a typed sub-column, and that is only correct if it agrees for all of them.
+select k, cast(j->'$.v' as int) as as_int, cast(j->'$.v' as string) as as_str from t order by k;
+-- Three types collide on one name just as two do.
+select k, cast(j->'$.v' as int) as i, cast(j->'$.v' as string) as s, cast(j->'$.v' as double) as d from t order by k;
+-- The predicate side goes through the same pre-pass as the projection.
+select k, cast(j->'$.v' as string) as as_str from t where cast(j->'$.v' as int) = 10 order by k;
+-- Per path, not per scan: $.other is read at one type and keeps its pushdown while $.v is declined.
+select k, cast(j->'$.v' as int) as v_int, cast(j->'$.v' as string) as v_str, cast(j->'$.other' as int) as other
+from t order by k;
+-- A path read at one type is untouched by any of this.
+select k, cast(j->'$.v' as int) as as_int from t order by k;
+-- Control: with the rewrite off every answer above must come back unchanged.
+set cbo_json_v2_rewrite = false;
+select k, cast(j->'$.v' as int) as as_int, cast(j->'$.v' as string) as as_str from t order by k;
+select k, cast(j->'$.v' as int) as i, cast(j->'$.v' as string) as s, cast(j->'$.v' as double) as d from t order by k;
+select k, cast(j->'$.v' as string) as as_str from t where cast(j->'$.v' as int) = 10 order by k;
+select k, cast(j->'$.v' as int) as v_int, cast(j->'$.v' as string) as v_str, cast(j->'$.other' as int) as other
+from t order by k;
+select k, cast(j->'$.v' as int) as as_int from t order by k;

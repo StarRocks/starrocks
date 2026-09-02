@@ -1,0 +1,104 @@
+-- name: test_json_same_path_read_at_two_types
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values
+  (1, parse_json('{"v":10,"other":1}')),
+  (2, parse_json('{"v":"10","other":2}')),
+  (3, parse_json('{"v":true,"other":3}')),
+  (4, parse_json('{"v":null,"other":4}')),
+  (5, parse_json('{"v":-3,"other":5}')),
+  (6, parse_json('{"other":6}'));
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, cast(j->'$.v' as int) as as_int, cast(j->'$.v' as string) as as_str from t order by k;
+-- result:
+1	10	10
+2	10	10
+3	1	true
+4	None	None
+5	-3	-3
+6	None	None
+-- !result
+select k, cast(j->'$.v' as int) as i, cast(j->'$.v' as string) as s, cast(j->'$.v' as double) as d from t order by k;
+-- result:
+1	10	10	10.0
+2	10	10	10.0
+3	1	true	1.0
+4	None	None	None
+5	-3	-3	-3.0
+6	None	None	None
+-- !result
+select k, cast(j->'$.v' as string) as as_str from t where cast(j->'$.v' as int) = 10 order by k;
+-- result:
+1	10
+2	10
+-- !result
+select k, cast(j->'$.v' as int) as v_int, cast(j->'$.v' as string) as v_str, cast(j->'$.other' as int) as other
+from t order by k;
+-- result:
+1	10	10	1
+2	10	10	2
+3	1	true	3
+4	None	None	4
+5	-3	-3	5
+6	None	None	6
+-- !result
+select k, cast(j->'$.v' as int) as as_int from t order by k;
+-- result:
+1	10
+2	10
+3	1
+4	None
+5	-3
+6	None
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, cast(j->'$.v' as int) as as_int, cast(j->'$.v' as string) as as_str from t order by k;
+-- result:
+1	10	10
+2	10	10
+3	1	true
+4	None	None
+5	-3	-3
+6	None	None
+-- !result
+select k, cast(j->'$.v' as int) as i, cast(j->'$.v' as string) as s, cast(j->'$.v' as double) as d from t order by k;
+-- result:
+1	10	10	10.0
+2	10	10	10.0
+3	1	true	1.0
+4	None	None	None
+5	-3	-3	-3.0
+6	None	None	None
+-- !result
+select k, cast(j->'$.v' as string) as as_str from t where cast(j->'$.v' as int) = 10 order by k;
+-- result:
+1	10
+2	10
+-- !result
+select k, cast(j->'$.v' as int) as v_int, cast(j->'$.v' as string) as v_str, cast(j->'$.other' as int) as other
+from t order by k;
+-- result:
+1	10	10	1
+2	10	10	2
+3	1	true	3
+4	None	None	4
+5	-3	-3	5
+6	None	None	6
+-- !result
+select k, cast(j->'$.v' as int) as as_int from t order by k;
+-- result:
+1	10
+2	10
+3	1
+4	None
+5	-3
+6	None
+-- !result
