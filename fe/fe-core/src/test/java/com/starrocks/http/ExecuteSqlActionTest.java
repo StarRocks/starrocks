@@ -13,11 +13,13 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.service.ExecuteEnv;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -31,8 +33,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -237,6 +242,41 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
             Assertions.assertTrue(responseBody.contains("No available connection ID"));
         } finally {
             Deencapsulation.setField(executeEnv, "scheduler", originalScheduler);
+        }
+    }
+
+    @Test
+    public void testRejectsNewRequestAfterAcceptWindowElapsed() throws Exception {
+        // Simulate that graceful exit has been marked and the accept-new window is over:
+        // shouldAcceptNewRequest() must then be false and ExecuteSqlAction must reject the
+        // request with 503 BEFORE registering/executing it (the drain loop must not wait on
+        // a query that began after the window).
+        GracefulExitFlag.markGracefulExit();
+        long acceptWindowNanos = TimeUnit.NANOSECONDS.convert(
+                Config.graceful_exit_accept_new_window_ms, TimeUnit.MILLISECONDS);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(System.nanoTime() - acceptWindowNanos - 1L);
+        try {
+            RequestBody body = RequestBody.create(JSON, "{ \"query\" : \"select 1\" }");
+            Request request = new Request.Builder()
+                    .get()
+                    .addHeader("Authorization", rootAuth)
+                    .url(BASE_URL + QUERY_EXECUTE_API)
+                    .post(body)
+                    .build();
+
+            Response response = networkClient.newCall(request).execute();
+            String responseBody = Objects.requireNonNull(response.body()).string();
+            Assertions.assertEquals(503, response.code());
+            Assertions.assertTrue(responseBody.contains("no longer accepting new requests"));
+        } finally {
+            // Reset the flag so other tests in this JVM are unaffected.
+            Field flagField = GracefulExitFlag.class.getDeclaredField("GRACEFUL_EXIT");
+            flagField.setAccessible(true);
+            ((AtomicBoolean) flagField.get(null)).set(false);
+            beginField.setAccessible(true);
+            ((AtomicLong) beginField.get(null)).set(0L);
         }
     }
 }

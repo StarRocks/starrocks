@@ -22,7 +22,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.TransactionIdGenerator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
@@ -70,8 +69,6 @@ public class StarRocksFEServerTest {
                 result = true;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-                globalTransactionMgr.getTransactionIDGenerator();
-                result = new TransactionIdGenerator();
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
                 // Accept-new window is already over, so stopAccept is triggered on the first pass.
@@ -147,8 +144,6 @@ public class StarRocksFEServerTest {
                 result = false;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-                globalTransactionMgr.getTransactionIDGenerator();
-                result = new TransactionIdGenerator();
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
                 GracefulExitFlag.shouldAcceptNewRequest();
@@ -203,8 +198,6 @@ public class StarRocksFEServerTest {
                 result = true;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-                globalTransactionMgr.getTransactionIDGenerator();
-                result = new TransactionIdGenerator();
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
                 GracefulExitFlag.shouldAcceptNewRequest();
@@ -239,8 +232,6 @@ public class StarRocksFEServerTest {
                 result = true;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-                globalTransactionMgr.getTransactionIDGenerator();
-                result = new TransactionIdGenerator();
                 globalTransactionMgr.getRunningTxnNums();
                 result = 3;
                 result = 0;
@@ -277,8 +268,6 @@ public class StarRocksFEServerTest {
                 result = false;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
-                globalTransactionMgr.getTransactionIDGenerator();
-                result = new TransactionIdGenerator();
                 globalTransactionMgr.getRunningTxnNums();
                 result = 0;
                 GracefulExitFlag.shouldAcceptNewRequest();

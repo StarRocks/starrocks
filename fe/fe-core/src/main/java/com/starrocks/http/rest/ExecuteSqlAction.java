@@ -121,6 +121,16 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
 
         try {
+            // Once the accept-new window has elapsed, reject new HTTP SQL requests before they are
+            // registered or executed: the drain loop must not wait on (or exit while) a query that
+            // began after the window is still running. During the window shouldAcceptNewRequest()
+            // is still true, so requests the load balancer routes within its probe blind window
+            // keep being served (same policy as the MySQL path). Closing the channel afterward
+            // alone is too late: the request would already be registered and fully executed.
+            if (!GracefulExitFlag.shouldAcceptNewRequest()) {
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE,
+                        "FE is in graceful shutdown, no longer accepting new requests");
+            }
             changeCatalogAndDB(catalogName, databaseName, context);
             try {
                 SqlRequest requestBody = validatePostBody(request.getContent(), context);
