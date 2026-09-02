@@ -3021,6 +3021,18 @@ public class PlanFragmentBuilder {
                     intermediateAggrExprs, removeDistinctFlags);
         }
 
+        private static boolean containsMetaScan(OptExpression optExpression) {
+            if (optExpression.getOp().getOpType() == OperatorType.PHYSICAL_META_SCAN) {
+                return true;
+            }
+            for (OptExpression child : optExpression.getInputs()) {
+                if (containsMetaScan(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
@@ -3032,6 +3044,26 @@ public class PlanFragmentBuilder {
             }
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
+            // flat_json_meta has no backend implementation. It is a marker that
+            // PushDownFlatJsonMetaToMetaScanRule consumes, turning it into a meta-scan read; the rule only
+            // matches over a meta scan, which exists only when the queried table carries the [_META_] hint.
+            // A call still sitting here means the rewrite never fired, and letting it through buys nothing
+            // but the same failure from a backend, reported as "Invalid agg function plan: flat_json_meta
+            // with (arg type JSON, ...) backend [id=N]".
+            for (CallOperator aggCall : aggregations.values()) {
+                if (FunctionSet.FLAT_JSON_META.equalsIgnoreCase(aggCall.getFnName())) {
+                    // The rule matches AGGR -> PROJECT -> META_SCAN and nothing else, so it also fails to
+                    // fire for a query that does carry the hint but wraps the meta scan in a shape the
+                    // rule cannot see through -- a join, for one. Telling that user to add a hint they
+                    // already wrote sends them looking in the wrong place.
+                    throw new SemanticException(containsMetaScan(optExpr)
+                            ? "flat_json_meta is only supported directly over the meta scan of a single"
+                                    + " table, as in: SELECT flat_json_meta(<json column>) FROM"
+                                    + " <table>[_META_]"
+                            : "flat_json_meta requires the [_META_] hint on the queried table, for example:"
+                                    + " SELECT flat_json_meta(<json column>) FROM <table>[_META_]");
+                }
+            }
             List<ColumnRefOperator> groupBys = node.getGroupBys();
             if (MapUtils.isEmpty(aggregations) && CollectionUtils.isEmpty(groupBys)) {
                 throw new StarRocksPlannerException(INTERNAL_ERROR, "invalid agg operator " +

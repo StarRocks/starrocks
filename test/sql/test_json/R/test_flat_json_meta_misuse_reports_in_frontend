@@ -1,0 +1,51 @@
+-- name: test_flat_json_meta_misuse_reports_in_frontend
+create table t (
+  k int,
+  j json,
+  s varchar(20),
+  arr array<json>,
+  st struct<a json, b int>,
+  mp map<varchar(10), json>
+) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values (1, parse_json('{"a":1}'), 'x', [parse_json('{"c":3}')],
+  row(parse_json('{"d":4}'), 7), map{'m':parse_json('{"e":5}')});
+-- result:
+-- !result
+select flat_json_meta(j) from t[_META_];
+-- result:
+["nulls(TINYINT), a(BIGINT)"]
+-- !result
+select flat_json_meta(arr) from t[_META_];
+-- result:
+["[nulls(TINYINT), c(BIGINT)]"]
+-- !result
+select flat_json_meta(st) from t[_META_];
+-- result:
+["a(nulls(TINYINT), d(BIGINT))"]
+-- !result
+select flat_json_meta(mp) from t[_META_];
+-- result:
+["{nulls(TINYINT), e(BIGINT)}"]
+-- !result
+select flat_json_meta(m) from (select j as m from t[_META_]) x;
+-- result:
+["nulls(TINYINT), a(BIGINT)"]
+-- !result
+with c as (select j as m from t[_META_]) select flat_json_meta(m) from c;
+-- result:
+["nulls(TINYINT), a(BIGINT)"]
+-- !result
+select flat_json_meta(s) from t[_META_];
+-- result:
+[REGEX].*flat_json_meta only supports JSON, ARRAY, MAP, STRUCT and VARIANT columns, but column 's' is varchar.*
+-- !result
+select flat_json_meta(k) from t[_META_];
+-- result:
+[REGEX].*flat_json_meta only supports JSON, ARRAY, MAP, STRUCT and VARIANT columns, but column 'k' is int.*
+-- !result
+select flat_json_meta(j) from t;
+-- result:
+[REGEX].*flat_json_meta requires the .*META.* hint on the queried table.*
+-- !result

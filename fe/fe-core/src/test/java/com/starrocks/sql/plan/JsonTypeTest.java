@@ -247,4 +247,80 @@ public class JsonTypeTest extends PlanTestBase {
         Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(
                 "select flat_json_meta(json_query(v_json, '$.v1')) from tjson_test[_META_]"));
     }
+
+    /**
+     * flat_json_meta is the only way to read a JSON column's physical form, so a fumbled invocation has to
+     * say what was wrong with it. Both misuses below used to plan all the way to a backend and come back as
+     * "column type mismatch: BE:10242" and "Invalid agg function plan: flat_json_meta with (arg type JSON,
+     * ...) backend [id=10242]" -- messages that name a backend for what is a mistake in the query.
+     */
+    @Test
+    public void testFlatJsonMetaRejectsMisuseInFrontend() throws Exception {
+        // A non-JSON column reaches the JSON overload through an implicit cast, so the call itself looks
+        // well typed; only the column the meta scan is handed is wrong.
+        assertSemanticExceptionMessage("select flat_json_meta(v_VARCHAR) from tjson_test[_META_]",
+                "flat_json_meta only supports JSON, ARRAY, MAP, STRUCT and VARIANT columns,"
+                        + " but column 'v_VARCHAR' is varchar(1)");
+        assertSemanticExceptionMessage("select flat_json_meta(v_INT) from tjson_test[_META_]",
+                "flat_json_meta only supports JSON, ARRAY, MAP, STRUCT and VARIANT columns,"
+                        + " but column 'v_INT' is int(11)");
+
+        // Without the hint there is no meta scan, so PushDownFlatJsonMetaToMetaScanRule never matches and
+        // the marker function survives into the fragment.
+        assertSemanticExceptionMessage("select flat_json_meta(v_json) from tjson_test",
+                "flat_json_meta requires the [_META_] hint on the queried table");
+
+        // The hint is present but the meta scan sits under a join, which the rule's
+        // AGGR -> PROJECT -> META_SCAN pattern cannot match either. Telling this user to add a hint they
+        // already wrote would send them looking in the wrong place.
+        starRocksAssert.withTable("CREATE TABLE tjson_join_side (v_id INT, v_v INT) DUPLICATE KEY (v_id)"
+                + " DISTRIBUTED BY HASH (v_id) properties(\"replication_num\"=\"1\");");
+        try {
+            assertSemanticExceptionMessage(
+                    "select flat_json_meta(tjson_test.v_json) from tjson_test[_META_]"
+                            + " join tjson_join_side on tjson_test.v_id = tjson_join_side.v_id",
+                    "flat_json_meta is only supported directly over the meta scan of a single table");
+        } finally {
+            starRocksAssert.dropTable("tjson_join_side");
+        }
+    }
+
+    private void assertSemanticExceptionMessage(String sql, String expectedMessage) {
+        SemanticException e =
+                Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql), sql);
+        Assertions.assertTrue(e.getMessage().contains(expectedMessage),
+                "for " + sql + " got: " + e.getMessage());
+    }
+
+    /**
+     * The backend descends into ARRAY/MAP/STRUCT looking for nested JSON -- is_semi_type() accepts them and
+     * they return real nested output -- so the frontend check must not narrow flat_json_meta to plain JSON.
+     * Nor may it reject the shapes where [_META_] sits below the block that calls the function.
+     */
+    @Test
+    public void testFlatJsonMetaAcceptsContainersAndNestedMetaScan() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE tjson_container (" +
+                " k INT," +
+                " j JSON," +
+                " arr ARRAY<JSON>," +
+                " st STRUCT<a JSON, b INT>," +
+                " mp MAP<VARCHAR(10), JSON>" +
+                ") DUPLICATE KEY (k) DISTRIBUTED BY HASH (k) properties(\"replication_num\"=\"1\");");
+        try {
+            for (String column : new String[] {"j", "arr", "st", "mp"}) {
+                String plan = getFragmentPlan(
+                        "select flat_json_meta(" + column + ") from tjson_container[_META_]");
+                assertContains(plan, "group by: flat_json_meta");
+            }
+
+            // [_META_] may sit arbitrarily deep: both of these plan today and must keep planning.
+            assertContains(getFragmentPlan(
+                            "select flat_json_meta(m) from (select j as m from tjson_container[_META_]) x"),
+                    "group by: flat_json_meta");
+            assertContains(getFragmentPlan("with c as (select j as m from tjson_container[_META_])"
+                    + " select flat_json_meta(m) from c"), "group by: flat_json_meta");
+        } finally {
+            starRocksAssert.dropTable("tjson_container");
+        }
+    }
 }

@@ -1,0 +1,34 @@
+-- name: test_flat_json_meta_misuse_reports_in_frontend
+-- flat_json_meta is the only way to read back a JSON column's physical form -- which paths were extracted
+-- into sub-columns and at what type -- so it is what every flat JSON investigation starts from. It is also
+-- easy to invoke wrongly in two ways, and both used to be answered by a backend rather than by the frontend:
+-- passing a column that is not semi-structured came back as "column type mismatch: BE:10242", and forgetting
+-- the [_META_] hint came back as "Invalid agg function plan: flat_json_meta with (arg type JSON, ...)
+-- backend [id=10242]". Neither names the mistake, and both send the reader to a backend for what is a typo.
+create table t (
+  k int,
+  j json,
+  s varchar(20),
+  arr array<json>,
+  st struct<a json, b int>,
+  mp map<varchar(10), json>
+) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values (1, parse_json('{"a":1}'), 'x', [parse_json('{"c":3}')],
+  row(parse_json('{"d":4}'), 7), map{'m':parse_json('{"e":5}')});
+-- The supported invocation, and the reason the function exists.
+select flat_json_meta(j) from t[_META_];
+-- The backend descends into ARRAY/MAP/STRUCT looking for nested JSON, so these are supported too and the
+-- new frontend check must not narrow the function to plain JSON columns.
+select flat_json_meta(arr) from t[_META_];
+select flat_json_meta(st) from t[_META_];
+select flat_json_meta(mp) from t[_META_];
+-- [_META_] may sit below the block that calls the function; both of these plan and must keep planning.
+select flat_json_meta(m) from (select j as m from t[_META_]) x;
+with c as (select j as m from t[_META_]) select flat_json_meta(m) from c;
+-- Misuse 1: a column that is not semi-structured. The call itself looks well typed -- a varchar reaches the
+-- JSON overload through an implicit cast -- so the error has to come from the column the meta scan is given.
+select flat_json_meta(s) from t[_META_];
+select flat_json_meta(k) from t[_META_];
+-- Misuse 2: no [_META_] hint, so there is no meta scan for the rewrite to match and the marker function
+-- would otherwise survive all the way into a fragment.
+select flat_json_meta(j) from t;

@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -49,18 +50,18 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
-        boolean hasFlatJsonMeta = false;
+        List<CallOperator> flatJsonMetaCalls = Lists.newArrayList();
         for (CallOperator aggCall : agg.getAggregations().values()) {
             String aggFuncName = aggCall.getFnName();
             if (aggFuncName.equalsIgnoreCase(FunctionSet.FLAT_JSON_META)) {
                 if (!aggCall.isVariable()) {
                     throw new SemanticException("flat_json_meta must query on column");
                 }
-                hasFlatJsonMeta = true;
+                flatJsonMetaCalls.add(aggCall);
             }
         }
 
-        if (!hasFlatJsonMeta) {
+        if (flatJsonMetaCalls.isEmpty()) {
             return false;
         }
 
@@ -76,6 +77,28 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
         if (!metaScan.getAggColumnIdToColumns().isEmpty()) {
             throw new SemanticException("flat_json_meta don't support complex meta");
+        }
+
+        // The call's argument type is not the column's type. A non-JSON column reaches the JSON overload
+        // through an implicit cast, so the call reports JSON while transform() below hands the underlying
+        // column to the meta scan. Validate the column the backend will actually be asked about, using the
+        // same resolution transform() uses, and accept exactly what is_semi_type() accepts in
+        // be/src/types/logical_type.h -- the backend descends into ARRAY/MAP/STRUCT looking for nested JSON,
+        // so those are supported and must not be rejected here.
+        for (CallOperator aggCall : flatJsonMetaCalls) {
+            List<ColumnRefOperator> refs = aggCall.getColumnRefs();
+            if (refs.isEmpty()) {
+                return false;
+            }
+            Column column = metaScan.getColRefToColumnMetaMap().get(refs.get(0));
+            if (column == null) {
+                return false;
+            }
+            Type type = column.getType();
+            if (!type.isJsonType() && !type.isVariantType() && !type.isComplexType()) {
+                throw new SemanticException("flat_json_meta only supports JSON, ARRAY, MAP, STRUCT and VARIANT"
+                        + " columns, but column '" + column.getName() + "' is " + type.toSql());
+            }
         }
         return true;
     }
