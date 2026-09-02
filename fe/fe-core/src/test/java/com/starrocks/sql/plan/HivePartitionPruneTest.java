@@ -17,11 +17,16 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.server.MetadataMgr;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @BeforeEach
@@ -73,6 +78,49 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testHivePartitionRangeFilterPushdown() throws Exception {
+        AtomicReference<String> pushedFilter = new AtomicReference<>();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<List<String>> listPartitionNamesByFilter(
+                    String catalogName, String dbName, String tableName, String filter) {
+                pushedFilter.set(filter);
+                if ("part_tbl1".equals(tableName)) {
+                    return Optional.of(List.of(
+                            "par_date=2020-01-01", "par_date=2020-01-02",
+                            "par_date=2020-01-03", "par_date=2020-01-04"));
+                }
+                return Optional.of(List.of("par_col=1", "par_col=2"));
+            }
+        };
+
+        String inPlan = getFragmentPlan("select * from t1 where par_col in (1, 2)");
+        Assertions.assertNull(pushedFilter.get());
+        assertContains(inPlan, "partitions=2/2");
+
+        String dateBetweenPlan = getFragmentPlan(
+                "select * from part_tbl1 where par_date between '2020-01-01' and '2020-01-03'");
+        Assertions.assertNull(pushedFilter.get());
+        assertContains(dateBetweenPlan, "partitions=3/3");
+
+        String plan = getFragmentPlan("select * from t1 where par_col >= 1 and par_col <= 2");
+        Assertions.assertNotNull(pushedFilter.get());
+        Assertions.assertTrue(pushedFilter.get().contains("par_col >= 1"));
+        Assertions.assertTrue(pushedFilter.get().contains("par_col <= 2"));
+        assertContains(plan, "4: par_col >= 1");
+        assertContains(plan, "4: par_col <= 2");
+        assertContains(plan, "partitions=2/2");
+
+        pushedFilter.set(null);
+        String largeDateRangePlan = getFragmentPlan(
+                "select * from part_tbl1 where par_date between '2020-01-01' and '2020-03-31'");
+        Assertions.assertNotNull(pushedFilter.get());
+        Assertions.assertTrue(pushedFilter.get().contains("par_date >= \"2020-01-01\""));
+        Assertions.assertTrue(pushedFilter.get().contains("par_date <= \"2020-03-31\""));
+        assertContains(largeDateRangePlan, "partitions=4/4");
+    }
+
+    @Test
     public void testCompoundPartitionPrune() throws Exception {
         String sql = "select * from t1 where par_col = 0 and par_col = 5";
         String plan = getFragmentPlan(sql);
@@ -84,7 +132,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "OR (4: par_col = 5), 4: par_col IN (0, 5)\n" +
                 "     NO EVAL-PARTITION PREDICATES: ((4: par_col = 0) AND (abs(4: par_col) = 3)) " +
                 "OR (4: par_col = 5)\n" +
-                "     partitions=1/3");
+                "     partitions=1/1");
 
         sql = "select * from t1 where abs(par_col) = 3 and par_col = 0 or par_col = 2";
         plan = getFragmentPlan(sql);
@@ -92,7 +140,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "OR (4: par_col = 2), 4: par_col IN (0, 2)\n" +
                 "     NO EVAL-PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 0)) " +
                 "OR (4: par_col = 2)\n" +
-                "     partitions=2/3");
+                "     partitions=2/2");
 
         sql = "select * from t1 where abs(par_col) = 3 and par_col = 10 or par_col = 2";
         plan = getFragmentPlan(sql);
@@ -100,7 +148,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "OR (4: par_col = 2), 4: par_col IN (10, 2)\n" +
                 "     NO EVAL-PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 10)) " +
                 "OR (4: par_col = 2)\n" +
-                "     partitions=1/3");
+                "     partitions=1/1");
 
         sql = "select * from t1 where abs(par_col) = 1 and abs(par_col) = 3 or par_col = 10";
         plan = getFragmentPlan(sql);
@@ -113,7 +161,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         sql = "select * from t1 where par_col = 1 or par_col = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PARTITION PREDICATES: 4: par_col IN (1, 2)\n" +
-                "     partitions=2/3");
+                "     partitions=2/2");
 
         sql = "select * from t1 where par_col = 1 or abs(par_col) = 2";
         plan = getFragmentPlan(sql);
@@ -139,7 +187,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
                 "AND (abs(4: par_col) = 2)), 4: par_col IN (0, 1)\n" +
                 "     NO EVAL-PARTITION PREDICATES: (4: par_col = 0) OR ((4: par_col = 1) " +
                 "AND (abs(4: par_col) = 2))\n" +
-                "     partitions=2/3");
+                "     partitions=2/2");
     }
 
     @Test

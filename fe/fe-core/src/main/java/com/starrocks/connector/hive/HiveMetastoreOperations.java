@@ -283,6 +283,18 @@ public class HiveMetastoreOperations {
         return metastore.getPartitionKeysByValue(dbName, tableName, partitionValues);
     }
 
+    public Optional<List<String>> getPartitionKeysByFilter(String dbName, String tableName, String filter) {
+        if (metastoreType != MetastoreType.HMS) {
+            return Optional.empty();
+        }
+        Table table = getTable(dbName, tableName);
+        if (!(table instanceof HiveTable) || partitionProjectionService.isEnabled(table)) {
+            return Optional.empty();
+        }
+        return Optional.of(new ArrayList<>(metastore.getPartitionsByFilter(
+                dbName, tableName, table.getPartitionColumnNames(), filter).keySet()));
+    }
+
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
         return metastore.getPartition(dbName, tableName, partitionValues);
     }
