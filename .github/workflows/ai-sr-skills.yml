@@ -26,12 +26,24 @@ jobs:
       !contains(github.head_ref, '-sync-pr-')
     steps:
       - name: Recommend Reviewer (AI)
+        # SECURITY (pull_request_target): bind attacker-influenceable context — above all
+        # github.head_ref, the PR branch name — to env vars and reference them as $VARs.
+        # Interpolating ${{ github.head_ref }} straight into this inline script lets a crafted
+        # branch name (e.g. `pwned";whoami;"`) break out and run arbitrary commands on the
+        # self-hosted runner, which holds CLAUDE_CODE_OAUTH_TOKEN / GITHUB_TOKEN. Env var
+        # VALUES are never re-parsed as shell, so this closes the injection.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.number }}
+          PR_ACTION: ${{ github.event.action }}
+          REPO: ${{ github.repository }}
         run: |
           echo "=== DEBUG ==="
-          echo "PR: ${{ github.event.number }}"
-          echo "ACTION: ${{ github.event.action }}"
-          echo "BASE_REF: ${{ github.base_ref }}"
-          echo "HEAD_REF: ${{ github.head_ref }}"
+          echo "PR: ${PR_NUMBER}"
+          echo "ACTION: ${PR_ACTION}"
+          echo "BASE_REF: ${BASE_REF}"
+          echo "HEAD_REF: ${HEAD_REF}"
           echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
           echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
           echo "=== RUN ==="
@@ -43,7 +55,7 @@ jobs:
             -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
             -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
             claude-cli claude --dangerously-skip-permissions \
-            -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" \
+            -p "/starrocks-assign-pr-reviewer https://github.com/${REPO}/pull/${PR_NUMBER}" \
             2>&1 | tee "${RUNNER_TEMP}/ai_output.txt" || true
 
       - name: Apply Reviewer
