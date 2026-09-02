@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -47,11 +50,28 @@ struct SegmentPKChunkRef;
 // mask BEFORE filtering the column; filtering renumbers the survivors.
 std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current);
 
-class LakePrimaryIndex : public PrimaryIndex {
+// The tablet-level primary-key index of a shared-data tablet: owns the load state, the reader/writer
+// lock the publish path serializes on, and the one LakePersistentIndex that does the work.
+//
+// Standalone on purpose. It used to derive from PrimaryIndex, the shared-nothing implementation, and
+// inherited a surface it could not use -- load(Tablet*), reset(Tablet*), major_compaction(DataDir*),
+// commit(PersistentIndexMetaPB*), on_commited(), abort(), insert(), replace() -- plus an in-memory
+// hash index that PrimaryIndex::_set_schema() allocated for every primary-key tablet and that a lake
+// tablet never reads. Nothing held a lake index through a PrimaryIndex pointer (UpdateManager's index
+// cache stores this class by value), so the base bought no dispatch, only reach.
+//
+// What it still borrows from primary_index.h are three shared names: the DeletesMap shape,
+// ROWID_MASK, and the static build_persistent_keys() key-marshalling helper.
+class LakePrimaryIndex {
 public:
-    LakePrimaryIndex() : PrimaryIndex() {}
-    LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
-    ~LakePrimaryIndex() override = default;
+    using segment_rowid_t = uint32_t;
+    using DeletesMap = std::unordered_map<uint32_t, std::vector<segment_rowid_t>>;
+
+    LakePrimaryIndex() = default;
+    ~LakePrimaryIndex();
+
+    LakePrimaryIndex(const LakePrimaryIndex&) = delete;
+    LakePrimaryIndex& operator=(const LakePrimaryIndex&) = delete;
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
@@ -164,17 +184,62 @@ public:
     int32_t publish_sst_flush_count() const;
     int64_t publish_sst_flush_bytes() const;
 
+    // ---- Surface the publish path shares with the shared-nothing index --------------------------
+    // These used to be inherited from PrimaryIndex. Kept, with the same signatures, because
+    // UpdateManager and the compaction-conflict resolver call them on a LakePrimaryIndex.
+
+    // Look up each primary key's current rss_rowid, or NullIndexValue when absent.
+    Status get(const Column& pks, std::vector<uint64_t>* rowids) const;
+
+    // Insert or update pks[idx_begin, idx_end) at (rssid, rowid_start + i), collecting whatever
+    // rowids they replaced into |deletes|.
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes);
+
+    // Replace the entries whose current rss_rowid is at or below |max_src_rssid|, reporting the
+    // positions that did not match in |failed|. Used by compaction apply.
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
+                       std::vector<uint32_t>* failed);
+
+    // Stamp the version every memtable entry written by this publish carries. Called once, before
+    // any upsert/erase, by UpdateManager::prepare_primary_index.
+    Status prepare(const EditVersion& version);
+
+    // Drop the loaded index, so the next lake_load() rebuilds it. [thread-safe]
+    void unload();
+
+    bool is_loaded() const;
+    Status get_load_status() const;
+    std::size_t memory_usage() const;
+    size_t key_size() const { return _key_size; }
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
 
-    // The cloud-native index this class delegates to, or nullptr when the index is not loaded.
-    // Shared-data primary-key tablets have no other implementation, so the downcast is
-    // unconditional -- see the definition for why that holds.
-    LakePersistentIndex* _lake_index() const;
+    // Derive the encoded-key layout from the tablet's primary-key columns. Replaces
+    // PrimaryIndex::_set_schema(), minus the in-memory hash index it also allocated.
+    void _set_pk_schema(const TabletMetadataPtr& metadata);
+
+    void _unload_without_lock();
 
 private:
-    // We don't support multi version in PrimaryIndex yet, but we will record latest data version for some checking
+    // The index implementation, or null while unloaded. Typed, so reaching it needs no downcast --
+    // this member used to be PrimaryIndex's shared_ptr<PersistentIndex>, which cost a
+    // dynamic_cast at every one of the delegating methods below.
+    std::shared_ptr<LakePersistentIndex> _index;
+
+    // Guards the load bookkeeping (_loaded / _status / _index), not the index contents.
+    mutable std::mutex _load_lock;
+    bool _loaded = false;
+    Status _status;
+
+    int64_t _tablet_id = 0;
+    // Encoded primary-key layout, set by _set_pk_schema() at load time.
+    Schema _pk_schema;
+    size_t _key_size = 0;
+
+    // We don't support multi version yet, but we record the latest data version for some checking
     int64_t _data_version = 0;
     // make sure at most 1 thread is read or write primary index
     std::shared_timed_mutex _mutex;

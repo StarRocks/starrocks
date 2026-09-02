@@ -41,13 +41,22 @@ class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
 
-// LakePersistentIndex is not thread-safe.
-// Caller should take care of the multi-thread safety
-class LakePersistentIndex : public PersistentIndex {
+// The one primary-key index implementation a shared-data tablet has: a write-ahead memtable in front
+// of a stack of sstable filesets on shared storage.
+//
+// Standalone on purpose. It used to derive from PersistentIndex, the local-disk implementation, but
+// took nothing from it except two scalar members and the vtable -- it overrode 7 of that class's 39
+// virtuals and inherited an l0/l1/l2 file layout, a DataDir and a PersistentIndexMetaPB it never
+// touched. Nothing holds a lake index polymorphically either (UpdateManager's index cache stores
+// LakePrimaryIndex by value), so the base bought no dispatch. It still shares the value types --
+// IndexValue, KeyIndexSet -- which is a dependency on persistent_index.h, not on its implementation.
+//
+// Not thread-safe. Callers serialize through LakePrimaryIndex's lock.
+class LakePersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
-    ~LakePersistentIndex() override;
+    ~LakePersistentIndex();
 
     DISALLOW_COPY(LakePersistentIndex);
 
@@ -57,7 +66,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    Status get(size_t n, const Slice* keys, IndexValue* values) override;
+    Status get(size_t n, const Slice* keys, IndexValue* values);
 
     // batch upsert
     // |n|: size of key/value array
@@ -66,7 +75,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, IOStat* stat = nullptr,
-                  ParallelUpsertContext* ctx = nullptr) override;
+                  ParallelUpsertContext* ctx = nullptr);
 
     // batch erase
     // |n|: size of key/value array
@@ -74,11 +83,6 @@ public:
     // |old_values|: return old values if key exist, or set to NullValue if not
     // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, uint32_t del_rssid);
-
-    // Use erase with `del_rssid` instead of this one.
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values) override {
-        return Status::NotSupported("LakePersistentIndex::erase not supported");
-    }
 
     // Apply a large delete by ingesting the tombstone sstable |del_sst_meta| that was pre-built at import
     // time (PkTabletWriter::flush_del_file), avoiding tombstone accumulation and additional memtable flushes.
@@ -111,15 +115,14 @@ public:
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                       std::vector<uint32_t>* failed) override;
+                       std::vector<uint32_t>* failed);
 
     // batch replace without return old values
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |replace_indexes|: The index of the |keys| array that need to replace.
-    Status replace(size_t n, const Slice* keys, const IndexValue* values,
-                   const std::vector<uint32_t>& replace_indexes) override;
+    Status replace(size_t n, const Slice* keys, const IndexValue* values, const std::vector<uint32_t>& replace_indexes);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
@@ -143,7 +146,7 @@ public:
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
 
-    size_t memory_usage() const override;
+    size_t memory_usage() const;
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
@@ -169,6 +172,16 @@ public:
     // Return the {file_cnt, row_cnt} that need to rebuild in a single rowset traversal.
     static std::pair<size_t, int64_t> need_rebuild_counts(const TabletMetadataPB& metadata,
                                                           const PersistentIndexSstableMetaPB& sstable_meta);
+
+    // Stamp the version that every subsequent memtable entry carries. Called once per publish,
+    // before any upsert/erase/replace.
+    //
+    // This replaces the inherited PersistentIndex::prepare(version, n), which set the same _version
+    // and then flipped four flags -- _dump_snapshot, _flushed, _need_bloom_filter and the error state
+    // -- that only the local-disk implementation reads. The version was the only part that reached
+    // this class, via `_version.major_number()` in upsert/erase/replace, which made the publish
+    // version's route into the memtable considerably harder to follow than it needed to be.
+    void set_publish_version(const EditVersion& version) { _version = version; }
 
     Status flush_memtable(bool force = false);
 
@@ -245,6 +258,12 @@ private:
     // Counters for SST files flushed during publish phase
     int32_t _publish_sst_flush_count{0};
     int64_t _publish_sst_flush_bytes{0};
+
+    // Fixed encoded key size, or 0 for variable-length keys. Set from the PK schema in
+    // load_from_lake_tablet(), which is also where it was set while this derived from PersistentIndex.
+    size_t _key_size{0};
+    // The version stamped on memtable entries; see set_publish_version().
+    EditVersion _version;
 };
 
 } // namespace lake
