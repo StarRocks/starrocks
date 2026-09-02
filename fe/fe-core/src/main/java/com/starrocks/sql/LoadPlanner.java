@@ -334,7 +334,38 @@ public class LoadPlanner {
                 // can ALSO build a flexible plan; without this a flexible load on a local (shared-
                 // nothing) table -- or flexible + merge_condition -- would inject "__cset__" and reach
                 // BE apply with no flexible-aware path, silently NULL-clobbering undeclared columns.
-                Load.checkFlexiblePartialUpdate(destTable, mergeConditionStr);
+                // An explicit flexible mode that fails the guard is rejected; `auto` degrades to the
+                // homogeneous plan it always produced (Load.resolveFlexiblePartialUpdate).
+                TPartialUpdateMode requestedMode =
+                        streamLoadInfo != null ? streamLoadInfo.getPartialUpdateMode() : partialUpdateMode;
+                List<ImportColumnDesc> flexibleColumnDescs = this.etlJobType == EtlJobType.BROKER
+                        ? fileGroups.get(0).getColumnExprList() : columnDescs;
+                flexiblePartialUpdate = Load.resolveFlexiblePartialUpdate(destTable, requestedMode, true,
+                        mergeConditionStr, flexibleColumnDescs);
+                // Merge commit fans the scan out over every BE that buffered data for this window. The BE
+                // json scanner interns each row's column set into a per-process dictionary keyed by txn_id
+                // and set-ids are assigned in first-seen order, so two scanner BEs assign DIFFERENT ids to
+                // the same set; the writers keep only the first dictionary that arrives on an eos request
+                // (ColumnSetDict::populate_from_snapshot is a no-op once populated) and decode every other
+                // BE's rows against it -- the wrong columns get applied, silently. Until the dictionary is
+                // made global, flexible needs a single scanner BE.
+                if (flexiblePartialUpdate && batchWriteBackendIds != null && batchWriteBackendIds.size() > 1) {
+                    if (requestedMode == TPartialUpdateMode.AUTO_MODE) {
+                        LOG.info("partial_update_mode=auto with merge commit over {} backends on table {}: "
+                                + "per-row column sets need a single scanner backend; planning the homogeneous "
+                                + "partial update instead", batchWriteBackendIds.size(), destTable.getName());
+                        flexiblePartialUpdate = false;
+                    } else {
+                        throw new DdlException("Flexible partial update with merge commit is only supported when "
+                                + "the load is scanned on a single backend (" + batchWriteBackendIds.size()
+                                + " backends buffered data for this window)");
+                    }
+                }
+                if (!flexiblePartialUpdate && streamLoadInfo != null) {
+                    // StreamLoadScanNode reads this flag to declare the hidden "__cset__" source slot and to
+                    // key the BE set-id dictionary by txn_id; it must see the planner's decision.
+                    streamLoadInfo.setFlexiblePartialUpdate(false);
+                }
             }
             if (this.etlJobType == EtlJobType.BROKER) {
                 destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList(),

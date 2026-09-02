@@ -161,13 +161,18 @@ public class StreamLoadPlanner {
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
         List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
-        boolean flexible = isPrimaryKey && streamLoadInfo.isPartialUpdate()
-                && streamLoadInfo.isFlexiblePartialUpdate();
-        if (flexible) {
-            // Shared guard (cloud-native-only + merge_condition reject). Kept in Load so the
-            // transactional-stream-load/batch-write planner (LoadPlanner) enforces the SAME rules --
-            // a guard on only one planner would leave the other silently NULL-clobbering data.
-            Load.checkFlexiblePartialUpdate(destTable, streamLoadInfo.getMergeConditionStr());
+        // Shared guard (cloud-native-only, merge_condition, auto-increment, column expressions). Kept in
+        // Load so the transactional-stream-load/batch-write planner (LoadPlanner) enforces the SAME rules --
+        // a guard on only one planner would leave the other silently NULL-clobbering data. An explicit
+        // flexible mode that fails the guard is rejected; `auto` degrades to the homogeneous plan it always
+        // produced before flexible existed (see Load.resolveFlexiblePartialUpdate).
+        boolean flexible = Load.resolveFlexiblePartialUpdate(destTable, streamLoadInfo.getPartialUpdateMode(),
+                isPrimaryKey && streamLoadInfo.isPartialUpdate() && streamLoadInfo.isFlexiblePartialUpdate(),
+                streamLoadInfo.getMergeConditionStr(), streamLoadInfo.getColumnExprDescs());
+        if (!flexible && streamLoadInfo.isFlexiblePartialUpdate()) {
+            // StreamLoadScanNode reads this same flag to declare the hidden "__cset__" source slot and to
+            // key the BE set-id dictionary by txn_id; it must see the planner's decision, not the request's.
+            streamLoadInfo.setFlexiblePartialUpdate(false);
         }
         if (streamLoadInfo.isPartialUpdate()) {
             destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(),

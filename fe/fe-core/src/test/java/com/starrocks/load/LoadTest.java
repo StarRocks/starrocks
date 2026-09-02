@@ -1022,4 +1022,110 @@ public class LoadTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "auto-increment",
                 () -> Load.checkFlexiblePartialUpdate(cnAi, null));
     }
+
+    // A `columns` mapping with an expression cannot be flexible: the BE derives a row's column set from the
+    // source slots present in the JSON object, so a derived column is never in any set and its update would
+    // silently never be applied. The hidden __op expression targets the op slot and is fine.
+    @Test
+    public void testCheckFlexiblePartialUpdateRejectsColumnExpressions(@Mocked OlapTable cnValid) {
+        Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
+        new Expectations() {
+            {
+                cnValid.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnValid.getBaseSchema();
+                result = Lists.newArrayList(v);
+                minTimes = 0;
+            }
+        };
+        List<ImportColumnDesc> plain = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("v"));
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnValid, null, plain));
+
+        List<ImportColumnDesc> withOp = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("v"),
+                new ImportColumnDesc(Load.LOAD_OP_COLUMN, new IntLiteral(0)));
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnValid, null, withOp));
+
+        List<ImportColumnDesc> derived = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("tmp"),
+                new ImportColumnDesc("v", new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, "tmp"),
+                        new IntLiteral(1))));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "column mappings or expressions",
+                () -> Load.checkFlexiblePartialUpdate(cnValid, null, derived));
+    }
+
+    // A generated column is a planner-injected expression: its value lands in the .upt but no row's column
+    // set covers it, so the masked apply would silently leave it stale.
+    @Test
+    public void testCheckFlexiblePartialUpdateRejectsGeneratedColumn(@Mocked OlapTable cnGenerated) {
+        Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
+        new Expectations() {
+            {
+                cnGenerated.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnGenerated.getBaseSchema();
+                result = Lists.newArrayList(v);
+                minTimes = 0;
+                cnGenerated.hasGeneratedColumn();
+                result = true;
+                minTimes = 0;
+            }
+        };
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "generated column",
+                () -> Load.checkFlexiblePartialUpdate(cnGenerated, null));
+        // auto degrades instead of rejecting, like every other unsupported shape.
+        ExceptionChecker.expectThrowsNoException(() -> Assertions.assertFalse(
+                Load.resolveFlexiblePartialUpdate(cnGenerated, TPartialUpdateMode.AUTO_MODE, true, null, null)));
+    }
+
+    // The flexible bit reaches the planner for two different reasons and they must not be treated alike:
+    // an explicit `partial_update_mode=flexible` names the feature, so an unsupported shape is an error the
+    // caller asked for; `partial_update_mode=auto` merely enables flexible where possible, and it predates
+    // flexible -- a shared-nothing table, an auto-increment table, a merge_condition, or an expression
+    // mapping under `auto` all worked before flexible existed and must keep planning as the homogeneous
+    // partial update (resolve returns false) instead of rejecting the load.
+    @Test
+    public void testResolveFlexiblePartialUpdateDegradesAutoOnly(@Mocked OlapTable localTbl,
+                                                                 @Mocked OlapTable cnValid) throws DdlException {
+        Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
+        new Expectations() {
+            {
+                cnValid.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnValid.getBaseSchema();
+                result = Lists.newArrayList(v);
+                minTimes = 0;
+            }
+        };
+        List<ImportColumnDesc> plain = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("v"));
+        List<ImportColumnDesc> derived = Lists.newArrayList(new ImportColumnDesc("pk"),
+                new ImportColumnDesc("v", new IntLiteral(1)));
+
+        // Not requested at all -> never flexible, whatever the mode.
+        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, false,
+                null, plain));
+        // Supported shape -> flexible for both the explicit and the auto request.
+        Assertions.assertTrue(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.COLUMN_UPDATE_MODE,
+                true, null, plain));
+        Assertions.assertTrue(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
+                null, plain));
+
+        // Unsupported shapes: auto degrades (false, no exception) ...
+        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(localTbl, TPartialUpdateMode.AUTO_MODE, true,
+                null, plain));
+        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
+                "v", plain));
+        Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.AUTO_MODE, true,
+                null, derived));
+        // ... while the explicit modes reject, with the same reasons checkFlexiblePartialUpdate gives.
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data",
+                () -> Load.resolveFlexiblePartialUpdate(localTbl, TPartialUpdateMode.COLUMN_UPDATE_MODE, true,
+                        null, plain));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "merge_condition",
+                () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.ROW_MODE, true, "v", plain));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "column mappings or expressions",
+                () -> Load.resolveFlexiblePartialUpdate(cnValid, TPartialUpdateMode.COLUMN_UPDATE_MODE, true,
+                        null, derived));
+    }
 }

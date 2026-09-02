@@ -866,6 +866,30 @@ public class Load {
      * flexible-aware apply path.
      */
     public static void checkFlexiblePartialUpdate(Table tbl, String mergeCondition) throws DdlException {
+        checkFlexiblePartialUpdate(tbl, mergeCondition, null);
+    }
+
+    /**
+     * Same as {@link #checkFlexiblePartialUpdate(Table, String)}, and additionally rejects a `columns`
+     * mapping that carries an expression. The BE json scanner derives a row's column set from the SOURCE
+     * slots physically present in that row's JSON object; a column produced by an expression
+     * ({@code columns: pk,tmp,v=tmp+1}, {@code columns: pk,c1,c2=c1*2}) has no source slot, so no row's set
+     * ever covers it and the masked apply keeps the base value -- the load reports Success and the derived
+     * column is silently never updated. The hidden {@code __op} expression is fine: its target is the op
+     * slot, not a value column.
+     */
+    public static void checkFlexiblePartialUpdate(Table tbl, String mergeCondition,
+                                                  List<ImportColumnDesc> columnExprDescs) throws DdlException {
+        if (columnExprDescs != null) {
+            for (ImportColumnDesc desc : columnExprDescs) {
+                if (desc.isColumn() || LOAD_OP_COLUMN.equalsIgnoreCase(desc.getColumnName())) {
+                    continue;
+                }
+                throw new DdlException("Flexible partial update does not support column mappings or expressions"
+                        + " (column '" + desc.getColumnName() + "'): a row's column set is derived from the columns"
+                        + " present in that row, so a derived column would never be applied");
+            }
+        }
         if (!tbl.isCloudNativeTableOrMaterializedView()) {
             throw new DdlException("Flexible partial update (per-row column sets) is only supported on "
                     + "shared-data (cloud-native) primary key tables");
@@ -886,6 +910,49 @@ public class Load {
                             "Flexible partial update is not supported on a table with an auto-increment column");
                 }
             }
+            // A generated column is the same problem as a column expression, injected by the planner rather
+            // than the user: getPartialUpateColumns puts every generated column in the union and initColumns
+            // adds its defining expression, so its value is written to the .upt -- but it is in no row's
+            // column set, and the masked apply would leave it stale while the load reports Success.
+            if (((OlapTable) tbl).hasGeneratedColumn()) {
+                throw new DdlException("Flexible partial update is not supported on a table with a generated column");
+            }
+        }
+    }
+
+    /**
+     * Decide whether a load whose request carries the flexible bit is actually planned as flexible.
+     *
+     * <p>{@code partial_update_mode=flexible} / {@code flexible_row} name the feature explicitly, so a shape
+     * {@link #checkFlexiblePartialUpdate} cannot apply is an error the caller asked for and is thrown as such.
+     * {@code partial_update_mode=auto} is different: the BE sets the flexible bit for EVERY JSON partial-update
+     * load in auto mode so that a shared-data table gets per-row column sets, but {@code auto} predates flexible
+     * and is accepted on every primary-key table. Rejecting the load would break every existing
+     * {@code auto} user on a shared-nothing table, on a table with an AUTO_INCREMENT column, or with a
+     * {@code merge_condition} -- loads that worked before flexible existed. For {@code auto} the unsupported
+     * shape therefore degrades to the plan {@code auto} always produced (one homogeneous union partial update),
+     * and this returns false. The caller must then also clear {@code StreamLoadInfo.flexiblePartialUpdate},
+     * because the scan node reads that flag to inject the hidden {@code __cset__} source slot -- the planner
+     * and the scan node must agree, or the writer receives a dictionary for a payload without set-ids.
+     *
+     * @return true when the plan must carry the hidden {@code __cset__} slot and the per-row dictionary
+     */
+    public static boolean resolveFlexiblePartialUpdate(Table tbl, TPartialUpdateMode requestedMode,
+                                                       boolean flexibleRequested, String mergeCondition,
+                                                       List<ImportColumnDesc> columnExprDescs) throws DdlException {
+        if (!flexibleRequested) {
+            return false;
+        }
+        try {
+            checkFlexiblePartialUpdate(tbl, mergeCondition, columnExprDescs);
+            return true;
+        } catch (DdlException e) {
+            if (requestedMode == TPartialUpdateMode.AUTO_MODE) {
+                LOG.info("partial_update_mode=auto on table {}: per-row column sets are not applicable ({}); "
+                        + "planning the homogeneous partial update instead", tbl.getName(), e.getMessage());
+                return false;
+            }
+            throw e;
         }
     }
 
