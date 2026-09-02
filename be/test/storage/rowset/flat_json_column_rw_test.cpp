@@ -22,6 +22,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
@@ -30,12 +31,14 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_json_flat_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -356,6 +359,76 @@ TEST_F(FlatJsonColumnRWTest, testNormalFlatJsonWithoutPath) {
     ASSERT_EQ(0, read_json->get_flat_fields().size());
     EXPECT_EQ("{\"a\": 1, \"b\": 21}", read_json->debug_item(0));
     EXPECT_EQ("{\"a\": 4, \"b\": 24}", read_json->debug_item(3));
+}
+
+TEST_F(FlatJsonColumnRWTest, testWriteFallbackIsCountedAndLogged) {
+    // The write path undoes the flattening in place -- sub-writers dropped, is_flat cleared, children
+    // removed -- and then writes the column as plain JSON. Nothing about the finished segment says it was
+    // meant to be flat, and flat_json_segment_write_total was already incremented on the way in, so it
+    // counts this as a flat segment write. Without a counter of its own the fallback is invisible.
+    int32_t old_limit = config::olap_string_max_length;
+    config::olap_string_max_length = 64;
+    DeferOp reset_limit([&]() { config::olap_string_max_length = old_limit; });
+
+    MutableColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    std::string oversized(200, 'n');
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"a": 1, "s": "s1"})"));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse(R"({"a": 2, "s": "s2"})"));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse(R"({"a": 3, "s": "s3"})"));
+    ASSIGN_OR_ABORT(auto jv4, JsonValue::parse(R"({"a": 4, "s": "s4"})"));
+    ASSIGN_OR_ABORT(auto jv5, JsonValue::parse(R"({"a": 5, "s": ")" + oversized + R"("})"));
+    json_col->append(&jv1);
+    json_col->append(&jv2);
+    json_col->append(&jv3);
+    json_col->append(&jv4);
+    json_col->append(&jv5);
+
+    int64_t before = FlatJsonMetrics::instance()->flat_json_write_fallback_total.value();
+
+    MutableColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, "/test_flat_json_write_fallback.data", write_col, read_col, nullptr);
+
+    EXPECT_EQ(before + 1, FlatJsonMetrics::instance()->flat_json_write_fallback_total.value());
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(R"({"a": 1, "s": "s1"})", read_json->debug_item(0));
+    EXPECT_EQ(R"({"a": 4, "s": "s4"})", read_json->debug_item(3));
+}
+
+TEST_F(FlatJsonColumnRWTest, testNothingWorthFlatteningIsNotAFallback) {
+    // Every row carries a different key, so each path is present in 1 of 5 rows -- below
+    // json_flat_sparsity_factory -- and the deriver returns nothing. That reaches finish() through the
+    // same failure branch as a real fallback, and counting or warning about it would fire on ordinary
+    // tables of unstructured documents, which is exactly the noise that makes a warning worthless.
+    MutableColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"({"k1": 1})"));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse(R"({"k2": 2})"));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse(R"({"k3": 3})"));
+    ASSIGN_OR_ABORT(auto jv4, JsonValue::parse(R"({"k4": 4})"));
+    ASSIGN_OR_ABORT(auto jv5, JsonValue::parse(R"({"k5": 5})"));
+    json_col->append(&jv1);
+    json_col->append(&jv2);
+    json_col->append(&jv3);
+    json_col->append(&jv4);
+    json_col->append(&jv5);
+
+    int64_t before = FlatJsonMetrics::instance()->flat_json_write_fallback_total.value();
+
+    MutableColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, "/test_flat_json_no_paths.data", write_col, read_col, nullptr);
+
+    EXPECT_EQ(before, FlatJsonMetrics::instance()->flat_json_write_fallback_total.value());
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_EQ(5, read_json->size());
+    EXPECT_EQ(R"({"k1": 1})", read_json->debug_item(0));
 }
 
 TEST_F(FlatJsonColumnRWTest, testNullNormalFlatJson) {

@@ -189,6 +189,12 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of segment writes that invoke flat JSON column extraction.
 
+## `starrocks_be_flat_json_write_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON columns that a load could not flatten and wrote as plain JSON instead, most often because a subfield exceeds `olap_string_max_length`. Counted once per JSON column per segment, the same granularity as `starrocks_be_flat_json_segment_write_total`, which counts the fallback as a flat segment write because it is incremented before flattening is attempted. A column whose documents simply had nothing worth extracting is not a fallback and is not counted here. The column silently changes shape when this happens, so a non-zero and growing value means some newly loaded data is not being stored in flat form.
+
 ## `starrocks_be_flat_json_write_rows_total`
 
 - Unit: Count

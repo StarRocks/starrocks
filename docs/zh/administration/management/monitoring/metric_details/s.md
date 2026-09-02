@@ -209,6 +209,12 @@ description: "Alphabetical s"
 - 类型: 累积值
 - 描述: 触发 flat JSON 列抽取的 segment 写入次数。
 
+## `starrocks_be_flat_json_write_fallback_total`
+
+- 单位: 个
+- 类型: 累积值
+- 描述: 导入无法打平某个 JSON 列、转而按普通 JSON 写入的累计次数，最常见的原因是某个子字段超过 `olap_string_max_length`。按**每个 segment 的每个 JSON 列**计数，与 `starrocks_be_flat_json_segment_write_total` 同粒度——后者在尝试打平之前就已累加，因此会把回退也计成一次打平写入。若某列的文档本就没有值得抽取的路径，那不算回退，不计入本指标。发生回退时列的形态会静默改变，因此该值非零且持续增长意味着新导入的部分数据没有以打平形式存储。
+
 ## `starrocks_be_flat_json_write_rows_total`
 
 - 单位: 计数

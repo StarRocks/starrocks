@@ -183,6 +183,12 @@ description: "Alphabetical s"
 - タイプ: 累積値
 - 説明: flat JSON カラム抽出を伴うセグメント書き込みの総回数。
 
+## `starrocks_be_flat_json_write_fallback_total`
+
+- 単位: 個
+- タイプ: 累積値
+- 説明: ロードが JSON カラムを平坦化できず、通常の JSON として書き込んだ累積回数。最も多い原因はサブフィールドが `olap_string_max_length` を超えることです。**segment ごと・JSON カラムごと**にカウントされ、`starrocks_be_flat_json_segment_write_total` と同じ粒度です（後者は平坦化を試みる前に加算されるため、フォールバックも平坦化書き込みとして数えます）。抽出に値するパスがもともと無かったカラムはフォールバックではなく、この指標には計上されません。フォールバック時にカラムの形態が暗黙的に変わるため、この値が 0 でなく増加し続けている場合、新しくロードされた一部のデータが平坦化された形式で保存されていません。
+
 ## `starrocks_be_flat_json_write_rows_total`
 
 - 単位: カウント

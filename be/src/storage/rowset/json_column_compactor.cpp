@@ -93,19 +93,15 @@ Status FlatJsonColumnCompactor::_compact_columns(MutableColumns& json_datas) {
     // Lead with the unique id: _column_name comes from ColumnWriterOptions::field_name, which
     // SegmentWriter only fills in for the load path, so it is empty during compaction.
     //
-    // The status is truncated on purpose. The failure this fallback exists for is
+    // Only the status code, never its message. The failure this fallback exists for is
     // StringColumnWriter's length check, whose message embeds the entire offending value
     // ("string length({}) > limit({}), string: {}") -- 1.05MB of base64 per occurrence in the
-    // incident that prompted this fix. Logging it whole would trade a compaction that fails forever
-    // for a warning that floods be.WARNING on every compaction of that tablet.
-    std::string reason = st.to_string();
-    constexpr size_t kMaxReasonLen = 256;
-    if (reason.size() > kMaxReasonLen) {
-        reason = reason.substr(0, kMaxReasonLen) + "... (truncated)";
-    }
+    // incident that prompted this fix. That value is a JSON subfield of a customer document, so
+    // truncating it to a few hundred bytes bounds the log without changing what it is: their
+    // payload, written into be.WARNING.
     LOG(WARNING) << "FlatJsonColumnCompactor falls back to plain json, column unique_id=" << _json_meta->unique_id()
                  << (_column_name.empty() ? "" : " (" + _column_name + ")") << ", chunks: " << json_datas.size()
-                 << ", rows: " << num_rows << ", reason: " << reason;
+                 << ", rows: " << num_rows << ", reason: " << st.code_as_string();
 
     // _flatten_columns() may have run partway: _init_flat_writers() can have created sub-writers and
     // stamped is_flat=true plus per-sub-column children onto _json_meta before _write_flat_column()
@@ -209,7 +205,13 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
             _flat_columns = flattener.mutable_result();
         } else {
             if (!check_is_same_schema(pre_col, json_col)) {
-                FlatJsonMetrics::instance()->flat_json_compaction_schema_change_total.increment(1);
+                // Only a difference from a schema we have already seen is a change. pre_col is null
+                // until the first flat input, and check_is_same_schema() answers false for null, so
+                // counting unconditionally here made every compaction of a flat column report at least
+                // one "schema change" -- the metric measured "had a flat input", not form drift.
+                if (pre_col != nullptr) {
+                    FlatJsonMetrics::instance()->flat_json_compaction_schema_change_total.increment(1);
+                }
                 transformer.init_compaction_task(json_col->flat_column_paths(), json_col->flat_column_types(),
                                                  json_col->has_remain());
                 pre_col = json_col;

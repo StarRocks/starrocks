@@ -497,6 +497,62 @@ TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJson) {
     EXPECT_EQ(R"({"a": 5, "b": 25})", read_col->debug_item(4));
 }
 
+TEST_F(FlatJsonColumnCompactTest, testUniformInputSchemasAreNotASchemaChange) {
+    // pre_col is null until the first flat input and check_is_same_schema() answers false for null, so
+    // the first input always looked like a change. That made flat_json_compaction_schema_change_total
+    // count "this compaction had a flat input" rather than "the inputs disagreed about the shape" --
+    // every compaction of a flat column reported at least one change, which is the opposite of a signal.
+    int64_t before = FlatJsonMetrics::instance()->flat_json_compaction_schema_change_total.value();
+
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            flat_json(R"({"a": 1, "b": 21})", false),
+            flat_json(R"({"a": 2, "b": 22})", false),
+            flat_json(R"({"a": 3, "b": 23})", false),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    EXPECT_EQ(before, FlatJsonMetrics::instance()->flat_json_compaction_schema_change_total.value());
+    // Without this the test passes when nothing was flattened at all and the branch never ran.
+    EXPECT_TRUE(_meta->json_meta().is_flat());
+    EXPECT_EQ(3, read_col->size());
+}
+
+TEST_F(FlatJsonColumnCompactTest, testDifferingInputSchemaIsStillCounted) {
+    // The other half of the same fix: a genuine disagreement between input segments must still count,
+    // once per differing input, so the counter keeps answering "how much form drift is there".
+    int64_t before = FlatJsonMetrics::instance()->flat_json_compaction_schema_change_total.value();
+
+    // Both shapes have to clear the deriver's sparsity gate or nothing is extracted at all and the
+    // compaction takes the plain-merge path, where this code never runs -- three rows with one odd one
+    // out produced exactly that, a test that asserted nothing.
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            flat_json(R"({"a": 1, "b": 21})", false),
+            flat_json(R"({"a": 2, "b": 22})", false),
+            flat_json(R"({"a": 3, "b": 23})", false),
+            flat_json(R"({"a": 4, "c": 24})", false),
+            flat_json(R"({"a": 5, "c": 25})", false),
+            flat_json(R"({"a": 6, "c": 26})", false),
+    });
+    // clang-format on
+
+    MutableColumnPtr read_col = jsons[0]->clone_empty();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    // One change, at the fourth input: the first three agree, and the first is not a change.
+    EXPECT_EQ(before + 1, FlatJsonMetrics::instance()->flat_json_compaction_schema_change_total.value());
+    EXPECT_TRUE(_meta->json_meta().is_flat());
+    EXPECT_EQ(6, read_col->size());
+}
+
 TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactToJsonWithConfig) {
     // clang-format off
     MutableColumns jsons = to_mutable_columns({

@@ -115,7 +115,10 @@ Status FlatJsonColumnWriter::_flat_column(MutableColumns& json_datas) {
     VLOG(2) << "FlatJsonColumnWriter flat_column flat json: "
             << JsonFlatPath::debug_flat_json(_flat_paths, _flat_types, _has_remain);
     if (_flat_paths.empty()) {
-        return Status::InternalError("doesn't have flat column.");
+        // Not a failure: the deriver looked and found nothing worth extracting, which is the ordinary
+        // outcome for a column of unstructured or highly variable documents. finish() tells this apart
+        // from a genuine failure by the status kind, so that ordinary tables do not log a warning.
+        return Status::NotFound("doesn't have flat column.");
     }
 
     JsonFlattener flattener(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json());
@@ -285,6 +288,30 @@ Status FlatJsonColumnWriter::finish() {
     auto st = _flat_column(_json_datas);
     _is_flat = st.ok();
     if (!st.ok()) {
+        // NotFound is the deriver reporting that it found nothing worth extracting, which is the
+        // ordinary outcome for a column of unstructured documents and is deliberately silent -- the
+        // absence of flat metadata on the segment already says it. Anything else is a failure.
+        if (!st.is_not_found()) {
+            // Everything below silently undoes the flattening, so without this the column just changes
+            // shape with nothing left to see: the segment is written as plain JSON, later reads take the
+            // slow path, and no log, metric or piece of metadata records that it was meant to be flat.
+            FlatJsonMetrics::instance()->flat_json_write_fallback_total.increment(1);
+            size_t num_rows = 0;
+            for (const auto& col : _json_datas) {
+                num_rows += col->size();
+            }
+            // Not sampled. One writer is built per column per segment and finish() runs once, so this
+            // is already at the finest granularity there is: one line per affected column per flush,
+            // and none at all on a healthy table. Sampling here would cost the thing the line exists
+            // for -- LOG_EVERY_N counts per call site, so with several columns falling back the
+            // surviving lines name an arbitrary one of them, and the counter names none.
+            // Only the status code, never its message: StringColumnWriter's length check embeds the
+            // entire offending value in it, and that value is a JSON subfield of a customer document.
+            // Truncating it bounds the log without changing what it is -- their payload in be.WARNING.
+            LOG(WARNING) << "FlatJsonColumnWriter falls back to plain json, column unique_id="
+                         << _json_meta->unique_id() << (_column_name.empty() ? "" : " (" + _column_name + ")")
+                         << ", rows: " << num_rows << ", reason: " << st.code_as_string();
+        }
         for (auto& col : _json_datas) {
             RETURN_IF_ERROR(_json_writer->append(*col));
         }

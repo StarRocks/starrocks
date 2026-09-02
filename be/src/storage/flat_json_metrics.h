@@ -43,6 +43,11 @@ public:
     // fallback is invisible: flat_json_compaction_total is incremented before any write, so it counts
     // a fallback as a flat compaction, and the column silently changes shape with nothing to see.
     METRIC_DEFINE_INT_COUNTER(flat_json_compaction_fallback_total, MetricUnit::OPERATIONS);
+    // Loads that could not flatten and wrote the column as plain JSON instead. The write path has the
+    // same blind spot the compaction path had: flat_json_segment_write_total is incremented on entry to
+    // _flat_column(), so a fallback is already counted as a flat segment write by the time it happens.
+    // Counts only genuine failures -- a column with nothing worth flattening is not a fallback.
+    METRIC_DEFINE_INT_COUNTER(flat_json_write_fallback_total, MetricUnit::OPERATIONS);
 
 private:
     MetricRegistry* _registry = nullptr;
