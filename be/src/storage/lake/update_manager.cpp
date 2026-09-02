@@ -534,6 +534,30 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                            replace_segments);
             }
 
+            // A rewrite makes the segment private but can retain sibling rows from its shared source.
+            // Mask them here; the parent view must merge unchanged shared segments from both children.
+            //
+            // This has to happen BEFORE the index update below, not after: the SST condition-merge path
+            // builds dv_generated_during_merge_update out of new_deletes and appends it to the builder
+            // right there, and builder->delvec_page() is then read to feed index.ingest_sst(). Adding
+            // these rowids afterwards would hide the sibling rows in the data segment while the
+            // ingested and persisted primary-index SST still carried their keys as live entries
+            // pointing into this child. The combined set only reaches the builder in the final loop.
+            bool masked_unowned_rows = false;
+            if (replace_segments.count(static_cast<int>(local_id)) > 0) {
+                auto unowned_rowids = state.upserts(local_id)->take_unowned_rowids();
+                if (!unowned_rowids.empty()) {
+                    auto& seg_deletes = new_deletes[rowset_id + global_segment_id];
+                    if (seg_deletes.empty()) {
+                        seg_deletes = std::move(unowned_rowids);
+                    } else {
+                        seg_deletes.reserve(seg_deletes.size() + unowned_rowids.size());
+                        seg_deletes.insert(seg_deletes.end(), unowned_rowids.begin(), unowned_rowids.end());
+                    }
+                    masked_unowned_rows = true;
+                }
+            }
+
             // PK index update + condition merge.
             TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
             DCHECK(state.upserts(local_id) != nullptr);
@@ -559,20 +583,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
                                                           state.upserts(local_id), index, &new_deletes));
             }
-            // A rewrite makes the segment private but can retain sibling rows from its shared source.
-            // Mask them here; the parent view must merge unchanged shared segments from both children.
-            if (replace_segments.count(static_cast<int>(local_id)) > 0) {
-                auto unowned_rowids = state.upserts(local_id)->take_unowned_rowids();
-                if (!unowned_rowids.empty()) {
-                    auto& seg_deletes = new_deletes[rowset_id + global_segment_id];
-                    if (seg_deletes.empty()) {
-                        seg_deletes = std::move(unowned_rowids);
-                    } else {
-                        seg_deletes.reserve(seg_deletes.size() + unowned_rowids.size());
-                        seg_deletes.insert(seg_deletes.end(), unowned_rowids.begin(), unowned_rowids.end());
-                    }
-                }
-            }
             if (state.auto_increment_deletes(local_id) != nullptr) {
                 RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(local_id), &new_deletes,
                                             del_rebuild_rssid));
@@ -581,6 +591,17 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             state.release_segment(local_id);
             _update_state_cache.update_object_size(state_entry, state.memory_usage());
             if (op_write.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
+                if (masked_unowned_rows && dv_generated_during_merge_update == nullptr) {
+                    // Same reason as above, for the path that builds no merge delvec of its own: the
+                    // SST about to be ingested must not expose keys this segment's delete vector hides.
+                    auto itr = new_deletes.find(rowset_id + global_segment_id);
+                    if (itr != new_deletes.end() && !itr->second.empty()) {
+                        dv_generated_during_merge_update = std::make_shared<DelVector>();
+                        dv_generated_during_merge_update->init(metadata->version(), itr->second.data(),
+                                                               itr->second.size());
+                        builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
+                    }
+                }
                 DelvecPagePB delvec_page_pb = builder->delvec_page(rowset_id + global_segment_id);
                 delvec_page_pb.set_version(metadata->version());
                 RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
