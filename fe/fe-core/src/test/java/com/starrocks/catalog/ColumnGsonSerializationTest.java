@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
+import com.starrocks.type.GeometryType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -169,5 +170,17 @@ public class ColumnGsonSerializationTest {
         Column readC1 = GsonUtils.GSON.fromJson(readJson, Column.class);
 
         Assertions.assertEquals(c1, readC1);
+    }
+
+    @Test
+    public void testSerializeGeometryColumn() {
+        Column geometryColumn = new Column("shape", new GeometryType(1024));
+
+        String json = GsonUtils.GSON.toJson(geometryColumn);
+        Column restored = GsonUtils.GSON.fromJson(json, Column.class);
+
+        Assertions.assertInstanceOf(GeometryType.class, restored.getType());
+        Assertions.assertTrue(restored.getType().isGeometryType());
+        Assertions.assertEquals(1024, ((GeometryType) restored.getType()).getLength());
     }
 }
