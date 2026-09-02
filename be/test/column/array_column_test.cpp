@@ -1298,6 +1298,42 @@ PARALLEL_TEST(ArrayColumnTest, test_null_rows_are_empty) {
     }
 }
 
+// The predicate behind null_rows_are_empty() is hand-vectorized eight rows at a time, so the cases
+// above - all shorter than one vector step - only ever reach the scalar tail. Walk a dirty row
+// across a column long enough to cover both, including the boundaries where a vector step ends.
+// NOLINTNEXTLINE
+PARALLEL_TEST(ArrayColumnTest, test_null_rows_are_empty_across_vector_steps) {
+    constexpr size_t kRows = 40;
+    std::vector<std::vector<int32_t>> rows(kRows, std::vector<int32_t>{1});
+
+    // Every row carries an element, but none of them is marked NULL.
+    {
+        auto column = make_array_column(rows);
+        Filter nulls(kRows, 0);
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // Every row is marked NULL and every payload was cleared.
+    {
+        auto column = make_array_column(std::vector<std::vector<int32_t>>(kRows));
+        Filter nulls(kRows, 1);
+        ASSERT_TRUE(column->null_rows_are_empty(nulls.data(), nulls.size()));
+    }
+    // One NULL row still carrying its element, at each interesting position: inside the first
+    // vector step, on both sides of a step boundary, and in the scalar tail.
+    for (size_t dirty : {size_t{0}, size_t{7}, size_t{8}, size_t{15}, size_t{16}, size_t{31}, size_t{32}, size_t{39}}) {
+        auto column = make_array_column(rows);
+        Filter nulls(kRows, 0);
+        nulls[dirty] = 1;
+        ASSERT_FALSE(column->null_rows_are_empty(nulls.data(), nulls.size())) << "dirty row " << dirty;
+
+        // The same row marked NULL after its payload was cleared is clean again.
+        auto cleared_rows = rows;
+        cleared_rows[dirty].clear();
+        auto cleared = make_array_column(cleared_rows);
+        ASSERT_TRUE(cleared->null_rows_are_empty(nulls.data(), nulls.size())) << "dirty row " << dirty;
+    }
+}
+
 // null_rows_are_empty() is the check for the invariant that fill_default() establishes, so one is the
 // inverse of the other over the same filter.
 // NOLINTNEXTLINE

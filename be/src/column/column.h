@@ -41,6 +41,15 @@ struct TypeDescriptor;
 // Forward declaration
 class Datum;
 
+// True when some row marked null still spans a non-empty offsets range - i.e. the complex column
+// carries payload underneath a row that logically has none. ArrayColumn::null_rows_are_empty() and
+// Column::empty_null_in_complex_column() ask exactly this question, one to decide whether a
+// zero-copy path is safe and the other to decide whether it has any work to do, so the scan lives
+// in one place instead of being hand-vectorized twice.
+//
+// |offsets| must hold |num_rows| + 1 entries: the vector steps read offsets[i .. i + 8].
+bool has_payload_under_null_rows(const uint8_t* nulls, const uint32_t* offsets, size_t num_rows);
+
 class Column : public Cow<Column> {
 public:
     friend class Cow<Column>;

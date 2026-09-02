@@ -127,10 +127,16 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_DECIMAL256:
             _node_type = TExprNodeType::DECIMAL_LITERAL;
             break;
+        // Complex types have no literal node type to map to, so _node_type keeps its default.
+        // TYPE_VARIANT belongs here with the rest of them: leaving it out made every expression
+        // built from a VARIANT TypeDescriptor hit the DCHECK below, which is LOG(FATAL) in a
+        // DEBUG/ASAN build - so it aborted the whole test binary rather than failing one case,
+        // while being invisible in release where DCHECK compiles out.
         case TYPE_UNKNOWN:
         case TYPE_STRUCT:
         case TYPE_MAP:
         case TYPE_JSON:
+        case TYPE_VARIANT:
             break;
 
         default:

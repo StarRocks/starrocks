@@ -51,7 +51,9 @@ public:
             // Column::has_null() defaults to false, so having nulls means this is a nullable column.
             // If its null representation is not a plain per-row byte buffer (an AdaptiveNullableColumn
             // that has not been materialized), null_rows_are_empty rejects the size mismatch and we
-            // stay on the rebuilding path.
+            // stay on the rebuilding path. Note this stays true no matter what the column really is:
+            // immutable_null_column_data() is not virtual, so the call below reads NullableColumn's
+            // own buffer and does not trigger AdaptiveNullableColumn's materialization.
             const auto& nulls = down_cast<const NullableColumn*>(arg0)->immutable_null_column_data();
             rebuild_offsets = !col_array->null_rows_are_empty(nulls.data(), nulls.size());
         }

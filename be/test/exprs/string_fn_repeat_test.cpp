@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include "column/column_helper.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/storage_define.h"
 #include "exprs/string_functions.h"
@@ -133,6 +134,51 @@ TEST_F(StringFunctionRepeatTest, repeatConstExactLimitWithOversizeRow) {
     ASSERT_FALSE(viewer.is_null(0));
     ASSERT_EQ(get_olap_string_max_length(), viewer.value(0).size);
     ASSERT_TRUE(viewer.is_null(1));
+}
+
+// A chunk whose bytes are dominated by rows that repeat past the string limit - and therefore
+// produce nothing at all. This is the skew the reservation used to get wrong: `times *
+// total_input_bytes` counts the dropped row's 700 bytes, and the recount that would have corrected
+// it only ran when that product exceeded `max_length * num_rows`, which this input stays well
+// under. The over-reservation itself is transient - the byte buffer is sized down to what was
+// written before the column is handed back - so what is pinned here is the result, over exactly
+// the shape where the old guard was silent.
+TEST_F(StringFunctionRepeatTest, repeatConstOversizeRowsDoNotInflateTheOutput) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    constexpr int32_t repeat_times = 100;
+    constexpr int kSmallRows = 9;
+    // 700 * 100 > 64 KiB, so this row is dropped; it still carries most of the input bytes.
+    constexpr size_t kOversizeRowLength = 700;
+    ASSERT_GT(kOversizeRowLength * repeat_times, get_olap_string_max_length());
+
+    auto str = BinaryColumn::create();
+    for (int i = 0; i < kSmallRows; ++i) {
+        str->append(std::string(1, 'x'));
+    }
+    str->append(std::string(kOversizeRowLength, 'y'));
+    auto times = Int32Column::create();
+    times->append(repeat_times);
+
+    Columns columns;
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(ConstColumn::create(std::move(times), 1));
+
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
+    ASSERT_EQ(kSmallRows + 1, result->size());
+
+    auto viewer = ColumnViewer<TYPE_VARCHAR>(result);
+    for (int i = 0; i < kSmallRows; ++i) {
+        ASSERT_FALSE(viewer.is_null(i));
+        ASSERT_EQ(std::string(repeat_times, 'x'), viewer.value(i).to_string());
+    }
+    ASSERT_TRUE(viewer.is_null(kSmallRows));
+
+    // 900 bytes of payload, not the 70900 the old estimate reserved: the dropped row contributes
+    // nothing to the result either.
+    constexpr size_t kProducedBytes = static_cast<size_t>(kSmallRows) * repeat_times;
+    const auto* data_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(result.get()));
+    ASSERT_EQ(kProducedBytes, data_column->get_immutable_bytes().size());
 }
 
 } // namespace starrocks

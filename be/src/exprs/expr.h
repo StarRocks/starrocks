@@ -258,7 +258,10 @@ protected:
 
     // function opcode
 
-    TExprNodeType::type _node_type;
+    // Default-initialized so that the complex-type branch of Expr(TypeDescriptor, bool), which has
+    // no literal node type to assign, leaves a defined value behind rather than an indeterminate
+    // one that node_type() / is_cast_expr() would read.
+    TExprNodeType::type _node_type{};
 
     // Used to check what opcode
     TExprOpcode::type _opcode;

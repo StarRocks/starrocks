@@ -920,14 +920,23 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         dst_offsets.resize(num_rows + 1);
         return builder.build(ColumnHelper::is_all_const(columns));
     } else {
-        size_t reserved = static_cast<size_t>(times) * src_offsets.back();
-        if (reserved > get_olap_string_max_length() * num_rows) {
-            reserved = 0;
-            for (int i = 0; i < num_rows; ++i) {
-                size_t slice_sz = src_offsets[i + 1] - src_offsets[i];
-                if (slice_sz * times <= get_olap_string_max_length()) {
-                    reserved += slice_sz * times;
-                }
+        // Size the single allocation below from what the rows actually produce. The estimate used
+        // to be `times * total_input_bytes`, corrected by a per-row recount only when it exceeded
+        // `max_length * num_rows` - but a row whose repeated length exceeds the string limit is
+        // turned into NULL by the loop below and contributes nothing, while the estimate still
+        // counts it. A skewed chunk - most rows tiny, a few long enough to be dropped - stays
+        // under that guard, so one long row can reserve gigabytes for a result of a few
+        // megabytes. That reservation is charged to the query's memory limit like any other
+        // allocation, so the query can fail on memory it was never going to use. Counting exactly
+        // is one pass over the offsets - O(rows) against the O(bytes) copy that follows - and it
+        // also keeps make_room() from widening the offsets to 64 bits for a size that never
+        // materializes.
+        const size_t max_length = get_olap_string_max_length();
+        size_t reserved = 0;
+        for (size_t i = 0; i < num_rows; ++i) {
+            const size_t repeated_size = (src_offsets[i + 1] - src_offsets[i]) * times;
+            if (repeated_size <= max_length) {
+                reserved += repeated_size;
             }
         }
         dst_offsets.make_room(num_rows + 1, reserved);
