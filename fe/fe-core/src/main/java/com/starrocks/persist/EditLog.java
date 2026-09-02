@@ -485,24 +485,17 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
-<<<<<<< HEAD
                     Frontend fe = (Frontend) journal.data();
                     globalStateMgr.getNodeMgr().replayDropFrontend(fe);
                     if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
-                        throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
-=======
-                    DropFrontendInfo dropFrontendInfo = (DropFrontendInfo) journal.data();
-                    globalStateMgr.getNodeMgr().replayDropFrontend(dropFrontendInfo);
-                    if (dropFrontendInfo.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
                         // The removed frontend must exit by itself, and it must NOT be raised as a
                         // JournalInconsistentException: OP_REMOVE_FRONTEND_V2 is an ignorable operation,
                         // so the exception would be swallowed by canSkipBadReplayedJournal() when
                         // metadata_journal_ignore_replay_failure is true (the default).
-                        String errMsg = "current fe " + dropFrontendInfo.getNodeName() + " is removed. will exit";
+                        String errMsg = "current fe " + fe.getNodeName() + " is removed. will exit";
                         LOG.error(errMsg);
                         Util.stdoutWithTime(errMsg);
                         System.exit(-1);
->>>>>>> d152d33 ([BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215))
                     }
                     break;
                 }
