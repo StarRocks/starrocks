@@ -87,6 +87,7 @@ public class LockInvariantViolations {
     private static final boolean STRICT_IN_TEST = Boolean.getBoolean("starrocks.lock.invariant.strict.in.test");
 
     /**
+<<<<<<< HEAD
      * The same escalation for the blocking-call rule, on its own property because the two rules are
      * at different stages. The lock-target rule has a known-empty violation set and is enforced;
      * the blocking-call rule is still <em>collecting</em> one, and until that set has stopped
@@ -101,14 +102,22 @@ public class LockInvariantViolations {
             Boolean.getBoolean("starrocks.lock.blocking.strict.in.test");
 
     /**
+=======
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
      * Upper bound on distinct call sites tracked. Beyond it every further site shares one bucket:
      * the throttling budget degrades, memory does not.
      */
     private static final int MAX_TRACKED_SITES = 512;
     private static final String OVERFLOW_SITE = "<site-table-full>";
+<<<<<<< HEAD
     static final String UNKNOWN_SITE = "<unknown>";
 
     static final String LOCK_PACKAGE = LockInvariantViolations.class.getPackage().getName() + ".";
+=======
+    private static final String UNKNOWN_SITE = "<unknown>";
+
+    private static final String LOCK_PACKAGE = LockInvariantViolations.class.getPackage().getName() + ".";
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
 
     /**
      * Leading token on every violation report, in the log and in the exception alike, so one grep
@@ -133,12 +142,17 @@ public class LockInvariantViolations {
 
     private static final ConcurrentHashMap<String, Site> SITES = new ConcurrentHashMap<>();
 
+<<<<<<< HEAD
     /**
      * One gate per rule. They cache independently because they read different config fields and
      * carry different test escalations.
      */
     private static final ModeGate LOCK_TARGET_GATE = new ModeGate(STRICT_IN_TEST);
     private static final ModeGate BLOCKING_CALL_GATE = new ModeGate(BLOCKING_STRICT_IN_TEST);
+=======
+    /** Cached parse of {@link Config#lock_target_validation_mode}, which is mutable at runtime. */
+    private static volatile ModeCache modeCache;
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
 
     private static final class Site {
         private final AtomicLong count = new AtomicLong();
@@ -156,6 +170,7 @@ public class LockInvariantViolations {
         }
     }
 
+<<<<<<< HEAD
     /**
      * Resolves one rule's config string to a {@link Mode}. Called on every guarded operation, so
      * the string parse is cached against the config value's <em>identity</em>: {@link Config}
@@ -184,18 +199,29 @@ public class LockInvariantViolations {
         }
     }
 
+=======
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
     private LockInvariantViolations() {
     }
 
     /**
+<<<<<<< HEAD
      * The mode the lock-target check runs in right now, honouring the
      * unit-test escalation.
+=======
+     * The mode the lock-target check runs in right now, honouring the unit-test escalation.
+     * <p>
+     * Called on every guarded lock acquisition, so the string parse is cached against the config
+     * value's identity; {@code Config} replaces the reference when the value is set, and a stale
+     * comparison costs at most one redundant parse.
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
      */
     public static Mode currentMode() {
         return effectiveMode(Config.lock_target_validation_mode);
     }
 
     public static Mode effectiveMode(String configured) {
+<<<<<<< HEAD
         return LOCK_TARGET_GATE.resolve(configured);
     }
 
@@ -208,6 +234,18 @@ public class LockInvariantViolations {
 
     public static Mode effectiveBlockingCallMode(String configured) {
         return BLOCKING_CALL_GATE.resolve(configured);
+=======
+        ModeCache cached = modeCache;
+        if (cached != null && cached.raw == configured) {
+            return cached.mode;
+        }
+        Mode mode = Mode.parse(configured);
+        if (mode == Mode.WARN && STRICT_IN_TEST) {
+            mode = Mode.ERROR;
+        }
+        modeCache = new ModeCache(configured, mode);
+        return mode;
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
     }
 
     /**
@@ -223,14 +261,19 @@ public class LockInvariantViolations {
      *                because whoever trips this in CI has usually never touched the lock layer.
      * @param mode    already-resolved mode; the caller has it because it short-circuits on
      *                {@link Mode#OFF} before doing any work.
+<<<<<<< HEAD
      * @throws LockInvariantViolationException in {@link Mode#ERROR}, refusing the operation. It is an
          {@code IllegalStateException}, and nameable so that a generic {@code catch} can let it
          through instead of rewriting it.
+=======
+     * @throws IllegalStateException in {@link Mode#ERROR}, refusing the operation.
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
      */
     public static void report(String kind, String detail, String remedy, Mode mode) {
         if (mode == Mode.OFF) {
             return;
         }
+<<<<<<< HEAD
         reportAtSite(kind, detail, remedy, mode, currentCallSite());
     }
 
@@ -244,12 +287,20 @@ public class LockInvariantViolations {
             return;
         }
 
+=======
+
+        String callSite = currentCallSite();
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
         Site site = siteFor(kind + "@" + callSite);
         long occurrences = site.count.incrementAndGet();
         String message = LOG_TAG + " kind=" + kind + " site=" + callSite + " detail=" + quoted(detail);
 
         if (mode == Mode.ERROR) {
+<<<<<<< HEAD
             throw new LockInvariantViolationException(message + " remedy=" + quoted(remedy));
+=======
+            throw new IllegalStateException(message + " remedy=" + quoted(remedy));
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
         }
 
         if (shouldLog(site, System.currentTimeMillis(), Config.lock_invariant_violation_log_interval_ms)) {
@@ -299,8 +350,11 @@ public class LockInvariantViolations {
     /**
      * The innermost frame that is neither the JDK's nor the lock layer's own — i.e. the code that
      * asked for the lock.
+<<<<<<< HEAD
      * <p>
      * Walks the stack, so it is called only once a violation has already been established.
+=======
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
      */
     private static String currentCallSite() {
         for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {

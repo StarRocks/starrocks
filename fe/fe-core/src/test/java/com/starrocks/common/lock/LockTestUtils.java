@@ -31,6 +31,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class LockTestUtils {
+<<<<<<< HEAD
     private static final String DEFAULT_BLOCKING_CALL_VALIDATION_MODE = Config.lock_blocking_call_validation_mode;
 
     /**
@@ -95,6 +96,26 @@ public class LockTestUtils {
                 return CompletableFuture.completedFuture(result.get());
             }
         };
+=======
+    private static final String DEFAULT_LOCK_TARGET_VALIDATION_MODE = Config.lock_target_validation_mode;
+
+    /**
+     * Opt a test out of the lock-target check.
+     * <p>
+     * Only for tests of the locking primitives themselves, which lock synthetic rids (1L, 2L, ...)
+     * that stand for no catalog object at all. A test that exercises real metadata must not use
+     * this: the check exists to catch exactly the kind of lock such a test would be hiding.
+     * <p>
+     * Pair with {@link #restoreLockTargetValidation()} in teardown -- {@link Config} is static and
+     * surefire may run other classes in the same JVM.
+     */
+    public static void disableLockTargetValidation() {
+        Config.lock_target_validation_mode = "off";
+    }
+
+    public static void restoreLockTargetValidation() {
+        Config.lock_target_validation_mode = DEFAULT_LOCK_TARGET_VALIDATION_MODE;
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
     }
 
     public static void assertLockSuccess(Future<LockResult> lockTaskResultFuture) {

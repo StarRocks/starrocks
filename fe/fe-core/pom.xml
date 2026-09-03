@@ -1227,9 +1227,16 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
 
+<<<<<<< HEAD
                     <!-- -XX:TieredStopAtLevel=1 lowers the default code cache to 48m. A planner-heavy test class can
                          fill it, and once there is no room left for an adapter the forked JVM fails the build even
                          though every test passed, so reserve 128m. -->
+=======
+                    <!-- starrocks.lock.invariant.strict.in.test raises lock_target_validation_mode=warn
+                         to error for the whole test JVM, so a newly introduced lock-target violation fails
+                         the test that introduced it. FeConstants.runningUnitTest cannot serve this purpose:
+                         it is opt-in per test class. -->
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/${jmockit.version}/jmockit-${jmockit.version}.jar
                         -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
@@ -1239,7 +1246,11 @@ under the License.
                         -XX:ReservedCodeCacheSize=128m
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
+<<<<<<< HEAD
                         ${security.manager.arg}
+=======
+                        -Dstarrocks.lock.invariant.strict.in.test=true
+>>>>>>> a7e49b328eb... [Enhancement] Check that a metadata lock target is an object the FE actually owns (#61693)
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
