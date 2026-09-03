@@ -17,13 +17,10 @@ package com.starrocks.server;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
-<<<<<<< HEAD
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
-=======
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.leader.CheckpointController;
->>>>>>> d152d3339a1... [BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215)
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
@@ -118,7 +115,6 @@ public class NodeMgrTest {
         Assertions.assertEquals((int) selfNode.second, frontends.get(0).getEditLogPort());
     }
 
-<<<<<<< HEAD
     @Test
     public void testGetAllNodeHosts() {
         NodeMgr nodeMgr = new NodeMgr();
@@ -198,7 +194,8 @@ public class NodeMgrTest {
         Assertions.assertTrue(macs.contains("11:22:33:44:55:66"));
         Assertions.assertTrue(macs.contains("aa:bb:cc:dd:ee:ff"));
         Assertions.assertEquals(2, macs.size());
-=======
+    }
+
     /**
      * A dropped follower only learns that it was removed by replaying OP_REMOVE_FRONTEND_V2, and
      * removeElectableNode() shuts down its feeder immediately, so the journal write (and its
@@ -290,6 +287,5 @@ public class NodeMgrTest {
         public String transferToLeader(String nodeName, int timeoutMs, boolean force) {
             return null;
         }
->>>>>>> d152d3339a1... [BugFix] Make dropped FE exit by itself on DROP FOLLOWER/OBSERVER (#78215)
     }
 }
