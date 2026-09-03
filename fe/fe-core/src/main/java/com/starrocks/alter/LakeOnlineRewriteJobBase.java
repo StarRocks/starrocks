@@ -1766,15 +1766,16 @@ public abstract class LakeOnlineRewriteJobBase
             }
 
             if (jobState == JobState.PENDING) {
-                // A PENDING job has installed NO durable catalog state yet. On the leader the shadow index
-                // meta + tablets are registered only inside the WAITING_TXN applier (runPendingJob),
+                // A PENDING job has installed no durable shadow catalog state yet. On the leader the shadow
+                // index meta + tablets are registered only inside the WAITING_TXN applier (runPendingJob),
                 // atomically with the WAITING_TXN journal entry, so the only PENDING journal entry (the
                 // initial ALTER log) carries empty partitionStates and nothing installed. Reconstructing
                 // here would call registerShadowIndexMeta with no per-partition shadow index, leaving the
                 // table with a shadow schema that OlapTableSink.createSchema() sees while createPartition()
                 // has no matching partition index -- loads to the table then fail until the job advances.
-                // So replay installs nothing for PENDING; the resuming leader's runPendingJob builds the
-                // shadow fresh.
+                // Replay must still restore the table reservation; the resuming leader's runPendingJob builds
+                // the shadow fresh.
+                table.setState(jobTableState());
                 LOG.info("Replaying PENDING online rewrite job {}; no durable shadow state to reconstruct.", jobId);
             } else if (jobState == JobState.WAITING_TXN || jobState == JobState.RUNNING) {
                 // WAITING_TXN and RUNNING share the same durable catalog state: the shadow index meta is

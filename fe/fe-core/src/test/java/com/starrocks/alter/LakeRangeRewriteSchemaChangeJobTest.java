@@ -480,7 +480,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         Assertions.assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()),
                 "precondition: no shadow meta before runPendingJob");
-        OlapTable.OlapTableState stateBefore = table.getState();
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
 
         String text = GsonUtils.GSON.toJson(job.copyForPersist());
         LakeRangeRewriteSchemaChangeJob replayed =
@@ -491,8 +491,13 @@ public class LakeRangeRewriteSchemaChangeJobTest {
 
         Assertions.assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()),
                 "replay of a PENDING entry must not register the shadow MaterializedIndexMeta");
-        Assertions.assertEquals(stateBefore, table.getState(),
-                "replay of a PENDING entry must not change the table state");
+        Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, inMemory.getJobState());
+
+        inMemory.replay(replayed);
+        Assertions.assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()),
+                "a repeated PENDING replay must not register the shadow MaterializedIndexMeta");
+        Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, inMemory.getJobState());
     }
 
