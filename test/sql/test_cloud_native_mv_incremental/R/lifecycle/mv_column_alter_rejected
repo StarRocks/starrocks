@@ -1,0 +1,92 @@
+-- name: test_ivm_mv_add_column_rejected @cloud
+CREATE TABLE mvcol_add (k INT, v BIGINT, w BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO mvcol_add VALUES (1,10,100),(2,20,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mvcol_add
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS sv FROM mvcol_add GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mvcol_add WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_mvcol_add ADD COLUMN sw AS SUM(w);
+-- result:
+[REGEX].*Cannot add column 'sw' on incrementally maintained materialized view.*SWAP WITH.*
+-- !result
+INSERT INTO mvcol_add VALUES (3,30,300);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mvcol_add WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_mvcol_add';
+-- result:
+true	SUCCESS
+-- !result
+SELECT k, sv FROM mv_mvcol_add ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+-- name: test_ivm_mv_drop_column_rejected @cloud
+CREATE TABLE mvcol_drop (k INT, v BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO mvcol_drop VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mvcol_drop
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT k, SUM(v) AS sv FROM mvcol_drop GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mvcol_drop WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_mvcol_drop DROP COLUMN sv;
+-- result:
+[REGEX].*Cannot drop column 'sv' on incrementally maintained materialized view.*SWAP WITH.*
+-- !result
+INSERT INTO mvcol_drop VALUES (3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mvcol_drop WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_mvcol_drop';
+-- result:
+true	SUCCESS
+-- !result
+SELECT k, sv FROM mv_mvcol_drop ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+-- name: test_pct_mv_not_caught_by_ivm_gate @cloud
+CREATE TABLE mvcol_pct (k INT, v BIGINT, w BIGINT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO mvcol_pct VALUES (1,10,100),(2,20,200);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_mvcol_pct
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "PCT")
+AS SELECT k, SUM(v) AS sv FROM mvcol_pct GROUP BY k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_mvcol_pct WITH SYNC MODE;
+[UC]ALTER MATERIALIZED VIEW mv_mvcol_pct ADD COLUMN sw AS SUM(w);
+SELECT IS_ACTIVE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_mvcol_pct';
+-- result:
+true
+-- !result

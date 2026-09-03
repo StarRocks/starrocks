@@ -455,7 +455,7 @@ public class TaskRun implements Comparable<TaskRun> {
                 // refresh here -- that would eat the actionable error; the consecutive-failure path suspends the task.
                 if (mv != null && mv.isActive()) {
                     AlterMVJobExecutor.inactiveMvAndLog(mv,
-                            MaterializedViewExceptions.inactiveReasonForIncrementalBreaking(mv.getName()));
+                            MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
                     throw e;
                 }
             }
