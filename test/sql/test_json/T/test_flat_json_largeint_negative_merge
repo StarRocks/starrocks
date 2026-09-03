@@ -1,0 +1,88 @@
+-- name: test_flat_json_largeint_negative_merge
+-- A flat JSON path that saw both vpack integer encodings is stored as one LARGEINT sub-column: the
+-- type bitmaps merge Int(7) with UInt(3) into UInt(3), and int128_t is the only column type holding
+-- the union [-2^63, 2^64-1] whole. Rebuilding the document read that sub-column back through
+-- uint64_t, so every negative value came back as its two's complement: -1 as 18446744073709551615.
+-- Reading is not the end of it. Compaction rebuilds the documents to re-flatten them, so it writes
+-- the two's complement back to disk and the negative values stop existing -- see t5 below, where the
+-- typed read of the sub-column, correct until then, starts answering 18446744073709551615 as well.
+-- Only a LARGEINT path is affected, so a value above int64 max must have been seen on it, and only
+-- its negative values are: the large ones are carried through unchanged.
+create table t1_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t1_${uuid0} values
+  (1, parse_json('{"v":18446744073709551615,"p":1}')),
+  (2, parse_json('{"v":-1,"p":2}')),
+  (3, parse_json('{"v":9223372036854775808,"p":3}')),
+  (4, parse_json('{"v":9223372036854775807,"p":4}')),
+  (5, parse_json('{"v":0,"p":5}')),
+  (6, parse_json('{"v":-9223372036854775808,"p":6}')),
+  (7, parse_json('{"v":5,"p":7}')),
+  (8, parse_json('{"v":-2,"p":8}')),
+  (9, parse_json('{"p":9}'));
+-- A single UInt among the integers is what settles $.v on LARGEINT.
+select flat_json_meta(j) from t1_${uuid0}[_META_];
+-- Every boundary of the union: 2^64-1, 2^63, int64 max, 0, int64 min, a small positive, and a row
+-- where the path is absent. The four negatives are the defect.
+select k, j from t1_${uuid0} order by k;
+-- A typed read of the same sub-column answers correctly, so one insert alone leaves the disk intact.
+select k, get_json_string(j, '$.v') as v from t1_${uuid0} order by k;
+-- Any read that needs the whole document rebuilds it, aggregation included.
+select group_concat(cast(j as string) order by k separator '|') as g from t1_${uuid0};
+-- Rows that differ stop being distinguishable: -1 and 2^64-1 rebuild to the same text, and so do
+-- int64 min and 2^63, which is another row's real value.
+create table t2_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t2_${uuid0} values
+  (1, parse_json('{"v":18446744073709551615}')),
+  (2, parse_json('{"v":-1}')),
+  (3, parse_json('{"v":9223372036854775808}')),
+  (4, parse_json('{"v":-9223372036854775808}'));
+select cast(j as string) as s, count(*) as c from t2_${uuid0} group by s order by s;
+select count(*) as c from t2_${uuid0} where cast(j as string) = '{"v": -1}';
+-- A LARGEINT path with no negative value has always been read correctly and must stay that way,
+-- both above int64 max and for the small values the type is wide enough to also carry.
+create table t3_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t3_${uuid0} values
+  (1, parse_json('{"v":18446744073709551615}')),
+  (2, parse_json('{"v":18446744073709551614}')),
+  (3, parse_json('{"v":9223372036854775807}')),
+  (4, parse_json('{"v":7}')),
+  (5, parse_json('{"v":0}'));
+select flat_json_meta(j) from t3_${uuid0}[_META_];
+select k, j from t3_${uuid0} order by k;
+-- Negatives alone settle the path on BIGINT, which goes back to vpack as signed. Nothing here was
+-- ever wrong, and the fix must not disturb it: this is the other side of the trigger condition.
+create table t4_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t4_${uuid0} values
+  (1, parse_json('{"v":-1}')),
+  (2, parse_json('{"v":-9223372036854775808}')),
+  (3, parse_json('{"v":9223372036854775807}')),
+  (4, parse_json('{"v":0}'));
+select flat_json_meta(j) from t4_${uuid0}[_META_];
+select k, j from t4_${uuid0} order by k;
+-- Compaction rebuilds the documents to re-flatten them, so the wrong rebuild is written back and the
+-- values are gone. Three inserts, each mixing a negative with a value above int64 max, so every
+-- segment settles on LARGEINT on its own.
+create table t5_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t5_${uuid0} values (1, parse_json('{"v":-1}')), (2, parse_json('{"v":18446744073709551615}'));
+insert into t5_${uuid0} values (3, parse_json('{"v":-11}')), (4, parse_json('{"v":18446744073709551605}'));
+insert into t5_${uuid0} values (5, parse_json('{"v":-21}')), (6, parse_json('{"v":18446744073709551595}'));
+select flat_json_meta(j) from t5_${uuid0}[_META_];
+-- Before compaction the typed read still has the written values.
+select k, get_json_string(j, '$.v') as v from t5_${uuid0} order by k;
+select k, j from t5_${uuid0} order by k;
+alter table t5_${uuid0} compact;
+function: wait_compaction_finish("t5_${uuid0}", 1)
+-- After compaction it has to still have them. If it does not, they are no longer on disk and no read
+-- gets them back.
+select k, get_json_string(j, '$.v') as v from t5_${uuid0} order by k;
+select k, j from t5_${uuid0} order by k;
+drop table t1_${uuid0};
+drop table t2_${uuid0};
+drop table t3_${uuid0};
+drop table t4_${uuid0};
+drop table t5_${uuid0};

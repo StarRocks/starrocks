@@ -147,8 +147,13 @@ void merge_number(vpack::Builder* builder, const std::string_view& name, const C
     const auto data = col->immutable_data().data();
 
     if constexpr (TYPE == LogicalType::TYPE_LARGEINT) {
-        // the value is from json, must be uint64_t
-        builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
+        // A LARGEINT path is the merge of the vpack Int and UInt encodings, so the value can be
+        // negative here; only its sign says which encoding it has to go back to.
+        if (data[idx] < 0) {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value((int64_t)data[idx]));
+        } else {
+            builder->addUnchecked(name.data(), name.size(), vpack::Value((uint64_t)data[idx]));
+        }
     } else {
         builder->addUnchecked(name.data(), name.size(), vpack::Value(data[idx]));
     }

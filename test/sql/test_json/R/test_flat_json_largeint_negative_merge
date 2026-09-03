@@ -1,0 +1,192 @@
+-- name: test_flat_json_largeint_negative_merge
+create table t1_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t1_${uuid0} values
+  (1, parse_json('{"v":18446744073709551615,"p":1}')),
+  (2, parse_json('{"v":-1,"p":2}')),
+  (3, parse_json('{"v":9223372036854775808,"p":3}')),
+  (4, parse_json('{"v":9223372036854775807,"p":4}')),
+  (5, parse_json('{"v":0,"p":5}')),
+  (6, parse_json('{"v":-9223372036854775808,"p":6}')),
+  (7, parse_json('{"v":5,"p":7}')),
+  (8, parse_json('{"v":-2,"p":8}')),
+  (9, parse_json('{"p":9}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t1_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), p(BIGINT), v(LARGEINT)"]
+-- !result
+select k, j from t1_${uuid0} order by k;
+-- result:
+1	{"p": 1, "v": 18446744073709551615}
+2	{"p": 2, "v": -1}
+3	{"p": 3, "v": 9223372036854775808}
+4	{"p": 4, "v": 9223372036854775807}
+5	{"p": 5, "v": 0}
+6	{"p": 6, "v": -9223372036854775808}
+7	{"p": 7, "v": 5}
+8	{"p": 8, "v": -2}
+9	{"p": 9}
+-- !result
+select k, get_json_string(j, '$.v') as v from t1_${uuid0} order by k;
+-- result:
+1	18446744073709551615
+2	-1
+3	9223372036854775808
+4	9223372036854775807
+5	0
+6	-9223372036854775808
+7	5
+8	-2
+9	None
+-- !result
+select group_concat(cast(j as string) order by k separator '|') as g from t1_${uuid0};
+-- result:
+{"p": 1, "v": 18446744073709551615}|{"p": 2, "v": -1}|{"p": 3, "v": 9223372036854775808}|{"p": 4, "v": 9223372036854775807}|{"p": 5, "v": 0}|{"p": 6, "v": -9223372036854775808}|{"p": 7, "v": 5}|{"p": 8, "v": -2}|{"p": 9}
+-- !result
+create table t2_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t2_${uuid0} values
+  (1, parse_json('{"v":18446744073709551615}')),
+  (2, parse_json('{"v":-1}')),
+  (3, parse_json('{"v":9223372036854775808}')),
+  (4, parse_json('{"v":-9223372036854775808}'));
+-- result:
+-- !result
+select cast(j as string) as s, count(*) as c from t2_${uuid0} group by s order by s;
+-- result:
+{"v": -1}	1
+{"v": -9223372036854775808}	1
+{"v": 18446744073709551615}	1
+{"v": 9223372036854775808}	1
+-- !result
+select count(*) as c from t2_${uuid0} where cast(j as string) = '{"v": -1}';
+-- result:
+1
+-- !result
+create table t3_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t3_${uuid0} values
+  (1, parse_json('{"v":18446744073709551615}')),
+  (2, parse_json('{"v":18446744073709551614}')),
+  (3, parse_json('{"v":9223372036854775807}')),
+  (4, parse_json('{"v":7}')),
+  (5, parse_json('{"v":0}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t3_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), v(LARGEINT)"]
+-- !result
+select k, j from t3_${uuid0} order by k;
+-- result:
+1	{"v": 18446744073709551615}
+2	{"v": 18446744073709551614}
+3	{"v": 9223372036854775807}
+4	{"v": 7}
+5	{"v": 0}
+-- !result
+create table t4_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t4_${uuid0} values
+  (1, parse_json('{"v":-1}')),
+  (2, parse_json('{"v":-9223372036854775808}')),
+  (3, parse_json('{"v":9223372036854775807}')),
+  (4, parse_json('{"v":0}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t4_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), v(BIGINT)"]
+-- !result
+select k, j from t4_${uuid0} order by k;
+-- result:
+1	{"v": -1}
+2	{"v": -9223372036854775808}
+3	{"v": 9223372036854775807}
+4	{"v": 0}
+-- !result
+create table t5_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t5_${uuid0} values (1, parse_json('{"v":-1}')), (2, parse_json('{"v":18446744073709551615}'));
+-- result:
+-- !result
+insert into t5_${uuid0} values (3, parse_json('{"v":-11}')), (4, parse_json('{"v":18446744073709551605}'));
+-- result:
+-- !result
+insert into t5_${uuid0} values (5, parse_json('{"v":-21}')), (6, parse_json('{"v":18446744073709551595}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t5_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), v(LARGEINT)"]
+-- !result
+select k, get_json_string(j, '$.v') as v from t5_${uuid0} order by k;
+-- result:
+1	-1
+2	18446744073709551615
+3	-11
+4	18446744073709551605
+5	-21
+6	18446744073709551595
+-- !result
+select k, j from t5_${uuid0} order by k;
+-- result:
+1	{"v": -1}
+2	{"v": 18446744073709551615}
+3	{"v": -11}
+4	{"v": 18446744073709551605}
+5	{"v": -21}
+6	{"v": 18446744073709551595}
+-- !result
+alter table t5_${uuid0} compact;
+-- result:
+-- !result
+function: wait_compaction_finish("t5_${uuid0}", 1)
+-- result:
+None
+-- !result
+select k, get_json_string(j, '$.v') as v from t5_${uuid0} order by k;
+-- result:
+1	-1
+2	18446744073709551615
+3	-11
+4	18446744073709551605
+5	-21
+6	18446744073709551595
+-- !result
+select k, j from t5_${uuid0} order by k;
+-- result:
+1	{"v": -1}
+2	{"v": 18446744073709551615}
+3	{"v": -11}
+4	{"v": 18446744073709551605}
+5	{"v": -21}
+6	{"v": 18446744073709551595}
+-- !result
+drop table t1_${uuid0};
+-- result:
+-- !result
+drop table t2_${uuid0};
+-- result:
+-- !result
+drop table t3_${uuid0};
+-- result:
+-- !result
+drop table t4_${uuid0};
+-- result:
+-- !result
+drop table t5_${uuid0};
+-- result:
+-- !result
