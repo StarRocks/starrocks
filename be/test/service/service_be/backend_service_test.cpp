@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "base/utility/defer_op.h"
 #include "runtime/exec_env.h"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
