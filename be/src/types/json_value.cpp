@@ -21,6 +21,7 @@
 
 #include "base/status.h"
 #include "base/statusor.h"
+#include "base/types/int128.h"
 #include "types/json_value_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
@@ -219,13 +220,29 @@ static inline int cmpDouble(double left, double right) {
     return 0;
 }
 
-static inline int cmpInt64(int64_t left, int64_t right) {
+static inline int cmpInt128(int128_t left, int128_t right) {
     if (left < right) {
         return -1;
     } else if (left > right) {
         return 1;
     }
     return 0;
+}
+
+// Widen any vpack integer encoding to int128_t.
+//
+// vpack keeps unsigned integers in a UInt encoding of their own, which reaches 2^64-1 and so does not
+// fit in int64_t: Slice::getInt() throws Number out of range for such a value. sliceCompare() runs
+// inside vectorized predicates that do not catch, so a throw there aborts the process instead of
+// failing the query. int128_t holds the int64 and the uint64 range exactly, and the unchecked
+// accessors are noexcept, which keeps the comparison total. This is the same widening the flat JSON
+// writer already applies when it stores a UInt path as a LARGEINT sub-column.
+static inline int128_t integerToInt128(const vpack::Slice& slice) {
+    if (slice.isUInt()) {
+        return static_cast<int128_t>(slice.getUIntUnchecked());
+    }
+    // Int and SmallInt, both signed and both within int64.
+    return static_cast<int128_t>(slice.getIntUnchecked());
 }
 
 static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
@@ -265,7 +282,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
             case vpack::ValueType::SmallInt:
             case vpack::ValueType::Int:
             case vpack::ValueType::UInt:
-                return cmpInt64(left.getInt(), right.getInt());
+                return cmpInt128(integerToInt128(left), integerToInt128(right));
             case vpack::ValueType::Double: {
                 return cmpDouble(left.getDouble(), right.getDouble());
             }
@@ -276,7 +293,9 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return 0;
             }
         } else if (left.isInteger() && right.isInteger()) {
-            return cmpInt64(left.getInt(), right.getInt());
+            // Mixed integer encodings, so one side may be an UInt above int64 max while the other is
+            // negative. int128_t orders every such pair without a conversion that can throw.
+            return cmpInt128(integerToInt128(left), integerToInt128(right));
         } else {
             return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
         }

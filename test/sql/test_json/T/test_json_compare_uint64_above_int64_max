@@ -1,0 +1,76 @@
+-- name: test_json_compare_uint64_above_int64_max
+-- A JSON integer above int64 max is held in vpack's own UInt encoding, which reaches 2^64-1.
+-- sliceCompare() read both operands with Slice::getInt(), an int64 accessor that throws "Number out
+-- of range" for such a value, and it is reached from vectorized predicates that install no handler:
+-- the throw terminated the BE process, the FE blacklisted the node, and one ordinary query cost the
+-- cluster a backend. 19-digit integers are ordinary data -- snowflake ids, nanosecond timestamps,
+-- amounts in cents -- and a single large operand was enough, so even a table holding nothing but
+-- small values went down when the filter carried a large literal.
+-- The rows below cover every way a comparison reaches that code: a constant pair with no table at
+-- all, a predicate over a stored JSON column, a predicate over a JSON column built at runtime by
+-- parse_json, IN, CASE, and the array functions that compare elements. int64 max is here as the
+-- boundary that always worked and has to keep its answer, and negative operands are here because a
+-- u64 read through int64 wraps to a negative number, which would sort a huge value below zero.
+-- The cross-type row is a control: integer against double is still compared as double, which is
+-- lossy above 2^53, and that is a separate defect this case must not silently change.
+-- $.a is compared with cbo_prune_json_subfield off because a flattened UInt path currently reads
+-- back as NULL through the pruned access path -- an unrelated, still unfixed defect that would
+-- otherwise mask what is under test here.
+
+-- The pair that used to throw, with no storage involved.
+select parse_json('{"v":18446744073709551615}')->'$.v' = parse_json('{"v":18446744073709551615}')->'$.v' as eq_self;
+select parse_json('{"v":18446744073709551615}')->'$.v' = parse_json('{"v":18446744073709551614}')->'$.v' as eq_off_by_one;
+-- Ordering has to hold across the encoding boundary, where Int gives way to UInt.
+select parse_json('{"v":18446744073709551615}')->'$.v' > parse_json('{"v":9223372036854775807}')->'$.v' as gt_int64_max,
+       parse_json('{"v":9223372036854775808}')->'$.v' < parse_json('{"v":18446744073709551615}')->'$.v' as lt_u64_max,
+       parse_json('{"v":9223372036854775807}')->'$.v' < parse_json('{"v":9223372036854775808}')->'$.v' as across_boundary;
+-- Sign decides first: read as int64 the unsigned value would have wrapped to -1 and lost to both.
+select parse_json('{"v":18446744073709551615}')->'$.v' > parse_json('{"v":-1}')->'$.v' as gt_neg_one,
+       parse_json('{"v":18446744073709551615}')->'$.v' > parse_json('{"v":0}')->'$.v' as gt_zero,
+       parse_json('{"v":-1}')->'$.v' < parse_json('{"v":9223372036854775808}')->'$.v' as neg_below_2p63;
+-- Control on the pairings that never threw and must be untouched.
+select parse_json('{"v":18446744073709551615}')->'$.v' = parse_json('{"v":1.8446744073709552e19}')->'$.v' as vs_double,
+       parse_json('{"v":18446744073709551615}')->'$.v' = parse_json('{"v":"18446744073709551615"}')->'$.v' as vs_string,
+       parse_json('{"v":18446744073709551615}')->'$.v' = parse_json('{"v":null}')->'$.v' as vs_json_null;
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values
+  (1, parse_json('{"a":18446744073709551615}')),
+  (2, parse_json('{"a":18446744073709551615}')),
+  (3, parse_json('{"a":9223372036854775808}')),
+  (4, parse_json('{"a":9223372036854775807}')),
+  (5, parse_json('{"a":1}'));
+set cbo_prune_json_subfield = false;
+-- A predicate over a column is the shape that killed the process: the vectorized predicate compares
+-- every row with no handler above it, so the first large operand aborted the scan thread.
+select k from t where j->'$.a' = parse_json('{"a":18446744073709551615}')->'$.a' order by k;
+select k from t where j->'$.a' = parse_json('{"a":9223372036854775808}')->'$.a' order by k;
+-- int64 max is the last value the old code could read, so this row proves the boundary did not move.
+select k from t where j->'$.a' = parse_json('{"a":9223372036854775807}')->'$.a' order by k;
+select k, cast(j->'$.a' as string) as a from t
+  where j->'$.a' > parse_json('{"a":9223372036854775807}')->'$.a' order by k;
+select k from t where j->'$.a' != parse_json('{"a":18446744073709551615}')->'$.a' order by k;
+select k from t where j->'$.a' in (parse_json('{"a":18446744073709551615}')->'$.a', parse_json('{"a":1}')->'$.a') order by k;
+select k, case when j->'$.a' > parse_json('{"a":1}')->'$.a' then 1 else 0 end as big from t order by k;
+-- Whole-object equality recurses into the member and reaches the same code with no path expression.
+select count(*) as c from t where j = parse_json('{"a":18446744073709551615}');
+create table small_only (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into small_only values (1, parse_json('{"a":1}')), (2, parse_json('{"a":2}'));
+-- One large operand is enough. This table holds only small values, and the literal alone used to
+-- abort the process as it was compared against each row.
+select count(*) as c from small_only where j->'$.a' = parse_json('{"a":18446744073709551615}')->'$.a';
+create table s (k int, txt varchar(64)) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into s values (1, '{"a":18446744073709551615}'), (2, '{"a":1}');
+-- The same predicate over a JSON column built at runtime, so it holds however JSON is stored.
+select k from s where parse_json(txt) = parse_json('{"a":18446744073709551615}') order by k;
+select k from s where parse_json(txt)->'$.a' > parse_json('{"a":9223372036854775807}')->'$.a' order by k;
+-- The array functions and json_contains compare elements through the same single foundation.
+select k, array_length(array_distinct([j->'$.a', parse_json('{"a":1}')->'$.a'])) as n from t order by k;
+select k, array_contains([j->'$.a'], parse_json('{"a":18446744073709551615}')->'$.a') as has from t order by k;
+select k, json_contains(j, parse_json('{"a":18446744073709551615}')) as c from t order by k;
+-- array_sort orders elements through the same comparison, so the boundary has to hold there as well:
+-- a u64 read as int64 would have wrapped negative and sorted first instead of last.
+select cast(array_sort(array_agg(j->'$.a'))[1] as string) as smallest,
+       cast(array_sort(array_agg(j->'$.a'))[5] as string) as largest from t;
