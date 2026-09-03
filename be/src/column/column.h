@@ -394,6 +394,11 @@ public:
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     // NOTE: they're still virtual method, because AdaptiveNullableColumn still override the implementation but not in the Visitor
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const;
+    // Same as fnv_hash(), except the hash of row i lands in seed[i - from] instead of seed[i], so
+    // `seed` only has to cover [from, to). Hashing a sub-range through fnv_hash() otherwise means
+    // either sizing the buffer for every row before `from`, or handing it a base pointer computed
+    // outside its own allocation.
+    virtual void fnv_hash_rebased(uint32_t* seed, uint32_t from, uint32_t to) const;
     virtual void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const;
     virtual void fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const;
     virtual void fnv_hash_at(uint32_t* seed, uint32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }

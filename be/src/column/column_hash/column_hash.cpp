@@ -107,6 +107,17 @@ struct SelectorRange {
     bool select(uint32_t idx) { return from <= idx && idx < to; }
 };
 
+// [from, to), but the hash of row i is written to hashes[i - origin] rather than hashes[i], so a
+// caller hashing a sub-range only has to provide a buffer covering that sub-range. `origin` is
+// deliberately a separate field from `from`: the nullable fast path below narrows [from, to) to a
+// run of equal null values and recurses with a copy of the selector, and the destination has to
+// stay anchored to the sub-range the caller asked for, not to the run.
+struct SelectorRangeRebased : SelectorRange {
+    SelectorRangeRebased(uint32_t from, uint32_t to) : SelectorRange(from, to), origin(from) {}
+
+    uint32_t origin;
+};
+
 // [sel[0], sel[1], ..., sel[sel_size - 1]]
 struct SelectorSelective {
     SelectorSelective(uint16_t* sel, uint16_t sel_size) : sel(sel), sel_size(sel_size) {}
@@ -279,7 +290,9 @@ public:
 
         // TODO: optimize performance for sparse nulls
         // Fast path: no selection arrays involved, so we can work on continuous ranges.
-        if constexpr (std::is_same_v<SelectorType, SelectorRange> || std::is_same_v<SelectorType, SelectorSelection>) {
+        if constexpr (std::is_same_v<SelectorType, SelectorRange> ||
+                      std::is_same_v<SelectorType, SelectorRangeRebased> ||
+                      std::is_same_v<SelectorType, SelectorSelection>) {
             uint32_t cursor = _selector.from;
             while (cursor < _selector.to) {
                 uint32_t next = cursor + 1;
@@ -391,8 +404,14 @@ public:
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
 
     Status do_visit(const AdaptiveNullableColumn& column) {
-        // TODO: supported later
-        return Status::NotSupported("AdaptiveNullableColumn is not supported");
+        // AdaptiveNullableColumn brings its own accept() through ColumnFactory, so it lands here
+        // rather than on the NullableColumn overload. Returning NotSupported meant every entry
+        // point below -- all of which discard the status -- left the caller's seeds untouched, so
+        // an adaptive column hashed to whatever was already in the buffer. Materialize it and hash
+        // the nullable representation, which is what its own fnv_hash()/crc32_hash() overrides
+        // were already trying to reach.
+        column.materialized_nullable();
+        return do_visit(static_cast<const NullableColumn&>(column));
     }
 
     template <typename ObjectType>
@@ -412,6 +431,8 @@ private:
     [[always_inline]] uint32_t* slot(uint32_t idx) const {
         if constexpr (std::is_same_v<SelectorType, SelectorSingle>) {
             return _hashes;
+        } else if constexpr (std::is_same_v<SelectorType, SelectorRangeRebased>) {
+            return _hashes + (idx - _selector.origin);
         } else {
             return _hashes + idx;
         }
@@ -426,6 +447,11 @@ private:
 // FNV Hash
 void fnv_hash_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
     ColumnHashVisitor<FNVHash, SelectorRange> visitor(hashes, SelectorRange(from, to));
+    (void)column.accept(&visitor);
+}
+
+void fnv_hash_column_rebased(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
+    ColumnHashVisitor<FNVHash, SelectorRangeRebased> visitor(hashes, SelectorRangeRebased(from, to));
     (void)column.accept(&visitor);
 }
 

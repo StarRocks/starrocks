@@ -196,6 +196,10 @@ void Column::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     fnv_hash_column(*this, seed, from, to);
 }
 
+void Column::fnv_hash_rebased(uint32_t* seed, uint32_t from, uint32_t to) const {
+    fnv_hash_column_rebased(*this, seed, from, to);
+}
+
 void Column::fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
     fnv_hash_column_with_selection(*this, seed, selection, from, to);
 }

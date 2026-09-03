@@ -5315,6 +5315,102 @@ TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
     }
 }
 
+// array_distinct_any_type hashes the elements one block of rows at a time instead of materializing
+// a hash per element for the whole chunk, so the block bookkeeping has to hold up across a block
+// boundary, across a row longer than the whole budget, and across null/empty rows in between.
+// Compare every row against a plain first-occurrence dedup.
+TEST_F(ArrayFunctionsTest, array_distinct_any_type_across_hash_blocks) {
+    // 600 rows x 8 elements is well past the 4096-element block budget.
+    constexpr size_t kShortRows = 600;
+    // Longer than the whole budget, so this row must form a block of its own.
+    constexpr int32_t kLongRowDistinct = 4200;
+
+    // std::nullopt as a row marks a NULL array; std::nullopt as an element marks a NULL element.
+    using Row = std::vector<std::optional<int32_t>>;
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    std::vector<std::optional<Row>> rows;
+
+    auto add_row = [&](std::optional<Row> row) {
+        if (!row.has_value()) {
+            src_column->append_nulls(1);
+        } else {
+            DatumArray datums;
+            for (const auto& v : *row) {
+                datums.emplace_back(v.has_value() ? Datum(*v) : Datum());
+            }
+            src_column->append_datum(datums);
+        }
+        rows.emplace_back(std::move(row));
+    };
+
+    for (size_t i = 0; i < kShortRows; i++) {
+        if (i % 37 == 0) {
+            add_row(std::nullopt);
+        } else if (i % 53 == 0) {
+            add_row(Row{});
+        } else if (i % 71 == 0) {
+            add_row(Row{static_cast<int32_t>(i)});
+        } else {
+            // Duplicates within the row exercise the collision fallback, which rescans the row
+            // with absolute element indices — the part that breaks if a block is misaddressed.
+            add_row(Row{static_cast<int32_t>(i % 3), static_cast<int32_t>(i % 3), std::nullopt,
+                        static_cast<int32_t>(i % 5), 7, 7, std::nullopt, static_cast<int32_t>(i % 2)});
+        }
+    }
+
+    Row long_row;
+    long_row.reserve(kLongRowDistinct + 6);
+    for (int32_t j = 0; j < kLongRowDistinct; j++) {
+        long_row.emplace_back(j);
+    }
+    // A few duplicates so the fallback also runs inside the oversized block.
+    for (int32_t j : {0, 1, kLongRowDistinct - 1, kLongRowDistinct / 2, 0, 1}) {
+        long_row.emplace_back(j);
+    }
+    add_row(long_row);
+
+    // Short rows after the oversized one: the next block starts from a fresh offset.
+    add_row(Row{1, 1, 2});
+    add_row(std::nullopt);
+    add_row(Row{3, 4, 3, 4, 5, std::nullopt, std::nullopt});
+
+    auto dest_column = ArrayFunctions::array_distinct_any_type(nullptr, {src_column}).value();
+    ASSERT_EQ(rows.size(), dest_column->size());
+
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (!rows[i].has_value()) {
+            ASSERT_TRUE(dest_column->is_null(i)) << "row " << i;
+            continue;
+        }
+        ASSERT_FALSE(dest_column->is_null(i)) << "row " << i;
+
+        Row expected;
+        for (const auto& v : *rows[i]) {
+            bool seen = false;
+            for (const auto& kept : expected) {
+                if (kept == v) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                expected.emplace_back(v);
+            }
+        }
+
+        auto actual = dest_column->get(i).get_array();
+        ASSERT_EQ(expected.size(), actual.size()) << "row " << i;
+        for (size_t j = 0; j < expected.size(); j++) {
+            if (!expected[j].has_value()) {
+                ASSERT_TRUE(actual[j].is_null()) << "row " << i << " element " << j;
+            } else {
+                ASSERT_FALSE(actual[j].is_null()) << "row " << i << " element " << j;
+                ASSERT_EQ(*expected[j], actual[j].get_int32()) << "row " << i << " element " << j;
+            }
+        }
+    }
+}
+
 TEST_F(ArrayFunctionsTest, array_intersect_any_type_int) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
     src_column->append_datum(DatumArray{(int32_t)5, (int32_t)3, (int32_t)6});
@@ -5965,6 +6061,78 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
             _check_array<int32_t>({(int32_t)0}, dest_column->get(0).get_array()[0].get_array());
         }
     }
+}
+
+// array_repeat sizes the elements column from the counts before allocating it, so the offsets it
+// then appends must land on exactly that size — including for the rows that produce no elements.
+TEST_F(ArrayFunctionsTest, array_repeat_offsets_match_counted_size) {
+    auto src_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, false, 0);
+    src_column->append_datum(Datum((int32_t)7));
+    src_column->append_datum(Datum((int32_t)8));
+    src_column->append_datum(Datum((int32_t)9));
+    src_column->append_datum(Datum((int32_t)10));
+
+    auto repeat_count_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    repeat_count_column->append_datum(Datum((int32_t)3));
+    repeat_count_column->append_datum(Datum());            // NULL count -> NULL row
+    repeat_count_column->append_datum(Datum((int32_t)0));  // empty row
+    repeat_count_column->append_datum(Datum((int32_t)-1)); // empty row
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(4, dest_column->size());
+    ASSERT_TRUE(dest_column->is_null(1));
+    _check_array<int32_t>({(int32_t)7, (int32_t)7, (int32_t)7}, dest_column->get(0).get_array());
+    ASSERT_EQ(0, dest_column->get(2).get_array().size());
+    ASSERT_EQ(0, dest_column->get(3).get_array().size());
+
+    const auto* nullable_column = down_cast<const NullableColumn*>(dest_column.get());
+    const auto* array_column = down_cast<const ArrayColumn*>(nullable_column->data_column().get());
+    ASSERT_EQ(3, array_column->elements_column()->size());
+    ASSERT_EQ(5, array_column->offsets().size());
+}
+
+// Pre-sizing the elements column must not be forwarded into a nested element type: reserve(n) on
+// an ArrayColumn also reserves n inner elements, which array_repeat([], n) never produces. The
+// result here is one row holding `count` empty arrays, so the inner INT container must stay empty
+// no matter how large `count` is.
+TEST_F(ArrayFunctionsTest, array_repeat_does_not_reserve_nested_elements) {
+    constexpr int32_t kCount = 1024 * 1024;
+
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    src_column->append_datum(DatumArray{});
+
+    auto repeat_count_column = Int32Column::create();
+    repeat_count_column->append(kCount);
+
+    auto dest_column = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column}).value();
+    ASSERT_EQ(1, dest_column->size());
+
+    // ARRAY(ARRAY(INT)): one outer row -> kCount repeated rows -> zero innermost INT elements.
+    const auto* outer = down_cast<const ArrayColumn*>(dest_column.get());
+    ASSERT_EQ(kCount, outer->offsets().immutable_data()[1]);
+    const auto* repeated_nullable = down_cast<const NullableColumn*>(outer->elements_column().get());
+    const auto* repeated = down_cast<const ArrayColumn*>(repeated_nullable->data_column().get());
+    ASSERT_EQ(kCount, repeated->size());
+    ASSERT_EQ(0, repeated->elements_column()->size());
+    // Reserving one inner element per repeated row would be ~5MB of capacity for nothing.
+    EXPECT_LT(repeated->elements_column()->container_memory_usage(), 4096u);
+}
+
+// The elements of the result are addressed by uint32 offsets. The count now happens before the
+// allocation, so a request that cannot be addressed fails cleanly instead of allocating gigabytes
+// and then silently truncating the offsets.
+TEST_F(ArrayFunctionsTest, array_repeat_rejects_offset_overflow) {
+    auto src_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, false, 0);
+    auto repeat_count_column = Int32Column::create();
+    for (int32_t i = 0; i < 3; i++) {
+        src_column->append_datum(Datum((int32_t)i));
+        repeat_count_column->append(std::numeric_limits<int32_t>::max());
+    }
+
+    // 3 * (2^31 - 1) overflows uint32; nothing should have been allocated to find that out.
+    auto result = ArrayFunctions::repeat(nullptr, {src_column, repeat_count_column});
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_capacity_limit_exceeded()) << result.status().to_string();
 }
 
 TEST_F(ArrayFunctionsTest, array_repeat_map) {
