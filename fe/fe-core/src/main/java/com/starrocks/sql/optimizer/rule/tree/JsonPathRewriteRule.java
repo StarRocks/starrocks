@@ -106,6 +106,16 @@ public class JsonPathRewriteRule extends TransformationRule {
         return new JsonPathRewriteRule(OperatorType.LOGICAL_PROJECT);
     }
 
+    /**
+     * A ColumnAccessPath nests one thrift struct per path segment, so a deep enough path overruns the
+     * BE's thrift_max_recursion_depth and the query fails while the plan is deserialized, with
+     * "couldn't deserialize thrift msg: TProtocolException: Exceeded depth limit". Measured on a
+     * cluster: a plain projection breaks at 54 segments, and the boundary moves with the plan shape
+     * because the structures enclosing the access path consume depth too. This is half of the BE's
+     * default limit of 64, which leaves the other half for those enclosing structures.
+     */
+    private static final int MAX_EXTENDED_COLUMN_PATH_DEPTH = 32;
+
     @Override
     public List<OptExpression> transform(OptExpression root, OptimizerContext optimizerContext) {
         SessionVariable variables = optimizerContext.getSessionVariable();
@@ -615,6 +625,13 @@ public class JsonPathRewriteRule extends TransformationRule {
             }
 
             if (!isValidJsonPath(fields)) {
+                return call;
+            }
+
+            // Past MAX_EXTENDED_COLUMN_PATH_DEPTH the extended column cannot be shipped, so leave the
+            // expression on the JSON column -- the answer path either way, and what
+            // cbo_json_v2_rewrite=false does.
+            if (fields.size() > MAX_EXTENDED_COLUMN_PATH_DEPTH) {
                 return call;
             }
 

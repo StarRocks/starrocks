@@ -773,4 +773,35 @@ public class JsonPathRewriteTest extends PlanTestBase {
         }
     }
 
+    @Test
+    public void testDeclineRewriteForPathDeeperThanTheAccessPathLimit() throws Exception {
+        // Must track MAX_EXTENDED_COLUMN_PATH_DEPTH in JsonPathRewriteRule.
+        int limit = 32;
+
+        String atLimit = jsonPathOfDepth(limit);
+        String plan = getVerboseExplain("select cast(c2->'" + atLimit + "' as bigint) from extend_predicate");
+        Assertions.assertTrue(plan.contains("ExtendedColumnAccessPath"), plan);
+
+        String pastLimit = jsonPathOfDepth(limit + 1);
+        plan = getVerboseExplain("select cast(c2->'" + pastLimit + "' as bigint) from extend_predicate");
+        Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+
+        // Declining leaves the expression on the JSON column, which answers correctly, and the
+        // subfield pruning channel still prunes what it can.
+        assertContains(plan, "get_json_int");
+        assertContains(plan, "ColumnAccessPath");
+
+        // The predicate side goes through the same rewrite.
+        plan = getVerboseExplain("select c1 from extend_predicate where cast(c2->'" + pastLimit + "' as bigint) = 1");
+        Assertions.assertFalse(plan.contains("ExtendedColumnAccessPath"), plan);
+    }
+
+    private static String jsonPathOfDepth(int depth) {
+        StringBuilder path = new StringBuilder("$");
+        for (int i = 0; i < depth; i++) {
+            path.append(".f").append(i);
+        }
+        return path.toString();
+    }
+
 }
