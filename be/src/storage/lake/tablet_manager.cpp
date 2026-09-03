@@ -345,6 +345,12 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     }
 
     if (req.enable_tablet_creation_optimization) {
+        // One version-1 object for the whole (partition, index) instead of one per tablet: FE sends a
+        // single CreateReplicaTask and every tablet resolves version 1 from this object, which is why
+        // it keeps THIS tablet's id and readers must stamp their own onto a copy. The name carries no
+        // index discriminator, so FE only requests this for a single-index partition -- the rollup and
+        // schema-change jobs always pass false and give their shadow tablets their own version-1
+        // objects, which is why a version-1 read must try the per-tablet key before this one.
         return put_tablet_metadata(std::move(tablet_metadata_pb), tablet_initial_metadata_location(req.tablet_id));
     }
 
@@ -774,6 +780,9 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
                                                                 int64_t expected_gtid,
                                                                 const std::shared_ptr<FileSystem>& fs) {
     TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
+    // Lets tests count and classify the remote metadata reads a single get_tablet_metadata() issues,
+    // which is the whole point of the version-1 layout hint.
+    TEST_SYNC_POINT_CALLBACK("TabletManager::load_tablet_metadata:path", const_cast<std::string*>(&metadata_location));
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
     auto s = load_tablet_metadata_file_with_meter(metadata_location, metadata.get(), fill_data_cache, fs);
@@ -804,6 +813,57 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
     return metadata;
 }
 
+StatusOr<TabletMetadataPtr> TabletManager::load_shared_initial_metadata(const std::string& sibling_path,
+                                                                        int64_t tablet_id,
+                                                                        const CacheOptions& cache_opts,
+                                                                        int64_t expected_gtid,
+                                                                        const std::shared_ptr<FileSystem>& fs) {
+    // Read through the virtual path (the filesystem layer resolves it) but key the metacache entry and
+    // the singleflight on the RESOLVED path, so every tablet of the partition shares one entry and one
+    // in-flight read: sibling tablets have different virtual roots (staros://<shard>/meta) that map to
+    // one physical partition.
+    const std::string virtual_path = join_path(prefix_name(sibling_path), tablet_initial_metadata_filename());
+    std::string cache_key = virtual_path;
+    if (auto real_path = _location_provider->real_location(virtual_path); real_path.ok()) {
+        cache_key = std::move(real_path).value();
+    }
+
+    TabletMetadataPtr shared;
+    if (!cache_opts.skip_meta_cache) {
+        shared = _metacache->lookup_tablet_metadata(cache_key);
+    }
+    if (shared == nullptr) {
+        // Cached regardless of |cache_opts.fill_meta_cache|. That flag is how publish keeps a tablet's
+        // base-version metadata -- read once, then superseded -- out of the metacache, and the shared
+        // object is the opposite case: one object per PARTITION that every tablet of the partition
+        // reads in the same publish. Honoring the flag here made a cold CN fetch it once per tablet,
+        // which is most of the traffic the version-1 hint exists to remove. One entry per partition is
+        // not worth protecting the cache from.
+        //
+        // The singleflight collapses the cold-start burst: publish runs one task per tablet, and every
+        // task that misses the metacache before the first read has landed would otherwise issue its
+        // own. The key includes |expected_gtid| because load_tablet_metadata() rejects a gtid mismatch,
+        // and a waiter must not inherit a check made against another caller's expectation.
+        auto load_and_cache = [&]() -> StatusOr<TabletMetadataPtr> {
+            ASSIGN_OR_RETURN(auto loaded,
+                             load_tablet_metadata(virtual_path, cache_opts.fill_data_cache, expected_gtid, fs));
+            _metacache->cache_tablet_metadata(cache_key, loaded);
+            return loaded;
+        };
+        ASSIGN_OR_RETURN(shared, _shared_initial_metadata_group.Do(fmt::format("{}#{}", cache_key, expected_gtid),
+                                                                   load_and_cache));
+    }
+
+    // The shared object carries the id of whichever tablet FE picked to create it, so it must be
+    // stamped for this caller. Copy rather than mutate: the PB is shared through the metacache.
+    if (shared->id() == tablet_id) {
+        return shared;
+    }
+    auto stamped = std::make_shared<TabletMetadataPB>(*shared);
+    stamped->set_id(tablet_id);
+    return stamped;
+}
+
 TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t tablet_id) {
     return _metacache->lookup_tablet_metadata(tablet_latest_metadata_cache_key(tablet_id));
 }
@@ -824,10 +884,11 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version,
                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
-                                                               const std::shared_ptr<FileSystem>& fs) {
+                                                               const std::shared_ptr<FileSystem>& fs,
+                                                               InitialMetadataOrder initial_order) {
     TEST_ERROR_POINT("TabletManager::get_tablet_metadata");
-    auto tablet_metadata_or =
-            get_tablet_metadata(tablet_metadata_location(tablet_id, version), cache_opts, expected_gtid, fs);
+    auto tablet_metadata_or = get_tablet_metadata(tablet_metadata_location(tablet_id, version), cache_opts,
+                                                  expected_gtid, fs, initial_order);
 
     if (!tablet_metadata_or.ok()) {
         return tablet_metadata_or.status();
@@ -855,7 +916,8 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& path, const CacheOptions& cache_opts,
                                                                int64_t expected_gtid,
-                                                               const std::shared_ptr<FileSystem>& fs) {
+                                                               const std::shared_ptr<FileSystem>& fs,
+                                                               InitialMetadataOrder initial_order) {
     if (!cache_opts.skip_meta_cache) {
         if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
             TRACE("got cached tablet metadata");
@@ -864,9 +926,38 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     }
     StatusOr<TabletMetadataPtr> metadata_or;
     auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
-    // The bundle is addressed from |tablet_id| through this process's LocationProvider, not from
-    // |path|; see the precondition on the declaration of this overload.
-    if (lookup_cached_bundled_metadata_partition_marker(tablet_id)) {
+    const bool wants_initial_version = (tablet_id != 0 && version == kInitialVersion);
+    // ORDERING INVARIANT for version 1: ask for the tablet's OWN key first, and only fall back to the
+    // partition-shared object. Not a style choice -- it is what keeps a mixed-index partition correct.
+    // Rollup and schema-change shadow indexes ALWAYS get per-tablet version-1 objects: LakeRollupJob
+    // and LakeTableSchemaChangeJob deliberately opt out of the shared layout, because the shared name
+    // is keyed on tablet id 0 with no index discriminator and a second index writing it would clobber
+    // the base index's object. Those shadow tablets sit in the SAME metadata directory as a base
+    // index that may own a shared object, so consulting the shared object first would hand them the
+    // base index's schema -- and that object exists, so the read succeeds and nothing signals the
+    // mistake.
+    //
+    // The one sanctioned reversal is kSharedFirst, which a caller may pass only while holding FE's
+    // per-request hint -- FE sends it after confirming the partition holds exactly one index, and it
+    // is never remembered past the request. It pays off because a partition created with
+    // TCreateTabletReq::enable_tablet_creation_optimization never writes a per-tablet version-1 key
+    // at all, making the probe a guaranteed NotFound for every one of its tablets. The
+    // bundled-metadata marker cannot absorb that probe either: get_single_tablet_metadata()
+    // short-circuits at kInitialVersion before reading anything, since there is no version-1 *bundle*
+    // -- the shared object is a plain TabletMetadataPB.
+    bool shared_initial_attempted = false;
+    if (wants_initial_version && initial_order == InitialMetadataOrder::kSharedFirst) {
+        shared_initial_attempted = true;
+        metadata_or = load_shared_initial_metadata(path, tablet_id, cache_opts, expected_gtid, fs);
+        if (metadata_or.status().is_not_found()) {
+            // The hint did not match the layout: the shared object has been vacuumed, or this
+            // partition owns per-tablet version-1 objects after all. Fall back, which is why the hint
+            // costs a request rather than correctness when it is wrong.
+            metadata_or = load_tablet_metadata(path, cache_opts.fill_data_cache, expected_gtid, fs);
+        }
+    } else if (lookup_cached_bundled_metadata_partition_marker(tablet_id)) {
+        // The bundle is addressed from |tablet_id| through this process's LocationProvider, not from
+        // |path|; see the precondition on the declaration of this overload.
         metadata_or = get_single_tablet_metadata(tablet_id, version, cache_opts, expected_gtid, fs);
         if (metadata_or.status().is_not_found()) {
             metadata_or = load_tablet_metadata(path, cache_opts.fill_data_cache, expected_gtid, fs);
@@ -881,15 +972,20 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
         }
     }
 
-    if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion) {
-        // If the metadata is not found, we will try to read the initial metadata at least
-        std::string new_path = join_path(prefix_name(path), tablet_initial_metadata_filename());
-        metadata_or = load_tablet_metadata(new_path, cache_opts.fill_data_cache, expected_gtid, fs);
-        // set tablet id for initial metadata
-        if (metadata_or.ok()) {
-            auto metadata = const_cast<starrocks::TabletMetadataPB*>(metadata_or.value().get());
-            metadata->set_id(tablet_id);
-        }
+    if (metadata_or.status().is_not_found() && wants_initial_version && !shared_initial_attempted) {
+        // Last-resort: this tablet has no version-1 key of its own, so try the partition-shared
+        // object. Reached on any read that carries no hint, and on a partition whose shared layout
+        // did not come from `file_bundling` (today, one built under
+        // Config.lake_enable_tablet_creation_optimization), since FE derives the hint from the table
+        // property alone and so never sends one for those.
+        //
+        // Reached only after the tablet's own key missed, which is what the ordering invariant above
+        // requires, and it memoizes nothing about the layout: the object itself is cached (see
+        // load_shared_initial_metadata), but the decision to consult it is made afresh on every read.
+        // Remembering that this partition resolved through the shared object would let a base-index
+        // tablet's success talk a shadow tablet out of reading its own key on a later call --
+        // reintroducing exactly the wrong-schema read the ordering prevents.
+        metadata_or = load_shared_initial_metadata(path, tablet_id, cache_opts, expected_gtid, fs);
     }
 
     // CN-Free Tablet Creation fallback: when cn_free_tablet_creation is enabled, DDL skips

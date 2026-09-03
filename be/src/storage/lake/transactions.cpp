@@ -287,15 +287,17 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata, int64_t fe_built_version) {
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
+                                            InitialMetadataOrder base_version_order) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
         // means there is no txnlog and need to increase version number,
         // just return tablet metadata of base_version.
         DCHECK_EQ(new_version, base_version + 1);
-        ASSIGN_OR_RETURN(auto metadata,
-                         tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version));
+        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(
+                                                tablet_info.get_tablet_id_in_metadata(), base_version, CacheOptions{},
+                                                /*expected_gtid=*/0, /*fs=*/nullptr, base_version_order));
 
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
@@ -403,7 +405,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     // keep it from hiding inside the overall publish cost.
     auto base_metadata_or = [&] {
         TRACE_COUNTER_SCOPE_LATENCY_US("get_base_metadata_latency_us");
-        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version,
+                                               CacheOptions{.fill_meta_cache = false, .fill_data_cache = false},
+                                               /*expected_gtid=*/0, /*fs=*/nullptr, base_version_order);
     }();
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());

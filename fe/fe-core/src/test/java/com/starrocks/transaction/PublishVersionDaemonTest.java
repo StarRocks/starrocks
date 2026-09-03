@@ -761,6 +761,7 @@ public class PublishVersionDaemonTest {
         List<List<Tablet>> capturedTablets = new ArrayList<>();
         List<List<TxnInfoPB>> capturedTxnInfos = new ArrayList<>();
         List<AggregatePublishVersionRequest> capturedRequests = new ArrayList<>();
+        List<Boolean> capturedPreferSharedInitialMetadata = new ArrayList<>();
         AtomicInteger sendCount = new AtomicInteger(0);
         List<AggregatePublishVersionRequest> sentRequests = new ArrayList<>();
 
@@ -768,10 +769,12 @@ public class PublishVersionDaemonTest {
             @Mock
             public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                     long baseVersion, long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
-                    ComputeResource computeResource, AggregatePublishVersionRequest request) {
+                    ComputeResource computeResource, AggregatePublishVersionRequest request,
+                    boolean preferSharedInitialMetadata) {
                 capturedTablets.add(tablets);
                 capturedTxnInfos.add(txnInfos);
                 capturedRequests.add(request);
+                capturedPreferSharedInitialMetadata.add(preferSharedInitialMetadata);
             }
 
             @Mock
@@ -799,7 +802,12 @@ public class PublishVersionDaemonTest {
 
         PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
                 4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
-                new java.util.HashMap<>(), new ArrayList<>());
+                new java.util.HashMap<>(), new ArrayList<>(), true);
+
+        // The version-1 layout hint must reach BOTH batches: the carry-forward tablets belong to the
+        // same physical partition, so a hint that covered only the touched tablets would leave them
+        // probing a per-tablet key that was never written.
+        Assertions.assertEquals(List.of(true, true), capturedPreferSharedInitialMetadata);
 
         // Exactly two sub-requests, both attached to the SAME request, sent exactly once.
         Assertions.assertEquals(2, capturedRequests.size());

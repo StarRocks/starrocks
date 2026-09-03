@@ -40,6 +40,11 @@ inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) 
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
 
+// Version-1 metadata shared by every tablet of a partition, written when DDL sets
+// enable_tablet_creation_optimization. Holds a plain TabletMetadataPB. Deliberately identical to
+// tablet_metadata_filename(0, kInitialVersion): tablet id 0 is the "whole partition" sentinel, which
+// version >= 2 reuses for the bundle file. Same name space, different formats -- see the format note
+// on TabletManager::load_tablet_metadata_file_with_meter.
 inline std::string tablet_initial_metadata_filename() {
     return tablet_metadata_filename(0, kInitialVersion);
 }

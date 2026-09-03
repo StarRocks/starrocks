@@ -60,6 +60,7 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
@@ -13941,6 +13942,62 @@ TEST_F(LakeTabletReshardTest, test_reshard_identical_resets_cdc_carryover) {
 
     expect_old_tablet_cdc_reset(tablet_metadatas.at(tablet_id), base_version);
     expect_new_tablet_cdc_reset(tablet_metadatas.at(identical_tablet.new_tablet_id()));
+}
+
+// A reshard of a partition still at version 1 -- an empty `file_bundling` partition pre-split ahead
+// of its first load -- reads old-tablet metadata that exists only in the partition-shared version-1
+// object. With FE's hint threaded through publish_resharding_tablet(), that read goes straight to the
+// shared object instead of first 404ing on a per-tablet key that was never written.
+TEST_F(LakeTabletReshardTest, publish_resharding_tablet_shared_first_skips_per_tablet_probe) {
+    auto old_tablet_id = next_id();
+    auto new_tablet_id = next_id();
+
+    // Only the shared object exists, as DDL leaves a file_bundling partition.
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(old_tablet_id);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(old_tablet_id);
+    shared->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    _tablet_manager->metacache()->erase(shared_location);
+
+    std::vector<std::string> read_paths;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path",
+                                          [&](void* arg) { read_paths.emplace_back(*static_cast<std::string*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& identical_tablet = *resharding_tablet.mutable_identical_tablet_info();
+    identical_tablet.set_old_tablet_id(old_tablet_id);
+    identical_tablet.set_new_tablet_id(new_tablet_id);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(next_id());
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, /*base_version=*/1,
+                                              /*new_version=*/2, txn_info, false, tablet_metadatas, tablet_ranges,
+                                              lake::InitialMetadataOrder::kSharedFirst));
+    ASSERT_EQ(2, tablet_metadatas.size());
+    EXPECT_EQ(old_tablet_id, tablet_metadatas.at(old_tablet_id)->id());
+    EXPECT_EQ(new_tablet_id, tablet_metadatas.at(new_tablet_id)->id());
+    EXPECT_EQ(2, tablet_metadatas.at(new_tablet_id)->version());
+
+    auto count_ending_with = [&](const std::string& suffix) {
+        return std::count_if(read_paths.begin(), read_paths.end(), [&](const std::string& path) {
+            return path.size() >= suffix.size() &&
+                   path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0;
+        });
+    };
+    // The old tablet's own version-1 key was never probed; the shared object was read exactly once.
+    EXPECT_EQ(0, count_ending_with(lake::tablet_metadata_filename(old_tablet_id, 1)));
+    EXPECT_EQ(1, count_ending_with(lake::tablet_initial_metadata_filename()));
 }
 
 } // namespace starrocks

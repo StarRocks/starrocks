@@ -70,10 +70,17 @@ public:
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(tablet_id, version));
     }
 
+    // Version-1 metadata shared by every tablet of a partition created with
+    // enable_tablet_creation_optimization. A plain TabletMetadataPB, NOT a bundle -- and the same
+    // path as bundle_tablet_metadata_location(tablet_id, kInitialVersion), since both name tablet
+    // id 0. Never hand this object to a bundle parser.
     std::string tablet_initial_metadata_location(int64_t tablet_id) const {
         return join_path(metadata_root_location(tablet_id), tablet_initial_metadata_filename());
     }
 
+    // The aggregated partition's bundle for |version|: a BundleTabletMetadataPB with one page per
+    // tablet. Meaningful only for version >= 2; at kInitialVersion this collides with
+    // tablet_initial_metadata_location(), which holds a different format.
     std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const {
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(0, version));
     }

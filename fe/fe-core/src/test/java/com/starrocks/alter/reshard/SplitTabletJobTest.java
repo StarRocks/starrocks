@@ -391,6 +391,7 @@ public class SplitTabletJobTest {
             }
         };
 
+        AtomicReference<Boolean> actualPreferSharedInitialMetadata = new AtomicReference<>();
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
@@ -398,8 +399,10 @@ public class SplitTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
                 actualResource.set(computeResource);
+                actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }
         };
 
@@ -421,6 +424,79 @@ public class SplitTabletJobTest {
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
             Assertions.assertSame(expectedResource, actualResource.get());
+            // The job must forward exactly what the predicate says for THIS partition at the publish's base
+            // version (visibleVersion == commitVersion - 1). The shared test table may already be past
+            // version 1 here; the positive case is testRunRunningHintsSharedInitialMetadataAtVersionOne.
+            Assertions.assertEquals(
+                    Utils.preferSharedInitialMetadata(table, physicalPartition, physicalPartition.getVisibleVersion()),
+                    actualPreferSharedInitialMetadata.get());
+        } finally {
+            splitJob.replayAbortedJob();
+            physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
+        }
+    }
+
+    /**
+     * A partition still at version 1 -- the pre-split of an empty file_bundling partition ahead of its first
+     * load -- keeps its tablets' version-1 metadata only in the partition-shared object, so the reshard
+     * publish must carry the same hint a normal load does; otherwise every old tablet 404s on a per-tablet
+     * key that was never written. Needs a table of its own: the shared test table has been published past
+     * version 1 by the other tests.
+     */
+    @Test
+    public void testRunRunningHintsSharedInitialMetadataAtVersionOne() throws Exception {
+        starRocksAssert.withTable("create table fresh_bundled_split (key1 int, key2 varchar(10))\n"
+                + "order by(key1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable freshTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "fresh_bundled_split");
+        PhysicalPartition physicalPartition = freshTable.getAllPhysicalPartitions().iterator().next();
+        Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION, physicalPartition.getVisibleVersion());
+        Assertions.assertEquals(Boolean.TRUE, freshTable.isFileBundling());
+
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob splitJob = (SplitTabletJob) new SplitTabletJobFactory(db, freshTable, clause)
+                .createTabletReshardJob();
+        splitJob.init();
+
+        AtomicReference<Long> actualBaseVersion = new AtomicReference<>();
+        AtomicReference<Boolean> actualPreferSharedInitialMetadata = new AtomicReference<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
+                                       long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                       Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                       Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
+                actualBaseVersion.set(baseVersion);
+                actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
+            }
+        };
+
+        // Isolate the publish assertion from StarOS shard creation (which would otherwise run against the
+        // mocked synthetic warehouse and fail).
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+            }
+        };
+
+        try {
+            splitJob.run();
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
+            Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION, actualBaseVersion.get());
+            Assertions.assertEquals(Boolean.TRUE, actualPreferSharedInitialMetadata.get());
         } finally {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
