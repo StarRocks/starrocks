@@ -153,7 +153,7 @@ Status CSVReader::readMore(bool expandBuffer) {
     }
 
 Status CSVReader::more_rows() {
-    if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
+    if (UNLIKELY(_reached_limit())) {
         return Status::EndOfFile("Reached limit");
     }
     Status status = Status::OK();
@@ -436,6 +436,13 @@ Status CSVReader::more_rows() {
                     }
                     parsed_start = _buff.position_offset();
                     column_start = _buff.position_offset();
+                    // A blank row counts towards the range's share like any other, so the limit has
+                    // to be honoured here too. Skipping the check lets a range whose limit falls on
+                    // a blank row carry on into the record after it, which the next range also
+                    // reads, and the row is loaded twice.
+                    if (UNLIKELY(_reached_limit())) {
+                        return Status::EndOfFile("Reached limit");
+                    }
                     break;
                 }
                 if (column_start != std::string::npos) {
@@ -491,7 +498,7 @@ Status CSVReader::more_rows() {
             enclose_trailing_cr_consumed = false;
             white_space_start = std::string::npos;
             parsed_start = _buff.position_offset();
-            if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
+            if (UNLIKELY(_reached_limit())) {
                 return Status::EndOfFile("Reached limit");
             }
             break;
@@ -523,7 +530,7 @@ Status CSVReader::next_record(CSVRow& row) {
 }
 
 Status CSVReader::next_record(Record* record) {
-    if (_limit > 0 && _parsed_bytes > _limit) {
+    if (_reached_limit()) {
         return Status::EndOfFile("Reached limit");
     }
     char* d;
