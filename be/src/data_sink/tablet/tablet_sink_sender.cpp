@@ -20,7 +20,9 @@
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
 #include "common/config_ingest_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "fmt/format.h"
@@ -91,48 +93,111 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
     return Status::OK();
 }
 
+void TabletSinkSender::set_enable_shard_write(bool enable, bool local_first) {
+    _enable_shard_write = enable;
+    _shard_write_local_first = enable && local_first;
+    if (_shard_write_local_first) {
+        // Resolved once: the backend id comes from the FE heartbeat and does not change while the
+        // process runs. Absent (a CN that has not been assigned one yet) simply leaves local-first
+        // off for this load -- the round-robin spread below is always a correct fallback.
+        _local_node_id = get_backend_id().value_or(-1);
+    }
+}
+
+// Decide the ONE node each selected row goes to. This cannot be folded into the per-node dispatch
+// loop in _send_chunk_by_node: that loop visits the same row once per node, so a cursor advanced
+// there would step a different number of times on each pass and a row could end up claimed by
+// several nodes (duplication) or by none (loss).
+Status TabletSinkSender::_assign_shard_write_targets(
+        IndexChannel* channel, const std::unordered_map<int64_t, std::vector<int64_t>>& tablet_to_be,
+        const std::vector<uint16_t>& selection_idx) {
+    if (_row_target_node.size() < _tablet_ids.size()) {
+        _row_target_node.resize(_tablet_ids.size());
+    }
+    // Rows are handed out in runs of `shard_write_rows_per_node`. A run of 1 spreads every row and
+    // balances perfectly, but leaves each node a strided 1/N slice of the chunk, so the sender does
+    // N small per-column appends where it used to do one large one. A run at or above the chunk size
+    // routes a whole chunk's rows for a tablet to one node instead.
+    const uint64_t stride = std::max(1, config::shard_write_rows_per_node);
+    int64_t last_tablet_id = -1;
+    const std::vector<int64_t>* last_be_ids = nullptr;
+    uint64_t* last_counter = nullptr;
+    // Whether this tablet's rows in THIS chunk stay on the local node, and the spread to use when
+    // they do not. Both are decided once per (chunk, tablet): is_full() is a coarse backpressure
+    // signal and re-probing it per row would only add noise to the split.
+    bool keep_local = false;
+    const std::vector<int64_t>* spread = nullptr;
+    for (unsigned short selection : selection_idx) {
+        const int64_t tablet_id = _tablet_ids[selection];
+        if (tablet_id != last_tablet_id) {
+            auto iter = tablet_to_be.find(tablet_id);
+            DCHECK(iter != tablet_to_be.end());
+            if (iter == tablet_to_be.end()) {
+                return Status::InternalError(fmt::format("Unknown tablet_id {} in tablet be map", tablet_id));
+            }
+            last_tablet_id = tablet_id;
+            last_be_ids = &iter->second;
+            last_counter = &_shard_write_counters[tablet_id];
+            keep_local = _shard_write_local_first && _can_keep_rows_local(channel, *last_be_ids);
+            // Spilling: spread over the OTHER nodes. Leaving the full local node in the rotation
+            // would send 1/N of the spilled rows straight back into the channel that is already
+            // backpressured, which is the thing spilling exists to avoid.
+            if (keep_local) {
+                spread = nullptr;
+            } else if (_shard_write_local_first && _local_node_id >= 0 && last_be_ids->size() > 1) {
+                _shard_write_spill_targets.clear();
+                for (int64_t node_id : *last_be_ids) {
+                    if (node_id != _local_node_id) {
+                        _shard_write_spill_targets.emplace_back(node_id);
+                    }
+                }
+                spread = _shard_write_spill_targets.empty() ? last_be_ids : &_shard_write_spill_targets;
+            } else {
+                spread = last_be_ids;
+            }
+        }
+        DCHECK(!last_be_ids->empty());
+        const int64_t target = keep_local ? _local_node_id : (*spread)[((*last_counter)++ / stride) % spread->size()];
+        _row_target_node[selection] = target;
+        ++(target == _local_node_id ? _shard_write_local_rows : _shard_write_remote_rows);
+    }
+    return Status::OK();
+}
+
+// Local-first is on, this instance knows its own node, that node is one of the tablet's writers, and
+// its channel is neither failed nor backpressured. is_full() is what keeps a load whose sink runs on
+// a SINGLE instance (a stream load) from collapsing onto one machine: once the local channel fills,
+// the rows spill to the other nodes and the fan-out is recovered.
+bool TabletSinkSender::_can_keep_rows_local(IndexChannel* channel, const std::vector<int64_t>& be_ids) const {
+    if (_local_node_id < 0) {
+        return false;
+    }
+    if (std::find(be_ids.begin(), be_ids.end(), _local_node_id) == be_ids.end()) {
+        return false;
+    }
+    auto iter = channel->_node_channels.find(_local_node_id);
+    if (iter == channel->_node_channels.end() || iter->second == nullptr) {
+        return false;
+    }
+    NodeChannel* local = iter->second.get();
+    return !channel->is_failed_channel(local) && !local->is_full();
+}
+
 Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel,
                                              const std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
 
     DCHECK(_index_id_to_tablet_be_map.find(channel->index_id()) != _index_id_to_tablet_be_map.end());
     auto& tablet_to_be = _index_id_to_tablet_be_map.find(channel->index_id())->second;
-    // Shard write picks ONE node per row up front. It cannot be decided inside the per-node loop
-    // below: that loop visits the same row once per node, and a counter advanced there would step
-    // a different number of times on each pass, so a row could be claimed by several nodes (data
-    // duplication) or by none (data loss).
-    if (_enable_shard_write) {
-        if (_row_target_node.size() < _tablet_ids.size()) {
-            _row_target_node.resize(_tablet_ids.size());
-        }
-        // Rows are handed out in runs of `shard_write_rows_per_node`. A run of 1 spreads every row
-        // and balances perfectly, but leaves each node a strided 1/N slice of the chunk, so the
-        // sender does N small per-column appends where it used to do one large one. A run at or
-        // above the chunk size routes a whole chunk's rows for a tablet to one node instead.
-        const uint64_t stride = std::max(1, config::shard_write_rows_per_node);
-        int64_t last_tablet_id = -1;
-        std::vector<int64_t>* last_be_ids = nullptr;
-        uint64_t* last_counter = nullptr;
-        for (unsigned short selection : selection_idx) {
-            const int64_t tablet_id = _tablet_ids[selection];
-            if (tablet_id != last_tablet_id) {
-                auto iter = tablet_to_be.find(tablet_id);
-                DCHECK(iter != tablet_to_be.end());
-                if (iter == tablet_to_be.end()) {
-                    return Status::InternalError(fmt::format("Unknown tablet_id {} in tablet be map", tablet_id));
-                }
-                last_tablet_id = tablet_id;
-                last_be_ids = &iter->second;
-                last_counter = &_shard_write_counters[tablet_id];
-            }
-            DCHECK(!last_be_ids->empty());
-            _row_target_node[selection] = (*last_be_ids)[((*last_counter)++ / stride) % last_be_ids->size()];
-        }
-    }
     // Acquire shared lock to protect against concurrent modification of _node_channels
     // during incremental partition opens (see IndexChannel::init with is_incremental=true).
+    // Held across the shard-write routing decision too: local-first probes the local node channel
+    // through this same map.
     std::shared_lock<std::shared_mutex> lock(channel->_node_channels_mutex);
     TEST_SYNC_POINT("TabletSinkSender::_send_chunk_by_node::after_lock");
+    if (_enable_shard_write) {
+        RETURN_IF_ERROR(_assign_shard_write_targets(channel, tablet_to_be, selection_idx));
+    }
     for (auto& it : channel->_node_channels) {
         NodeChannel* node = it.second.get();
         if (channel->is_failed_channel(node)) {
@@ -341,6 +406,15 @@ bool TabletSinkSender::is_close_done() {
 Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
                                     bool write_txn_log) {
     Status status = std::move(close_status);
+    if (_enable_shard_write && ts_profile != nullptr && ts_profile->runtime_profile != nullptr) {
+        // How this instance's rows were split. Under local-first a non-zero remote count means the
+        // local channel was backpressured (or this node is not one of the tablet's writers); under
+        // round-robin the split is the expected ~(N-1)/N.
+        COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteLocalRows", TUnit::UNIT),
+                       _shard_write_local_rows);
+        COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteRemoteRows", TUnit::UNIT),
+                       _shard_write_remote_rows);
+    }
     // BE id -> add_batch method counter
     std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
     int64_t serialize_batch_ns = 0, actual_consume_ns = 0;

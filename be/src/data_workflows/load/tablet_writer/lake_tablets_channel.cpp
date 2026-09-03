@@ -954,6 +954,21 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     tablet_ids.reserve(params.tablets_size());
     bool multi_stmt = _is_multi_statements_txn(params);
     bool shard_write = _is_shard_write(params);
+    if (shard_write) {
+        // Under shard write several CNs write the same tablet in one transaction, so each of them
+        // produces a PARTIAL txn log. Two FE-side preconditions make that safe, and both are cheap to
+        // re-check here: without combined txn logs (write_txn_log true means THIS node writes its own
+        // file) every writer would target the same `{tablet}_{txn}.log` path and silently clobber the
+        // others, and without file bundling the folded rowset could mix segments that carry a bundle
+        // offset with segments that do not, which publish rejects. Fail the load rather than write
+        // data that cannot be published -- or, worse, that publishes short.
+        if (params.lake_tablet_params().write_txn_log()) {
+            return Status::NotSupported("shard write requires combined txn log");
+        }
+        if (!params.lake_tablet_params().enable_data_file_bundling()) {
+            return Status::NotSupported("shard write requires file bundling");
+        }
+    }
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
         // Enable bundle write for both single-statement and multi-statement transactions.

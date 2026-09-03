@@ -48,6 +48,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -273,16 +274,42 @@ public class OlapTableSink extends DataSink {
     // `shardWriteParallelism` value that keeps the historical behaviour: one node per tablet.
     public static final int NO_SHARD_WRITE = 1;
 
+    // `tablet_write_parallelism` value asking for every alive compute node in the warehouse.
+    public static final int ALL_ALIVE_NODES = -1;
+
     // Resolve the effective single-tablet write parallelism for this sink. Returns NO_SHARD_WRITE
     // whenever any precondition of the feature is not met.
     private int shardWriteParallelism(TOlapTableSink tSink, TransactionState txnState) {
         if (!dstTable.isCloudNativeTableOrMaterializedView()) {
             return NO_SHARD_WRITE;
         }
+        // Rows of one tablet are spread over the writing nodes with no order between them, so a load
+        // whose result depends on the arrival order of rows sharing a key cannot use this path: an
+        // aggregate table's REPLACE, and a primary-key table's upsert-then-delete of the same key,
+        // both do. DUPLICATE KEY has no such semantics -- its rowset is the union of the segments --
+        // which is why the feature is restricted to it.
+        if (dstTable.getKeysType() != KeysType.DUP_KEYS) {
+            return NO_SHARD_WRITE;
+        }
+        // Bundled data files are what make the fold safe to widen across nodes: each node opens its
+        // OWN bundle file (uuid-named, so no collision) and every SegmentMetadataPB carries its own
+        // filename plus bundle_file_offset, so concatenating segments from several bundles resolves
+        // correctly. It also keeps the publish-side check "all segments have offsets or none do"
+        // satisfied, which a mix of bundling and non-bundling writers would violate.
+        if (!dstTable.isFileBundling()) {
+            return NO_SHARD_WRITE;
+        }
         // Every writing node produces a PARTIAL txn log for the tablet, and only the combined-txn-log
         // path funnels them back to one sender that can aggregate them. Without it each node would write
         // its own {txn_id}.log to the SAME object-storage path and silently clobber the others.
         if (txnState == null || !txnState.isUseCombinedTxnLog()) {
+            return NO_SHARD_WRITE;
+        }
+        // INSERT_STREAMING (BEGIN ... COMMIT) is the one loading source type whose publish does NOT read
+        // the combined log: TxnInfoHelper emits `load_ids` for it and BE's load_txn_log takes that branch
+        // first, resolving `{tablet}_{txn}_{load_id}.log`. A load id is per statement, not per node, so
+        // several writing nodes would target that same path and silently clobber each other.
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             return NO_SHARD_WRITE;
         }
         // A load that makes BE attach RowsetTxnMetaPB to its op_write cannot have its txn logs folded
@@ -303,11 +330,26 @@ public class OlapTableSink extends DataSink {
         if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
             return NO_SHARD_WRITE;
         }
+        // TabletSinkColocateSender overrides the row dispatch and reads a tablet's node list as a
+        // REPLICA set, so a spread location would make it send every row to all of them -- silent
+        // duplication rather than a spread. BE refuses the combination as well; keep FE from ever
+        // producing it.
+        if (canUseColocateMVIndex(dstTable)) {
+            return NO_SHARD_WRITE;
+        }
         ConnectContext context = ConnectContext.get();
         if (context == null) {
             return NO_SHARD_WRITE;
         }
-        return Math.max(NO_SHARD_WRITE, context.getSessionVariable().getTabletWriteParallelism());
+        int parallelism = context.getSessionVariable().getTabletWriteParallelism();
+        // -1 asks for every alive compute node. That is what local-first routing needs: a sink instance
+        // can only keep its rows on its own machine if that machine is in the tablet's node list, and
+        // any node left out would silently push its share back over the network. createLocation clamps
+        // the value to the number of alive nodes.
+        if (parallelism == ALL_ALIVE_NODES) {
+            return Integer.MAX_VALUE;
+        }
+        return Math.max(NO_SHARD_WRITE, parallelism);
     }
 
     // Mirror of DeltaWriterImpl::init_write_schema: BE counts the sink's slots, drops a trailing `__op`,
@@ -534,6 +576,9 @@ public class OlapTableSink extends DataSink {
             // what BE actually received: if no partition turned out eligible, BE stays on the old path.
             if (dstTable.isCloudNativeTableOrMaterializedView() && hasMultiNodeTablet(location)) {
                 tSink.setEnable_shard_write(true);
+                ConnectContext context = ConnectContext.get();
+                tSink.setShard_write_local_first(
+                        context == null || context.getSessionVariable().isTabletWriteLocalFirst());
             }
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
             // A column-mode partial update writes the new values into a DCG beside the segment it

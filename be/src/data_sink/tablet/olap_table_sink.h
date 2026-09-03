@@ -196,6 +196,9 @@ private:
     // Widest tablet under shard write: how many CNs the most-spread tablet is written by. Reported in
     // the sink profile so a load can be told apart from one where the feature silently did not apply.
     size_t _shard_write_node_num = 1;
+    // See TOlapTableSink.shard_write_local_first: keep a chunk's rows on this instance's own node
+    // while its channel has room, instead of always round-robining across the tablet's nodes.
+    bool _shard_write_local_first = false;
     bool _enable_data_file_bundling = false;
     bool _is_multi_statements_txn = false;
     bool _enable_lake_per_partition_coordinator_txn_log = false;

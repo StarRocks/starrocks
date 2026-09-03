@@ -17,6 +17,9 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "fmt/format.h"
@@ -196,6 +199,65 @@ TEST(ShardWriteTxnLogTest, merge_pads_seg_delvecs_of_a_contributor_without_any) 
     EXPECT_TRUE(dst.op_write().seg_delvecs(0).data().empty());
     EXPECT_TRUE(dst.op_write().seg_delvecs(1).data().empty());
     EXPECT_EQ("dv", dst.op_write().seg_delvecs(2).data());
+}
+
+// Shard write is only offered on file-bundling tables, so the shape the fold really sees is
+// bundled: every segment carries its OWN bundle filename plus a bundle_file_offset into it, and each
+// node opened a different bundle file. Folding must keep every segment pointing at the bundle its
+// own node wrote -- a rowset-level filename would have made this impossible -- and must leave the
+// "all segments have an offset or none do" property intact, which is what publish checks before it
+// merges the rowsets (NonPrimaryKeyTxnLogApplier).
+TEST(ShardWriteTxnLogTest, merge_keeps_each_segment_on_its_own_bundle_file) {
+    auto bundled = [](const std::string& node, int segments) {
+        auto log = make_log(node, segments, false, 10);
+        auto* rowset = log.mutable_op_write()->mutable_rowset();
+        for (int i = 0; i < rowset->segment_metas_size(); i++) {
+            auto* seg = rowset->mutable_segment_metas(i);
+            // One physical file per node; the segments differ only by their offset into it.
+            seg->set_filename(fmt::format("{}_bundle.dat", node));
+            seg->set_bundle_file_offset(4096 * (i + 1));
+        }
+        return log;
+    };
+    auto dst = bundled("a", 2);
+    auto src = bundled("b", 3);
+
+    ASSERT_OK(merge_shard_write_txn_log(&dst, &src));
+
+    const auto& rowset = dst.op_write().rowset();
+    ASSERT_EQ(5, rowset.segment_metas_size());
+    const std::vector<std::pair<std::string, int64_t>> expected = {{"a_bundle.dat", 4096},
+                                                                   {"a_bundle.dat", 8192},
+                                                                   {"b_bundle.dat", 4096},
+                                                                   {"b_bundle.dat", 8192},
+                                                                   {"b_bundle.dat", 12288}};
+    for (int i = 0; i < rowset.segment_metas_size(); i++) {
+        EXPECT_EQ(expected[i].first, rowset.segment_metas(i).filename()) << "segment " << i;
+        ASSERT_TRUE(rowset.segment_metas(i).has_bundle_file_offset()) << "segment " << i;
+        EXPECT_EQ(expected[i].second, rowset.segment_metas(i).bundle_file_offset()) << "segment " << i;
+        EXPECT_EQ(i, rowset.segment_metas(i).segment_idx()) << "segment " << i;
+    }
+}
+
+// A node that received no rows still finishes its writer and hands back an EMPTY op_write (the eos
+// request declares the partition sink-wide, not per node), so under local-first routing this is the
+// common case rather than an edge one: only the nodes that actually got rows contribute segments.
+// The empty contributor must not turn a bundled fold into a mixed one.
+TEST(ShardWriteTxnLogTest, merge_empty_contributor_keeps_bundle_offsets_uniform) {
+    auto dst = make_log("a", 2, false, 10);
+    for (int i = 0; i < 2; i++) {
+        dst.mutable_op_write()->mutable_rowset()->mutable_segment_metas(i)->set_bundle_file_offset(4096 * (i + 1));
+    }
+    auto empty = make_log("b", 0, false, 0);
+
+    ASSERT_OK(merge_shard_write_txn_log(&dst, &empty));
+
+    const auto& rowset = dst.op_write().rowset();
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    for (int i = 0; i < rowset.segment_metas_size(); i++) {
+        EXPECT_TRUE(rowset.segment_metas(i).has_bundle_file_offset()) << "segment " << i;
+    }
+    EXPECT_EQ(2 * 10, rowset.num_rows());
 }
 
 } // namespace starrocks::lake

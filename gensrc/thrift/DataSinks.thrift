@@ -263,6 +263,12 @@ struct TOlapTableSink {
     // combined txn logs (each writing CN produces a PARTIAL txn log for the tablet; the sender
     // aggregates them into one before writing the combined log).
     36: optional bool enable_shard_write
+    // Shard write routing policy. When true (the default FE sends alongside enable_shard_write), a
+    // chunk's rows stay on the sink instance's OWN compute node whenever that node is in the tablet's
+    // node list and its channel is not backpressured, which removes the shuffle hop; rows spill to the
+    // round-robin spread only while the local channel is full, so a load with a single sink instance
+    // still fans out. When false the sender always round-robins.
+    37: optional bool shard_write_local_first
 }
 
 struct TSchemaTableSink {
