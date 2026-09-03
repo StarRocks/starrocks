@@ -17,7 +17,10 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <limits>
+#include <map>
 #include <memory>
+#include <tuple>
 
 #include "base/coding.h"
 #include "base/container/raw_container.h"
@@ -41,6 +44,10 @@
 #include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
+
+namespace {
+Status append_delvec_bytes_bounded(WritableFile* writer, Slice bytes);
+}
 
 uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
     DCHECK_GE(segment_pos, 0);
@@ -1145,6 +1152,8 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         TRACE_COUNTER_SCOPE_LATENCY_US("delvec_write_us");
         TRACE_COUNTER_INCREMENT("delvec_file_bytes", static_cast<int64_t>(_buf.size()));
         TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec", &_buf);
+        [[maybe_unused]] int64_t logical_size = _buf.size();
+        TEST_SYNC_POINT_CALLBACK("MetaFileBuilder::_finalize_delvec:logical_append_size", &logical_size);
         auto delvec_file_name = gen_delvec_filename(txn_id);
         auto delvec_file_path = _tablet.delvec_location(delvec_file_name);
         // keep delete vector file name in tablet meta
@@ -1153,7 +1162,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         item.set_size(_buf.size());
         auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto writer_file, fs::new_writable_file(options, delvec_file_path));
-        RETURN_IF_ERROR(writer_file->append(Slice(_buf.data(), _buf.size())));
+        RETURN_IF_ERROR(append_delvec_bytes_bounded(writer_file.get(), Slice(_buf.data(), _buf.size())));
         RETURN_IF_ERROR(writer_file->close());
         TRACE("end write delvec");
     }
@@ -1348,85 +1357,219 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
     return Status::OK();
 }
 
-Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
-                          int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
-                          std::vector<uint64_t>* offsets, const Slice& extra_data, uint64_t* extra_data_offset) {
-    if (old_delvec_files.empty()) {
-        DCHECK(extra_data.empty()) << "extra_data provided but no delvec files to merge";
-        return Status::OK();
-    }
+namespace {
 
-    const std::string new_file_name = gen_delvec_filename(txn_id);
-    const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
-    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
+constexpr size_t kDelvecIoChunkSize = 1UL << 20;
 
-    std::vector<uint64_t> new_offsets;
-    new_offsets.reserve(old_delvec_files.size());
-    uint64_t total_size = 0;
-    for (size_t i = 0; i < old_delvec_files.size(); ++i) {
-        const auto& file_info = old_delvec_files[i];
-        new_offsets.push_back(total_size);
-        const std::string src_path = tablet_mgr->delvec_location(file_info.tablet_id, file_info.delvec_file.name());
-        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(src_path));
-        ASSIGN_OR_RETURN(auto content, reader->read_all());
+Status append_delvec_bytes_bounded(WritableFile* writer, Slice bytes) {
+    while (!bytes.empty()) {
+        const size_t chunk_size = std::min(bytes.size, kDelvecIoChunkSize);
+        [[maybe_unused]] size_t observed_chunk_size = chunk_size;
+        TEST_SYNC_POINT_CALLBACK("append_delvec_bytes_bounded:chunk_size", &observed_chunk_size);
         Status append_status;
-        TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
+        TEST_SYNC_POINT_CALLBACK("append_delvec_bytes_bounded:before_chunk", &append_status);
         RETURN_IF_ERROR(append_status);
-        RETURN_IF_ERROR(writer->append(Slice(content.data(), content.size())));
-        total_size += content.size();
+        RETURN_IF_ERROR(writer->append(Slice(bytes.data, chunk_size)));
+        bytes.remove_prefix(chunk_size);
     }
-
-    uint64_t new_extra_data_offset = 0;
-    if (!extra_data.empty()) {
-        new_extra_data_offset = total_size;
-        Status append_status;
-        TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
-        RETURN_IF_ERROR(append_status);
-        RETURN_IF_ERROR(writer->append(extra_data));
-        total_size += extra_data.size;
-    }
-
-    Status close_status;
-    TEST_SYNC_POINT_CALLBACK("write_delvec_output:close", &close_status);
-    RETURN_IF_ERROR(close_status);
-    RETURN_IF_ERROR(writer->close());
-
-    *offsets = std::move(new_offsets);
-    if (!extra_data.empty() && extra_data_offset != nullptr) {
-        *extra_data_offset = new_extra_data_offset;
-    }
-    new_delvec_file->set_name(new_file_name);
-    new_delvec_file->set_size(total_size);
-    new_delvec_file->clear_encryption_meta();
-    new_delvec_file->set_shared(false);
     return Status::OK();
 }
 
-Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tablet_id, int64_t txn_id,
-                                     const Slice& buffer, FileMetaPB* new_delvec_file) {
+Status validate_signed_page_range(const DelvecPagePB& page) {
+    constexpr uint64_t kInt64Max = std::numeric_limits<int64_t>::max();
+    if (page.size() == 0) {
+        return Status::InvalidArgument("compacted delvec raw page size must be positive");
+    }
+    if (page.offset() > kInt64Max) {
+        return Status::InvalidArgument("compacted delvec raw page offset is outside signed int64 domain");
+    }
+    if (page.size() > kInt64Max) {
+        return Status::InvalidArgument("compacted delvec raw page size is outside signed int64 domain");
+    }
+    uint64_t end = 0;
+    if (__builtin_add_overflow(page.offset(), page.size(), &end) || end > kInt64Max) {
+        return Status::InvalidArgument("compacted delvec raw page end is outside signed int64 domain");
+    }
+    return Status::OK();
+}
+
+Status validate_source_size(int64_t source_size, uint64_t page_end, bool resolved) {
+    if (source_size < 0) {
+        return Status::InvalidArgument(resolved ? "compacted delvec resolved source size is negative"
+                                                : "compacted delvec declared source size is negative");
+    }
+    if (static_cast<uint64_t>(source_size) < page_end) {
+        return Status::InvalidArgument(resolved ? "compacted delvec resolved source size does not contain page"
+                                                : "compacted delvec declared source size does not contain page");
+    }
+    return Status::OK();
+}
+
+} // namespace
+
+Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector<DelvecOutputPage>& pages,
+                                    int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
+                                    std::vector<uint64_t>* page_offsets) {
     DCHECK(new_delvec_file != nullptr);
-    if (buffer.empty()) {
-        return Status::InvalidArgument("write_delvec_file_from_buffer called with empty buffer");
+    DCHECK(page_offsets != nullptr);
+    if (pages.empty()) {
+        return Status::InvalidArgument("compacted delvec page plan is empty");
+    }
+
+    uint64_t total_size = 0;
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:initial_output_offset", &total_size);
+    bool skip_int64_output_limit = false;
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:test_skip_int64_output_limit", &skip_int64_output_limit);
+
+    std::map<std::tuple<int64_t, std::string, uint64_t>, uint64_t> duplicate_pages;
+    std::map<std::pair<int64_t, std::string>, int64_t> resolved_source_sizes;
+    std::vector<uint64_t> offsets;
+    offsets.reserve(pages.size());
+
+    // Preflight the whole plan before constructing the destination object.
+    for (const auto& output_page : pages) {
+        const bool has_raw = output_page.raw_page.has_value();
+        const bool has_serialized = !output_page.serialized_page.empty();
+        if (has_raw == has_serialized) {
+            return Status::InvalidArgument("compacted delvec output page must contain exactly one payload");
+        }
+
+        uint64_t page_size = 0;
+        if (has_raw) {
+            const auto& raw = *output_page.raw_page;
+            if (raw.delvec_file.name().empty()) {
+                return Status::InvalidArgument("compacted delvec raw page filename is empty");
+            }
+            if (!raw.delvec_file.encryption_meta().empty()) {
+                return Status::NotSupported(fmt::format(
+                        "encrypted delvec input is unsupported; delvec must be plaintext: {}", raw.delvec_file.name()));
+            }
+            RETURN_IF_ERROR(validate_signed_page_range(raw.page));
+            const uint64_t page_end = raw.page.offset() + raw.page.size();
+            if (raw.delvec_file.has_size()) {
+                RETURN_IF_ERROR(validate_source_size(raw.delvec_file.size(), page_end, false));
+            } else {
+                const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
+                auto source_size_it = resolved_source_sizes.find(source_key);
+                if (source_size_it == resolved_source_sizes.end()) {
+                    RandomAccessFileOptions options{.skip_fill_local_cache = true};
+                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &options);
+                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:preflight_source_open", nullptr);
+                    ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(
+                                                          options, tablet_mgr->delvec_location(
+                                                                           raw.tablet_id, raw.delvec_file.name())));
+                    std::optional<StatusOr<int64_t>> source_size_override;
+                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size_override",
+                                             &source_size_override);
+                    int64_t resolved_size = 0;
+                    if (source_size_override.has_value()) {
+                        RETURN_IF_ERROR(source_size_override->status());
+                        resolved_size = source_size_override->value();
+                    } else {
+                        ASSIGN_OR_RETURN(resolved_size, reader->get_size());
+                    }
+                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size", &resolved_size);
+                    RETURN_IF_ERROR(validate_source_size(resolved_size, page_end, true));
+                    source_size_it = resolved_source_sizes.emplace(source_key, resolved_size).first;
+                } else {
+                    RETURN_IF_ERROR(validate_source_size(source_size_it->second, page_end, true));
+                }
+            }
+            const auto duplicate_key = std::make_tuple(raw.tablet_id, raw.delvec_file.name(), raw.page.offset());
+            auto [it, inserted] = duplicate_pages.emplace(duplicate_key, raw.page.size());
+            if (!inserted && it->second != raw.page.size()) {
+                return Status::Corruption("compacted delvec duplicate page declarations disagree on size");
+            }
+            page_size = raw.page.size();
+        } else {
+            page_size = output_page.serialized_page.size();
+        }
+
+        uint64_t next_total = 0;
+        if (__builtin_add_overflow(total_size, page_size, &next_total)) {
+            return Status::InvalidArgument("compacted delvec output size overflows uint64");
+        }
+        if (!skip_int64_output_limit && next_total > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+            return Status::InvalidArgument("compacted delvec output size is outside signed int64 domain");
+        }
+        offsets.push_back(total_size);
+        total_size = next_total;
     }
 
     const std::string new_file_name = gen_delvec_filename(txn_id);
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
-    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
-    Status append_status;
-    TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
-    RETURN_IF_ERROR(append_status);
-    RETURN_IF_ERROR(writer->append(buffer));
+    WritableFileOptions options{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:writer_open", nullptr);
+    Status writer_open_status;
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_writer_open", &writer_open_status);
+    RETURN_IF_ERROR(writer_open_status);
+    ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(options, new_file_path));
+
+    std::unique_ptr<RandomAccessFile> current_reader;
+    std::optional<std::pair<int64_t, std::string>> current_source;
+    auto close_reader = [&] {
+        if (current_reader != nullptr) {
+            current_reader.reset();
+            [[maybe_unused]] int delta = -1;
+            TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
+            current_source.reset();
+        }
+    };
+    DeferOp close_current_reader(close_reader);
+
+    std::string buffer;
+    for (const auto& output_page : pages) {
+        if (!output_page.raw_page.has_value()) {
+            close_reader();
+            RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(output_page.serialized_page)));
+            continue;
+        }
+        const auto& raw = *output_page.raw_page;
+        const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
+        if (!current_source.has_value() || *current_source != source_key) {
+            close_reader();
+            RandomAccessFileOptions source_options{.skip_fill_local_cache = true};
+            TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &source_options);
+            ASSIGN_OR_RETURN(current_reader, fs::new_random_access_file(
+                                                     source_options, tablet_mgr->delvec_location(
+                                                                             raw.tablet_id, raw.delvec_file.name())));
+            current_source = source_key;
+            [[maybe_unused]] int delta = 1;
+            TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
+        }
+        uint64_t copied = 0;
+        buffer.resize(kDelvecIoChunkSize);
+        while (copied < raw.page.size()) {
+            const size_t chunk_size =
+                    static_cast<size_t>(std::min<uint64_t>(kDelvecIoChunkSize, raw.page.size() - copied));
+            [[maybe_unused]] size_t observed_chunk_size = chunk_size;
+            TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:read_chunk_size", &observed_chunk_size);
+            Status read_status;
+            TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_read_chunk", &read_status);
+            RETURN_IF_ERROR(read_status);
+            RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
+                                                          buffer.data(), static_cast<int64_t>(chunk_size)));
+            RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(buffer.data(), chunk_size)));
+            copied += chunk_size;
+        }
+    }
+
+    close_reader();
     Status close_status;
-    TEST_SYNC_POINT_CALLBACK("write_delvec_output:close", &close_status);
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_close", &close_status);
     RETURN_IF_ERROR(close_status);
     RETURN_IF_ERROR(writer->close());
 
-    new_delvec_file->set_name(new_file_name);
-    new_delvec_file->set_size(buffer.size);
-    new_delvec_file->clear_encryption_meta();
-    new_delvec_file->set_shared(false);
+    FileMetaPB output;
+    output.set_name(new_file_name);
+    output.set_size(static_cast<int64_t>(total_size));
+    output.clear_encryption_meta();
+    output.set_shared(false);
+    Status apply_offsets_status;
+    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_apply_offsets", &apply_offsets_status);
+    RETURN_IF_ERROR(apply_offsets_status);
+    *new_delvec_file = std::move(output);
+    *page_offsets = std::move(offsets);
     return Status::OK();
 }
 
