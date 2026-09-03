@@ -219,12 +219,12 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
     if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
         export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
     elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
-        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
     else
         # Normal mode: take the value from the `jemalloc_conf` config in be.conf/cn.conf so it is
         # observable via information_schema.be_configs. Fall back to the built-in default when unset.
         # NOTE: keep this default in sync with CONF_mString(jemalloc_conf, ...) in be/src/common/config.h.
-        jemalloc_conf="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+        jemalloc_conf="percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
         if [ ${RUN_BE} -eq 1 ]; then
             read_var_from_conf jemalloc_conf $STARROCKS_HOME/conf/be.conf
         elif [ ${RUN_CN} -eq 1 ]; then
