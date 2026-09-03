@@ -90,9 +90,21 @@ set enable_profile = false;
 drop database db_${uuid0};
 
 -- name: test_default_value_zonemap_prune_key_types
--- The same read path on UNIQUE / AGGREGATE / PRIMARY KEY tables. Only
--- correctness is asserted here: those key types read through a merge path whose
--- profile counters are not comparable with the duplicate-key case.
+-- PRIMARY KEY reaches the fold and is proven to below. UNIQUE and AGGREGATE
+-- deliberately do NOT reach it, and this case documents that rather than
+-- pretending otherwise.
+--
+-- OlapPredicateParser::can_pushdown (be/src/storage/predicate_parser.cpp:29) is
+--     keys_type == PRIMARY_KEYS || column.aggregation() == STORAGE_AGGREGATE_NONE
+-- A non-key column added to a UNIQUE table is given AggregateType.REPLACE
+-- (SchemaChangeHandler.java:1442) and the AGGREGATE one below is declared SUM, so
+-- neither predicate is ever pushed into the storage layer and
+-- DefaultValueColumnIterator::get_row_ranges_by_zone_map is never consulted for
+-- them -- those answers come from post-aggregation conjunct evaluation and would
+-- be identical with this optimisation reverted. The UNIQUE/AGGREGATE blocks are
+-- therefore correctness regression cover only; do not read them as evidence that
+-- the fold works. The fold applies to DUPLICATE value columns, every PRIMARY KEY
+-- column, and key columns generally.
 create database db_${uuid0};
 use db_${uuid0};
 
@@ -134,6 +146,19 @@ function: wait_alter_table_finish()
 select count(*) from t_pk where c_int = 0;
 select count(*) from t_pk where c_int = 7;
 select count(*) from t_pk where c_int is null;
+
+-- PRIMARY KEY bypasses the aggregation gate in can_pushdown, so unlike the two
+-- tables above this one really does exercise the fold. Prove it with the same
+-- profile counter used for the duplicate-key case rather than inferring it.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*) from t_pk where c_int = 7;
+create table profile_pk properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_pk
+    where line like '%- ZoneMapIndexFilterRows%';
+set enable_profile = false;
 
 drop database db_${uuid0};
 

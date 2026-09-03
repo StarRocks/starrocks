@@ -257,6 +257,26 @@ select count(*) from t_pk where c_int is null;
 -- result:
 0
 -- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*) from t_pk where c_int = 7;
+create table profile_pk properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_pk
+    where line like '%- ZoneMapIndexFilterRows%';
+-- result:
+1
+-- !result
+set enable_profile = false;
+-- result:
+-- !result
 drop database db_${uuid0};
 -- result:
 -- !result

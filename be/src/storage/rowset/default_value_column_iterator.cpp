@@ -817,8 +817,14 @@ Status DefaultValueColumnIterator::get_row_ranges_by_zone_map(const std::vector<
     // enable_index_page_level_zonemap_filter turned off, and the read-state-cache path that replays a
     // precomputed scan range. In both, a tablet with delete predicates would leave _del_predicates
     // empty, so reading null as "no deletes" would drop the stamp for a chunk whose columns are all
-    // backed by this iterator. ScalarColumnIterator::_contains_deleted_row is conservative in the
-    // same way when its zone map pass never ran.
+    // backed by this iterator.
+    //
+    // Note this is deliberately STRICTER than the scalar path rather than a copy of it:
+    // ScalarColumnIterator::get_row_ranges_by_zone_map() emplaces _delete_partial_satisfied_pages
+    // before it knows whether a delete predicate was supplied, so after any zone-map pass its
+    // _contains_deleted_row() returns contains(page) -- false for every page when that pass carried a
+    // null delete predicate. It is conservative only until its first zone-map call. Do not "align"
+    // this branch with it.
     //
     // The OR-accumulate on the non-null branch is defensive rather than load-bearing: every current
     // call site resolves the same _del_predicates[cid] entry and evaluates it against the same
