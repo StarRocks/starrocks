@@ -1099,9 +1099,8 @@ public class OlapTableSink extends DataSink {
             List<Long> allTabletIds = new ArrayList<>();
             for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
-                List<MaterializedIndex> indexes = (txnState != null)
-                        ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                        : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                List<MaterializedIndex> indexes = selectWriteIndexes(
+                        table, physicalPartition, txnState, null);
                 for (MaterializedIndex index : indexes) {
                     for (Tablet tablet : index.getTablets()) {
                         allTabletIds.add(tablet.getId());
@@ -1124,9 +1123,8 @@ public class OlapTableSink extends DataSink {
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
             LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
-            List<MaterializedIndex> indexes = (txnState != null)
-                    ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                    : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+            List<MaterializedIndex> indexes = selectWriteIndexes(
+                    table, physicalPartition, txnState, null);
             for (MaterializedIndex index : indexes) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
