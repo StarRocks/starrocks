@@ -685,8 +685,12 @@ data, not by the property:
 
 None of this is an error and none of it changes what the column is compressed
 with: the nominated columns are still ZSTD. `zstd_compression_dict_pages_written`
-counts the column writers that ended up with a dictionary (a flat JSON column has one writer per flattened sub-column) and
-`zstd_compression_dict_build_fallback` the ones that did not.
+counts the column writers that ended up with a dictionary (a flat JSON column has one writer per flattened sub-column).
+`zstd_compression_dict_build_fallback` counts only the writers that ATTEMPTED one and were turned
+down -- the build failed, or the completed trial found it did not pay. The cases above where a
+dictionary is never attempted at all, because the column is dictionary-encoded or ends before the
+trial finishes, increment neither counter, so the two do not add up to the number of nominated
+columns.
 
 The property can also be changed later with
 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")`. This is a schema

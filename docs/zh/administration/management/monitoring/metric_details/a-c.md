@@ -468,7 +468,7 @@ description: "Alphabetical a - c"
 ## `zstd_compression_dict_build_fallback`
 
 - 单位：计数
-- 描述：符合压缩字典条件的列最终没有拿到字典、按普通 ZSTD 写出的累计次数。原因可能是试压页带字典后不够小（见 `zstd_compression_dict_min_gain`），也可能是字典构建失败。按“writer + Segment”计数——与 `zstd_compression_dict_pages_written` 一样，打平 JSON 列的每个打平子列各是一个 writer。数据页太小无法用于采样不计入本项——写入端会改用后面的页再试。该值相对于 `zstd_compression_dict_pages_written` 偏高，说明由表属性 `zstd_compression_columns` 指定的列很少真正用上压缩字典。
+- 描述：符合压缩字典条件的列最终没有拿到字典、按普通 ZSTD 写出的累计次数。原因可能是试压页带字典后不够小（见 `zstd_compression_dict_min_gain`），也可能是字典构建失败。按“writer + Segment”计数——与 `zstd_compression_dict_pages_written` 一样，打平 JSON 列的每个打平子列各是一个 writer。只统计尝试过字典的 writer：数据页太小无法用于采样不计入本项（写入端会改用后面的页再试），根本没走到试压的列（被字典编码、或长度不够跑完试压）也不计入，因此本项与 `zstd_compression_dict_pages_written` 之和并不等于被指定的列数。该值相对于 `zstd_compression_dict_pages_written` 偏高，说明由表属性 `zstd_compression_columns` 指定的列很少真正用上压缩字典。
 
 ## `zstd_compression_dict_bytes`
 

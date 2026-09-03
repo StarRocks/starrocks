@@ -468,7 +468,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 ## `zstd_compression_dict_build_fallback`
 
 - 単位: カウント
-- 説明: 圧縮ディクショナリの対象となる列が最終的にディクショナリを得られず、通常の ZSTD として書き込まれた累計回数。試験対象のページがディクショナリありでも十分に小さくならなかった場合 (`zstd_compression_dict_min_gain` を参照)、またはディクショナリの構築が失敗した場合に計上されます。列 writer ごと Segment ごとに 1 回カウントされます。`zstd_compression_dict_pages_written` と同様に、フラット化された JSON 列はフラット化サブ列ごとに writer を持ちます。サンプルにするには小さすぎたページはここに計上されません。次のページで改めて試されます。`zstd_compression_dict_pages_written` に対してこの値が大きい場合、テーブルプロパティ `zstd_compression_columns` で指定した列に対して圧縮ディクショナリがほとんど効いていないことを意味します。
+- 説明: 圧縮ディクショナリの対象となる列が最終的にディクショナリを得られず、通常の ZSTD として書き込まれた累計回数。試験対象のページがディクショナリありでも十分に小さくならなかった場合 (`zstd_compression_dict_min_gain` を参照)、またはディクショナリの構築が失敗した場合に計上されます。列 writer ごと Segment ごとに 1 回カウントされます。`zstd_compression_dict_pages_written` と同様に、フラット化された JSON 列はフラット化サブ列ごとに writer を持ちます。計上されるのはディクショナリを試した writer だけです。サンプルにするには小さすぎたページは計上されません (次のページで改めて試されます)。試験に到達しない列 (ディクショナリエンコードされた列、試験を終える前に列が終わる場合) も計上されないため、この値と `zstd_compression_dict_pages_written` の合計は指定された列の数になりません。`zstd_compression_dict_pages_written` に対してこの値が大きい場合、テーブルプロパティ `zstd_compression_columns` で指定した列に対して圧縮ディクショナリがほとんど効いていないことを意味します。
 
 ## `zstd_compression_dict_bytes`
 

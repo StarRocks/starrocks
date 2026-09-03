@@ -1166,8 +1166,12 @@ PROPERTIES (
   その列の残りはディクショナリなしで書かれます。
 
 いずれもエラーではなく、その列の圧縮方式も変わりません。指定された列は引き続き ZSTD です。
-`zstd_compression_dict_pages_written` は最終的にディクショナリを得た列 writer の数 (フラット化された JSON 列はフラット化サブ列ごとに 1 つ)、
-`zstd_compression_dict_build_fallback` は得られなかった列の数を示します。
+`zstd_compression_dict_pages_written` は最終的にディクショナリを得た列 writer の数です
+(フラット化された JSON 列はフラット化サブ列ごとに 1 つ)。
+`zstd_compression_dict_build_fallback` が数えるのは、ディクショナリを**試したうえで見送られた**
+writer だけです。構築に失敗した場合、または試験が完了して割に合わないと判定された場合です。
+上記のようにそもそも試行に至らないケース (ディクショナリエンコードされた列、試験を終える前に
+列が終わる場合) はどちらのカウンタも増えないため、2 つの合計は指定された列の数になりません。
 
 このプロパティはテーブル作成後に `ALTER TABLE ... SET ("zstd_compression_columns" = "...")` で変更することもできます。これは Schema Change です。すべての Tablet を書き換えるため、既存のデータも新しい設定で再エンコードされ、同じ規模のテーブルに対する他の Schema Change と同程度のコストがかかります。進捗は `SHOW ALTER TABLE COLUMN` で確認できます。処理中もテーブルは読み取り可能で、どちらの方法で書かれた Segment も読み取れます。各 Segment は自身がどう書かれたかを記録しているためです。
 

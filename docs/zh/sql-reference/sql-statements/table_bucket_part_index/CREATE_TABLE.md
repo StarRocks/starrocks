@@ -686,8 +686,10 @@ PROPERTIES (
   `zstd_compression_dict_min_gain`。否则字典被丢弃，该列余下部分不带字典写出。
 
 以上都不是错误，也不改变该列用什么压缩：被指定的列仍然是 ZSTD。
-`zstd_compression_dict_pages_written` 数的是最终拿到字典的列 writer（打平 JSON 列的每个打平子列各算一个），
-`zstd_compression_dict_build_fallback` 数的是没拿到的。
+`zstd_compression_dict_pages_written` 数的是最终拿到字典的列 writer（打平 JSON 列的每个打平子列各算一个）。
+`zstd_compression_dict_build_fallback` 只数**尝试过但被否**的 writer——构建失败，或试压跑完判定不划算。
+上面那些根本没去尝试的情况（列被字典编码、或长度不够跑完试压）两个计数器都不加，
+因此两者之和并不等于被指定的列数。
 
 该属性也可以在建表后通过 `ALTER TABLE ... SET ("zstd_compression_columns" = "...")` 修改。这是一次 Schema Change：它会重写每一个 Tablet，因此存量数据也会按新设置重新编码，代价与同等规模表上的其他 Schema Change 相当，可用 `SHOW ALTER TABLE COLUMN` 跟踪进度。整个过程中表都可读，两种方式写出的 Segment 也都可读，因为每个 Segment 都记录了自己是怎么写的。
 
