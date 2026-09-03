@@ -42,8 +42,11 @@
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_builder.h"
+#include "column/datum_convert.h"
 #include "column/json_converter.h"
+#include "common/config_rowset_fwd.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate.h"
 #include "storage_primitive/range.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
@@ -590,22 +593,242 @@ Status DefaultValueColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, 
     return next_batch(&size, values);
 }
 
+namespace {
+
+// Types whose constant default value can be folded into a synthetic ZoneMapDetail.
+//
+// This is deliberately NOT `is_zone_map_key_type()` (types/logical_type.h): that predicate answers
+// "is it cheap enough to persist a zone map for this column on disk", which is why it rejects
+// CHAR/VARCHAR. Here nothing is persisted -- the value is already in memory and is exact -- so the
+// string types are among the most valuable entries below. Keep the two predicates separate.
+//
+// Every excluded type is excluded because `_mem_value` does not hold what a predicate would read
+// out of a Datum for that type:
+//   * JSON/OBJECT/HLL/PERCENTILE: init() stores the raw default as a Slice, but the matching Datum
+//     alternative is a JsonValue*/BitmapValue*/HyperLogLog*/PercentileValue* pointer.
+//   * ARRAY/MAP/STRUCT: init() placement-news a Datum into `_mem_value` instead of a scalar, and
+//     TypeDescriptor::from_storage_type_info() cannot rebuild MAP/STRUCT for the expression
+//     predicate path. Container iterators never forward zone-map filtering to their children anyway.
+//   * VARBINARY: init() falls through to TypeInfo::from_string(), which unaligned-loads a Slice out
+//     of uninitialised pool memory, so `_mem_value` is garbage.
+//   * DATE_V1/DATETIME_V1/DECIMAL(v1): legacy storage encodings (uint24_t, packed int64, decimal12_t)
+//     that do not match the modern runtime column shape. Legacy-only, so there is no upside.
+//   * INT256: absent from APPLY_FOR_ALL_SCALAR_TYPE (types/logical_type_infra.h), so
+//     ColumnHelper::create_column() has no case for it and ColumnExprPredicate::zone_map_filter,
+//     which builds a probe column from the predicate's TypeInfo, would abort. It exists mainly as
+//     the storage delegate of DECIMAL256 rather than as a column type anyone defaults.
+//
+// Invariant worth preserving: every entry below is a member of APPLY_FOR_ALL_SCALAR_TYPE, which is
+// what ColumnHelper::create_column() dispatches over.
+bool can_fold_default_value(LogicalType lt) {
+    switch (lt) {
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+    case TYPE_SMALLINT:
+    case TYPE_INT:
+    case TYPE_BIGINT:
+    case TYPE_LARGEINT:
+    case TYPE_FLOAT:
+    case TYPE_DOUBLE:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+bool DefaultValueColumnIterator::_predicate_type_matches(const ColumnPredicate* pred) const {
+    // A predicate reads the zone-map Datum through ITS OWN TypeInfo:
+    //   ColumnPredicate::type_info()->cmp(Datum(_value), detail.max_value())
+    //     -> ScalarTypeInfoImplBase::datum_cmp -> Datum::get<CppType>() -> std::get<T>()
+    // which throws std::bad_variant_access on a variant mismatch, and nothing catches it. Decimals
+    // fail worse than a crash: DecimalTypeInfo compares the raw scaled integers without rescaling,
+    // so a scale mismatch is a silent wrong answer. Fold only for a predicate that speaks exactly
+    // this column's storage type.
+    //
+    // The stored zone-map path solves the same problem from the other end, by parsing the persisted
+    // min/max string with the predicate's type (ColumnReader::_get_zone_map_parse_type). That is not
+    // available here: `_default_value` is the column's own textual form -- a decimal literal such as
+    // "3.14", not the scaled integer a persisted zone map holds -- so it can only be parsed with the
+    // column's own TypeInfo.
+    // A placeholder never reads the Datum: it exists only so that the runtime filter's column is
+    // read in the first stage of late materialization (ColumnScanConjunctsManager adds one for every
+    // slot-ref runtime filter probe), and it inherits ColumnPredicate::zone_map_filter, which returns
+    // true unconditionally. Exempting it matters because it is built with the single-argument
+    // get_type_info(), so on a DECIMAL column its precision/scale are -1 and the check below would
+    // otherwise disable folding for the entire call -- including the real predicates next to it --
+    // on exactly the join queries this optimisation helps most.
+    if (pred->type() == PredicateType::kPlaceHolder) {
+        return true;
+    }
+    const TypeInfo* pred_type = pred->type_info();
+    return pred_type != nullptr && pred_type->type() == _type_info->type() &&
+           pred_type->precision() == _type_info->precision() && pred_type->scale() == _type_info->scale();
+}
+
+bool DefaultValueColumnIterator::_build_constant_zone_map(ZoneMapDetail* detail) const {
+    // A subfield-pruned default rewrites `_mem_value` into a projected Datum
+    // (_project_default_datum_by_path_if_needed), so it is not the scalar this function assumes.
+    // Only complex types can carry an access path today and those are rejected below anyway, but
+    // guard the invariant explicitly so a future scalar access path cannot silently poison the fold.
+    if (_path != nullptr) {
+        return false;
+    }
+    if (!can_fold_default_value(_type_info->type())) {
+        return false;
+    }
+
+    if (_is_default_value_null) {
+        // Every row is NULL. This is the same shape ColumnReader::_parse_zone_map() produces for an
+        // all-null page: min and max stay unset and has_null is true.
+        // Read `_is_default_value_null` rather than testing `_default_value == "NULL"`: init() also
+        // lands here when the column is nullable without a declared default, and when parsing a
+        // declared default failed and was downgraded to NULL.
+        *detail = ZoneMapDetail(Datum{}, Datum{}, /*has_null=*/true);
+        detail->set_num_rows(_num_rows);
+        return true;
+    }
+
+    if (_mem_value == nullptr) {
+        return false;
+    }
+
+    Datum value;
+    const LogicalType type = _type_info->type();
+    if (type == TYPE_CHAR || type == TYPE_VARCHAR) {
+        // Read `_mem_value`, NOT datum_from_string(_default_value). The invariant this whole
+        // function rests on is that the folded value is byte-identical to what next_batch()
+        // materialises, and for TYPE_CHAR those two differ: init() NUL-pads `_mem_value` out to
+        // `_schema_length` and next_batch() appends exactly those padded bytes, while
+        // datum_from_string() strnlen-strips the padding. Folding the stripped literal would prune
+        // rows that the row-level predicate keeps -- CHAR(10) DEFAULT 'abc' under `c > 'abc'` would
+        // go from every row to zero rows, because the predicate operand keeps its unpadded length
+        // while the materialised value is ten bytes long.
+        // The Slice points into `_pool`, which outlives every ZoneMapDetail built here (they are all
+        // function-local).
+        value = Datum(*static_cast<const Slice*>(_mem_value));
+    } else {
+        // The same TypeInfo::from_string() entry point that init() used to fill `_mem_value`, so the
+        // folded Datum and the materialised value cannot diverge. Note this must NOT copy
+        // ColumnReader::_parse_zone_map()'s get_type_info(delegate_type(...)): a persisted decimal
+        // zone map holds the already-scaled integer, whereas `_default_value` is a human decimal
+        // literal that only DecimalTypeInfo::from_string() scales correctly.
+        Status st = datum_from_string(_type_info.get(), &value, _default_value, /*type_info_allocator=*/nullptr);
+        if (!st.ok()) {
+            VLOG(2) << "cannot fold default value '" << _default_value << "' of type " << _type_info->type()
+                    << " into a zone map: " << st;
+            return false;
+        }
+    }
+    if (value.is_null()) {
+        // Refuse to emit (null, null, has_null=false): both has_null() and has_not_null() would be
+        // false, and ColumnExprPredicate::zone_map_filter() would then evaluate zero rows and report
+        // "no row can match", pruning the whole segment.
+        return false;
+    }
+
+    *detail = ZoneMapDetail(value, value, /*has_null=*/false);
+    detail->set_num_rows(_num_rows);
+    return true;
+}
+
 Status DefaultValueColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                               const ColumnPredicate* del_predicate,
                                                               SparseRange<>* row_ranges, CompoundNodeType pred_relation,
                                                               const Range<>* src_range) {
     DCHECK(row_ranges->empty());
-    // TODO
-    if (src_range == nullptr) {
-        row_ranges->add({0, static_cast<rowid_t>(_num_rows)});
-    } else {
-        row_ranges->add(*src_range);
+
+    // A segment that physically lacks this column returns the same value for every row, so the
+    // column's zone map is exactly ZoneMapDetail(D, D) -- tighter than any persisted zone map and
+    // free of the false positives a bloom filter would have. Evaluate the predicates against it
+    // instead of handing back every row.
+    //
+    // This function must never surface a Status other than OK: its callers RETURN_IF_ERROR all the
+    // way up to the query, so turning an unfoldable value into an error would convert a missed
+    // optimisation into a query failure. Every failure path below falls back to the legacy
+    // behaviour instead.
+    ZoneMapDetail detail;
+    bool folded = config::enable_default_value_column_zonemap_filter && _build_constant_zone_map(&detail);
+    if (folded) {
+        // The predicate type gate is all-or-nothing on purpose: skipping just the mismatched
+        // predicate would shrink the OR disjunction below and drop rows that must be kept.
+        folded = std::ranges::all_of(predicates, [this](const auto* pred) { return _predicate_type_matches(pred); }) &&
+                 (del_predicate == nullptr || _predicate_type_matches(del_predicate));
     }
-    // TODO: Setting `_may_contained_deleted_row` to true is a temporary fix,
-    // which will affect performance in some scenarios.
-    // It is best to filter according to DefaultValue,
-    // but the current Expr framework does not support filter for a single line, which will be added later.
-    _may_contain_deleted_row = true;
+
+    if (!folded) {
+        if (src_range == nullptr) {
+            row_ranges->add({0, static_cast<rowid_t>(_num_rows)});
+        } else {
+            row_ranges->add(*src_range);
+        }
+        // Legacy conservative behaviour: assume the delete predicate may hit some row, so that
+        // next_batch() stamps every batch DEL_PARTIAL_SATISFIED and the upper layers re-check the
+        // delete condition row by row.
+        _may_contain_deleted_row = true;
+        return Status::OK();
+    }
+
+    // Mirror ColumnReader::_zone_map_filter()'s relation handling exactly, including the fact that an
+    // empty predicate list keeps everything under BOTH relations -- callers rely on that when they
+    // pass a delete predicate only.
+    bool keep;
+    if (pred_relation == CompoundNodeType::AND) {
+        keep = std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+    } else {
+        keep = predicates.empty() ||
+               std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+    }
+
+    if (keep) {
+        if (src_range == nullptr) {
+            row_ranges->add({0, static_cast<rowid_t>(_num_rows)});
+        } else {
+            row_ranges->add(*src_range);
+        }
+    }
+
+    // The delete predicate never prunes the row range -- exactly as in ColumnReader::_zone_map_filter,
+    // it only decides whether the data has to be re-checked against the delete condition row by row.
+    // On a constant column that answer is exact: the delete condition either matches every row or no
+    // row, so DEL_PARTIAL_SATISFIED is impossible.
+    //
+    // Neither branch below ever clears the flag; one iterator instance is re-entered several times
+    // per scan (the page-level zone map pass, the delete-only column pass,
+    // SegmentIterator::_apply_del_predicate() and the runtime filter pass) and each of them may only
+    // raise it. Losing the flag means next_batch() stops stamping DEL_PARTIAL_SATISFIED and
+    // already-deleted rows reach the user.
+    //
+    // A null |del_predicate| is treated as "the caller told us nothing", NOT as "no delete condition
+    // touches this column", even though the SegmentIterator call sites that resolve it from
+    // _del_predicates do mean the latter. The reason is that _del_predicates is populated only by
+    // SegmentIterator::_get_row_ranges_by_zone_map(), and two paths skip that function while
+    // _try_to_update_ranges_by_runtime_filter() still calls in here: config
+    // enable_index_page_level_zonemap_filter turned off, and the read-state-cache path that replays a
+    // precomputed scan range. In both, a tablet with delete predicates would leave _del_predicates
+    // empty, so reading null as "no deletes" would drop the stamp for a chunk whose columns are all
+    // backed by this iterator. ScalarColumnIterator::_contains_deleted_row is conservative in the
+    // same way when its zone map pass never ran.
+    //
+    // The OR-accumulate on the non-null branch is defensive rather than load-bearing: every current
+    // call site resolves the same _del_predicates[cid] entry and evaluates it against the same
+    // constant zone map, so repeated calls agree. It costs nothing and stops a future caller that
+    // passes a narrower delete predicate from clearing a hit an earlier call already proved.
+    if (del_predicate != nullptr) {
+        _may_contain_deleted_row |= del_predicate->zone_map_filter(detail);
+    } else {
+        _may_contain_deleted_row = true;
+    }
     return Status::OK();
 }
 
