@@ -75,8 +75,8 @@ public class VersionPhaseTest extends EsTestCase {
         List<Column> columns = new ArrayList<>();
         Column k1 = new Column("k1", IntegerType.BIGINT);
         columns.add(k1);
-        EsTable esTableBefore7X = fakeEsTable("fake", "test", "doc", columns,"8.19.20");
-        SearchContext context = new SearchContext(esTableBefore7X);
+        EsTable esTableV8X = fakeEsTable("fake", "test", "doc", columns,"8.19.20");
+        SearchContext context = new SearchContext(esTableV8X);
 
         new Expectations(client) {
             {
@@ -96,8 +96,8 @@ public class VersionPhaseTest extends EsTestCase {
         List<Column> columns = new ArrayList<>();
         Column k1 = new Column("k1", IntegerType.BIGINT);
         columns.add(k1);
-        EsTable esTableBefore7X = fakeEsTable("fake", "test", "doc", columns,"9.5.3");
-        SearchContext context = new SearchContext(esTableBefore7X);
+        EsTable esTableV9X = fakeEsTable("fake", "test", "doc", columns,"9.5.3");
+        SearchContext context = new SearchContext(esTableV9X);
 
         new Expectations(client) {
             {
