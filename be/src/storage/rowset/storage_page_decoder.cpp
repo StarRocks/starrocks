@@ -14,6 +14,12 @@
 
 #include "storage/rowset/storage_page_decoder.h"
 
+<<<<<<< HEAD
+=======
+#include "base/bit/bit_util.h"
+#include "base/coding.h"
+#include "base/container/raw_container.h"
+>>>>>>> 8c008f4 ([BugFix] Validate bitshuffle page sizes in the pre-decoder before use (#78357))
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/raw_container_checked.h"
@@ -32,15 +38,70 @@ public:
         _reserve_head_size = head_size;
     }
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+<<<<<<< HEAD
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
+=======
+                            std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) override {
+        size_t header_size = _reserve_head_size + BITSHUFFLE_PAGE_HEADER_SIZE;
+        // All the sizes below come straight from the (possibly corrupted) page
+        // bytes, so validate them before they drive any allocation or memcpy.
+        if (page_slice->size < header_size) {
+            return Status::Corruption(strings::Substitute("invalid bitshuffle page size:$0, header size:$1",
+                                                          page_slice->size, header_size));
+        }
+>>>>>>> 8c008f4 ([BugFix] Validate bitshuffle page sizes in the pre-decoder before use (#78357))
         size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 0);
         size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);
         size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 8);
         size_t size_of_element = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 12);
-        DCHECK_EQ(num_element_after_padding, ALIGN_UP(num_elements, 8U));
+        // Not ALIGN_UP(): its mask is 32-bit, so a corrupted num_elements near
+        // 2^32 wraps -- ALIGN_UP(0xffffffff, 8U) is 0 and would match a crafted
+        // padded count of 0. RoundUpToPowerOf2() rounds at full 64-bit width.
+        size_t expected_padded = static_cast<size_t>(BitUtil::RoundUpToPowerOf2(num_elements, 8));
+        if (num_element_after_padding != expected_padded) {
+            return Status::Corruption(strings::Substitute("bitshuffle element count corrupted, padded:$0, num:$1",
+                                                          num_element_after_padding, num_elements));
+        }
+        if (compressed_size < BITSHUFFLE_PAGE_HEADER_SIZE || compressed_size > page_slice->size - _reserve_head_size) {
+            return Status::Corruption(strings::Substitute("invalid bitshuffle compressed size:$0, page size:$1",
+                                                          compressed_size, page_slice->size));
+        }
+        // bitshuffle::decompress_lz4() takes no input length: it derives how far
+        // to read from the element count and the per-block framing, so a page
+        // that declares elements but carries an empty compressed body makes it
+        // read past the body into the trailer (or past the buffer entirely),
+        // before the post-call consumed-bytes check can reject the page. Only a
+        // genuinely empty page is header-only: the builder writes
+        // compressed_size == BITSHUFFLE_PAGE_HEADER_SIZE only when the padded
+        // element count is 0.
+        if (num_element_after_padding != 0 && compressed_size == BITSHUFFLE_PAGE_HEADER_SIZE) {
+            return Status::Corruption(
+                    strings::Substitute("empty bitshuffle compressed body for $0 elements", num_element_after_padding));
+        }
+        // Same element sizes BitShufflePageDecoder::init accepts; anything else
+        // (e.g. 0xffffffff) would drive an absurd allocation below.
+        switch (size_of_element) {
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 8:
+        case 12:
+        case 16:
+        case 32:
+            break;
+        default:
+            return Status::Corruption(strings::Substitute("invalid bitshuffle size_of_elem:$0", size_of_element));
+        }
 
-        size_t header_size = _reserve_head_size + BITSHUFFLE_PAGE_HEADER_SIZE;
         size_t data_size = num_element_after_padding * size_of_element;
+        // LZ4 cannot expand beyond ~255x, so a decoded size far past the
+        // compressed body is corrupt; reject it before allocating (load paths
+        // may run with memory-limit enforcement disabled).
+        if (data_size > 256 * (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE) + 4096) {
+            return Status::Corruption(strings::Substitute(
+                    "implausible bitshuffle decoded size:$0 for compressed size:$1", data_size, compressed_size));
+        }
 
         // data_size is size of decoded_data
         // compressed_size contains encoded_data size and BITSHUFFLE_PAGE_HEADER_SIZE
@@ -62,6 +123,16 @@ public:
         if (footer->type() == DATA_PAGE) {
             const DataPageFooterPB& data_footer = footer->data_page_footer();
             null_size = data_footer.nullmap_size();
+        }
+        // The trailer sizes come from the page footer; a malformed page could
+        // claim more trailer bytes than the input actually holds (reading past
+        // page_slice and writing past decompressed_page below), or fewer,
+        // leaving surplus bytes that end up inside the cached page whose footer
+        // is parsed from its very end. The input must be consumed exactly.
+        if (page_slice->size - _reserve_head_size - compressed_size != (size_t)null_size + footer_size) {
+            return Status::Corruption(strings::Substitute(
+                    "bitshuffle page trailer mismatch, page size:$0, compressed size:$1, trailer size:$2",
+                    page_slice->size, compressed_size, (size_t)null_size + footer_size));
         }
         memcpy(decompressed_body.data + decompressed_body.size,
                page_slice->data + header_size + (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE),
