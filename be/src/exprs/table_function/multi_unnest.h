@@ -66,7 +66,6 @@ public:
             return {};
         }
 
-<<<<<<< HEAD
         const size_t num_args = args.size();
         const size_t input_rows = state->input_rows();
         const bool fn_result_required = state->is_required();
@@ -153,74 +152,6 @@ public:
                     if (slice_end > pad_begin) {
                         outputs[i]->append_nulls(slice_end - pad_begin);
                     }
-=======
-        const size_t column_count = state->get_columns().size();
-        const size_t row_count = state->get_columns()[0]->size();
-        state->set_processed_rows(row_count);
-
-        // Resolve the per-column views once instead of re-resolving them for every row.
-        struct ArrayView {
-            const Column* nullable_column;
-            const Column* elements;
-            UInt32Column::ImmContainer offsets;
-        };
-        std::vector<ArrayView> array_views;
-        array_views.reserve(column_count);
-
-        MutableColumns unnested_array_list;
-        unnested_array_list.reserve(column_count);
-        // Everything here is const, all the way down from the input ColumnPtr: nothing on this path
-        // may mutate the input columns. That is also what keeps the offsets read on immutable_data(),
-        // since the non-const FixedLengthColumnBase::get_data() materializes a
-        // ContainerResource-backed column into its own buffer and drops the resource.
-        for (const auto& col : state->get_columns()) {
-            const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col));
-            array_views.emplace_back(
-                    ArrayView{col.get(), &col_array->elements(), col_array->offsets().immutable_data()});
-            unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());
-        }
-
-        auto copy_count_column = UInt32Column::create();
-        uint32_t offset = 0;
-        copy_count_column->append(offset);
-        for (size_t row_idx = 0; row_idx < row_count; ++row_idx) {
-            uint32_t max_length_array_size = 0;
-            for (const auto& view : array_views) {
-                if (view.nullable_column->is_null(row_idx)) {
-                    // current row is null, ignore the offset.
-                    continue;
-                }
-                const uint32_t array_element_length = view.offsets[row_idx + 1] - view.offsets[row_idx];
-                max_length_array_size = std::max(max_length_array_size, array_element_length);
-            }
-
-            if (max_length_array_size == 0 && state->get_is_left_join()) {
-                offset += 1;
-                copy_count_column->append(offset);
-                for (size_t col_idx = 0; col_idx < column_count; ++col_idx) {
-                    unnested_array_list[col_idx]->append_nulls(1);
-                }
-                continue;
-            }
-
-            offset += max_length_array_size;
-            copy_count_column->append(offset);
-
-            for (size_t col_idx = 0; col_idx < column_count; ++col_idx) {
-                const auto& view = array_views[col_idx];
-                if (view.nullable_column->is_null(row_idx)) {
-                    // current row is null, ignore element data.
-                    unnested_array_list[col_idx]->append_nulls(max_length_array_size);
-                    continue;
-                }
-
-                const uint32_t array_start = view.offsets[row_idx];
-                const uint32_t array_element_length = view.offsets[row_idx + 1] - array_start;
-                unnested_array_list[col_idx]->append(*view.elements, array_start, array_element_length);
-
-                if (array_element_length < max_length_array_size) {
-                    unnested_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
->>>>>>> 59f7a16326e... [BugFix] Read multi_unnest array offsets as uint32 instead of int32 (#78479)
                 }
             }
 
