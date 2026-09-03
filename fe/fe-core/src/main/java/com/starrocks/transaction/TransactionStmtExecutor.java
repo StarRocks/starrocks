@@ -184,19 +184,12 @@ public class TransactionStmtExecutor {
                 context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
-
         try {
-            if (transactionState.getDbId() == 0) {
-                transactionState.setDbId(database.getId());
-                DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getDatabaseTransactionMgr(database.getId());
-                databaseTransactionMgr.upsertTransactionState(transactionState);
-            }
-
-            if (database.getId() != transactionState.getDbId()) {
-                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
+            TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                    context.getTxnId(), database.getId());
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
+            if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
+                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, context.getTxnId());
             }
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
@@ -248,14 +241,11 @@ public class TransactionStmtExecutor {
     public static void loadData(long dbId, long tableId, ExplicitTxnState.ExplicitTxnStateItem item,
             ConnectContext context) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                context.getTxnId(), dbId);
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
-
-        if (transactionState.getDbId() == 0) {
-            transactionState.setDbId(dbId);
-            DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getDatabaseTransactionMgr(dbId);
-            databaseTransactionMgr.upsertTransactionState(transactionState);
+        if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
+            throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, context.getTxnId());
         }
 
         transactionState.addTableIdList(tableId);
