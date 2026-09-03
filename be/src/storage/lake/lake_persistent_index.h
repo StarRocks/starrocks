@@ -176,12 +176,12 @@ public:
     // Stamp the version that every subsequent memtable entry carries. Called once per publish,
     // before any upsert/erase/replace.
     //
-    // This replaces the inherited PersistentIndex::prepare(version, n), which set the same _version
-    // and then flipped four flags -- _dump_snapshot, _flushed, _need_bloom_filter and the error state
-    // -- that only the local-disk implementation reads. The version was the only part that reached
-    // this class, via `_version.major_number()` in upsert/erase/replace, which made the publish
-    // version's route into the memtable considerably harder to follow than it needed to be.
-    void set_publish_version(const EditVersion& version) { _version = version; }
+    // A plain version number, not an EditVersion: only the major number ever reached the memtable,
+    // so holding both halves meant callers built an `EditVersion(v, 0)` for the minor to be dropped
+    // again on the way in. (Before #78570 this arrived through the inherited
+    // PersistentIndex::prepare(version, n), which also flipped four flags only the local-disk
+    // implementation reads.)
+    void set_publish_version(int64_t version) { _publish_version = version; }
 
     Status flush_memtable(bool force = false);
 
@@ -263,7 +263,7 @@ private:
     // load_from_lake_tablet(), which is also where it was set while this derived from PersistentIndex.
     size_t _key_size{0};
     // The version stamped on memtable entries; see set_publish_version().
-    EditVersion _version;
+    int64_t _publish_version{0};
 };
 
 } // namespace lake

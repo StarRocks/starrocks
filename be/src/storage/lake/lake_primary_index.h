@@ -221,7 +221,7 @@ public:
 
     // Stamp the version every memtable entry written by this publish carries. Called once, before
     // any upsert/erase, by UpdateManager::prepare_primary_index.
-    Status prepare(const EditVersion& version);
+    Status prepare(int64_t version);
 
     // Drop the loaded index, so the next lake_load() rebuilds it. [thread-safe]
     void unload();
@@ -237,9 +237,9 @@ private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
 
-    // Derive the encoded-key layout from the tablet's primary-key columns. Replaces
+    // Derive the fixed encoded-key size from the tablet's primary-key columns. Replaces
     // PrimaryIndex::_set_schema(), minus the in-memory hash index it also allocated.
-    void _set_pk_schema(const TabletMetadataPtr& metadata);
+    void _init_encoded_key_size(const TabletMetadataPtr& metadata);
 
     void _unload_without_lock();
 
@@ -255,8 +255,8 @@ private:
     Status _status;
 
     int64_t _tablet_id = 0;
-    // Encoded primary-key layout, set by _set_pk_schema() at load time.
-    Schema _pk_schema;
+    // Fixed encoded key size, or 0 for variable-length keys. Set by _init_encoded_key_size() at load
+    // time and consulted only by build_persistent_keys().
     size_t _key_size = 0;
 
     // We don't support multi version yet, but we record the latest data version for some checking

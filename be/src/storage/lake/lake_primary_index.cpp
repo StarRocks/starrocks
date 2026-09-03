@@ -112,20 +112,24 @@ std::size_t LakePrimaryIndex::memory_usage() const {
     return _index != nullptr ? _index->memory_usage() : 0;
 }
 
-void LakePrimaryIndex::_set_pk_schema(const TabletMetadataPtr& metadata) {
+void LakePrimaryIndex::_init_encoded_key_size(const TabletMetadataPtr& metadata) {
     auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
     for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
     }
-    _pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
-    // Shared-data always encodes with V1; the encoding type is otherwise a shared-nothing knob.
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    // V1 rather than the tablet's own encoding type, which is what PrimaryIndex::_set_schema did and
+    // what this value's one consumer needs. build_persistent_keys() only reads it when the encoded
+    // column is NOT binary, and encoded_primary_key_type() produces a non-binary column exactly for
+    // a single-column V1 key -- the case this computation is right for. A V2 tablet encodes to
+    // VARCHAR, takes the binary path, and never looks.
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pk_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 }
 
 Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                        int64_t base_version, const MetaFileBuilder* builder) {
-    _set_pk_schema(metadata);
+    _init_encoded_key_size(metadata);
 
     // A shared-data primary-key tablet has exactly one index implementation. The metadata is
     // normalized to enabled + CLOUD_NATIVE at load time (force_cloud_native_pk_persistent_index),
@@ -584,7 +588,7 @@ std::string LakePrimaryIndex::to_string() const {
     return strings::Substitute("LakePrimaryIndex tablet:$0", _tablet_id);
 }
 
-Status LakePrimaryIndex::prepare(const EditVersion& version) {
+Status LakePrimaryIndex::prepare(int64_t version) {
     auto* index = _index.get();
     if (index == nullptr) {
         return Status::InternalError("prepare on an unloaded lake primary index");
