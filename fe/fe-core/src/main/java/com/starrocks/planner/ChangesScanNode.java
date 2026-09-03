@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -29,12 +30,16 @@ import com.starrocks.lake.bookmark.Bookmark;
 import com.starrocks.lake.bookmark.BookmarkChange;
 import com.starrocks.lake.bookmark.IndexEpoch;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
+import com.starrocks.lake.changes.ChangesScanCacheMode;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.transformer.ChangesScanBuilder;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TChangeScanSpec;
+import com.starrocks.thrift.TChangesScanCacheMode;
 import com.starrocks.thrift.TChangesScanNode;
 import com.starrocks.thrift.TChangesScanRange;
 import com.starrocks.thrift.TExplainLevel;
@@ -113,6 +118,15 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
     public void computeScanRanges(ComputeResource computeResource) {
         long dbId = getSchemaKey().getDb_id();
         long tableId = olapTable.getId();
+        // Cache controls, mirroring OlapScanNode.addScanRangeLocations. The two skip_* flags are
+        // query-wide; fill_data_cache is evaluated per logical partition below.
+        SessionVariable sessionVariable =
+                ConnectContext.get() != null ? ConnectContext.get().getSessionVariable() : null;
+        boolean skipDiskCache = sessionVariable != null && sessionVariable.isSkipLocalDiskCache();
+        boolean skipPageCache = sessionVariable != null && sessionVariable.isSkipPageCache();
+        TChangesScanCacheMode cacheMode = sessionVariable != null
+                ? sessionVariable.getChangesScanCacheMode().resolve()
+                : ChangesScanCacheMode.AUTO.resolve();
         DistributionInfo distInfo = olapTable.getDefaultDistributionInfo();
         RangeColocateScanDispatch dispatch = distInfo.getType() == DistributionInfo.DistributionInfoType.RANGE
                 ? RangeColocateScanDispatch.forTable(olapTable) : null;
@@ -120,6 +134,9 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         for (SelectedPhysicalPartition selected : selectedPartitions) {
             PhysicalPartition partition = selected.getPartition();
             BookmarkChange.PhysicalPartitionChange change = selected.getChange();
+            CacheControls cacheControls = new CacheControls(
+                    olapTable.isEnableFillDataCache(selected.getLogicalPartition()),
+                    skipPageCache, skipDiskCache, cacheMode);
             long ppId = change.getPhysicalPartitionId();
 
             BookmarkChange.ReshardedDataChanged resharded = generationCrossingChange(change);
@@ -133,7 +150,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                         if (selectedTabletIds != null && !selectedTabletIds.contains(tablet.getId())) {
                             continue;
                         }
-                        addScanRange(dbId, tableId, ppId, tablet, epochSpec, computeResource);
+                        addScanRange(dbId, tableId, ppId, tablet, epochSpec, cacheControls, computeResource);
                     }
                 }
                 continue;
@@ -156,13 +173,14 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                 if (selectedTabletIds != null && !selectedTabletIds.contains(tablet.getId())) {
                     continue;
                 }
-                addScanRange(dbId, tableId, ppId, tablet, scanSpec, computeResource);
+                addScanRange(dbId, tableId, ppId, tablet, scanSpec, cacheControls, computeResource);
             }
         }
     }
 
     private void addScanRange(long dbId, long tableId, long ppId, Tablet tablet,
-                              TChangeScanSpec scanSpec, ComputeResource computeResource) {
+                              TChangeScanSpec scanSpec, CacheControls cacheControls,
+                              ComputeResource computeResource) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         TChangesScanRange changesScanRange = new TChangesScanRange();
@@ -171,6 +189,10 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         changesScanRange.setPartition_id(ppId);
         changesScanRange.setTablet_id(tablet.getId());
         changesScanRange.setScan_spec(scanSpec);
+        changesScanRange.setFill_data_cache(cacheControls.fillDataCache());
+        changesScanRange.setSkip_page_cache(cacheControls.skipPageCache());
+        changesScanRange.setSkip_disk_cache(cacheControls.skipDiskCache());
+        changesScanRange.setCache_mode(cacheControls.mode());
 
         TScanRange scanRange = new TScanRange();
         scanRange.setChanges_scan_range(changesScanRange);
@@ -248,6 +270,12 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
             if (selectedLogicalPartitionIds != null && !selectedLogicalPartitionIds.contains(entry.getKey())) {
                 continue;
             }
+            Partition logicalPartition = olapTable.getPartition(entry.getKey());
+            if (logicalPartition == null) {
+                throw new IllegalStateException(
+                        "logical partition " + entry.getKey() + " missing from bookmark-scoped table '"
+                                + olapTable.getName() + "'");
+            }
             List<BookmarkChange.PhysicalPartitionChange> partitionChanges = entry.getValue();
             for (BookmarkChange.PhysicalPartitionChange change : partitionChanges) {
                 long ppId = change.getPhysicalPartitionId();
@@ -262,7 +290,7 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
                                 .noneMatch(t -> selectedTabletIds.contains(t.getId()))) {
                     continue;
                 }
-                selectedPartitions.add(new SelectedPhysicalPartition(partition, change));
+                selectedPartitions.add(new SelectedPhysicalPartition(logicalPartition, partition, change));
             }
         }
         return selectedPartitions;
@@ -355,14 +383,29 @@ public class ChangesScanNode extends AbstractOlapTableScanNode {
         return true;
     }
 
+    // The cache fields a scan range carries. fill_data_cache is evaluated per logical partition;
+    // the other three are query-wide. Grouped so addScanRange keeps a readable signature.
+    private record CacheControls(boolean fillDataCache, boolean skipPageCache, boolean skipDiskCache,
+                                 TChangesScanCacheMode mode) {
+    }
+
     // A physical partition surviving logical-partition pruning, paired with its delta change.
+    // The logical partition is carried too: datacache.partition_duration is evaluated per logical
+    // partition, and a physical partition cannot be mapped back to it without another catalog lookup.
     private static class SelectedPhysicalPartition {
+        private final Partition logicalPartition;
         private final PhysicalPartition partition;
         private final BookmarkChange.PhysicalPartitionChange change;
 
-        SelectedPhysicalPartition(PhysicalPartition partition, BookmarkChange.PhysicalPartitionChange change) {
+        SelectedPhysicalPartition(Partition logicalPartition, PhysicalPartition partition,
+                                  BookmarkChange.PhysicalPartitionChange change) {
+            this.logicalPartition = logicalPartition;
             this.partition = partition;
             this.change = change;
+        }
+
+        Partition getLogicalPartition() {
+            return logicalPartition;
         }
 
         PhysicalPartition getPartition() {

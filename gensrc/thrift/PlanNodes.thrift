@@ -577,6 +577,19 @@ enum TCdcErrorCode {
     CHANGE_NOT_TRACKABLE = 1
 }
 
+// Whether a CHANGES scan writes what it reads into the BE caches. A short-window materialized
+// view refresh reads what ordinary queries read, so caching it serves both; a long backfill reads
+// history nothing will ask for again and would evict the live working set. The caller picks.
+// FE resolves the user-facing `auto` before sending, so only these two values ever reach the BE.
+enum TChangesScanCacheMode {
+    // Read without filling the segment, delete-vector, page, data, or tablet-metadata caches.
+    // The table's schema entry is not covered: TableSchemaService caches it unconditionally and
+    // shares one entry across every tablet and every reader of the table.
+    NEVER = 0,
+    // Write back as an ordinary scan would.
+    ALWAYS = 1
+}
+
 // CDC: per-tablet scan range for CHANGES query
 struct TChangesScanRange {
     1: optional i64 db_id
@@ -584,6 +597,14 @@ struct TChangesScanRange {
     3: optional i64 partition_id
     4: optional Types.TTabletId tablet_id
     5: optional TChangeScanSpec scan_spec
+    // Cache controls, mirroring TInternalScanRange. fill_data_cache is per partition
+    // (datacache.partition_duration); the two skip_* flags come from session variables.
+    6: optional bool fill_data_cache = true
+    7: optional bool skip_page_cache = false
+    8: optional bool skip_disk_cache = false
+    // Resolved from the changes_scan_cache_mode session variable. An unrecognized value
+    // is treated as ALWAYS so a newer FE never silently disables caching on an older BE.
+    9: optional TChangesScanCacheMode cache_mode = TChangesScanCacheMode.ALWAYS
 }
 
 // CDC: FE -> CN plan node parameters

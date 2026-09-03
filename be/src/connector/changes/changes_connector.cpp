@@ -22,6 +22,7 @@
 #include "column/chunk_factory.h"
 #include "column/nullable_column.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "compute_env/query/fragment_runtime_state.h"
 #include "compute_env/runtime_range_pruner.hpp"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -61,21 +62,22 @@ lake::TabletManager* lake_tablet_manager() {
     return StorageEnv::GetInstance()->lake_tablet_manager();
 }
 
+} // namespace
+
 // Load a segment's delete vector by rssid from |metadata|'s live delvecs map; empty Roaring if absent.
-static StatusOr<Roaring> load_delvec(lake::TabletManager* mgr, const TabletMetadata& metadata, uint32_t rssid) {
+StatusOr<Roaring> ChangesReadPlanner::_load_delvec(const TabletMetadata& metadata, uint32_t rssid) const {
     DelVector dv;
-    RETURN_IF_ERROR(lake::get_del_vec(mgr, metadata, rssid, /*fill_cache=*/false, LakeIOOptions{}, &dv));
-    return dv.empty() ? Roaring{} : *dv.roaring();
-}
-// Load a delvec page (a value from a CdcMetadataPB capture map), using |metadata| to resolve the file.
-static StatusOr<Roaring> load_delvec_page(lake::TabletManager* mgr, const TabletMetadata& metadata,
-                                          const DelvecPagePB& page) {
-    DelVector dv;
-    RETURN_IF_ERROR(lake::get_del_vec(mgr, metadata, page, /*fill_cache=*/false, LakeIOOptions{}, &dv));
+    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, metadata, rssid, _lake_io_opts.fill_data_cache, _lake_io_opts, &dv));
     return dv.empty() ? Roaring{} : *dv.roaring();
 }
 
-} // namespace
+// Load a delvec page (a value from a CdcMetadataPB capture map), using |metadata| to resolve the file.
+StatusOr<Roaring> ChangesReadPlanner::_load_delvec_page(const TabletMetadata& metadata,
+                                                        const DelvecPagePB& page) const {
+    DelVector dv;
+    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, metadata, page, _lake_io_opts.fill_data_cache, _lake_io_opts, &dv));
+    return dv.empty() ? Roaring{} : *dv.roaring();
+}
 
 // =============================================================================
 // Planning layer: ChangesReadPlanner
@@ -120,7 +122,7 @@ StatusOr<VersionChangeReadPlan> ChangesReadPlanner::plan_full_scan(TabletMetadat
             }
             // Primary key: the segment's live rows are the whole segment minus its delete vector.
             const uint32_t rssid = lake::get_rssid(r, seg);
-            ASSIGN_OR_RETURN(Roaring delvec_after, load_delvec(_tablet_mgr, after, rssid));
+            ASSIGN_OR_RETURN(Roaring delvec_after, _load_delvec(after, rssid));
             Roaring rows;
             rows.addRange(0, static_cast<uint64_t>(r.segment_metas(seg).num_rows()));
             rows -= delvec_after;
@@ -205,14 +207,14 @@ Status ChangesReadPlanner::_plan_insert_change_read(const VersionChangeReadPlan&
             insert_changes->push_back({a.rowset_pos, a.segment_pos, false, std::nullopt, false});
             continue;
         }
-        ASSIGN_OR_RETURN(Roaring delvec_after, load_delvec(_tablet_mgr, after, rssid));
+        ASSIGN_OR_RETURN(Roaring delvec_after, _load_delvec(after, rssid));
         Roaring rows;
         if (a.is_compaction_output) {
             // rows it column-updated, minus any the same publish then deleted (delvec_after).
             const auto& upd = after.cdc_metadata().pk_change_locator().column_overlay_vecs();
             auto it = upd.find(rssid);
             if (it != upd.end()) {
-                ASSIGN_OR_RETURN(Roaring updated, load_delvec_page(_tablet_mgr, after, it->second));
+                ASSIGN_OR_RETURN(Roaring updated, _load_delvec_page(after, it->second));
                 rows = updated - delvec_after;
             }
         } else {
@@ -235,8 +237,8 @@ Status ChangesReadPlanner::_plan_insert_change_read(const VersionChangeReadPlan&
         if (pos == after_position.end()) continue;
         auto it = upd.find(rssid);
         if (it == upd.end()) continue;
-        ASSIGN_OR_RETURN(Roaring updated, load_delvec_page(_tablet_mgr, after, it->second));
-        ASSIGN_OR_RETURN(Roaring delvec_after, load_delvec(_tablet_mgr, after, rssid));
+        ASSIGN_OR_RETURN(Roaring updated, _load_delvec_page(after, it->second));
+        ASSIGN_OR_RETURN(Roaring delvec_after, _load_delvec(after, rssid));
         Roaring rows = updated - delvec_after;
         if (!rows.isEmpty()) {
             insert_changes->push_back({pos->second.first, pos->second.second, false, std::move(rows), true});
@@ -258,15 +260,15 @@ Status ChangesReadPlanner::_plan_delete_change_read(const VersionChangeReadPlan&
         if (!a.is_compaction_output) continue;
         const auto& r = after.rowsets(a.rowset_pos);
         const uint32_t rssid = lake::get_rssid(r, a.segment_pos);
-        ASSIGN_OR_RETURN(Roaring rows, load_delvec(_tablet_mgr, after, rssid)); // delvec_after
+        ASSIGN_OR_RETURN(Roaring rows, _load_delvec(after, rssid)); // delvec_after
         auto upd = cdc.pk_change_locator().column_overlay_vecs().find(rssid);
         if (upd != cdc.pk_change_locator().column_overlay_vecs().end()) {
-            ASSIGN_OR_RETURN(Roaring updated, load_delvec_page(_tablet_mgr, after, upd->second));
+            ASSIGN_OR_RETURN(Roaring updated, _load_delvec_page(after, upd->second));
             rows |= updated;
         }
         auto base = cdc.pk_change_locator().compaction_output_delvecs().find(rssid);
         if (base != cdc.pk_change_locator().compaction_output_delvecs().end()) {
-            ASSIGN_OR_RETURN(Roaring baseline, load_delvec_page(_tablet_mgr, after, base->second));
+            ASSIGN_OR_RETURN(Roaring baseline, _load_delvec_page(after, base->second));
             rows -= baseline;
         }
         if (!rows.isEmpty()) {
@@ -284,19 +286,19 @@ Status ChangesReadPlanner::_plan_delete_change_read(const VersionChangeReadPlan&
             if (c.is_compaction_input) {
                 auto it = cdc.pk_change_locator().compaction_input_delvecs().find(rssid);
                 if (it != cdc.pk_change_locator().compaction_input_delvecs().end()) {
-                    ASSIGN_OR_RETURN(after_delvec, load_delvec_page(_tablet_mgr, after, it->second));
+                    ASSIGN_OR_RETURN(after_delvec, _load_delvec_page(after, it->second));
                 }
             } else {
-                ASSIGN_OR_RETURN(after_delvec, load_delvec(_tablet_mgr, after, rssid));
+                ASSIGN_OR_RETURN(after_delvec, _load_delvec(after, rssid));
             }
-            ASSIGN_OR_RETURN(Roaring before_delvec, load_delvec(_tablet_mgr, before, rssid));
+            ASSIGN_OR_RETURN(Roaring before_delvec, _load_delvec(before, rssid));
             rows |= (after_delvec - before_delvec);
         }
         if (c.column_overlaid) {
             auto upd = cdc.pk_change_locator().column_overlay_vecs().find(rssid);
             if (upd != cdc.pk_change_locator().column_overlay_vecs().end()) {
-                ASSIGN_OR_RETURN(Roaring updated, load_delvec_page(_tablet_mgr, after, upd->second));
-                ASSIGN_OR_RETURN(Roaring delvec_after, load_delvec(_tablet_mgr, after, rssid));
+                ASSIGN_OR_RETURN(Roaring updated, _load_delvec_page(after, upd->second));
+                ASSIGN_OR_RETURN(Roaring delvec_after, _load_delvec(after, rssid));
                 rows |= (updated - delvec_after);
             }
         }
@@ -343,6 +345,41 @@ ChangesDataSource::ChangesDataSource(const ChangesDataSourceProvider* provider, 
     if (_derivation_mode != TChangeDerivationMode::FULL_SCAN) {
         _base_version = spec.base_version;
     }
+    _resolve_cache_mode(range);
+}
+
+// Folds the scan range's four cache fields into the three settings the read paths consume.
+// The mode is the outer gate: NEVER stops this scan from filling the caches these three settings
+// reach, ALWAYS defers to the per-partition and per-session controls FE already resolved. The
+// table's schema entry is outside all of them -- TableSchemaService caches it unconditionally and
+// shares one entry across every reader of the table, so no per-scan control exists for it.
+//
+// How far NEVER reaches differs by cache, because the layers below expose different controls.
+// The data cache separates the two directions -- skip_disk_cache decides lookups, fill_data_cache
+// decides writes -- so NEVER still reads whatever another path has already warmed there. The page
+// cache has a single flag covering both (see page_io.cpp: use_page_cache guards the lookup as well
+// as the insert), so NEVER gives up its hits too. That is the right trade for the workload NEVER
+// exists to serve: a backfill wide enough to be worth keeping out of the cache gets little from
+// pages a different query happened to warm.
+void ChangesDataSource::_resolve_cache_mode(const TChangesScanRange& range) {
+    auto mode = range.__isset.cache_mode ? range.cache_mode : TChangesScanCacheMode::ALWAYS;
+    // A mode this BE does not recognize falls back to ALWAYS: during a rolling upgrade a newer FE
+    // must not silently disable caching here.
+    if (mode != TChangesScanCacheMode::NEVER && mode != TChangesScanCacheMode::ALWAYS) {
+        LOG(WARNING) << "unrecognized CHANGES scan cache mode " << static_cast<int>(mode) << " on tablet " << _tablet_id
+                     << ", falling back to ALWAYS";
+        mode = TChangesScanCacheMode::ALWAYS;
+    }
+    const bool may_fill = mode == TChangesScanCacheMode::ALWAYS;
+    const bool fill_data_cache = !range.__isset.fill_data_cache || range.fill_data_cache;
+    const bool skip_page_cache = range.__isset.skip_page_cache && range.skip_page_cache;
+
+    _lake_io_opts.fill_data_cache = may_fill && fill_data_cache;
+    // Match TabletReaderParams' default: a scan keeps the Segment objects it opens.
+    _lake_io_opts.fill_metadata_cache = may_fill;
+    _lake_io_opts.skip_disk_cache = range.__isset.skip_disk_cache && range.skip_disk_cache;
+    _use_page_cache = may_fill && fill_data_cache && !skip_page_cache && !config::disable_storage_page_cache;
+    _cache_tablet_metadata = may_fill;
 }
 
 Status ChangesDataSource::open(RuntimeState* state) {
@@ -377,7 +414,8 @@ Status ChangesDataSource::open(RuntimeState* state) {
     if (tablet_mgr == nullptr) {
         return Status::InternalError("lake tablet manager not available");
     }
-    ASSIGN_OR_RETURN(_head_metadata, tablet_mgr->get_tablet_metadata(_tablet_id, _head_version));
+    ASSIGN_OR_RETURN(_head_metadata,
+                     tablet_mgr->get_tablet_metadata(_tablet_id, _head_version, _cache_tablet_metadata));
     RETURN_IF_ERROR(_init_tablet_schema());
     RETURN_IF_ERROR(_init_pushdown_predicates());
     RETURN_IF_ERROR(_init_storage_read_schema());
@@ -388,7 +426,7 @@ Status ChangesDataSource::open(RuntimeState* state) {
         return Status::InvalidArgument(fmt::format("CHANGES version range invalid: base_version({}) > head_version({})",
                                                    _base_version, _head_version));
     }
-    _changes_read_planner.emplace(tablet_mgr, _is_primary_key_table());
+    _changes_read_planner.emplace(tablet_mgr, _is_primary_key_table(), _lake_io_opts);
     _current_meta = _head_metadata;
 
     return Status::OK();
@@ -774,7 +812,8 @@ StatusOr<bool> ChangesDataSource::_advance_to_next_version() {
                             _tablet_id, _base_version, current_version));
     }
     auto* tablet_mgr = lake_tablet_manager();
-    ASSIGN_OR_RETURN(auto parent_meta, tablet_mgr->get_tablet_metadata(_tablet_id, parent_version));
+    ASSIGN_OR_RETURN(auto parent_meta,
+                     tablet_mgr->get_tablet_metadata(_tablet_id, parent_version, _cache_tablet_metadata));
     ASSIGN_OR_RETURN(VersionChangeReadPlan plan, _changes_read_planner->plan_version_diff(parent_meta, _current_meta));
     _current_plan = std::move(plan);
     _current_change_type = ChangeType::INSERT;
@@ -838,6 +877,8 @@ StatusOr<ChunkIteratorPtr> ChangesDataSource::_build_segment_iterator(const Vers
         opts.runtime_filter_preds = _runtime_filter_preds;
         opts.runtime_range_pruner = _runtime_range_pruner;
         opts.runtime_state = _runtime_state;
+        opts.lake_io_opts = _lake_io_opts;
+        opts.use_page_cache = _use_page_cache;
         ASSIGN_OR_RETURN(iters, rowset->get_each_segment_iterator_no_delvec(_storage_read_schema, opts,
                                                                             /*apply_dcg=*/seg.read_with_dcg, &ranges));
     } else {
@@ -846,7 +887,8 @@ StatusOr<ChunkIteratorPtr> ChangesDataSource::_build_segment_iterator(const Vers
         opts.stats = stats;
         opts.chunk_size = _runtime_state->chunk_size();
         opts.tablet_schema = _tablet_schema;
-        opts.use_page_cache = false;
+        opts.lake_io_opts = _lake_io_opts;
+        opts.use_page_cache = _use_page_cache;
         opts.is_primary_keys = false;
         opts.pred_tree = _pushdown_pred_tree;
         opts.pred_tree_for_zone_map = _pushdown_pred_tree_for_zone_map;

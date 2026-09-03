@@ -40,6 +40,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/predicate_parser.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
@@ -141,8 +142,11 @@ struct VersionChangeReadPlan {
 // only metadata bitmaps, no columns.
 class ChangesReadPlanner {
 public:
-    ChangesReadPlanner(lake::TabletManager* tablet_mgr, bool is_primary_keys)
-            : _tablet_mgr(tablet_mgr), _is_primary_keys(is_primary_keys) {}
+    // |lake_io_opts| governs the delete-vector reads this planner makes: whether their file reads
+    // populate the local data cache, and -- through the same fill_data_cache flag, matching what an
+    // ordinary lake scan does -- whether the parsed vectors stay in the metadata cache.
+    ChangesReadPlanner(lake::TabletManager* tablet_mgr, bool is_primary_keys, LakeIOOptions lake_io_opts)
+            : _tablet_mgr(tablet_mgr), _is_primary_keys(is_primary_keys), _lake_io_opts(std::move(lake_io_opts)) {}
 
     // Locates this edge's changed rows: after-value reads (-> INSERT) for every table, plus
     // before-value reads (-> DELETE) for primary-key tables. Duplicate- and aggregate-key tables
@@ -199,8 +203,13 @@ private:
                                     const std::vector<CarriedSegment>& carried,
                                     std::vector<SegmentChangeReadPlan>* delete_changes);
 
+    // Delete-vector reads, honoring this planner's cache settings.
+    StatusOr<Roaring> _load_delvec(const TabletMetadata& metadata, uint32_t rssid) const;
+    StatusOr<Roaring> _load_delvec_page(const TabletMetadata& metadata, const DelvecPagePB& page) const;
+
     lake::TabletManager* _tablet_mgr;
     bool _is_primary_keys;
+    LakeIOOptions _lake_io_opts;
 };
 
 // =============================================================================
@@ -279,6 +288,7 @@ private:
     };
 
     void _init_counter();
+    void _resolve_cache_mode(const TChangesScanRange& range);
     Status _init_tablet_schema();
     Status _init_pushdown_predicates();
     Status _init_storage_read_schema();
@@ -311,6 +321,16 @@ private:
     TChangeDerivationMode::type _derivation_mode = TChangeDerivationMode::VERSION_CHAIN_DIFF;
     int64_t _base_version;     // left-open; set only for VERSION_CHAIN_DIFF
     int64_t _head_version = 0; // right-closed
+
+    // --- Cache filling (resolved from the scan range in the constructor) ---
+    // Three settings rather than one flag because they reach caches that do not overlap:
+    //   _lake_io_opts           segment and delete-vector file reads, and their metacache entries
+    //   _use_page_cache         decoded data and index pages
+    //   _cache_tablet_metadata  tablet metadata, which TabletManager reads outside _lake_io_opts
+    // See _resolve_cache_mode for how the scan range's four fields fold into them.
+    LakeIOOptions _lake_io_opts;
+    bool _use_page_cache = false;
+    bool _cache_tablet_metadata = true;
 
     // --- Runtime context ---
     RuntimeState* _runtime_state = nullptr;

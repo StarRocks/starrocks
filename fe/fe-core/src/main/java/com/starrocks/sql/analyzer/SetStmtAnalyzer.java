@@ -32,6 +32,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
+import com.starrocks.lake.changes.ChangesScanCacheMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.gson.GsonUtils;
@@ -385,6 +386,11 @@ public class SetStmtAnalyzer {
         // check connector sink shuffle mode
         if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_MODE)) {
             ConnectorSinkShuffleMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check changes scan cache mode
+        if (variable.equalsIgnoreCase(SessionVariable.CHANGES_SCAN_CACHE_MODE)) {
+            ChangesScanCacheMode.fromName(resolvedExpression.getStringValue());
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD)) {

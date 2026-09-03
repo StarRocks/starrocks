@@ -57,6 +57,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
@@ -1114,6 +1115,51 @@ TEST_F(ChangesConnectorTest, test_dup_multi_segment_new_rowset_surfaces_every_se
     EXPECT_EQ(5 + 7 + 4, total);
 }
 
+// changes_scan_cache_mode reaches every cache the scan touches, including the tablet metadata
+// reads that do not go through LakeIOOptions. Asserting on the metadata cache covers the path
+// that is easiest to leave behind when the mode is threaded through the read options alone.
+TEST_F(ChangesConnectorTest, test_cache_mode_gates_metadata_cache_population) {
+    _keys_type = DUP_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 100, .segment_rows = {4}}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    const std::string head_meta_key = _tablet_mgr->tablet_metadata_location(tablet_id, 2);
+    auto provider = make_provider(tuple_id, schema_id);
+
+    auto scan_with_mode = [&](TChangesScanCacheMode::type mode) {
+        auto sr = make_scan_range(tablet_id, /*base=*/1, /*head=*/2);
+        sr.changes_scan_range.__set_cache_mode(mode);
+        auto ds = provider->create_data_source(sr);
+        CHECK_OK(ds->open(_runtime_state.get()));
+        EXPECT_EQ(4, drain(ds.get()));
+        ds->close(_runtime_state.get());
+    };
+
+    // NEVER reads head metadata without leaving it behind.
+    _tablet_mgr->prune_metacache();
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(head_meta_key));
+    scan_with_mode(TChangesScanCacheMode::NEVER);
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(head_meta_key));
+
+    // ALWAYS keeps it for the next reader.
+    _tablet_mgr->prune_metacache();
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(head_meta_key));
+    scan_with_mode(TChangesScanCacheMode::ALWAYS);
+    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(head_meta_key));
+
+    // A value this BE does not recognize behaves as ALWAYS. During a rolling upgrade a newer FE
+    // may send a mode added after this BE was built, and the fallback must not be the one that
+    // silently stops caching.
+    _tablet_mgr->prune_metacache();
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(head_meta_key));
+    scan_with_mode(static_cast<TChangesScanCacheMode::type>(99));
+    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(head_meta_key));
+}
+
 // FULL_SCAN surfaces every row visible at head as an insert -- including a compaction-output
 // rowset, which the VERSION_CHAIN_DIFF path deliberately skips because its bulk rows pre-existed.
 // This guards reading a newly-added / empty-base partition whose sub-head history vacuum may have
@@ -1175,6 +1221,42 @@ TEST_F(ChangesConnectorTest, test_full_scan_rejects_delete_predicate) {
     Status st = drain_until_error(ds.get());
     expect_change_not_trackable(st, "CDC for DUP_KEYS does not support delete");
     ds->close(_runtime_state.get());
+}
+
+// The primary-key read path reaches segments through get_each_segment_iterator_no_delvec, a
+// different helper than the DUP/AGG path uses. Assert the mode reaches it too: a mode that only
+// took effect for DUP/AGG would leave the main CHANGES workload -- incremental MV refresh on a
+// primary-key table -- reading every segment footer from remote storage on every scan.
+TEST_F(ChangesConnectorTest, test_cache_mode_reaches_primary_key_segment_loading) {
+    _keys_type = PRIMARY_KEYS;
+    auto tuple_id = install_tuple_descriptor(TupleShape::BOTH_NON_NULLABLE);
+    int64_t schema_id = next_id();
+    int64_t tablet_id = next_id();
+    initialize_tablet(tablet_id, schema_id);
+    std::vector<RowsetSpec> r2 = {{.version = 2, .id = 10, .num_rows = 4, .start_value = 100}};
+    publish_metadata(tablet_id, /*version=*/2, schema_id, /*ancestors=*/{1}, &r2);
+
+    const std::string segment_key = _tablet_mgr->segment_location(tablet_id, r2[0].segment_path);
+    auto provider = make_provider(tuple_id, schema_id);
+
+    auto scan_with_mode = [&](TChangesScanCacheMode::type mode) {
+        auto sr = make_full_scan_range(tablet_id, /*head=*/2);
+        sr.changes_scan_range.__set_cache_mode(mode);
+        auto ds = provider->create_data_source(sr);
+        ASSERT_OK(ds->open(_runtime_state.get()));
+        EXPECT_EQ(4, drain(ds.get()));
+        ds->close(_runtime_state.get());
+    };
+
+    _tablet_mgr->prune_metacache();
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(segment_key));
+    scan_with_mode(TChangesScanCacheMode::NEVER);
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(segment_key));
+
+    _tablet_mgr->prune_metacache();
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(segment_key));
+    scan_with_mode(TChangesScanCacheMode::ALWAYS);
+    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_segment(segment_key));
 }
 
 TEST_F(ChangesConnectorTest, test_full_scan_pk_applies_delvec_and_dcg) {
@@ -2876,7 +2958,7 @@ TEST_F(ChangesConnectorTest, test_planner_load_insert_alive_rows) {
 
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
+    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true, LakeIOOptions{});
     ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.insert_changes.size());
@@ -2909,7 +2991,7 @@ TEST_F(ChangesConnectorTest, test_planner_compaction_output_column_update_insert
 
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
+    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true, LakeIOOptions{});
     ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.insert_changes.size());
@@ -2943,7 +3025,7 @@ TEST_F(ChangesConnectorTest, test_planner_surviving_segment_column_update_insert
 
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
+    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true, LakeIOOptions{});
     ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.insert_changes.size());
@@ -2976,7 +3058,7 @@ TEST_F(ChangesConnectorTest, test_planner_whole_row_delete) {
 
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
+    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true, LakeIOOptions{});
     ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());
@@ -3009,7 +3091,7 @@ TEST_F(ChangesConnectorTest, test_planner_compaction_input_delete) {
 
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
+    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true, LakeIOOptions{});
     ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());
@@ -3043,7 +3125,7 @@ TEST_F(ChangesConnectorTest, test_planner_compaction_output_delete) {
 
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
+    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true, LakeIOOptions{});
     ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());
@@ -3080,7 +3162,7 @@ TEST_F(ChangesConnectorTest, test_planner_same_segment_delete_and_column_update_
 
     ASSIGN_OR_ABORT(auto before, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
     ASSIGN_OR_ABORT(auto after, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true);
+    ChangesReadPlanner planner(_tablet_mgr, /*is_primary_keys=*/true, LakeIOOptions{});
     ASSIGN_OR_ABORT(auto plan, planner.plan_version_diff(before, after));
 
     ASSERT_EQ(1u, plan.delete_changes.size());

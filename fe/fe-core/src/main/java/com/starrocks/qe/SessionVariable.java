@@ -57,6 +57,7 @@ import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
+import com.starrocks.lake.changes.ChangesScanCacheMode;
 import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
@@ -392,6 +393,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // range start and its value at the end; a Duplicate Key or Aggregate Key table is append-only
     // (its CHANGES are already net changes), so the flag is a no-op for it.
     public static final String ENABLE_CDC_NET_CHANGE = "enable_cdc_net_change";
+
+    // Whether a CHANGES scan writes the data it reads back into the compute node's caches:
+    // auto / never / always.
+    public static final String CHANGES_SCAN_CACHE_MODE = "changes_scan_cache_mode";
 
     public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
 
@@ -1337,6 +1342,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableIncrementalRefreshMV = false;
     @VarAttr(name = ENABLE_CDC_NET_CHANGE)
     private boolean enableCdcNetChange = false;
+
+    @VarAttr(name = CHANGES_SCAN_CACHE_MODE)
+    private String changesScanCacheMode = ChangesScanCacheMode.AUTO.modeName();
 
     @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
     private boolean enableLocalShuffleAgg = true;
@@ -4976,6 +4984,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCdcNetChange(boolean enableCdcNetChange) {
         this.enableCdcNetChange = enableCdcNetChange;
+    }
+
+    public ChangesScanCacheMode getChangesScanCacheMode() {
+        return ChangesScanCacheMode.fromName(this.changesScanCacheMode);
+    }
+
+    public void setChangesScanCacheMode(String mode) {
+        this.changesScanCacheMode = mode;
     }
 
     public long getLogRejectedRecordNum() {

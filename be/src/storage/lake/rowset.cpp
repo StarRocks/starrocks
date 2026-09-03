@@ -720,7 +720,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::_build_segment_iterators(
     std::vector<LoadedSegment> segments;
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_for_build_iter_us");
-        RETURN_IF_ERROR(load_segments(&segments, false));
+        // Load through the caller's options rather than a hardcoded no-cache bool: the segment
+        // footer read and the parsed Segment then honor whatever fill_data_cache /
+        // fill_metadata_cache the caller resolved, the same way Rowset::read does.
+        RETURN_IF_ERROR(load_segments(&segments, seg_options, /*not_used_segments=*/nullptr));
     }
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 

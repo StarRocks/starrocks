@@ -363,6 +363,17 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.5.0
 
+### changes_scan_cache_mode
+
+* **描述**: CHANGES 查询是否将读取到的数据写入计算节点的缓存。CHANGES 查询返回表在一段版本范围内的行级变更，因此也会读取到表最新版本已不再包含的数据。取值：
+  * `auto`（默认）：由系统决定，当前行为与 `always` 相同。
+  * `always`：与普通查询一样缓存数据。
+  * `never`：读取时不填充数据缓存，避免大批量回补将普通查询依赖的数据挤出缓存。
+* **范围**: Session
+* **默认值**: `auto`
+* **数据类型**: String
+* **引入版本**: v26.2
+
 ### character_set_database（global）
 
 * 描述：StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码（`utf8`）。

@@ -399,6 +399,17 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: v3.5.0
 
+### changes_scan_cache_mode
+
+* **Description**: Specifies whether a CHANGES query writes the data it reads into the compute node's caches. A CHANGES query returns a table's row-level changes over a version range, so it also reads data that the table's latest version no longer contains. Valid values:
+  * `auto` (default): The system decides. It currently behaves the same as `always`.
+  * `always`: Cache the data, as an ordinary query does.
+  * `never`: Read without filling the data caches, so that a large backfill does not evict what ordinary queries rely on.
+* **Scope**: Session
+* **Default**: `auto`
+* **Data Type**: String
+* **Introduced in**: v26.2
+
 ### character_set_database (global)
 
 * **Data type**: StringThe character set supported by StarRocks. Only UTF8 (`utf8`) is supported.
