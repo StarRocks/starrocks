@@ -647,6 +647,30 @@ public class ZstdCompressionColumnsTest {
         waitForSchemaChangeJob(table);
     }
 
+    @Test
+    public void testSchemaInfoSnapshotSurvivesDropColumn() throws Exception {
+        starRocksAssert.withTable(createTableSql("t_cdict_snapshot",
+                ", \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + "\" = \"v1:1m, v2\""));
+        OlapTable table = getTable("t_cdict_snapshot");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+
+        // What a fast schema evolution keeps for the transactions still writing the old schema.
+        SchemaInfo snapshot = SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId,
+                table.getIndexMetaByMetaId(baseIndexMetaId));
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 1024 * 1024),
+                snapshot.getZstdCompressionPageSizes());
+
+        // Dropping the column prunes the table's own map IN PLACE (rebuildFullSchema). A snapshot
+        // that aliased that map would silently lose the page size it was taken to remember.
+        starRocksAssert.alterTable("ALTER TABLE " + DB_NAME + ".t_cdict_snapshot DROP COLUMN v1");
+        waitForSchemaChangeJob(table);
+        Assertions.assertEquals(Sets.newHashSet("v2"), table.getZstdCompressionColumnNames());
+
+        Assertions.assertEquals(ImmutableMap.of(ColumnId.create("v1"), 1024 * 1024),
+                snapshot.getZstdCompressionPageSizes());
+        Assertions.assertTrue(snapshot.getZstdCompressionColumnNames().contains(ColumnId.create("v1")));
+    }
+
     private static void assertCreateTableFails(String tableName, String spec, String expectedMessage) {
         Exception e = Assertions.assertThrows(Exception.class,
                 () -> starRocksAssert.withTable(createTableSql(tableName,

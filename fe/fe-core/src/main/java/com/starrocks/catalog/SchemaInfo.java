@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.KeysType;
@@ -136,6 +137,10 @@ public class SchemaInfo {
 
     public Set<ColumnId> getZstdCompressionColumnNames() {
         return zstdCompressionColumnNames;
+    }
+
+    public Map<ColumnId, Integer> getZstdCompressionPageSizes() {
+        return zstdCompressionPageSizes;
     }
 
     public TCompressionType getCompressionType() {
@@ -332,7 +337,13 @@ public class SchemaInfo {
         // SHOW CREATE TABLE still reports the size the user asked for.
         public Builder setZstdCompressionColumns(Collection<ColumnId> zstdCompressionColumnNames,
                                                  Map<ColumnId, Integer> zstdCompressionPageSizes) {
-            this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+            // Copied, like the name set below: the caller hands over OlapTable's live map, and
+            // rebuildFullSchema() prunes that map IN PLACE when a column is dropped. A SchemaInfo
+            // that is kept -- the historical schema a fast schema evolution snapshots for the
+            // transactions still writing the old schema -- would otherwise lose the page size it
+            // was taken to remember, and those writes would fall back to the default.
+            this.zstdCompressionPageSizes =
+                    zstdCompressionPageSizes == null ? null : Maps.newHashMap(zstdCompressionPageSizes);
             return setZstdCompressionColumnNames(zstdCompressionColumnNames);
         }
 
