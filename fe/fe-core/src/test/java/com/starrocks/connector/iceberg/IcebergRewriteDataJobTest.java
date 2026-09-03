@@ -73,6 +73,8 @@ public class IcebergRewriteDataJobTest {
         AlterTableStmt alter = Mockito.mock(AlterTableStmt.class);
         return new IcebergRewriteDataJob(
                 "insert into t select 1",
+                "insert into t select 1",
+                false,
                 false,
                 0L,
                 10L,
@@ -118,7 +120,11 @@ public class IcebergRewriteDataJobTest {
         when(alter.getTableName()).thenReturn("t");
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
+<<<<<<< HEAD
                 "insert into t select 1", false, 0L, 10L, 1L, ctx, alter);
+=======
+                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, false, ctx, alter);
+>>>>>>> ade6b00 ([BugFix] Fix silent data loss in rewrite_data_files with WHERE clause (#77797))
 
         IcebergScanNode scanNode = mock(IcebergScanNode.class);
         Deencapsulation.setField(job, "scanNodes", Collections.singletonList(scanNode));
@@ -167,7 +173,11 @@ public class IcebergRewriteDataJobTest {
         when(sv.clone()).thenReturn(sv);
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
+<<<<<<< HEAD
                 "insert into t select 1", false, 0L, 10L, 1L, ctx, alter);
+=======
+                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, false, ctx, alter);
+>>>>>>> ade6b00 ([BugFix] Fix silent data loss in rewrite_data_files with WHERE clause (#77797))
 
         // ---- Prepare minimal fields required by execute() ----
         InsertStmt parsedInsert = mock(InsertStmt.class);
@@ -228,7 +238,11 @@ public class IcebergRewriteDataJobTest {
         Deencapsulation.setField(job, "parsedStmt", fakeInsertStmt);
         new mockit.Expectations() {
             {
+<<<<<<< HEAD
                 new com.starrocks.sql.ast.IcebergRewriteStmt(fakeInsertStmt, anyBoolean);
+=======
+                new com.starrocks.sql.ast.IcebergRewriteStmt(fakeInsertStmt, anyBoolean, anyBoolean, anyBoolean);
+>>>>>>> ade6b00 ([BugFix] Fix silent data loss in rewrite_data_files with WHERE clause (#77797))
                 result = rewriteStmt;
                 minTimes = 0;
             }
@@ -255,4 +269,54 @@ public class IcebergRewriteDataJobTest {
 
         verify(state, never()).setError(anyString());
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void prepare_shouldPlanWithRewriteStmt() throws Exception {
+        ConnectContext ctx = mock(ConnectContext.class, Mockito.RETURNS_DEEP_STUBS);
+        SessionVariable sessionVariable = mock(SessionVariable.class);
+        when(ctx.getSessionVariable()).thenReturn(sessionVariable);
+
+        AlterTableStmt alter = mock(AlterTableStmt.class);
+        when(alter.getTableName()).thenReturn("t");
+
+        ValuesRelation valuesRelation = new ValuesRelation(Collections.emptyList(), Collections.emptyList());
+        QueryStatement queryStatement = new QueryStatement(valuesRelation);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("c", "db", "t")), null, NodePosition.ZERO);
+        InsertStmt parsedInsert = new InsertStmt(tableRef, queryStatement);
+        parsedInsert.setOrigStmt(new OriginStatement("insert into t select 1", 0));
+        IcebergScanNode scanNode = mock(IcebergScanNode.class);
+        IcebergConnectorScanRangeSource source = mock(IcebergConnectorScanRangeSource.class);
+        when(scanNode.getSourceRange()).thenReturn(source);
+        when(source.getSourceFileScanOutputs(Mockito.anyInt(), Mockito.anyLong(), Mockito.anyBoolean()))
+                .thenReturn(Collections.emptyList());
+
+        new MockUp<com.starrocks.sql.parser.SqlParser>() {
+            @Mock
+            public List<StatementBase> parse(String sql, SessionVariable ignoredSessionVariable) {
+                return Collections.singletonList(parsedInsert);
+            }
+        };
+
+        final StatementBase[] plannedStmt = new StatementBase[1];
+        ExecPlan execPlan = mockPlanWithOneIcebergScan(scanNode);
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public ExecPlan plan(StatementBase stmt, ConnectContext session) {
+                plannedStmt[0] = stmt;
+                return execPlan;
+            }
+        };
+
+        IcebergRewriteDataJob job = new IcebergRewriteDataJob(
+                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, false, ctx, alter);
+
+        job.prepare();
+
+        Assertions.assertTrue(plannedStmt[0] instanceof IcebergRewriteStmt);
+        Assertions.assertNotSame(parsedInsert, plannedStmt[0]);
+    }
+}
+>>>>>>> ade6b00 ([BugFix] Fix silent data loss in rewrite_data_files with WHERE clause (#77797))

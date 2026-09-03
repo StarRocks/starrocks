@@ -261,6 +261,9 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.transport.TTransportException;
@@ -2739,12 +2742,24 @@ public class StmtExecutor {
             if (extra == null) {
                 extra = new IcebergMetadata.IcebergSinkExtra();
             }
+            // A rewrite removes the data files it scanned, so a delete file may only be removed along with them
+            // when it is provably dangling afterwards. Removing one that still applies to an untouched data file
+            // would resurrect the rows it deletes.
+            boolean wholeTableRewrite = ((IcebergRewriteStmt) stmt).rewriteAll()
+                    && !((IcebergRewriteStmt) stmt).hasPartitionFilter();
             for (PlanFragment fragment : execPlan.getFragments()) {
                 for (ScanNode scan : fragment.collectScanNodes().values()) {
                     if (scan instanceof IcebergScanNode && scan.getPlanNodeName().equals("IcebergScanNode")) {
-                        extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getPosAppliedDeleteFiles());
-                        extra.addScannedDataFiles(((IcebergScanNode) scan).getScannedDataFiles());
-                        if (((IcebergRewriteStmt) stmt).rewriteAll()) {
+                        Set<DataFile> scannedDataFiles = ((IcebergScanNode) scan).getScannedDataFiles();
+                        extra.addScannedDataFiles(scannedDataFiles);
+                        extra.addAppliedDeleteFiles(
+                                danglingPosDeleteFiles(((IcebergScanNode) scan).getPosAppliedDeleteFiles(),
+                                        scannedDataFiles, wholeTableRewrite));
+                        // Equality deletes carry no reference to the data files they apply to; they cover every
+                        // file of their partition with a lower sequence number. Only a rewrite of the whole table
+                        // is guaranteed to have rewritten all of them. Keeping them is harmless: the files written
+                        // by the rewrite get a higher sequence number, so the deletes no longer apply to them.
+                        if (wholeTableRewrite) {
                             extra.addAppliedDeleteFiles(((IcebergScanNode) scan).getEqualAppliedDeleteFiles());
                         }
                     }
@@ -2752,6 +2767,26 @@ public class StmtExecutor {
             }
         }
         return extra;
+    }
+
+    // A position delete is file scoped when it names the single data file it applies to; deletion vectors always
+    // are. Such a file becomes dangling once that data file is rewritten, so it can be dropped with it. Position
+    // deletes without a reference span the whole partition and would still apply to data files this rewrite left
+    // untouched - unless the rewrite covered the whole table, in which case there is no untouched file left and
+    // every applied position delete, file scoped or not, is dangling.
+    private static Set<DeleteFile> danglingPosDeleteFiles(Set<DeleteFile> posDeleteFiles,
+                                                          Set<DataFile> scannedDataFiles,
+                                                          boolean wholeTableRewrite) {
+        if (wholeTableRewrite) {
+            return posDeleteFiles;
+        }
+        Set<String> rewrittenLocations = scannedDataFiles.stream()
+                .map(ContentFile::location)
+                .collect(Collectors.toSet());
+        return posDeleteFiles.stream()
+                .filter(deleteFile -> deleteFile.referencedDataFile() != null
+                        && rewrittenLocations.contains(deleteFile.referencedDataFile()))
+                .collect(Collectors.toSet());
     }
 
     /**

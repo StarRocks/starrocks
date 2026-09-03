@@ -19,15 +19,43 @@ import com.starrocks.sql.ast.InsertStmt;
 public class IcebergRewriteStmt extends InsertStmt {
 
     private final boolean rewriteAll;
+<<<<<<< HEAD
 
     public IcebergRewriteStmt(InsertStmt base, boolean rewriteAll) {
         super(base.getTableName(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(), 
                 base.getQueryStatement(), base.isOverwrite(), base.getProperties(), base.getPos());
         super.setOrigStmt(base.getOrigStmt());
         this.rewriteAll = rewriteAll;
+=======
+    private final boolean writeRowLineage;
+    private final boolean hasPartitionFilter;
+
+    public IcebergRewriteStmt(InsertStmt base, boolean rewriteAll, boolean writeRowLineage,
+                              boolean hasPartitionFilter) {
+        super(base.getTableRef(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(),
+                base.getQueryStatement(), base.isOverwrite(), base.getProperties(), base.getPos());
+        super.setOrigStmt(base.getOrigStmt());
+        this.rewriteAll = rewriteAll;
+        this.writeRowLineage = writeRowLineage;
+        this.hasPartitionFilter = hasPartitionFilter;
+>>>>>>> ade6b00 ([BugFix] Fix silent data loss in rewrite_data_files with WHERE clause (#77797))
     }
 
     public boolean rewriteAll() {
         return rewriteAll;
     }
+<<<<<<< HEAD
 }
+=======
+
+    // True when the rewrite was scoped by a WHERE clause. Such a rewrite covers only the files that survived
+    // pruning, so equality deletes it applied may still apply to data files left untouched.
+    public boolean hasPartitionFilter() {
+        return hasPartitionFilter;
+    }
+
+    public boolean writeRowLineage() {
+        return writeRowLineage;
+    }
+}
+>>>>>>> ade6b00 ([BugFix] Fix silent data loss in rewrite_data_files with WHERE clause (#77797))

@@ -1020,8 +1020,33 @@ public class InsertPlanTest extends PlanTestBase {
             }
         };
 
+<<<<<<< HEAD
         String actualRes = getInsertExecPlan(
                 "explain insert into iceberg_catalog_shuffle.iceberg_db.iceberg_table select 1, 2 from t0");
+=======
+        String sql = "insert into iceberg_catalog_lineage.iceberg_db.iceberg_lineage_table select 1, 2, 3, 4";
+        InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true, false);
+
+        String actualRes = getInsertExecPlan(rewriteStmt, sql);
+        Assertions.assertTrue(actualRes.contains(IcebergTable.ROW_ID), actualRes);
+        Assertions.assertTrue(actualRes.contains(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER), actualRes);
+        Assertions.assertFalse(actualRes.contains(IcebergTable.FILE_PATH), actualRes);
+    }
+
+    @Test
+    public void testInsertIcebergWithGlobalShuffle() throws Exception {
+        Schema icebergSchema = new Schema(
+                Types.NestedField.required(1, "k1", Types.IntegerType.get()),
+                Types.NestedField.required(2, "k2", Types.IntegerType.get())
+        );
+        PartitionSpec identitySpec = PartitionSpec.builderFor(icebergSchema).identity("k1").build();
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
+        String actualRes = getIcebergInsertExecPlanWithGlobalShuffle(
+                "iceberg_catalog_shuffle", "iceberg_table", 12345566, icebergSchema, identitySpec,
+                Lists.newArrayList(k1, k2), Lists.newArrayList(k1), Arrays.asList(0), "select 1, 2 from t0");
+>>>>>>> ade6b00 ([BugFix] Fix silent data loss in rewrite_data_files with WHERE clause (#77797))
         String expected = "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:6: k1 | 7: k2\n" +
                 "  PARTITION: HASH_PARTITIONED: 6: k1\n" +
