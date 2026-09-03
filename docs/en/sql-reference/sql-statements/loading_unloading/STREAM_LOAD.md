@@ -40,7 +40,7 @@ This topic uses `curl` as an example to describe how to load data by using Strea
   If you use `curl` to perform Stream Load, the system automatically adds a `Content-Length` header field and you do not need manually input it.
   :::
 
-- You must add an `Expect` header field and specify its value as `100-continue`, as in `"Expect:100-continue"`. This helps prevent unnecessary data transfers and reduce resource overheads in case your job request is denied.
+- You can add an `Expect` header field and specify its value as `100-continue`, as in `"Expect:100-continue"`. This helps prevent unnecessary data transfers and reduce resource overheads in case your job request is denied. The header is optional: an L7 proxy (such as nginx) may strip it, and a missing header is tolerated.
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../keywords.md).
 

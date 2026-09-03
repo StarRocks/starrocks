@@ -14,6 +14,13 @@
 
 package com.starrocks.http;
 
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
+import com.starrocks.service.ExecuteEnv;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpMethod;
@@ -22,13 +29,18 @@ import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.ReferenceCountUtil;
 import org.junit.jupiter.api.Test;
 
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class HttpServerHandlerTest extends HttpServerTestUtils {
 
@@ -153,6 +165,30 @@ public class HttpServerHandlerTest extends HttpServerTestUtils {
             verifyResponse(context.pollResponse(), HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "mock reject");
         }
+    }
+
+    @Test
+    public void testHttpContextCleanupClosesNettyChannelAndUnregisters() {
+        ExecuteEnv.setup();
+        ConnectScheduler scheduler = ExecuteEnv.getInstance().getScheduler();
+        Map<Long, ConnectContext> connectionMap = Deencapsulation.getField(scheduler, "connectionMap");
+
+        HttpConnectContext context = new HttpConnectContext();
+        context.setConnectionId(123);
+        context.setQualifiedUser("root");
+        ChannelHandlerContext nettyContext = mock(ChannelHandlerContext.class);
+        Channel channel = mock(Channel.class);
+        ChannelFuture closeFuture = mock(ChannelFuture.class);
+        when(nettyContext.channel()).thenReturn(channel);
+        when(channel.remoteAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 8080));
+        when(nettyContext.close()).thenReturn(closeFuture);
+        context.setNettyChannel(nettyContext);
+        connectionMap.put(123L, context);
+
+        context.cleanup();
+
+        verify(nettyContext).close();
+        assertFalse(connectionMap.containsKey(123L));
     }
 
     private void verifyResponse(Object response, HttpResponseStatus expectStatus, String expectContent) {

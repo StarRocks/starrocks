@@ -254,9 +254,24 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         }
 
         {
-            // HTTP/1.1, no 'Expect: 100-Continue'. responds HTTP 200 with error msg
+            // HTTP/1.1, no 'Expect: 100-Continue' (e.g. stripped by an L7 proxy like nginx).
+            // The missing header is tolerated: responds HTTP 307 (FE redirects without reading body).
             HttpPut put = buildPutRequest(256, false);
             put.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
+            try (CloseableHttpResponse response = client.execute(put)) {
+                Assertions.assertEquals(HttpResponseStatus.TEMPORARY_REDIRECT.code(),
+                        response.getStatusLine().getStatusCode());
+                // The server indicates that the connection should be closed.
+                Assertions.assertEquals(HttpHeaderValues.CLOSE.toString(),
+                        response.getFirstHeader(HttpHeaderNames.CONNECTION.toString()).getValue());
+            }
+        }
+
+        {
+            // HTTP/1.1, present but wrong 'Expect' value. responds HTTP 200 with error msg
+            HttpPut put = buildPutRequest(256, false);
+            put.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
+            put.setHeader("Expect", "nonsense");
             try (CloseableHttpResponse response = client.execute(put)) {
                 Assertions.assertEquals(HttpResponseStatus.OK.code(),
                         response.getStatusLine().getStatusCode());

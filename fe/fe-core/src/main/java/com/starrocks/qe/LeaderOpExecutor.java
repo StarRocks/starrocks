@@ -138,7 +138,12 @@ public class LeaderOpExecutor {
         }
         try {
             forward();
-            if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+            // Still wait for the journal to catch up while the accept-new window is open: a follower
+            // marked for graceful exit keeps serving forwarded DDL (e.g. CREATE TABLE) on still-open
+            // connections until the window ends, and querying right after such a DDL must see the
+            // replayed metadata. Only once the window closes (shouldAcceptNewRequest() == false, drain
+            // begins) may the journal wait be skipped.
+            if (GracefulExitFlag.shouldAcceptNewRequest() && !GlobalStateMgr.getCurrentState().isLeader()) {
                 long deadline = System.currentTimeMillis() + waitTimeoutMs;
                 LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
                 ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);

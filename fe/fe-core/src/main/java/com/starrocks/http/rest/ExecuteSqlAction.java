@@ -47,6 +47,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.QueryState;
@@ -121,6 +122,22 @@ public class ExecuteSqlAction extends RestBaseAction {
         }
 
         try {
+            // Once the accept-new window has elapsed, reject new HTTP SQL requests before they are
+            // registered or executed: the drain loop must not wait on (or exit while) a query that
+            // began after the window is still running. During the window shouldAcceptNewRequest()
+            // is still true, so requests the load balancer routes within its probe blind window
+            // keep being served (same policy as the MySQL path). Closing the channel afterward
+            // alone is too late: the request would already be registered and fully executed.
+            if (!GracefulExitFlag.shouldAcceptNewRequest()) {
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE,
+                        "FE is in graceful shutdown, no longer accepting new requests");
+            }
+            // Mark the context busy as soon as the request is admitted: a keep-alive channel that
+            // finished its previous request more than 1s ago still carries COM_SLEEP/endTime, so the
+            // drain's closeAllIdleConnection() could otherwise reap it during changeCatalog/parse,
+            // before processOnce() sets COM_QUERY and a fresh start time.
+            context.setCommand(MysqlCommand.COM_QUERY);
+            context.setStartTime();
             changeCatalogAndDB(catalogName, databaseName, context);
             try {
                 SqlRequest requestBody = validatePostBody(request.getContent(), context);
@@ -152,18 +169,34 @@ public class ExecuteSqlAction extends RestBaseAction {
                 throw new StarRocksHttpException(INTERNAL_SERVER_ERROR, e.getMessage());
             } finally {
                 ConnectContext.remove();
+                // Restore the idle state if the request failed before processOnce() completed (it ends
+                // by setting COM_SLEEP + endTime). Leaving COM_QUERY here would make the drain's
+                // closeAllIdleConnection() skip this keep-alive channel forever.
+                if (context.getCommand() == MysqlCommand.COM_QUERY) {
+                    context.setCommand(MysqlCommand.COM_SLEEP);
+                    context.setEndTime();
+                }
             }
 
             // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
             finalize(request, response, parsedStmt, context);
 
-            if (GracefulExitFlag.isGracefulExit()) {
+            if (!GracefulExitFlag.shouldAcceptNewRequest()) {
                 context.getNettyChannel().close();
             }
         } catch (StarRocksHttpException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
             response.getContent().append(failResult.toJson());
+            // A graceful-exit rejection (either the fast-fail gate at the top of this method or the
+            // recheck inside registerContextOnce) must not leave a keep-alive channel open: the
+            // request was refused because the accept-new window has elapsed, and the surviving
+            // connection would keep sitting in connectionMap (totalConns > 0), blocking
+            // waitForDraining() until the hard shutdown timeout. writeResponse() closes the channel
+            // after flushing only when keep-alive is disabled, so force it here.
+            if (SERVICE_UNAVAILABLE.equals(e.getCode()) && !GracefulExitFlag.shouldAcceptNewRequest()) {
+                response.setForceCloseConnection(true);
+            }
             writeResponse(request, response, HttpResponseStatus.valueOf(e.getCode().code()));
         }
     }
@@ -240,7 +273,14 @@ public class ExecuteSqlAction extends RestBaseAction {
             return;
         }
 
-        // now register this request in connectScheduler
+        // Re-validate admission immediately before registering. The fast-fail gate at the top of
+        // executeWithoutPassword() can pass while the accept-new window is still open, but
+        // changeCatalogAndDB()/validatePostBody()/parse() run in between; if the window expires in
+        // that gap, waitForDraining() may observe shouldAcceptNewRequest()==false && totalConns==0
+        // (this context is not in connectionMap yet) and exit the process while the request is still
+        // registering/executing. registerConnectionIfAccepting() re-checks admission inside the same
+        // connStatsLock critical section as the registration, so the drain's zero-connection decision
+        // can never fall between an accepted check and its registration.
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         try {
             context.setConnectionId(connectScheduler.getNextConnectionId());
@@ -250,7 +290,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         context.resetConnectionStartTime();
 
         // mark as registered
-        Pair<Boolean, String> result = connectScheduler.registerConnection(context);
+        Pair<Boolean, String> result = connectScheduler.registerConnectionIfAccepting(context);
         if (!result.first) {
             throw new StarRocksHttpException(SERVICE_UNAVAILABLE, result.second);
         }

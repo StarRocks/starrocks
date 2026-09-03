@@ -1607,4 +1607,22 @@ public class GlobalTransactionMgrTest {
             dbMgrs.remove(dbId);
         }
     }
+
+    @Test
+    public void testGetRunningTxnNumsAggregatesAcrossDatabases() throws Exception {
+        // getRunningTxnNums() sums the per-database running-txn counters; it backs the
+        // graceful-exit drain check (leader only), so it must reflect every database.
+        long dbId1 = 9101L;
+        long dbId2 = 9102L;
+        masterTransMgr.addDatabaseTransactionMgr(dbId1);
+        masterTransMgr.addDatabaseTransactionMgr(dbId2);
+        DatabaseTransactionMgr db1 = masterTransMgr.getDatabaseTransactionMgr(dbId1);
+        DatabaseTransactionMgr db2 = masterTransMgr.getDatabaseTransactionMgr(dbId2);
+        int base = masterTransMgr.getRunningTxnNums();
+        Deencapsulation.setField(db1, "runningTxnNums", 2);
+        Deencapsulation.setField(db2, "runningTxnNums", 3);
+        assertEquals(base + 5, masterTransMgr.getRunningTxnNums());
+        Deencapsulation.setField(db1, "runningTxnNums", 0);
+        Deencapsulation.setField(db2, "runningTxnNums", 0);
+    }
 }

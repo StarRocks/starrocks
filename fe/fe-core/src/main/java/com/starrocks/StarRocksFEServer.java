@@ -80,6 +80,7 @@ import java.util.concurrent.TimeUnit;
 
 public class StarRocksFEServer {
     private static final Logger LOG = LogManager.getLogger(StarRocksFEServer.class);
+    private static QeService QE_SERVICE;
 
     public static volatile boolean stopped = false;
 
@@ -166,6 +167,7 @@ public class StarRocksFEServer {
             // 3. HttpServer for HTTP Server and optionally for HTTPS Server
             // 4. ArrowFlightSqlService for Arrow Flight SQL Server
             QeService qeService = new QeService(Config.query_port, ExecuteEnv.getInstance().getScheduler());
+            QE_SERVICE = qeService;
             FrontendThriftServer frontendThriftServer = new FrontendThriftServer(Config.rpc_port);
             HttpServer httpServer = new HttpServer(Config.http_port);
             Optional<HttpServer> httpsServer = Optional.ofNullable(
@@ -215,15 +217,30 @@ public class StarRocksFEServer {
         // Since the normal exit is using SIGTERM(15),
         // so we have to choose another signal for the graceful exit, use SIGUSR1(10) here.
         Signal.handle(new Signal("USR1"), sig -> {
+            // Snapshot the explicit transactions active on this node BEFORE the graceful-exit flag
+            // becomes visible. Transaction ids are globally monotonic, but TransactionIdGenerator
+            // journals them in batches of 1000 and follower replay advances nextId to the reserved
+            // batch end, so a follower's peekNextTransactionId() can sit far above the leader's
+            // actual position: a numeric boundary captured here would wrongly exempt post-signal
+            // transactions on followers (their leader-assigned ids fall below the inflated boundary).
+            // A snapshot of the ids actually active when shutdown begins is exact on both leader and
+            // follower. The isGracefulExit() guard stops a repeated SIGUSR1 from re-snapshotting
+            // mid-drain (which would admit post-signal transactions into the exempt set).
+            if (!GracefulExitFlag.isGracefulExit()) {
+                GracefulExitFlag.setPreSignalTxnIds(
+                        ExecuteEnv.getInstance().getScheduler().getActiveExplicitTxnIds());
+            }
+            if (!GracefulExitFlag.markGracefulExit()) {
+                LOG.info("already handling graceful exit, ignore repeated SIGUSR1");
+                return;
+            }
             Thread t = new Thread(() -> {
                 if (canGracefulExit()) {
-                    long startTime = System.nanoTime();
                     LOG.info("start to handle graceful exit");
-                    GracefulExitFlag.markGracefulExit();
 
                     // Wait for queries to complete
                     try {
-                        waitForDraining(startTime);
+                        waitForDraining();
                     } catch (Exception e) {
                         LOG.warn("handle graceful exit failed", e);
                         System.exit(-1);
@@ -252,22 +269,50 @@ public class StarRocksFEServer {
             }
         });
     }
-
-    private static void waitForDraining(long startTimeNano) throws InterruptedException {
+    private static void waitForDraining() throws InterruptedException {
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
         final long waitInterval = 1000L;
+        // Probe failure fires at the very start of graceful exit: the TCP probe (query, MySQL port)
+        // fails as soon as stopAccept closes the port, and the HTTP probe (load) fails because
+        // HealthAction returns 500. Idle connections are force-closed from the very start (a client
+        // reconnecting now fails because the port is already closed), so no new query can slip in
+        // during the accept-new window. The FE then stays alive through the accept-new window
+        // (graceful_exit_accept_new_window_ms) so the Load Balancer notices both failures within its
+        // probe interval and stops routing, while in-flight transactions drain naturally, bounded by
+        // the hard timeout.
+        long stopAcceptTimeNano = System.nanoTime();
+        if (QE_SERVICE != null) {
+            QE_SERVICE.stopAccept();
+            LOG.info("Stopped accepting new JDBC connections (graceful exit).");
+        }
         while (true) {
             connectScheduler.closeAllIdleConnection();
             int totalConns = connectScheduler.getTotalConnCount();
-            if (totalConns > 0) {
-                LOG.info("waiting for {} connections to drain", totalConns);
-            } else if (System.nanoTime() - startTimeNano
+            // On a follower, transaction metadata reflects the whole cluster (replicated via BDB), so only the
+            // leader waits for running transactions to drain; a follower exits as soon as its connections are gone.
+            boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+            int runningTxnNums = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getRunningTxnNums();
+
+            if (connectScheduler.isDrained() && (!isLeader || runningTxnNums == 0)
+                    && System.nanoTime() - stopAcceptTimeNano
                     > TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second)) {
                 break;
+            }
+
+            if (totalConns > 0) {
+                LOG.info("waiting for {} connections to drain", totalConns);
+            } else if (isLeader && runningTxnNums > 0) {
+                LOG.info("waiting for {} running transactions to drain", runningTxnNums);
+            } else if (!GracefulExitFlag.shouldAcceptNewRequest()) {
+                long remainingMs = TimeUnit.SECONDS.toMillis(Config.min_graceful_exit_time_second) -
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - stopAcceptTimeNano);
+                LOG.info("drained, waiting for min_graceful_exit_time_second ({} ms remaining) before exit",
+                        Math.max(0, remainingMs));
             }
             Thread.sleep(waitInterval);
         }
     }
+
 
     private static boolean canGracefulExit() {
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);

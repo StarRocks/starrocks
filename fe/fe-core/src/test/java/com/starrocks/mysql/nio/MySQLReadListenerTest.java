@@ -34,10 +34,15 @@ import org.junit.jupiter.api.Test;
 import org.xnio.XnioWorker;
 import org.xnio.conduits.ConduitStreamSourceChannel;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class MySQLReadListenerTest {
     @Mocked
@@ -55,14 +60,35 @@ public class MySQLReadListenerTest {
         return (boolean) method.invoke(listener);
     }
 
+    private static void resetGracefulExitFlag() throws Exception {
+        Field flagField = GracefulExitFlag.class.getDeclaredField("GRACEFUL_EXIT");
+        flagField.setAccessible(true);
+        ((AtomicBoolean) flagField.get(null)).set(false);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(0L);
+        GracefulExitFlag.setPreSignalTxnIds(null);
+    }
+
+    // Simulate that the graceful-exit drain window (accept-new window + min wait) has elapsed.
+    private static void markDrainWindowElapsed() throws Exception {
+        GracefulExitFlag.markGracefulExit();
+        long windowNanos = TimeUnit.MILLISECONDS.toNanos(Config.graceful_exit_accept_new_window_ms);
+        long minNanos = TimeUnit.SECONDS.toNanos(Config.min_graceful_exit_time_second);
+        Field beginField = GracefulExitFlag.class.getDeclaredField("BEGIN_NANO");
+        beginField.setAccessible(true);
+        ((AtomicLong) beginField.get(null)).set(System.nanoTime() - windowNanos - minNanos - 1L);
+    }
+
     @BeforeEach
-    public void setUp() {
-        // Reset GracefulExitFlag before each test
+    public void setUp() throws Exception {
+        resetGracefulExitFlag();
         listener = new MySQLReadListener(ctx, connectProcessor);
     }
 
     @AfterEach
-    public void tearDown() {
+    public void tearDown() throws Exception {
+        resetGracefulExitFlag();
     }
 
     @Test
@@ -99,6 +125,104 @@ public class MySQLReadListenerTest {
 
         Assertions.assertTrue(result,
                 "isTerminated should return true when graceful exit is active and statement is not pre-query SQL");
+    }
+
+    @Test
+    public void testIsTerminatedWithActiveExplicitTransaction() throws Exception {
+        // Set terminated flag to false
+        Deencapsulation.setField(listener, "terminated", false);
+
+        // Mark graceful exit
+        GracefulExitFlag.markGracefulExit();
+
+        // Parse a non-pre-query SQL statement (regular SELECT)
+        StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+                ctx.inActiveExplicitTransaction();
+                result = true;
+            }
+        };
+
+        boolean result = invokeIsTerminated();
+
+        // A connection with an active explicit transaction must be kept alive so its transaction
+        // state is not stranded mid-flight.
+        Assertions.assertFalse(result,
+                "isTerminated should return false when an explicit transaction is active");
+    }
+
+    @Test
+    public void testIsTerminatedWithExplicitTxnBegunAfterGracefulExit() throws Exception {
+        // Set terminated flag to false
+        Deencapsulation.setField(listener, "terminated", false);
+
+        // Mark graceful exit and let the drain window elapse
+        markDrainWindowElapsed();
+        // Snapshot captured at SIGUSR1 contained txnId 500; the BEGIN below got 2000 after that
+        GracefulExitFlag.setPreSignalTxnIds(Collections.singleton(500L));
+
+        // Parse a non-pre-query SQL statement (regular SELECT)
+        StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+                ctx.inActiveExplicitTransaction();
+                result = true;
+                ctx.getTxnId();
+                result = 2000L;
+            }
+        };
+
+        boolean result = invokeIsTerminated();
+
+        // After the window, a BEGIN issued after SIGUSR1 must not keep the connection exempt:
+        // it would otherwise allow fresh work to continue until the hard shutdown timeout.
+        Assertions.assertTrue(result,
+                "isTerminated should return true when the explicit transaction began after graceful exit");
+    }
+
+    @Test
+    public void testIsTerminatedWithExplicitTxnBegunBeforeGracefulExit() throws Exception {
+        // Set terminated flag to false
+        Deencapsulation.setField(listener, "terminated", false);
+
+        // Mark graceful exit and let the drain window elapse
+        markDrainWindowElapsed();
+        // txnId 500 was already active (in the snapshot) when SIGUSR1 arrived
+        GracefulExitFlag.setPreSignalTxnIds(Collections.singleton(500L));
+
+        // Parse a non-pre-query SQL statement (regular SELECT)
+        StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+                ctx.inActiveExplicitTransaction();
+                result = true;
+                ctx.getTxnId();
+                result = 500L;
+            }
+        };
+
+        boolean result = invokeIsTerminated();
+
+        // A transaction already active when graceful exit began stays exempt after the window,
+        // so its in-flight work is not cut short mid-transaction.
+        Assertions.assertFalse(result,
+                "isTerminated should return false when the explicit transaction began before graceful exit");
     }
 
     @Test

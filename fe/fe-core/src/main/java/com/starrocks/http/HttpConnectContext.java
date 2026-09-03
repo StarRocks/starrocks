@@ -33,6 +33,7 @@ package com.starrocks.http;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.thrift.TResultSinkFormatType;
 import io.netty.channel.ChannelFutureListener;
@@ -144,6 +145,18 @@ public class HttpConnectContext extends ConnectContext {
 
     public void setOnlyOutputResultRaw(boolean onlyOutputResultRaw) {
         this.onlyOutputResultRaw = onlyOutputResultRaw;
+    }
+
+    @Override
+    public synchronized void cleanup() {
+        try {
+            super.cleanup();
+        } finally {
+            if (nettyChannel != null) {
+                nettyChannel.close();
+            }
+            ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
+        }
     }
 
     @Override
