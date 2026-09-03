@@ -358,9 +358,14 @@ Status CSVReader::more_rows() {
             // enclose
             if (UNLIKELY(*(_buff.position()) == _parse_options.enclose)) {
                 preState = curState;
-                curState = ENCLOSE_ESCAPE;
                 _escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
+                READ_MORE()
+                // A doubled enclose character stands for a literal one, and ENCLOSE_ESCAPE consumes
+                // the second of the pair. A lone one is dropped, but must not consume the character
+                // after it: doing so swallowed column and row delimiters, merging columns and
+                // running records together.
+                curState = (*(_buff.position()) == _parse_options.enclose) ? ENCLOSE_ESCAPE : ORDINARY;
                 break;
             }
 

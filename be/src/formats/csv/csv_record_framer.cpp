@@ -68,14 +68,11 @@ void CSVRecordFramer::_emit_boundary(int64_t offset) {
 }
 
 // Mirrors the state machine in CSVReader::more_rows(), keeping its states, its order of tests and
-// its transitions, with the column and row bookkeeping dropped. One of its behaviours looks like a
-// defect and is reproduced deliberately, because the framer's job is to predict what the parser
-// will do rather than to improve on it: ORDINARY treats an enclose character as an escape for the
-// character after it, so a row delimiter immediately following one is swallowed rather than ending
-// the record.
-//
-// That is pinned by CSVRecordFramerTest. If more_rows() is ever corrected, this must be corrected
-// with it in the same change or splits will stop lining up with what the parser reads.
+// its transitions, with the column and row bookkeeping dropped. The correspondence is the whole
+// point: the framer has to predict what the parser will do rather than improve on it, because a
+// split point the parser then reads differently is the defect this exists to remove.
+// CSVRecordFramerTest pins the two together, so any change to more_rows() belongs here in the same
+// commit.
 size_t CSVRecordFramer::_run(const char* p, size_t n, bool at_eof) {
     size_t i = 0;
     while (i < n) {
@@ -200,8 +197,8 @@ size_t CSVRecordFramer::_run(const char* p, size_t n, bool at_eof) {
             }
             if (p[i] == _options.enclose) {
                 _pre_state = _state;
-                _state = State::ENCLOSE_ESCAPE;
                 ++i;
+                _state = (i < n && p[i] == _options.enclose) ? State::ENCLOSE_ESCAPE : State::ORDINARY;
                 break;
             }
             ++i;
