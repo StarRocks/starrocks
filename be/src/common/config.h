@@ -554,6 +554,13 @@ CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
+// Whether to resolve a load's shadowed rows with one merge over the index and the load's own
+// sstables, instead of one index lookup per loaded key. Only applies when the load pre-built its
+// pk index sstables (no partial update, no condition merge, no delete files in the same txn).
+CONF_mBool(enable_pk_index_merge_dedup, "false");
+// Below this many bytes of incoming pk index sstable, merge dedup runs on the calling thread
+// instead of splitting the key space across the pk index thread pool.
+CONF_mInt64(pk_index_merge_dedup_min_parallel_bytes, "67108864");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 // The threadpool max thread num for pk index get in shared-data mode.

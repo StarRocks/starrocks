@@ -176,6 +176,16 @@ bool PersistentIndexSstableFileset::contains_sst(const std::string& filename) co
     return false;
 }
 
+void PersistentIndexSstableFileset::collect_sstables(std::vector<PersistentIndexSstable*>* out) const {
+    if (_standalone_sstable != nullptr) {
+        out->push_back(_standalone_sstable.get());
+        return;
+    }
+    for (const auto& [range, sstable] : _sstable_map) {
+        out->push_back(sstable.get());
+    }
+}
+
 size_t PersistentIndexSstableFileset::memory_usage() const {
     size_t total_memory = 0;
     for (const auto& [key_pair, sstable] : _sstable_map) {

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <numeric>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
@@ -764,6 +765,353 @@ Status LakePersistentIndex::prepare_merging_iterator(
     (*merging_iter_ptr)->SeekToFirst();
     iters.clear(); // Clear the vector without deleting iterators since they are now managed by merge_iter_ptr.
     VLOG(2) << "prepare sst for merge : " << ss_debug.str();
+    return Status::OK();
+}
+
+namespace {
+// One entry of the key group currently being resolved. The merging iterator's key and value slices
+// are only valid until the next Next(), but a group can only be judged once its last entry has been
+// seen, so each entry is copied out first. The buffers are reused across groups -- on a bulk load
+// this runs once per loaded row.
+struct MergeGroupEntry {
+    std::string value;
+    uint64_t max_rss_rowid = 0;
+    uint32_t shared_rssid = 0;
+    int64_t shared_version = 0;
+    int32_t rssid_offset = 0;
+    // Borrowed from the sstable the entry came from, which outlives the walk.
+    DelVector* delvec = nullptr;
+};
+
+// An entry after the same rssid/version projection the compaction merger applies.
+struct MergeResolvedEntry {
+    int64_t version = 0;
+    uint64_t max_rss_rowid = 0;
+    uint32_t rssid = 0;
+    uint32_t rowid = 0;
+    bool tombstone = false;
+    bool is_new = false;
+};
+
+// One input to the merge: an open sstable plus the read options that project its entries into the
+// index's current id space. Iterators are stateful, so each range task builds its own set.
+struct MergeSource {
+    PersistentIndexSstable* sstable = nullptr;
+    sstable::ReadOptions options;
+};
+
+// The order compaction uses to pick the surviving entry for a key: newer version wins; on a tie the
+// higher rss rowid wins, which is what orders the sstables of a single publish, since they all carry
+// that publish's version. See KeyValueMerger::merge for the full reasoning behind needing the pair.
+//
+// This has to agree with LakePersistentIndex::get(), which resolves a key by scanning the filesets
+// newest-first and taking the first hit. It does: a fileset only ever grows at the back, so fileset
+// order is ingest order, versions are non-decreasing along it, and within one publish max_rss_rowid
+// increases with the rssid each sstable is ingested under.
+bool merge_entry_wins(const MergeResolvedEntry& candidate, const MergeResolvedEntry& incumbent) {
+    if (candidate.version != incumbent.version) {
+        return candidate.version > incumbent.version;
+    }
+    return candidate.max_rss_rowid > incumbent.max_rss_rowid;
+}
+
+// Walks the merged stream over [begin_key, end_key) -- both empty meaning unbounded -- and records
+// the rows this transaction shadows. A key's entries all share the same bytes, so a key group never
+// straddles a boundary and the ranges can be walked independently.
+Status merge_dedup_range(const std::vector<MergeSource>& sources, const std::unordered_set<uint32_t>& new_rssids,
+                         const std::string& begin_key, const std::string& end_key, DeletesMap* deletes,
+                         int64_t* out_entries, int64_t* out_dup_groups) {
+    std::vector<sstable::Iterator*> iters;
+    DeferOp free_iters([&] {
+        for (sstable::Iterator* iter : iters) {
+            delete iter;
+        }
+    });
+    iters.reserve(sources.size());
+    for (const auto& source : sources) {
+        iters.emplace_back(source.sstable->new_iterator(source.options));
+    }
+    if (iters.empty()) {
+        return Status::OK();
+    }
+    sstable::Options options;
+    std::unique_ptr<sstable::Iterator> merging_iter(
+            sstable::NewMergingIterator(options.comparator, iters.data(), iters.size()));
+    // Ownership moved into merging_iter; the DeferOp above must not double free.
+    iters.clear();
+
+    std::vector<MergeGroupEntry> group;
+    std::vector<MergeResolvedEntry> resolved;
+    size_t group_size = 0;
+    std::string current_key;
+    bool has_current_key = false;
+    IndexValuesWithVerPB parse_scratch;
+    int64_t entries = 0;
+    int64_t dup_groups = 0;
+
+    // Only a group with more than one entry can shadow anything, and on a bulk load nearly every
+    // group has exactly one. Keeping the value protobuf unparsed until a duplicate actually shows up
+    // is what makes this pass cheaper than the per-key lookups it replaces.
+    auto resolve_group = [&]() -> Status {
+        if (group_size < 2) {
+            return Status::OK();
+        }
+        resolved.clear();
+        for (size_t i = 0; i < group_size; ++i) {
+            const auto& entry = group[i];
+            parse_scratch.Clear();
+            if (!parse_scratch.ParseFromArray(entry.value.data(), static_cast<int>(entry.value.size()))) {
+                // Written as a serialized IndexValuesWithVerPB, so a parse failure means the
+                // persisted bytes are corrupt -- usually a bad local cache copy.
+                return Status::Corruption("merge_dedup: failed to parse index value");
+            }
+            if (parse_scratch.values_size() == 0) {
+                continue;
+            }
+            const auto& value = parse_scratch.values(0);
+            MergeResolvedEntry out;
+            out.version = value.version();
+            out.rssid = value.rssid();
+            out.rowid = value.rowid();
+            out.tombstone = is_index_tombstone(value);
+            out.max_rss_rowid = entry.max_rss_rowid;
+            // Rows this sstable's own delete vector already masks are gone; naming one again would
+            // record a delete against a location the index no longer points at.
+            if (entry.delvec != nullptr && !entry.delvec->empty() && entry.delvec->roaring()->contains(out.rowid)) {
+                continue;
+            }
+            // Same projection as KeyValueMerger::merge: an ingested sstable stores locations in its
+            // source's id space and carries the destination's in shared_rssid/shared_version.
+            if (entry.shared_version > 0) {
+                out.version = entry.shared_version;
+                if (!out.tombstone) {
+                    out.rssid = entry.shared_rssid;
+                }
+            } else if (entry.rssid_offset != 0 && !out.tombstone) {
+                out.rssid = static_cast<uint32_t>(static_cast<int64_t>(out.rssid) + entry.rssid_offset);
+            }
+            out.is_new = new_rssids.count(out.rssid) > 0;
+            resolved.push_back(out);
+        }
+
+        // The per-segment lookup path emits exactly two kinds of delete, and this reproduces both:
+        // the first segment carrying the key finds the index's current value for it, and every later
+        // segment finds the previous segment's entry, because each segment's sstable is ingested
+        // before the next segment is looked up. So the survivor is the newest entry this transaction
+        // adds, and everything it shadows -- the older segments of this same transaction, plus the
+        // one entry that was current in the index -- is deleted. Older entries buried behind that
+        // current value are deliberately left alone: the lookup path never saw them either, and they
+        // can name rowsets already compacted away.
+        int best_new = -1;
+        int best_old = -1;
+        for (size_t i = 0; i < resolved.size(); ++i) {
+            if (resolved[i].is_new) {
+                if (best_new < 0 || merge_entry_wins(resolved[i], resolved[best_new])) {
+                    best_new = static_cast<int>(i);
+                }
+            } else if (best_old < 0 || merge_entry_wins(resolved[i], resolved[best_old])) {
+                best_old = static_cast<int>(i);
+            }
+        }
+        if (best_new < 0) {
+            // The key is not part of this load, so the lookup path would not have touched it either.
+            return Status::OK();
+        }
+        ++dup_groups;
+        for (size_t i = 0; i < resolved.size(); ++i) {
+            if (resolved[i].is_new && static_cast<int>(i) != best_new && !resolved[i].tombstone) {
+                (*deletes)[resolved[i].rssid].push_back(resolved[i].rowid);
+            }
+        }
+        if (best_old >= 0 && !resolved[best_old].tombstone) {
+            (*deletes)[resolved[best_old].rssid].push_back(resolved[best_old].rowid);
+        }
+        return Status::OK();
+    };
+
+    if (begin_key.empty()) {
+        merging_iter->SeekToFirst();
+    } else {
+        merging_iter->Seek(Slice(begin_key));
+    }
+    for (; merging_iter->Valid(); merging_iter->Next()) {
+        const Slice key = merging_iter->key();
+        if (!end_key.empty() && key.compare(Slice(end_key)) >= 0) {
+            break;
+        }
+        if (!has_current_key || Slice(current_key) != key) {
+            RETURN_IF_ERROR(resolve_group());
+            current_key.assign(key.data, key.size);
+            has_current_key = true;
+            group_size = 0;
+        }
+        if (group_size == group.size()) {
+            group.emplace_back();
+        }
+        auto& entry = group[group_size++];
+        const Slice value = merging_iter->value();
+        // assign() reuses the string's existing buffer, so this stops allocating after a few rows.
+        entry.value.assign(value.data, value.size);
+        entry.max_rss_rowid = merging_iter->max_rss_rowid();
+        entry.shared_rssid = merging_iter->shared_rssid();
+        entry.shared_version = merging_iter->shared_version();
+        entry.rssid_offset = merging_iter->rssid_offset();
+        entry.delvec = merging_iter->delvec().get();
+        ++entries;
+    }
+    RETURN_IF_ERROR(merging_iter->status());
+    RETURN_IF_ERROR(resolve_group());
+    *out_entries = entries;
+    *out_dup_groups = dup_groups;
+    return Status::OK();
+}
+} // namespace
+
+Status LakePersistentIndex::merge_dedup(const TabletMetadataPtr& metadata,
+                                        const std::vector<const FileMetaPB*>& new_ssts,
+                                        const std::vector<uint32_t>& new_rssids, int64_t version,
+                                        DeletesMap* new_deletes) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("merge_dedup_latency_us");
+    if (new_ssts.size() != new_rssids.size()) {
+        return Status::InternalError("merge_dedup: sstable and rssid counts differ");
+    }
+    // Everything the merge reads has to be in a file. The memtables hold entries no sstable carries
+    // yet, and a key living only there would look absent to the merge, leaving the row it shadows
+    // alive. ingest_sst() flushes at this same point for the same reason.
+    RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+
+    std::vector<MergeSource> sources;
+    // Keeps the sstables opened for the new side alive as long as any task's iterators are.
+    std::vector<PersistentIndexSstableUniquePtr> opened_new_ssts;
+
+    // The side already in the index, read exactly as compaction reads it -- delvec included, so a
+    // row an older sstable still lists but a newer delvec has masked is not resurrected here.
+    for (const auto& fileset : _sstable_filesets) {
+        std::vector<PersistentIndexSstable*> fileset_ssts;
+        fileset->collect_sstables(&fileset_ssts);
+        for (auto* sst : fileset_ssts) {
+            const auto& sstable_pb = sst->sstable_pb();
+            MergeSource source;
+            source.sstable = sst;
+            source.options.fill_cache = false;
+            source.options.max_rss_rowid = sstable_pb.max_rss_rowid();
+            source.options.shared_rssid = sstable_pb.shared_rssid();
+            source.options.shared_version = sstable_pb.shared_version();
+            source.options.rssid_offset = sstable_pb.rssid_offset();
+            source.options.delvec = sst->delvec();
+            sources.push_back(std::move(source));
+        }
+    }
+    const size_t num_old_sources = sources.size();
+
+    // The side this transaction adds. These are the files ingest_sst() registers right after, opened
+    // with the same rssid/version projection it stamps on them, so an entry read here already
+    // carries the location it will have in the index.
+    std::unordered_set<uint32_t> new_rssid_set(new_rssids.begin(), new_rssids.end());
+    int64_t new_sst_bytes = 0;
+    size_t probe_idx = 0;
+    for (size_t i = 0; i < new_ssts.size(); ++i) {
+        PersistentIndexSstablePB sstable_pb;
+        sstable_pb.set_filename(new_ssts[i]->name());
+        sstable_pb.set_filesize(new_ssts[i]->size());
+        sstable_pb.set_encryption_meta(new_ssts[i]->encryption_meta());
+        sstable_pb.set_shared_rssid(new_rssids[i]);
+        sstable_pb.set_shared_version(version);
+        sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(new_rssids[i]) << 32) | (UINT32_MAX - 1));
+        ASSIGN_OR_RETURN(auto sstable, PersistentIndexSstable::new_sstable(
+                                               sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()),
+                                               nullptr, false /* need filter */, nullptr, metadata, _tablet_mgr));
+        MergeSource source;
+        source.sstable = sstable.get();
+        source.options.fill_cache = false;
+        source.options.max_rss_rowid = sstable_pb.max_rss_rowid();
+        source.options.shared_rssid = sstable_pb.shared_rssid();
+        source.options.shared_version = sstable_pb.shared_version();
+        sources.push_back(std::move(source));
+        if (new_ssts[i]->size() > new_ssts[probe_idx]->size()) {
+            probe_idx = i;
+        }
+        new_sst_bytes += new_ssts[i]->size();
+        opened_new_ssts.emplace_back(std::move(sstable));
+    }
+    if (sources.empty()) {
+        return Status::OK();
+    }
+
+    // Split the key space so the merge can use the same pool the lookups it replaces used. Without
+    // this the comparison is a single thread against a saturated pool, which is close to a wash even
+    // when the merge does an order of magnitude less work. Boundaries come from the index-block
+    // separators of the largest incoming sstable -- no data is read to find them -- and every
+    // sstable of one load spans roughly the same key domain, so its quantiles split them all.
+    std::vector<std::pair<std::string, std::string>> ranges;
+    size_t num_tasks = 1;
+    auto* pool = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool();
+    if (config::enable_pk_index_parallel_execution && pool != nullptr && !opened_new_ssts.empty() &&
+        new_sst_bytes >= config::pk_index_merge_dedup_min_parallel_bytes) {
+        num_tasks = std::max<size_t>(1, pool->max_threads());
+    }
+    if (num_tasks > 1) {
+        auto& probe = *opened_new_ssts[probe_idx];
+        std::vector<std::string> samples;
+        const size_t interval =
+                std::max<size_t>(4096, static_cast<size_t>(new_ssts[probe_idx]->size()) / (num_tasks * 8));
+        RETURN_IF_ERROR(probe.sample_keys(&samples, interval));
+        std::sort(samples.begin(), samples.end());
+        samples.erase(std::unique(samples.begin(), samples.end()), samples.end());
+        std::vector<std::string> bounds;
+        for (size_t t = 1; t < num_tasks && samples.size() >= num_tasks; ++t) {
+            const auto& candidate = samples[t * samples.size() / num_tasks];
+            if (bounds.empty() || bounds.back() != candidate) {
+                bounds.push_back(candidate);
+            }
+        }
+        std::string prev;
+        for (const auto& bound : bounds) {
+            ranges.emplace_back(prev, bound);
+            prev = bound;
+        }
+        ranges.emplace_back(prev, std::string());
+    } else {
+        ranges.emplace_back(std::string(), std::string());
+    }
+    num_tasks = ranges.size();
+
+    // Each task fills its own map so the walk needs no locking; the maps are disjoint only by
+    // accident (two ranges can shadow rows of the same segment), so they are concatenated after.
+    std::vector<DeletesMap> task_deletes(num_tasks);
+    std::vector<int64_t> task_entries(num_tasks, 0);
+    std::vector<int64_t> task_dups(num_tasks, 0);
+    std::unique_ptr<ThreadPoolToken> token;
+    if (num_tasks > 1) {
+        token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    }
+    {
+        ParallelTaskRunner runner(token.get());
+        for (size_t t = 0; t < num_tasks; ++t) {
+            runner.run([&, t]() -> Status {
+                return merge_dedup_range(sources, new_rssid_set, ranges[t].first, ranges[t].second, &task_deletes[t],
+                                         &task_entries[t], &task_dups[t]);
+            });
+        }
+        RETURN_IF_ERROR(runner.join());
+    }
+
+    int64_t merged_entries = 0;
+    int64_t dup_groups = 0;
+    for (size_t t = 0; t < num_tasks; ++t) {
+        merged_entries += task_entries[t];
+        dup_groups += task_dups[t];
+        for (auto& [rssid, rowids] : task_deletes[t]) {
+            auto& dst = (*new_deletes)[rssid];
+            dst.insert(dst.end(), rowids.begin(), rowids.end());
+        }
+    }
+
+    TRACE_COUNTER_INCREMENT("merge_dedup_entries", merged_entries);
+    TRACE_COUNTER_INCREMENT("merge_dedup_dup_groups", dup_groups);
+    TRACE_COUNTER_INCREMENT("merge_dedup_input_ssts", sources.size());
+    TRACE_COUNTER_INCREMENT("merge_dedup_old_ssts", num_old_sources);
+    TRACE_COUNTER_INCREMENT("merge_dedup_tasks", num_tasks);
     return Status::OK();
 }
 

@@ -157,6 +157,16 @@ Status LakePrimaryIndex::ingest_sst(const FileMetaPB& sst_meta, const Persistent
     return index->ingest_sst(sst_meta, sst_range, rssid, version, delvec_page, std::move(delvec));
 }
 
+Status LakePrimaryIndex::merge_dedup(const TabletMetadataPtr& metadata, const std::vector<const FileMetaPB*>& new_ssts,
+                                     const std::vector<uint32_t>& new_rssids, int64_t version,
+                                     DeletesMap* new_deletes) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("merge_dedup on an unloaded lake primary index");
+    }
+    return index->merge_dedup(metadata, new_ssts, new_rssids, version, new_deletes);
+}
+
 Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                 int64_t generation_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
