@@ -2742,6 +2742,13 @@ public class Config extends ConfigBase {
             "disable the count check while keeping the guard enabled.")
     public static int dict_thrash_guard_threshold = 5;
 
+    @ConfField(mutable = true, comment = "Minimum interval, in seconds, between two min/max statistics " +
+            "collections for the same column. Min/max stats are collected on demand via a [_META_] " +
+            "MetaScan that reads every segment's zone-map metadata; a frequently loaded column would " +
+            "otherwise re-scan on every load. Within the interval the min/max optimization is skipped " +
+            "rather than re-collected (a stale value is never served). Set to 0 to disable throttling.")
+    public static int min_max_stats_collect_interval_sec = 60;
+
     /**
      * The column statistic cache update interval
      */
