@@ -1248,6 +1248,14 @@ FROM test;
 * 单位：Byte
 * 类型：Int
 
+### max_array_length
+
+* **作用域**: Session
+* **描述**: 数组函数生成的数组中最大的元素数量。当某个函数生成的数组超过该限制时，查询会直接失败，而不会返回超大数组。设置为 `0` 或负数表示不限制。该限制适用于所有生成数组的函数，但目前仅 [array_agg](sql-functions/array-functions/array_agg.md) 会校验该限制。
+* **默认值**: 0
+* **数据类型**: Long
+* **引入版本**: v4.2
+
 ### max_pipeline_dop
 
 * **范围**: Session
