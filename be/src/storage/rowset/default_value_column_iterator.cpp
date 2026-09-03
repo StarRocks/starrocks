@@ -662,8 +662,10 @@ bool DefaultValueColumnIterator::_predicate_type_matches(const ColumnPredicate* 
     // "3.14", not the scaled integer a persisted zone map holds -- so it can only be parsed with the
     // column's own TypeInfo.
     // A placeholder never reads the Datum: it exists only so that the runtime filter's column is
-    // read in the first stage of late materialization (ColumnScanConjunctsManager adds one for every
-    // slot-ref runtime filter probe), and it inherits ColumnPredicate::zone_map_filter, which returns
+    // read in the first stage of late materialization (ChunkPredicateBuilder adds one per
+    // pushdown-eligible slot-ref runtime filter probe, compute_env/query/scan_conjuncts_manager.cpp:1334,
+    // gated on _is_root_builder && enable_join_runtime_filter_pushdown() && is_olap_scan), and it
+    // inherits ColumnPredicate::zone_map_filter, which returns
     // true unconditionally. Exempting it matters because it is built with the single-argument
     // get_type_info(), so on a DECIMAL column its precision/scale are -1 and the check below would
     // otherwise disable folding for the entire call -- including the real predicates next to it --
