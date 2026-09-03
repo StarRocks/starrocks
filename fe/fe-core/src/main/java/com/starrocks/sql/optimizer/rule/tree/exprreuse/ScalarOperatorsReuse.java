@@ -312,20 +312,28 @@ public class ScalarOperatorsReuse {
         // this information will help us determine whether an operator can be reused.
         public Set<ColumnRefOperator> currentLambdaArguments;
         public Set<ColumnRefOperator> outerLambdaArguments;
+        public Set<ColumnRefOperator> currentLambdaLocalRefs;
+        public Set<ColumnRefOperator> outerLambdaLocalRefs;
         public ColumnRefSet usedColumns;
 
         public CommonOperatorContext(boolean isPartOfLambdaExpr) {
             this.isPartOfLambdaExpr = isPartOfLambdaExpr;
             this.currentLambdaArguments = Sets.newHashSet();
             this.outerLambdaArguments = Sets.newHashSet();
+            this.currentLambdaLocalRefs = Sets.newHashSet();
+            this.outerLambdaLocalRefs = Sets.newHashSet();
             this.usedColumns = new ColumnRefSet();
         }
 
         public CommonOperatorContext(boolean isPartOfLambdaExpr, Set<ColumnRefOperator> currentLambdaArguments,
-                                     Set<ColumnRefOperator> outerLambdaArguments) {
+                                     Set<ColumnRefOperator> outerLambdaArguments,
+                                     Set<ColumnRefOperator> currentLambdaLocalRefs,
+                                     Set<ColumnRefOperator> outerLambdaLocalRefs) {
             this.isPartOfLambdaExpr = isPartOfLambdaExpr;
             this.currentLambdaArguments = currentLambdaArguments;
             this.outerLambdaArguments = outerLambdaArguments;
+            this.currentLambdaLocalRefs = currentLambdaLocalRefs;
+            this.outerLambdaLocalRefs = outerLambdaLocalRefs;
             this.usedColumns = new ColumnRefSet();
         }
     }
@@ -394,13 +402,15 @@ public class ScalarOperatorsReuse {
             int group = level.computeIfAbsent(id, k -> currentId++);
             CommonResult result = new CommonResult(depth, List.of(group));
 
-            boolean isDependentOnOuterLambda = context.usedColumns.containsAny(context.outerLambdaArguments);
+            boolean isDependentOnOuterLambda = context.usedColumns.containsAny(context.outerLambdaArguments)
+                    || context.usedColumns.containsAny(context.outerLambdaLocalRefs);
             if (isDependentOnOuterLambda) {
                 return result;
             }
 
             boolean isDependentOnCurrentLambdaArguments =
-                    context.usedColumns.containsAny(context.currentLambdaArguments);
+                    context.usedColumns.containsAny(context.currentLambdaArguments)
+                            || context.usedColumns.containsAny(context.currentLambdaLocalRefs);
             if (isDuplicated && !isDependentOnCurrentLambdaArguments) {
                 Set<OperatorId> commonGroup =
                         commonOperatorsByDepth.computeIfAbsent(depth, c -> Sets.newLinkedHashSet());
@@ -430,6 +440,8 @@ public class ScalarOperatorsReuse {
 
             if (scalarOperator instanceof LambdaFunctionOperator) {
                 context.currentLambdaArguments.addAll(((LambdaFunctionOperator) scalarOperator).getRefColumns());
+                context.currentLambdaLocalRefs.addAll(
+                        ((LambdaFunctionOperator) scalarOperator).getColumnRefMap().keySet());
             }
 
             CommonResult result = visitChildren(scalarOperator, context);
@@ -446,7 +458,8 @@ public class ScalarOperatorsReuse {
             }
             for (int i = 1; i < scalarOperator.getChildren().size(); i++) {
                 CommonOperatorContext childContext = new CommonOperatorContext(context.isPartOfLambdaExpr,
-                        context.currentLambdaArguments, context.outerLambdaArguments);
+                        context.currentLambdaArguments, context.outerLambdaArguments,
+                        context.currentLambdaLocalRefs, context.outerLambdaLocalRefs);
                 CommonResult res = scalarOperator.getChild(i).accept(this, childContext);
                 depth = Math.max(depth, res.depth);
                 groups.addAll(res.childrenGroup);
@@ -458,7 +471,9 @@ public class ScalarOperatorsReuse {
 
         @Override
         public CommonResult visitVariableReference(ColumnRefOperator variable, CommonOperatorContext context) {
-            if (variable.getOpType() == OperatorType.LAMBDA_ARGUMENT) {
+            if (variable.getOpType() == OperatorType.LAMBDA_ARGUMENT
+                    || context.currentLambdaLocalRefs.contains(variable)
+                    || context.outerLambdaLocalRefs.contains(variable)) {
                 context.usedColumns.union(variable);
             }
             return super.visitVariableReference(variable, context);
@@ -473,6 +488,9 @@ public class ScalarOperatorsReuse {
             newContext.outerLambdaArguments.addAll(context.outerLambdaArguments);
             newContext.outerLambdaArguments.addAll(context.currentLambdaArguments);
             newContext.currentLambdaArguments.addAll(scalarOperator.getRefColumns());
+            newContext.outerLambdaLocalRefs.addAll(context.outerLambdaLocalRefs);
+            newContext.outerLambdaLocalRefs.addAll(context.currentLambdaLocalRefs);
+            newContext.currentLambdaLocalRefs.addAll(scalarOperator.getColumnRefMap().keySet());
             CommonResult result = visit(scalarOperator.getLambdaExpr(), newContext);
             context.usedColumns.union(newContext.usedColumns);
             return result;
