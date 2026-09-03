@@ -125,6 +125,10 @@ starrocks_set_default_packages() {
     if [[ "$(uname -s)" == "Darwin" ]]; then
         starrocks_filter_default_packages "${DARWIN_UNSUPPORTED_PACKAGES:-}"
     fi
+
+    if [[ "${machine_type}" == "riscv64" ]]; then
+        starrocks_filter_default_packages "${RISCV64_UNSUPPORTED_PACKAGES:-}"
+    fi
 }
 
 # Print the packages of the default order starting from the given one, i.e. the

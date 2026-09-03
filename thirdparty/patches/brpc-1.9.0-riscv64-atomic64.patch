@@ -1,0 +1,203 @@
+diff --git a/src/butil/atomicops.h b/src/butil/atomicops.h
+index cda1529..d5523dc 100644
+--- a/src/butil/atomicops.h
++++ b/src/butil/atomicops.h
+@@ -157,6 +157,8 @@ Atomic64 Release_Load(volatile const Atomic64* ptr);
+ #include "butil/atomicops_internals_mips_gcc.h"
+ #elif defined(COMPILER_GCC) && defined(ARCH_CPU_LOONGARCH64_FAMILY)
+ #include "butil/atomicops_internals_loongarch64_gcc.h"
++#elif defined(COMPILER_GCC) && defined(ARCH_CPU_RISCV64_FAMILY)
++#include "butil/atomicops_internals_riscv64_gcc.h"
+ #else
+ #error "Atomic operations are not supported on your platform"
+ #endif
+diff --git a/src/butil/atomicops_internals_riscv64_gcc.h b/src/butil/atomicops_internals_riscv64_gcc.h
+new file mode 100644
+index 0000000..5648802
+--- /dev/null
++++ b/src/butil/atomicops_internals_riscv64_gcc.h
+@@ -0,0 +1,184 @@
++// Copyright 2024 The Chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// This file is an internal atomic implementation, include butil/atomicops.h
++// instead. RISC-V 64 implementation using GCC __sync builtins, mirroring
++// atomicops_internals_gcc.h but additionally providing the Atomic64 overloads
++// that a 64-bit target requires. GCC lowers these to lr.w/sc.w (32-bit) and
++// lr.d/sc.d (64-bit) on riscv64.
++
++#ifndef BUTIL_ATOMICOPS_INTERNALS_RISCV64_GCC_H_
++#define BUTIL_ATOMICOPS_INTERNALS_RISCV64_GCC_H_
++
++namespace butil {
++namespace subtle {
++
++inline void MemoryBarrier() {
++  __sync_synchronize();
++}
++
++inline Atomic32 NoBarrier_CompareAndSwap(volatile Atomic32* ptr,
++                                         Atomic32 old_value,
++                                         Atomic32 new_value) {
++  Atomic32 prev_value;
++  do {
++    if (__sync_bool_compare_and_swap(ptr, old_value, new_value))
++      return old_value;
++    prev_value = *ptr;
++  } while (prev_value == old_value);
++  return prev_value;
++}
++
++inline Atomic32 NoBarrier_AtomicExchange(volatile Atomic32* ptr,
++                                         Atomic32 new_value) {
++  Atomic32 old_value;
++  do {
++    old_value = *ptr;
++  } while (!__sync_bool_compare_and_swap(ptr, old_value, new_value));
++  return old_value;
++}
++
++inline Atomic32 Barrier_AtomicIncrement(volatile Atomic32* ptr,
++                                        Atomic32 increment) {
++  for (;;) {
++    Atomic32 old_value = *ptr;
++    Atomic32 new_value = old_value + increment;
++    if (__sync_bool_compare_and_swap(ptr, old_value, new_value)) {
++      return new_value;
++    }
++  }
++}
++
++inline Atomic32 NoBarrier_AtomicIncrement(volatile Atomic32* ptr,
++                                          Atomic32 increment) {
++  return Barrier_AtomicIncrement(ptr, increment);
++}
++
++inline Atomic32 Acquire_CompareAndSwap(volatile Atomic32* ptr,
++                                       Atomic32 old_value,
++                                       Atomic32 new_value) {
++  // __sync_bool_compare_and_swap is a full memory barrier.
++  return NoBarrier_CompareAndSwap(ptr, old_value, new_value);
++}
++
++inline Atomic32 Release_CompareAndSwap(volatile Atomic32* ptr,
++                                       Atomic32 old_value,
++                                       Atomic32 new_value) {
++  return NoBarrier_CompareAndSwap(ptr, old_value, new_value);
++}
++
++inline void NoBarrier_Store(volatile Atomic32* ptr, Atomic32 value) {
++  *ptr = value;
++}
++
++inline void Acquire_Store(volatile Atomic32* ptr, Atomic32 value) {
++  *ptr = value;
++  MemoryBarrier();
++}
++
++inline void Release_Store(volatile Atomic32* ptr, Atomic32 value) {
++  MemoryBarrier();
++  *ptr = value;
++}
++
++inline Atomic32 NoBarrier_Load(volatile const Atomic32* ptr) {
++  return *ptr;
++}
++
++inline Atomic32 Acquire_Load(volatile const Atomic32* ptr) {
++  Atomic32 value = *ptr;
++  MemoryBarrier();
++  return value;
++}
++
++inline Atomic32 Release_Load(volatile const Atomic32* ptr) {
++  MemoryBarrier();
++  return *ptr;
++}
++
++// 64-bit versions of the operations. On riscv64 Atomic64 == intptr_t == long,
++// so these are the overloads actually invoked by LazyInstance and friends.
++
++inline Atomic64 NoBarrier_CompareAndSwap(volatile Atomic64* ptr,
++                                         Atomic64 old_value,
++                                         Atomic64 new_value) {
++  Atomic64 prev_value;
++  do {
++    if (__sync_bool_compare_and_swap(ptr, old_value, new_value))
++      return old_value;
++    prev_value = *ptr;
++  } while (prev_value == old_value);
++  return prev_value;
++}
++
++inline Atomic64 NoBarrier_AtomicExchange(volatile Atomic64* ptr,
++                                         Atomic64 new_value) {
++  Atomic64 old_value;
++  do {
++    old_value = *ptr;
++  } while (!__sync_bool_compare_and_swap(ptr, old_value, new_value));
++  return old_value;
++}
++
++inline Atomic64 Barrier_AtomicIncrement(volatile Atomic64* ptr,
++                                        Atomic64 increment) {
++  for (;;) {
++    Atomic64 old_value = *ptr;
++    Atomic64 new_value = old_value + increment;
++    if (__sync_bool_compare_and_swap(ptr, old_value, new_value)) {
++      return new_value;
++    }
++  }
++}
++
++inline Atomic64 NoBarrier_AtomicIncrement(volatile Atomic64* ptr,
++                                          Atomic64 increment) {
++  return Barrier_AtomicIncrement(ptr, increment);
++}
++
++inline Atomic64 Acquire_CompareAndSwap(volatile Atomic64* ptr,
++                                       Atomic64 old_value,
++                                       Atomic64 new_value) {
++  return NoBarrier_CompareAndSwap(ptr, old_value, new_value);
++}
++
++inline Atomic64 Release_CompareAndSwap(volatile Atomic64* ptr,
++                                       Atomic64 old_value,
++                                       Atomic64 new_value) {
++  return NoBarrier_CompareAndSwap(ptr, old_value, new_value);
++}
++
++inline void NoBarrier_Store(volatile Atomic64* ptr, Atomic64 value) {
++  *ptr = value;
++}
++
++inline void Acquire_Store(volatile Atomic64* ptr, Atomic64 value) {
++  *ptr = value;
++  MemoryBarrier();
++}
++
++inline void Release_Store(volatile Atomic64* ptr, Atomic64 value) {
++  MemoryBarrier();
++  *ptr = value;
++}
++
++inline Atomic64 NoBarrier_Load(volatile const Atomic64* ptr) {
++  return *ptr;
++}
++
++inline Atomic64 Acquire_Load(volatile const Atomic64* ptr) {
++  Atomic64 value = *ptr;
++  MemoryBarrier();
++  return value;
++}
++
++inline Atomic64 Release_Load(volatile const Atomic64* ptr) {
++  MemoryBarrier();
++  return *ptr;
++}
++
++}  // namespace butil::subtle
++}  // namespace butil
++
++#endif  // BUTIL_ATOMICOPS_INTERNALS_RISCV64_GCC_H_
