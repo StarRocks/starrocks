@@ -509,6 +509,23 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Colu
                          reinterpret_cast<IndexValue*>(slot.old_values.data()), /*stat=*/nullptr, &ctx);
 }
 
+Status LakePrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                                 const Column& pks) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("replace on an unloaded lake primary index");
+    }
+    Buffer<Slice> keys;
+    std::vector<uint64_t> values;
+    values.reserve(pks.size());
+    const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
+    for (size_t i = 0; i < pks.size(); i++) {
+        values.emplace_back(base + i);
+    }
+    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    return index->replace(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), replace_indexes);
+}
+
 Status LakePrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
                                      std::vector<uint32_t>* failed) {
     auto* index = _index.get();

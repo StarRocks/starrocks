@@ -209,6 +209,11 @@ public:
     Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, ParallelPublishSlot* slot,
                   ParallelUpsertContext* ctx);
 
+    // Point pks[replace_indexes[i]] at (rssid, rowid_start + replace_indexes[i]). Used by the
+    // compaction conflict resolver to hand it the rows that survived.
+    Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                   const Column& pks);
+
     // Replace the entries whose current rss_rowid is at or below |max_src_rssid|, reporting the
     // positions that did not match in |failed|. Used by compaction apply.
     Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
