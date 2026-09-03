@@ -401,10 +401,10 @@ FIU_SOURCE="libfiu-1.1"
 FIU_MD5SUM="51092dcb7801efb511b7b962388d9ff4"
 
 # libdeflate
-LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.18.zip"
-LIBDEFLATE_NAME="libdeflate-1.18.zip"
-LIBDEFLATE_SOURCE="libdeflate-1.18"
-LIBDEFLATE_MD5SUM="1ec42dfe7d777929ade295281560d750"
+LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.26.zip"
+LIBDEFLATE_NAME="libdeflate-1.26.zip"
+LIBDEFLATE_SOURCE="libdeflate-1.26"
+LIBDEFLATE_MD5SUM="15fde5dcbc584d1adee99c0ed13212db"
 
 # llvm
 LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/llvm-project-18.1.8.src.tar.xz"
