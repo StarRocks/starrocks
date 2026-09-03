@@ -40,8 +40,8 @@ namespace starrocks {
 // behaviour that is arguably wrong (see csv_record_framer.cpp). Its contract is to agree with
 // the parser, not to be independently correct about CSV: a framer that disagreed would hand
 // out split points the parser then reads differently, which is the very defect it exists to
-// remove. CSVRecordFramerParityTest pins the two together, and any change to more_rows() must
-// be made here in step.
+// remove. CSVRecordFramerTest pins the two together, and any change to more_rows() must be made
+// here in step.
 //
 // Only framing is performed - no fields are split out, no data is copied, and nothing is
 // allocated per record - so the scan runs at roughly the speed of the underlying reads.

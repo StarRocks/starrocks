@@ -67,19 +67,15 @@ void CSVRecordFramer::_emit_boundary(int64_t offset) {
     }
 }
 
-// Mirrors the state machine in CSVReader::more_rows(), keeping its states, its order of tests
-// and its transitions, with the column and row bookkeeping dropped. Two of its behaviours look
-// like defects and are reproduced deliberately, because the framer's job is to predict what the
-// parser will do rather than to improve on it:
+// Mirrors the state machine in CSVReader::more_rows(), keeping its states, its order of tests and
+// its transitions, with the column and row bookkeeping dropped. One of its behaviours looks like a
+// defect and is reproduced deliberately, because the framer's job is to predict what the parser
+// will do rather than to improve on it: ORDINARY treats an enclose character as an escape for the
+// character after it, so a row delimiter immediately following one is swallowed rather than ending
+// the record.
 //
-//   - ESCAPE falls through to ORDINARY when the escaped character is an ordinary one, so an
-//     escape inside an enclosed field leaves the field. A row delimiter later in that field then
-//     ends the record.
-//   - ORDINARY treats an enclose character as an escape for the character after it, so a row
-//     delimiter immediately following one is swallowed rather than ending the record.
-//
-// Both are pinned by CSVRecordFramerParityTest. If more_rows() is ever corrected, this must be
-// corrected with it in the same change or splits will stop lining up with what the parser reads.
+// That is pinned by CSVRecordFramerTest. If more_rows() is ever corrected, this must be corrected
+// with it in the same change or splits will stop lining up with what the parser reads.
 size_t CSVRecordFramer::_run(const char* p, size_t n, bool at_eof) {
     size_t i = 0;
     while (i < n) {
@@ -174,7 +170,9 @@ size_t CSVRecordFramer::_run(const char* p, size_t n, bool at_eof) {
                 _state = _pre_state;
                 break;
             }
-            [[fallthrough]];
+            _state = _pre_state;
+            ++i;
+            break;
 
         case State::ORDINARY:
             if (_options.trim_space && _pre_state == State::ENCLOSE) {

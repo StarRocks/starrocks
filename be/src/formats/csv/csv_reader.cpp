@@ -318,6 +318,13 @@ Status CSVReader::more_rows() {
                 curState = preState;
                 break;
             }
+            // Any other escaped character is taken literally as well, and like the cases above it
+            // does not change which field we are in. This used to fall through to ORDINARY, which
+            // discarded the ENCLOSE recorded in preState, so an escape anywhere inside an enclosed
+            // field left the field and every delimiter after it was read as structure. See #43613.
+            curState = preState;
+            _buff.skip(1);
+            break;
 
         case ORDINARY:
             if (UNLIKELY(_parse_options.trim_space && preState == ENCLOSE)) {

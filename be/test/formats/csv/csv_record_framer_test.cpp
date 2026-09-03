@@ -198,16 +198,16 @@ TEST(CSVRecordFramerTest, test_min_split_size_thins_boundaries) {
     EXPECT_EQ(std::vector<int64_t>({0, 8, 16}), frame(options(), data, 8));
 }
 
-// The two behaviours below read as parser defects. They are asserted so that the framer and the
-// parser stay in step: whichever way more_rows() is changed, these must be changed with it, and a
-// framer that quietly disagreed would hand out split points the parser reads differently.
-
 // NOLINTNEXTLINE
-TEST(CSVRecordFramerTest, test_escape_inside_enclosed_field_leaves_the_field) {
-    // The escape before 'y' drops the parser out of the enclosed field, so the row delimiter at
-    // offset 7 ends the record even though it looks quoted.
-    EXPECT_EQ(std::vector<int64_t>({0, 8, 13}), frame(options("\n", ",", '\\'), "a,\"x\\yz\nq\",b\nc,d,e\n"));
+TEST(CSVRecordFramerTest, test_escaped_character_inside_enclosed_field_stays_in_the_field) {
+    // The escape before 'y' is taken literally and leaves the field open, so the row delimiter
+    // inside it is data and the first record runs to the one after 'b'.
+    EXPECT_EQ(std::vector<int64_t>({0, 13}), frame(options("\n", ",", '\\'), "a,\"x\\yz\nq\",b\nc,d,e\n"));
 }
+
+// The behaviour below reads as a parser defect. It is asserted so that the framer and the parser
+// stay in step: whichever way more_rows() is changed, this must be changed with it, and a framer
+// that quietly disagreed would hand out split points the parser reads differently.
 
 // NOLINTNEXTLINE
 TEST(CSVRecordFramerTest, test_enclose_outside_a_field_escapes_the_next_character) {
