@@ -90,6 +90,14 @@ public class MetaUtil {
 
     public static <T> Result<T> criticalRegion(Database db, Table table, LockType lockType,
                                                Result.ThrowableSupplier<T> codeBlock) {
+        // An external-catalog table's id -- and its database's -- is minted by the connector, not by the FE.
+        // Locking on it protects nothing: it either never collides, or collides with an unrelated internal
+        // object that happens to share the number. The metadata such a lock would guard is not FE-owned
+        // state in the first place, which is why PlannerMetaLocker already keeps these tables out of the
+        // lock set. Run the block without a lock rather than on a fabricated identity.
+        if (!table.isMetaLockTarget()) {
+            return Result.wrap(codeBlock);
+        }
         return criticalRegion(db, Arrays.asList(table.getId()), lockType, codeBlock);
     }
 

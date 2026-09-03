@@ -4629,6 +4629,32 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lock_manager_enable_resolve_deadlock = false;
 
+    /**
+     * How the FE reacts when a metadata lock is requested on an object the internal catalog does
+     * not own -- a database from an external catalog, or a placeholder table id such as the
+     * {@code -1} BaseTableInfo default. Such an id names nothing the lock manager can protect: it
+     * either never collides (a lock nobody else can take) or collides with everything (every
+     * external base table on one lock).
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with a stack and lets the
+     * operation proceed, {@code error} refuses it. Mutable, so a deployment can start at
+     * {@code warn}, confirm its logs are clean and tighten to {@code error} without a restart.
+     * Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_target_validation_mode = "warn";
+
+    /**
+     * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same
+     * call site</b>. Throttling per site rather than globally keeps a busy violating site from
+     * crowding out every other one, and a site that has not been seen before always logs its first
+     * occurrence. Violation counts stay exact regardless of what the throttle drops.
+     *
+     * Set to 0 to log every violation while investigating.
+     */
+    @ConfField(mutable = true)
+    public static long lock_invariant_violation_log_interval_ms = 10000;
+
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
     /**

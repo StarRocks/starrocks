@@ -49,6 +49,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -198,6 +199,11 @@ public class RoutineLoadManagerTest {
         createRoutineLoadStmt.setOrigStmt(new OriginStatement("dummy", 0));
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        // The @Mocked GlobalStateMgr hands back a cascaded Table whose id is the default 0, so the READ
+        // lock KafkaRoutineLoadJob.fromCreateStmt takes would be taken on a placeholder id. That is a
+        // property of the mock, not of the path under test: routine load only ever targets an OlapTable,
+        // whose id is real. Scoped to this one test so the rest of the class keeps the check.
+        LockTestUtils.disableLockTargetValidation();
         try {
             routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
             Assertions.fail();
@@ -207,6 +213,8 @@ public class RoutineLoadManagerTest {
             LOG.info("Access deny");
         } catch (StarRocksException e) {
             e.printStackTrace();
+        } finally {
+            LockTestUtils.restoreLockTargetValidation();
         }
     }
 

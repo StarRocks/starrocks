@@ -1222,6 +1222,10 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
 
+                    <!-- starrocks.lock.invariant.strict.in.test raises lock_target_validation_mode=warn
+                         to error for the whole test JVM, so a newly introduced lock-target violation fails
+                         the test that introduced it. FeConstants.runningUnitTest cannot serve this purpose:
+                         it is opt-in per test class. -->
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
                         ${async.profiler.arg}
@@ -1229,6 +1233,7 @@ under the License.
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
+                        -Dstarrocks.lock.invariant.strict.in.test=true
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>

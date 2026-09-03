@@ -850,8 +850,18 @@ public class ConnectProcessor {
             return;
         }
 
+        // Both ids below come from a MetadataMgr resolution, so for an external catalog both are minted by the
+        // connector. The lock is not merely harmless overhead there: the two id spaces are not partitioned, so
+        // a collision makes COM_FIELD_LIST on a Hive table take IS + READ on an unrelated internal one and
+        // stall DDL against it. Nothing it would protect is FE-owned -- the schema comes from the connector
+        // cache, which is replaced wholesale and never takes the Locker -- and the revalidation below is
+        // already internal-catalog only. Fail-closed via Table#isMetaLockTarget, so a resource-mapping table,
+        // which lives in an internal database and is rewritten in place under this lock, keeps it.
+        boolean needLock = table.isMetaLockTarget();
         Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        if (needLock) {
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        }
         try {
             // Revalidate by name to detect concurrent DROP/RENAME between unlocked lookup
             // and lock acquisition. The table id is stable, so id-based revalidation would
@@ -876,7 +886,9 @@ public class ConnectProcessor {
         } catch (StarRocksConnectorException e) {
             LOG.error("errors happened when getting table {}", tableName, e);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            if (needLock) {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            }
         }
         ctx.getState().setEof();
     }

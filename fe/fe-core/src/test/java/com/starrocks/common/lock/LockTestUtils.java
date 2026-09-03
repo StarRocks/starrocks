@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.DeadlockException;
 import com.starrocks.common.util.concurrent.lock.LockException;
@@ -24,6 +25,26 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public class LockTestUtils {
+    private static final String DEFAULT_LOCK_TARGET_VALIDATION_MODE = Config.lock_target_validation_mode;
+
+    /**
+     * Opt a test out of the lock-target check.
+     * <p>
+     * Only for tests of the locking primitives themselves, which lock synthetic rids (1L, 2L, ...)
+     * that stand for no catalog object at all. A test that exercises real metadata must not use
+     * this: the check exists to catch exactly the kind of lock such a test would be hiding.
+     * <p>
+     * Pair with {@link #restoreLockTargetValidation()} in teardown -- {@link Config} is static and
+     * surefire may run other classes in the same JVM.
+     */
+    public static void disableLockTargetValidation() {
+        Config.lock_target_validation_mode = "off";
+    }
+
+    public static void restoreLockTargetValidation() {
+        Config.lock_target_validation_mode = DEFAULT_LOCK_TARGET_VALIDATION_MODE;
+    }
+
     public static void assertLockSuccess(Future<LockResult> lockTaskResultFuture) {
         try {
             LockResult lockResult = lockTaskResultFuture.get();

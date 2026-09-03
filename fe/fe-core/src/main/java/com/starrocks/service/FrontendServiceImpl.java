@@ -997,12 +997,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // Only the target table's schema is read, so an intensive
             // IS-on-db + READ-on-table lock is sufficient; it lets concurrent
             // DDL/ALTER on other tables in the same db proceed.
+            // Skipped entirely for an external catalog: both ids come from MetadataMgr and are minted by the
+            // connector, so the lock guards no FE-owned state and, on a collision with the internal id space,
+            // would stall DDL on an unrelated internal table. Fail-closed via Table#isMetaLockTarget, which
+            // keeps the lock for a resource-mapping table rewritten in place under it.
+            boolean needLock = table.isMetaLockTarget();
             Locker locker = new Locker();
-            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            if (needLock) {
+                locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            }
             try {
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
-                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                if (needLock) {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+                }
             }
         }
         return result;
