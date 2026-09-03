@@ -121,6 +121,109 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
+Status SegmentRewriter::rewrite_partial_update_owned_only(
+        const FileInfo& src, FileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
+        const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
+        uint32_t segment_id, const FooterPointerPB& partial_rowset_footer, SegmentFileMark segment_file_mark,
+        RewriteVectorIndexOptions vector_index_opts, std::vector<int64_t>* out_vector_index_ids) {
+    RETURN_ERROR_IF_FALSE(resolved_column_ids.size() == resolved_columns.size(),
+                          "resolved column ids and columns disagree");
+    // Whatever the resolved set does not cover is what the load actually wrote, and those are the only
+    // columns physically present in the source segment.
+    std::set<uint32_t> resolved(resolved_column_ids.begin(), resolved_column_ids.end());
+    std::vector<uint32_t> written_column_ids;
+    written_column_ids.reserve(tschema->num_columns() - resolved.size());
+    for (uint32_t i = 0, n = tschema->num_columns(); i < n; i++) {
+        if (resolved.count(i) == 0) {
+            written_column_ids.emplace_back(i);
+        }
+    }
+    RETURN_ERROR_IF_FALSE(!written_column_ids.empty(), "a partial segment with no written column");
+
+    const size_t expected_rows = resolved_columns.empty() ? 0 : resolved_columns[0]->size();
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dest->path));
+
+    RandomAccessFileOptions ropts;
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    if (!src.encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(ropts.encryption_info, KeyCache::instance().unwrap_encryption_meta(src.encryption_meta));
+        wopts.encryption_info = ropts.encryption_info;
+        dest->encryption_meta = src.encryption_meta;
+    }
+
+    // Segment keys its column readers on unique id, so the full tablet schema is safe for a partial
+    // segment: the columns the load did not write simply get no reader. The iterator asks for the
+    // written ones only, which is exactly what the file holds.
+    size_t footer_length_hint = 16 * 1024;
+    ASSIGN_OR_RETURN(auto segment,
+                     Segment::open(fs, src, segment_id, tschema, &footer_length_hint, &partial_rowset_footer));
+
+    auto written_schema = ChunkHelper::convert_schema(tschema, written_column_ids);
+    OlapReaderStatistics stats;
+    SegmentReadOptions read_opts;
+    read_opts.fs = fs;
+    read_opts.stats = &stats;
+    ASSIGN_OR_RETURN(auto iter, segment->new_iterator(written_schema, read_opts));
+
+    // Read the source through, dropping the rows a sibling owns as each chunk arrives. |owned| is
+    // indexed by source row, so it is sliced chunk by chunk in step with the read.
+    auto kept = ChunkFactory::new_chunk(written_schema, expected_rows);
+    auto chunk = ChunkFactory::new_chunk(written_schema, DEFAULT_CHUNK_SIZE);
+    size_t source_row = 0;
+    while (true) {
+        chunk->reset();
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        RETURN_IF_ERROR(st);
+        const size_t chunk_rows = chunk->num_rows();
+        if (chunk_rows == 0) {
+            continue;
+        }
+        RETURN_ERROR_IF_FALSE(source_row + chunk_rows <= owned.size(),
+                              "ownership mask shorter than the source segment");
+        Filter selection(owned.begin() + source_row, owned.begin() + source_row + chunk_rows);
+        source_row += chunk_rows;
+        chunk->filter(selection);
+        kept->append(*chunk);
+    }
+    iter->close();
+    RETURN_ERROR_IF_FALSE(source_row == owned.size(), "ownership mask longer than the source segment");
+    // The narrowed publish iterator resolved exactly the rows this tablet owns, so the two halves must
+    // agree row for row -- otherwise the output would pair a written row with another row's values.
+    RETURN_ERROR_IF_FALSE(kept->num_rows() == expected_rows, "owned row count disagrees with the resolved columns");
+
+    auto full_schema = ChunkHelper::convert_schema(tschema);
+    auto out = ChunkFactory::new_chunk(full_schema, kept->num_rows());
+    for (size_t i = 0; i < written_column_ids.size(); i++) {
+        out->get_column_by_index(written_column_ids[i]) = kept->get_column_by_index(i);
+    }
+    for (size_t i = 0; i < resolved_column_ids.size(); i++) {
+        out->get_column_by_index(resolved_column_ids[i]).reset(std::move(resolved_columns[i]));
+    }
+
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest->path));
+    SegmentWriterOptions opts;
+    opts.segment_file_mark = std::move(segment_file_mark);
+    opts.vector_index_file_paths = std::move(vector_index_opts.file_paths);
+    opts.defer_vector_index_build = vector_index_opts.defer_build;
+    opts.vector_index_build_threshold = vector_index_opts.build_threshold;
+    SegmentWriter writer(std::move(wfile), segment_id, tschema, opts);
+    // Every column is present, so unlike the copy-and-append rewrite this never has to satisfy the
+    // sort key out of a value-only column set.
+    RETURN_IF_ERROR(writer.init());
+    RETURN_IF_ERROR(writer.append_chunk(*out));
+    uint64_t index_size = 0;
+    uint64_t segment_file_size = 0;
+    uint64_t footer_position = 0;
+    RETURN_IF_ERROR(writer.finalize(&segment_file_size, &index_size, &footer_position));
+
+    record_rewrite_vector_index_ids(writer, out_vector_index_ids);
+    dest->size = segment_file_size;
+    return Status::OK();
+}
+
 Status SegmentRewriter::rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                                const TabletSchemaCSPtr& tschema,
                                                AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
@@ -230,7 +333,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
         const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
         const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts,
-        std::vector<int64_t>* out_vector_index_ids) {
+        std::vector<int64_t>* out_vector_index_ids, const Filter& owned) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
@@ -283,6 +386,14 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         return Status::InternalError("Unexpected row count");
     }
     itr->close();
+
+    // On a split cross publish the source segment holds the siblings' rows too, and the columns the
+    // caller resolved cover only this tablet's. Drop the rest here so the output is private with no
+    // foreign rows in it, and so the two halves pair row for row below.
+    if (!owned.empty()) {
+        RETURN_ERROR_IF_FALSE(owned.size() == num_rows, "ownership mask does not match the source segment");
+        num_rows = static_cast<uint32_t>(read_chunk->filter(owned));
+    }
 
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     if (!src.encryption_meta.empty()) {

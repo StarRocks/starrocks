@@ -193,16 +193,6 @@ private:
     // is what the rewriters demand and what a cross publish's narrowed publish iterator does not give.
     // A no-op on every tablet that was never resharded -- see the definition.
     //
-    // Widens COPIES: |widened_write_columns| receives them, empty meaning nothing needed widening and the
-    // caller should hand the rewriter the state's own columns. The auto-increment column is the exception
-    // -- the rewriter reads it out of the state and moves it -- so the widened copy is swapped in here and
-    // the original handed back through |unwidened_auto_increment_column|; the caller owns putting it back,
-    // and must do so after the rewrite.
-    Status _widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params, uint32_t segment_id,
-                                                    const FileInfo& src,
-                                                    const std::vector<ColumnId>& unmodified_column_ids,
-                                                    MutableColumns* widened_write_columns,
-                                                    MutableColumnPtr* unwidened_auto_increment_column);
 
     // resolve conflict when publish transaction
     Status _resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version);

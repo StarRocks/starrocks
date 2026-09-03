@@ -93,6 +93,13 @@ public:
     // position in the segment file.
     uint32_t physical_rowid_base() const { return _physical_rowid_base.value_or(0); }
 
+    // Declare that the segment this iterator reads has been rewritten to hold only the rows it
+    // emits, renumbered from zero -- what SegmentRewriter's owned-only rewrites produce. The emit
+    // positions then ARE the new segment's rowids, so every consumer that names a row in the file
+    // this publish produced (the index upsert value, the condition-merge deletes) stops adding a
+    // base that pointed into the source.
+    void renumber_to_emit_order() { _physical_rowid_base = 0; }
+
     // Return the memory usage of this encode pk column.
     // If _lazy_load is true, return 0, because memory allocation is lazy.
     size_t memory_usage() const { return _memory_usage; }
@@ -108,10 +115,6 @@ public:
     // in lazy mode _owned describes only the piece currently loaded.
     const Filter& standalone_owned() const { return _owned; }
 
-    // Physical rowids of unowned source rows. Complete after the iterator reaches done().
-    // Ownership is transferred to avoid copying the delvec input.
-    std::vector<uint32_t> take_unowned_rowids() { return std::move(_unowned_rowids); }
-
 private:
     Status _load();
 
@@ -120,8 +123,6 @@ private:
     // Ownership of the chunk _load() just produced, moved out by current(). Empty when no selector
     // is set, which every consumer reads as "own every row".
     Filter _owned;
-    // Accumulated in ascending order across chunks.
-    std::vector<uint32_t> _unowned_rowids;
 
     // Iterator of this segment file.
     ChunkIteratorPtr _iter;
