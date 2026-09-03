@@ -151,6 +151,8 @@ public class OlapTableSinkTest {
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
+        TransactionState registeredState = new TransactionState();
+        registeredState.setUseCombinedTxnLog(true);
 
         new Expectations() {
             {
@@ -161,7 +163,7 @@ public class OlapTableSinkTest {
                 globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
                 result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
-                result = new TransactionState();
+                result = registeredState;
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 result = new SystemInfoService();
                 dstTable.getId();
@@ -183,6 +185,7 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
     // init() plans the sink during the load, before an explicit transaction (multi-statement stream
@@ -288,10 +291,10 @@ public class OlapTableSinkTest {
         Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
-    // A registered transaction still reserves its explicit layout before the normal lookup, while
-    // the registered state remains authoritative for the combined transaction-log mode.
+    // A registered explicit INSERT_STREAMING transaction still reserves its layout, but the normal
+    // database lookup must not let the same state enable combined transaction logs.
     @Test
-    public void testInitReservesExplicitTxnBeforeRegisteredTransactionLookup(
+    public void testInitKeepsPerTabletTxnLogForRegisteredExplicitInsertStreaming(
             @Mocked GlobalStateMgr globalStateMgr,
             @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
@@ -304,7 +307,8 @@ public class OlapTableSinkTest {
 
         TransactionState explicitState = new TransactionState();
         explicitState.setUseCombinedTxnLog(true);
-        TransactionState registeredState = new TransactionState();
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
 
         new Expectations() {
             {
@@ -316,7 +320,7 @@ public class OlapTableSinkTest {
                 result = explicitState;
                 times = 2;
                 globalTransactionMgr.getTransactionState(4L, 3L);
-                result = registeredState;
+                result = explicitState;
                 times = 1;
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 result = new SystemInfoService();

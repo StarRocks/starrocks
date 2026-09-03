@@ -187,10 +187,6 @@ public class TransactionStmtExecutor {
         try {
             TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
                     context.getTxnId(), database.getId());
-            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-            if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
-                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, context.getTxnId());
-            }
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
             for (Table table : m.values()) {
@@ -202,9 +198,8 @@ public class TransactionStmtExecutor {
                 }
             }
 
-            if (!transactionState.getTableIdList().contains(targetTable.getId())) {
-                transactionState.addTableIdList(targetTable.getId());
-            }
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                    context.getTxnId(), database.getId(), targetTable.getId());
             // record modified table id in explicit txn state for later SELECT validation
             explicitTxnState.addModifiedTableId(targetTable.getId());
 
@@ -243,12 +238,8 @@ public class TransactionStmtExecutor {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
                 context.getTxnId(), dbId);
-        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
-            throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, context.getTxnId());
-        }
-
-        transactionState.addTableIdList(tableId);
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                context.getTxnId(), dbId, tableId);
 
         // record modified table id in explicit txn state for later SELECT validation
         explicitTxnState.addModifiedTableId(tableId);

@@ -81,6 +81,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.Mockito.mock;
@@ -116,6 +117,15 @@ public class ExplicitTxnTest {
         Long txnId;
         while ((txnId = dbTxnMgr.getMinActiveTxnId().orElse(null)) != null) {
             mgr.abortTransaction(dbId, txnId, "ExplicitTxnTest isolation");
+        }
+    }
+
+    private static void awaitLatch(CountDownLatch latch, String message) {
+        try {
+            Assertions.assertTrue(latch.await(10, TimeUnit.SECONDS), message);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
         }
     }
 
@@ -228,6 +238,15 @@ public class ExplicitTxnTest {
 
     @Test
     public void testInsertSameTable() throws IOException, DdlException {
+        AtomicInteger activationCount = new AtomicInteger();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public ExplicitTxnState activateExplicitTransactionTable(
+                    Invocation invocation, long txnId, long dbId, long tableId) throws StarRocksException {
+                activationCount.incrementAndGet();
+                return invocation.proceed(txnId, dbId, tableId);
+            }
+        };
         new MockUp<DefaultCoordinator>() {
             @Mock
             public void exec() throws StarRocksException, RpcException, InterruptedException {
@@ -282,12 +301,14 @@ public class ExplicitTxnTest {
 
         TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), (DmlStmt) stmt, stmt.getOrigStmt(), context);
         Assertions.assertFalse(context.getState().isError());
+        Assertions.assertEquals(1, activationCount.get());
         try {
             TransactionStmtExecutor.loadData(database, olapTable, new ExecPlan(), (DmlStmt) stmt, stmt.getOrigStmt(), context);
             Assertions.fail();
         } catch (ErrorReportException e) {
             Assertions.assertEquals(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE, e.getErrorCode());
         }
+        Assertions.assertEquals(1, activationCount.get());
     }
 
     @Test
@@ -1091,7 +1112,7 @@ public class ExplicitTxnTest {
     }
 
     @Test
-    public void testDatabaseLoadDataRejectsStateRemovedAfterRegistration() throws Exception {
+    public void testDatabaseLoadDataRejectsStateRemovedBeforeActivation() throws Exception {
         GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1108,11 +1129,10 @@ public class ExplicitTxnTest {
         try {
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public TransactionState registerExplicitTransactionState(
-                        Invocation invocation, long transactionId, long dbId) throws StarRocksException {
-                    TransactionState registered = invocation.proceed(transactionId, dbId);
+                public ExplicitTxnState activateExplicitTransactionTable(
+                        Invocation invocation, long transactionId, long dbId, long tableId) throws StarRocksException {
                     mgr.clearExplicitTxnState(transactionId);
-                    return registered;
+                    return invocation.proceed(transactionId, dbId, tableId);
                 }
             };
 
@@ -1120,13 +1140,14 @@ public class ExplicitTxnTest {
                     new OriginStatement("insert"), context);
             Assertions.assertTrue(context.getState().isError());
             Assertions.assertTrue(context.getState().getErrorMessage().contains(Long.toString(txnId)));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
         } finally {
             cleanupExplicitState(mgr, state);
         }
     }
 
     @Test
-    public void testStreamLoadDataRejectsStateRemovedAfterRegistration() throws Exception {
+    public void testStreamLoadDataRejectsStateRemovedBeforeActivation() throws Exception {
         GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1140,11 +1161,10 @@ public class ExplicitTxnTest {
         try {
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public TransactionState registerExplicitTransactionState(
-                        Invocation invocation, long transactionId, long dbId) throws StarRocksException {
-                    TransactionState registered = invocation.proceed(transactionId, dbId);
+                public ExplicitTxnState activateExplicitTransactionTable(
+                        Invocation invocation, long transactionId, long dbId, long tableId) throws StarRocksException {
                     mgr.clearExplicitTxnState(transactionId);
-                    return registered;
+                    return invocation.proceed(transactionId, dbId, tableId);
                 }
             };
 
@@ -1152,7 +1172,200 @@ public class ExplicitTxnTest {
                     () -> TransactionStmtExecutor.loadData(db1.getId(), table1.getId(),
                             new ExplicitTxnState.ExplicitTxnStateItem(), context));
             Assertions.assertTrue(exception.getMessage().contains(Long.toString(txnId)));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
         } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testExplicitTableActivationRejectsStateClearedAfterRegistration() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "activation-after-clear", 60_000L);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            mgr.clearExplicitTxnState(txnId);
+
+            StarRocksException exception = Assertions.assertThrows(StarRocksException.class,
+                    () -> mgr.activateExplicitTransactionTable(txnId, db1.getId(), table1.getId()));
+            Assertions.assertTrue(exception.getMessage().contains(Long.toString(txnId)));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testDatabaseTableActivationRejectsMissingTransaction() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+
+        TransactionNotFoundException exception = Assertions.assertThrows(TransactionNotFoundException.class,
+                () -> mgr.getDatabaseTransactionMgr(db1.getId()).activateTransactionTable(txnId, 1L));
+        Assertions.assertTrue(exception.getMessage().contains(Long.toString(txnId)));
+    }
+
+    @Test
+    public void testDatabaseTableActivationRejectsFinishedTransaction() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "activation-after-finish", 60_000L);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            mgr.abortTransaction(db1.getId(), txnId, "finish before activation");
+
+            Assertions.assertThrows(TransactionNotFoundException.class,
+                    () -> mgr.getDatabaseTransactionMgr(db1.getId())
+                            .activateTransactionTable(txnId, table1.getId()));
+            Assertions.assertFalse(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            mgr.clearExplicitTxnState(txnId);
+        }
+    }
+
+    @Test
+    public void testDatabaseTableActivationIsIdempotent() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "idempotent-table-activation", 60_000L);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            DatabaseTransactionMgr dbTxnMgr = mgr.getDatabaseTransactionMgr(db1.getId());
+
+            Assertions.assertSame(state, dbTxnMgr.activateTransactionTable(txnId, table1.getId()));
+            Assertions.assertSame(state, dbTxnMgr.activateTransactionTable(txnId, table1.getId()));
+            Assertions.assertEquals(1, state.getTableIdList().stream()
+                    .filter(tableId -> tableId.equals(table1.getId())).count());
+        } finally {
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testExplicitTableActivationSerializesWatermarkAndRemoval() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "serialize-table-activation", 60_000L);
+        CountDownLatch activationEntered = new CountDownLatch(1);
+        CountDownLatch releaseActivation = new CountDownLatch(1);
+        CountDownLatch watermarkStarted = new CountDownLatch(1);
+        CountDownLatch removalStarted = new CountDownLatch(1);
+        AtomicBoolean blockActivation = new AtomicBoolean(true);
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            ExplicitTxnState explicit = mgr.getExplicitTxnState(txnId);
+            Assertions.assertNotNull(explicit);
+            new MockUp<TransactionState>() {
+                @Mock
+                public void addTableIdList(Invocation invocation, Long tableId) {
+                    TransactionState invokedState = invocation.getInvokedInstance();
+                    if (invokedState == state && tableId.equals(table1.getId())
+                            && blockActivation.compareAndSet(true, false)) {
+                        activationEntered.countDown();
+                        awaitLatch(releaseActivation, "activation was not released");
+                    }
+                    invocation.proceed(tableId);
+                }
+            };
+
+            Future<ExplicitTxnState> activation = executor.submit(
+                    () -> mgr.activateExplicitTransactionTable(txnId, db1.getId(), table1.getId()));
+            Assertions.assertTrue(activationEntered.await(10, TimeUnit.SECONDS));
+            Future<Boolean> watermark = executor.submit(() -> {
+                watermarkStarted.countDown();
+                return mgr.isPreviousTransactionsFinishedForReshard(
+                        txnId, db1.getId(), List.of(table1.getId()), Set.of());
+            });
+            Future<?> removal = executor.submit(() -> {
+                removalStarted.countDown();
+                mgr.clearExplicitTxnState(txnId);
+            });
+            Assertions.assertTrue(watermarkStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertTrue(removalStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(watermark.isDone());
+            Assertions.assertFalse(removal.isDone());
+
+            releaseActivation.countDown();
+            Assertions.assertSame(explicit, activation.get(10, TimeUnit.SECONDS));
+            removal.get(10, TimeUnit.SECONDS);
+            Assertions.assertFalse(watermark.get(10, TimeUnit.SECONDS));
+            Assertions.assertNull(mgr.getExplicitTxnState(txnId));
+            Assertions.assertTrue(state.getTableIdList().contains(table1.getId()));
+        } finally {
+            releaseActivation.countDown();
+            executor.shutdownNow();
+            cleanupExplicitState(mgr, state);
+        }
+    }
+
+    @Test
+    public void testDatabaseWatermarkSerializesTableActivation() throws Exception {
+        GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db1.getFullName(), "tbl1");
+        abortRunningTransactions(mgr, db1.getId());
+        long secondTableId = table1.getId() + 1;
+        long txnId = mgr.getTransactionIDGenerator().getNextTransactionId();
+        TransactionState state = addExplicitState(mgr, txnId, "serialize-db-table-list", 60_000L);
+        CountDownLatch watermarkEntered = new CountDownLatch(1);
+        CountDownLatch releaseWatermark = new CountDownLatch(1);
+        CountDownLatch activationStarted = new CountDownLatch(1);
+        AtomicBoolean blockWatermark = new AtomicBoolean(true);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            mgr.registerExplicitTransactionState(txnId, db1.getId());
+            DatabaseTransactionMgr dbTxnMgr = mgr.getDatabaseTransactionMgr(db1.getId());
+            dbTxnMgr.activateTransactionTable(txnId, table1.getId());
+            new MockUp<TransactionState>() {
+                @Mock
+                public List<Long> getTableIdList(Invocation invocation) {
+                    TransactionState invokedState = invocation.getInvokedInstance();
+                    if (invokedState == state && blockWatermark.compareAndSet(true, false)) {
+                        watermarkEntered.countDown();
+                        awaitLatch(releaseWatermark, "watermark was not released");
+                    }
+                    return invocation.proceed();
+                }
+            };
+
+            Future<Boolean> watermark = executor.submit(() -> dbTxnMgr.isPreviousTransactionsFinished(
+                    txnId, List.of(secondTableId), Set.of()));
+            Assertions.assertTrue(watermarkEntered.await(10, TimeUnit.SECONDS));
+            Future<TransactionState> activation = executor.submit(() -> {
+                activationStarted.countDown();
+                return dbTxnMgr.activateTransactionTable(txnId, secondTableId);
+            });
+            Assertions.assertTrue(activationStarted.await(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(activation.isDone());
+
+            releaseWatermark.countDown();
+            Assertions.assertTrue(watermark.get(10, TimeUnit.SECONDS));
+            Assertions.assertSame(state, activation.get(10, TimeUnit.SECONDS));
+            Assertions.assertFalse(dbTxnMgr.isPreviousTransactionsFinished(
+                    txnId, List.of(secondTableId), Set.of()));
+        } finally {
+            releaseWatermark.countDown();
+            executor.shutdownNow();
             cleanupExplicitState(mgr, state);
         }
     }

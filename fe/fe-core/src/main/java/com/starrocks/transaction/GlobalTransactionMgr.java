@@ -246,6 +246,25 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
+    public ExplicitTxnState activateExplicitTransactionTable(long txnId, long dbId, long tableId)
+            throws StarRocksException {
+        synchronized (explicitTxnStateLock) {
+            ExplicitTxnState explicit = explicitTxnStateMap.get(txnId);
+            if (explicit == null || explicit.getTransactionState() == null) {
+                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
+            }
+            TransactionState state = explicit.getTransactionState();
+            if (state.getDbId() != 0 && state.getDbId() != dbId) {
+                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
+            }
+            if (state.getDbId() != dbId) {
+                throw new TransactionNotFoundException(txnId);
+            }
+            getDatabaseTransactionMgr(dbId).activateTransactionTable(txnId, tableId);
+            return explicit;
+        }
+    }
+
     /**
      * the app could specify the transaction id
      * <p>
