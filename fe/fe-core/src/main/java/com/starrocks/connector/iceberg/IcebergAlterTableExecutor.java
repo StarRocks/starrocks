@@ -598,19 +598,20 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             partitionFilterSql = partitionFilter.toSql();
         }
         velCtx.put("partitionFilterSql", partitionFilterSql);
-        VelocityEngine defaultVelocityEngine = new VelocityEngine();
-        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
-        StringWriter writer = new StringWriter();
-        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
-                "INSERT INTO $catalogName.$dbName.$tableName" +
-                        " SELECT * FROM $catalogName.$dbName.$tableName" +
-                        " #if ($partitionFilterSql)" +
-                        " WHERE $partitionFilterSql" +
-                        " #end"
-        );
-        String executeStmt = writer.toString();
-        IcebergRewriteDataJob job = new IcebergRewriteDataJob(executeStmt, rewriteAll,
-                minFileSizeBytes, batchSize, batchParallelism, context, stmt);
+        // The filter selects which files are rewritten; it must not filter rows inside those files, otherwise the
+        // non-matching rows of a partially matched file are dropped when the whole file is removed at commit time.
+        // Planning keeps the filter (so file pruning still applies), execution drops it and rewrites whole files.
+        // This mirrors Iceberg's own `TableScan.ignoreResiduals()`.
+        String planningSql = buildInsertSelectSql(velCtx);
+        VelocityContext execVelCtx = new VelocityContext();
+        execVelCtx.put("catalogName", catalogName);
+        execVelCtx.put("dbName", dbName);
+        execVelCtx.put("tableName", tableName);
+        execVelCtx.put("partitionFilterSql", null);
+        String executionSql = buildInsertSelectSql(execVelCtx);
+        boolean hasPartitionFilter = partitionFilterSql != null;
+        IcebergRewriteDataJob job = new IcebergRewriteDataJob(planningSql, executionSql, hasPartitionFilter,
+                rewriteAll, minFileSizeBytes, batchSize, batchParallelism, context, stmt);
         long durationMs = 0L;
         try {
             job.prepare();
@@ -627,6 +628,20 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             recordManualCompactionMetrics(success, durationMs, metrics, failureReason);
         }
         super.resultSet = getRewriteResult(context, metrics, durationMs);
+    }
+
+    private String buildInsertSelectSql(VelocityContext velCtx) {
+        VelocityEngine defaultVelocityEngine = new VelocityEngine();
+        defaultVelocityEngine.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+        StringWriter writer = new StringWriter();
+        defaultVelocityEngine.evaluate(velCtx, writer, "InsertSelectTemplate",
+                "INSERT INTO $catalogName.$dbName.$tableName" +
+                        " SELECT * FROM $catalogName.$dbName.$tableName" +
+                        " #if ($partitionFilterSql)" +
+                        " WHERE $partitionFilterSql" +
+                        " #end"
+        );
+        return writer.toString();
     }
 
     private ShowResultSet getRewriteResult(ConnectContext context, 
