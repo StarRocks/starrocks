@@ -1,0 +1,26 @@
+-- name: test_paimon_filesystem_catalog
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/test.db >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/scalar_types oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/test.db/scalar_types/ >/dev/null
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/variant_basic oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/test.db/variant_basic/ >/dev/null
+
+create external catalog `paimon_filesystem_catalog_${uuid0}`
+properties (
+"type"  =  "paimon",
+"paimon.catalog.type"  =  "filesystem",
+"paimon.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/",
+"aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+-- c_ts_ltz (TIMESTAMP WITH LOCAL TIME ZONE) renders in the session time zone; pin it.
+set time_zone = 'Asia/Shanghai';
+-- Always go through paimon-cpp.
+set paimon_reader_mode = 'native';
+
+[ORDER]select * from paimon_filesystem_catalog_${uuid0}.test.scalar_types order by 1;
+
+[ORDER]select id, variant_typeof(v) from paimon_filesystem_catalog_${uuid0}.test.variant_basic order by 1;
+
+drop catalog paimon_filesystem_catalog_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
