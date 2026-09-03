@@ -3033,7 +3033,10 @@ public class OlapTable extends Table {
         // which make things easier.
         dropAllTempPartitions();
         if (!replay && hasAutoIncrementColumn()) {
-            sendDropAutoIncrementMapTask();
+            // Best-effort: the table is going away and its id is never reused, so an entry left on
+            // a node that is not alive is unreachable dead memory. Waiting for such a node would
+            // cost a full latch timeout per table with the database WRITE lock held.
+            sendDropAutoIncrementMapTaskBestEffort();
         }
 
         updateBaseCompactionForbiddenTimeRanges(true);
