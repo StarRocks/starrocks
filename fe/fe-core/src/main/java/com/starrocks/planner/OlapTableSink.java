@@ -304,11 +304,17 @@ public class OlapTableSink extends DataSink {
         if (txnState == null || !txnState.isUseCombinedTxnLog()) {
             return NO_SHARD_WRITE;
         }
-        // INSERT_STREAMING (BEGIN ... COMMIT) is the one loading source type whose publish does NOT read
-        // the combined log: TxnInfoHelper emits `load_ids` for it and BE's load_txn_log takes that branch
-        // first, resolving `{tablet}_{txn}_{load_id}.log`. A load id is per statement, not per node, so
-        // several writing nodes would target that same path and silently clobber each other.
-        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+        // An explicit transaction (BEGIN ... COMMIT) collects one load id per statement and commits them
+        // as TxnInfoPB.load_ids, and BE's load_txn_log takes that branch BEFORE the combined-log one,
+        // resolving `{tablet}_{txn}_{load_id}.log`. A load id is per statement, not per node, so several
+        // writing nodes would target that same path. A plain INSERT is INSERT_STREAMING too but never
+        // populates load_ids, so the source type alone is the wrong signal -- ask whether this txn id is
+        // registered as an explicit transaction. (Such a transaction also misses the DatabaseTransactionMgr
+        // lookup above until it commits, so the check above already covers today's behaviour; this states
+        // the actual reason instead of relying on that.)
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING
+                && GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getExplicitTxnState(tSink.getTxn_id()) != null) {
             return NO_SHARD_WRITE;
         }
         // A load that makes BE attach RowsetTxnMetaPB to its op_write cannot have its txn logs folded
