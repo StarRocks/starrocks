@@ -608,9 +608,8 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
         tparquet::ColumnChunk chunk;
         chunk.__set_file_path("col" + std::to_string(i));
         chunk.file_offset = 0;
-        chunk.meta_data.__set_type((i == 3)             ? tparquet::Type::INT64
-                                   : (i == 6 || i == 8) ? tparquet::Type::INT32
-                                                        : tparquet::Type::BYTE_ARRAY);
+        chunk.meta_data.__set_type((i == 3) ? tparquet::Type::INT64
+                                            : (i == 6 || i == 8) ? tparquet::Type::INT32 : tparquet::Type::BYTE_ARRAY);
         chunk.meta_data.data_page_offset = i * 10;
         chunk.meta_data.total_compressed_size = 1;
         rg.columns.emplace_back(std::move(chunk));

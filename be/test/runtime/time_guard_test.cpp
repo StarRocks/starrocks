@@ -73,7 +73,9 @@ TEST(SignalTimerGuardTest, disabled_allocates_nothing) {
 TEST(SignalTimerGuardTest, fired_path_runs_without_crash) {
     constexpr int64_t kFiresQuicklyMs = 1;
     for (int i = 0; i < 20; ++i) {
-        { SignalTimerGuard guard(kFiresQuicklyMs); }
+        {
+            SignalTimerGuard guard(kFiresQuicklyMs);
+        }
         // Give the global timer thread time to run the callback before the next iteration.
         std::this_thread::sleep_for(std::chrono::milliseconds(15));
     }

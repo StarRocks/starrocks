@@ -34,7 +34,7 @@
 namespace starrocks {
 
 template <typename E>
-requires std::is_enum_v<E> [[nodiscard]] constexpr auto enum_to_underlying_type(E enumerator) noexcept {
+requires std::is_enum_v<E>[[nodiscard]] constexpr auto enum_to_underlying_type(E enumerator) noexcept {
     return static_cast<std::underlying_type_t<E>>(enumerator);
 }
 
