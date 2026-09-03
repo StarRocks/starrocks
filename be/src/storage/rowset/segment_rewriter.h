@@ -63,13 +63,18 @@ public:
     // This variant decodes every column instead, drops the rows |owned| excludes, and renumbers what
     // is left, so the output is an ordinary full segment private to this tablet with no foreign rows
     // in it at all. It costs a full re-encode rather than a copy plus append, which is why only the
-    // cross-published path uses it. |resolved_columns| must already hold this tablet's rows only, in
-    // ascending source order -- which is what the narrowed publish iterator produces.
+    // cross-published path uses it.
+    //
+    // |owned| and |resolved_columns| are both indexed by the rows the narrowed publish iterator
+    // EMITTED -- one entry per emitted row, owned or not -- and |emitted_rowid_base| says where that
+    // run starts in the source file. Both halves are therefore filtered by the same mask, and a source
+    // row outside the emitted run is not this tablet's either, so it goes as well.
     static Status rewrite_partial_update_owned_only(
             const FileInfo& src, FileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
             const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
-            uint32_t segment_id, const FooterPointerPB& partial_rowset_footer, SegmentFileMark segment_file_mark = {},
-            RewriteVectorIndexOptions vector_index_opts = {}, std::vector<int64_t>* out_vector_index_ids = nullptr);
+            uint32_t emitted_rowid_base, uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
+            SegmentFileMark segment_file_mark = {}, RewriteVectorIndexOptions vector_index_opts = {},
+            std::vector<int64_t>* out_vector_index_ids = nullptr);
 
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
@@ -81,7 +86,8 @@ public:
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
             const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {},
-            std::vector<int64_t>* out_vector_index_ids = nullptr, const Filter& owned = Filter{});
+            std::vector<int64_t>* out_vector_index_ids = nullptr, const Filter& owned = Filter{},
+            uint32_t emitted_rowid_base = 0);
 };
 
 } // namespace starrocks

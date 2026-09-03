@@ -673,7 +673,8 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids, has_partial_update_state(params) ? rewrite_write_columns : nullptr,
-                params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids, owned));
+                params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids, owned,
+                _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0));
         file_info.path = dest_path;
         stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
@@ -685,8 +686,9 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         if (filter_unowned_rows) {
             RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update_owned_only(
                     src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, owned,
-                    segment_id, partial_rowset_footer, {root_path, std::to_string(rowset_meta.id())},
-                    std::move(vector_index_opts), &file_info.vector_index_ids));
+                    _upserts[segment_id]->physical_rowid_base(), segment_id, partial_rowset_footer,
+                    {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
+                    &file_info.vector_index_ids));
         } else {
             RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                     src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, segment_id,
