@@ -377,6 +377,15 @@ replication_job_batch_size=10
 report_interval_seconds=300
 
 enable_table_property_sync=false
+
+# privilege config
+enable_privilege_sync=false
+ddl_job_allow_drop_user_target_only=false
+ddl_job_allow_drop_role_target_only=false
+ddl_job_allow_drop_inconsistent_user=true
+ddl_job_allow_revoke_grant_target_only=false
+privilege_sync_exclude_users=
+privilege_sync_exclude_roles=
 ```
 
 The description of the parameters is as follows:
@@ -427,6 +436,13 @@ The description of the parameters is as follows:
 | ddl_job_allow_drop_inconsistent_view      | Whether to allow the migration tool to delete inconsistent views between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted views during the migration. |
 | ddl_job_allow_drop_view_target_only       | Whether to allow the migration tool to delete views that are deleted in the source cluster to keep the views consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
 | enable_table_property_sync                | Whether to enable synchronization for table properties.       |
+| enable_privilege_sync                     | Whether to enable synchronization for users, roles, and their privileges. The default is `false`, which means account metadata is not synchronized. |
+| ddl_job_allow_drop_user_target_only       | Whether to allow the migration tool to delete users that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. |
+| ddl_job_allow_drop_role_target_only       | Whether to allow the migration tool to delete roles that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. |
+| ddl_job_allow_drop_inconsistent_user      | Whether to allow the migration tool to rebuild (that is, drop and re-create) a user whose definition is inconsistent between the source and target clusters. The default is `true`. A user is only rebuilt when their privileges have been read in the same cycle, so that the privileges can be granted again immediately. |
+| ddl_job_allow_revoke_grant_target_only    | Whether to allow the migration tool to revoke privileges that are granted only in the target cluster but not in the source cluster. The default is `false`, which means they will not be revoked. |
+| privilege_sync_exclude_users              | The users that the migration tool must leave untouched, with multiple users separated by commas (`,`). A user can be specified either as a user name (`jack`) or as a full user identity (`'jack'@'%'`). `root` and the user specified in `target_cluster_user` are always excluded. |
+| privilege_sync_exclude_roles              | The roles that the migration tool must leave untouched, with multiple roles separated by commas (`,`). |
 
 <Tabs groupId="migrationPath">
 <TabItem value="sourceNothing" label="Migrate from Shared-nothing" default>
@@ -563,6 +579,26 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 </TabItem>
 </Tabs>
 
+### Synchronize users, roles, and privileges (Optional)
+
+By default, the migration tool does not synchronize account metadata. If you set `enable_privilege_sync` to `true`, the tool also synchronizes users, roles, and their privileges from the source cluster to the target cluster.
+
+Each time the tool retrieves metadata, it reads the users, roles, and privileges of both clusters, compares them, and executes the DDL statements needed to make the target cluster consistent with the source cluster. User definitions are obtained using `SHOW CREATE USER`, which returns the password as ciphertext, so no plaintext password is handled during migration.
+
+The following objects are never modified by the migration tool:
+
+- `root` and the user specified in `target_cluster_user`. Overwriting the password of the target cluster's `root` would lock out its operators, and dropping the account that the tool uses to connect would break the tool's own connection.
+- The immutable built-in roles `root`, `db_admin`, `cluster_admin`, `user_admin`, and `security_admin`. The `public` role is built-in but mutable, so its privileges are synchronized while the role itself is left alone.
+- The users specified in `privilege_sync_exclude_users` and the roles specified in `privilege_sync_exclude_roles`.
+
+:::note
+
+- The FE of both clusters must support `SHOW CREATE USER`. If the FE of either cluster does not support this statement, users and their privileges are skipped, and only roles and role privileges are synchronized.
+- The progress of privilege synchronization is printed to the log file **log/sync.INFO.log** with the prefix `Sync privilege progress`. It lists the status of each of the four units: roles, role privileges, users, and user privileges.
+- In one-time synchronization mode (`one_time_run_mode=true`), the tool exits successfully only after privileges have also converged. It exits with a failure if either cluster does not support `SHOW CREATE USER`, or if privileges remain inconsistent across three consecutive comparisons.
+
+:::
+
 ## Step 3: Start the Migration Tool
 
 After configuring the tool, start the migration tool to initiate the data migration process.
@@ -690,6 +726,7 @@ The list of objects that support synchronization currently is as follows (those 
 - Internal tables and their data
 - Materialized view schemas and their building statements (The data in the materialized view will not be synchronized. And if the base tables of the materialized view is not synchronized to the target cluster, the background refresh task of the materialized view reports an error.)
 - Logical views
+- Users, roles, and their privileges (not synchronized by default, enabled by `enable_privilege_sync`)
 
 For migration between shared-data clusters:
 
