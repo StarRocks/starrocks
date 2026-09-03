@@ -1957,6 +1957,31 @@ public class PropertyAnalyzer {
                 }
                 materializedView.setBloomFilterInfo(bfColumnIds, bfFpp);
             }
+            // zstd_compression_columns. ALTER TABLE <mv> SET accepts this property and the view's
+            // DDL echoes it, so CREATE MATERIALIZED VIEW has to consume it too -- otherwise the
+            // emitted DDL cannot be replayed and fails as an unknown property.
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+                List<Column> baseSchema = materializedView.getColumns();
+                Map<String, Integer> zstdCompressionPageSizes =
+                        PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(properties, baseSchema);
+                Set<ColumnId> zstdCompressionColumnIds = null;
+                Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;
+                if (zstdCompressionPageSizes != null && !zstdCompressionPageSizes.isEmpty()) {
+                    zstdCompressionColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    zstdCompressionPageSizeIds = Maps.newHashMap();
+                    for (Map.Entry<String, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                        ColumnId columnId = materializedView.getColumn(entry.getKey()).getColumnId();
+                        zstdCompressionColumnIds.add(columnId);
+                        if (entry.getValue() != null && entry.getValue() > 0) {
+                            zstdCompressionPageSizeIds.put(columnId, entry.getValue());
+                        }
+                    }
+                    if (zstdCompressionPageSizeIds.isEmpty()) {
+                        zstdCompressionPageSizeIds = null;
+                    }
+                }
+                materializedView.setZstdCompressionColumns(zstdCompressionColumnIds, zstdCompressionPageSizeIds);
+            }
             // mv_rewrite_staleness second.
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
                 int maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);

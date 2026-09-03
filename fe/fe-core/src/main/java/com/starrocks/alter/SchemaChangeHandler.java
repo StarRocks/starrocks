@@ -195,6 +195,30 @@ public class SchemaChangeHandler extends AlterHandler {
         return normalized;
     }
 
+    /**
+     * Rejects a schema this ALTER is about to install in which a column the property still names is
+     * no longer eligible -- its type or its keyness changed underneath it. Such a table emits a SHOW
+     * CREATE TABLE that CREATE TABLE would reject. Called from finalAnalyze and from the routed
+     * keyness flip, which returns before finalAnalyze ever runs.
+     */
+    private static void checkZstdCompressionColumnsStillEligible(Set<ColumnId> zstdCompressionColumnIds,
+                                                                 List<Column> newBaseSchema) throws DdlException {
+        if (zstdCompressionColumnIds == null || newBaseSchema == null) {
+            return;
+        }
+        for (Column column : newBaseSchema) {
+            if (!zstdCompressionColumnIds.contains(column.getColumnId())) {
+                continue;
+            }
+            String rejection = PropertyAnalyzer.zstdCompressionColumnRejection(column);
+            if (rejection != null) {
+                throw new DdlException("Column " + column.getName() + " can no longer be a zstd compression "
+                        + "column: " + rejection + ". Remove it from "
+                        + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " first.");
+            }
+        }
+    }
+
     // Page sizes keyed by lower-cased column name, with "no size" and "the default"
     // both erased, so two spellings of the same request compare equal.
     private static Map<String, Integer> normalizedPageSizes(Map<String, Integer> pageSizes) {
@@ -1898,25 +1922,9 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // A MODIFY COLUMN in this same statement can change the type or the keyness of a column the
-        // property still names, and the property survives that untouched. Re-check the nominated
-        // columns against the schema this ALTER is about to install, or the table ends up emitting a
-        // SHOW CREATE TABLE that CREATE TABLE would reject.
-        if (zstdCompressionColumnIds != null) {
-            List<Column> newBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
-            if (newBaseSchema != null) {
-                for (Column column : newBaseSchema) {
-                    if (!zstdCompressionColumnIds.contains(column.getColumnId())) {
-                        continue;
-                    }
-                    String rejection = PropertyAnalyzer.zstdCompressionColumnRejection(column);
-                    if (rejection != null) {
-                        throw new DdlException("Column " + column.getName() + " can no longer be a zstd compression "
-                                + "column: " + rejection + ". Remove it from "
-                                + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " first.");
-                    }
-                }
-            }
-        }
+        // property still names, and the property survives that untouched.
+        checkZstdCompressionColumnsStillEligible(zstdCompressionColumnIds,
+                indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
 
         // Page sizes travel with the column set: when the property is restated they
         // come from it, and when it is not restated the existing ones stay.
@@ -2990,6 +2998,12 @@ public class SchemaChangeHandler extends AlterHandler {
                         throw new DdlException("MODIFY COLUMN that changes keyness on a range-distribution table "
                                 + "can not be combined with other alter operations");
                     }
+                    // This return bypasses finalAnalyze, so its check that the nominated ZSTD
+                    // columns are still eligible has to run here too: promoting one of them to a key
+                    // would otherwise leave the property naming a key column, which CREATE TABLE
+                    // rejects when the emitted DDL is replayed.
+                    checkZstdCompressionColumnsStillEligible(olapTable.getZstdCompressionColumnIds(),
+                            postFlipBaseSchema);
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
                     return createRangeRewriteJob(db, olapTable, postFlipBaseSchema);

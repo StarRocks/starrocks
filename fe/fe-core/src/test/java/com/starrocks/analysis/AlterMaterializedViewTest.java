@@ -112,25 +112,43 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     }
 
     @Test
-    public void testZstdCompressionColumnsAreEchoedInMvDdl() throws Exception {
-        // ALTER TABLE <mv> SET ("zstd_compression_columns" = ...) is accepted and rewrites the
-        // view's tablets, so the DDL has to carry the property: anything that recreates the view
-        // from this string would otherwise drop the setting without a word. Which columns may be
-        // nominated is PropertyAnalyzer's business and is covered there; what is pinned here is
-        // that a set on the view reaches its DDL, next to bloom_filter_columns.
-        MaterializedView mv = starRocksAssert.getMv("test", "mv1");
-        Assertions.assertFalse(mv.getMaterializedViewDdlStmt(false)
-                .contains(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS));
+    public void testZstdCompressionColumnsRoundTripThroughMvDdl() throws Exception {
+        // ALTER TABLE <mv> SET ("zstd_compression_columns" = ...) is accepted on a view and rewrites
+        // its tablets, so the view's DDL has to carry the property AND the CREATE path has to consume
+        // it -- an emitted DDL that CREATE MATERIALIZED VIEW rejects as an unknown property is worse
+        // than not emitting it. A JSON column cannot be a key, so it is a value column (the only kind
+        // this property accepts) without depending on how the view derives its key columns.
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_zstd\n" +
+                "                DISTRIBUTED BY HASH(tc) BUCKETS 1\n" +
+                "                PROPERTIES(\"replication_num\" = \"1\",\n" +
+                "                           \"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                + "\" = \"j:256k\")\n" +
+                "                as select tc, parse_json(ta) as j from tall;\n");
         try {
-            Column column = mv.getColumn("count_c2");
+            MaterializedView mv = starRocksAssert.getMv("test", "mv_zstd");
+            Column column = mv.getColumn("j");
             Assertions.assertNotNull(column);
-            mv.setZstdCompressionColumns(Sets.newHashSet(column.getColumnId()),
-                    ImmutableMap.of(column.getColumnId(), 262144));
+            Assertions.assertFalse(column.isKey(), "j must be a value column for this test");
+            Assertions.assertEquals(Sets.newHashSet("j"), mv.getZstdCompressionColumnNames());
+            Assertions.assertEquals(ImmutableMap.of(column.getColumnId(), 262144),
+                    mv.getZstdCompressionPageSizes());
+
             String ddl = mv.getMaterializedViewDdlStmt(false);
             Assertions.assertTrue(ddl.contains("\"" + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
-                    + "\" = \"count_c2:262144\""), ddl);
+                    + "\" = \"j:262144\""), ddl);
+
+            // And that emitted DDL runs again, which is the whole point of echoing it.
+            starRocksAssert.withMaterializedView(ddl.replace("mv_zstd", "mv_zstd_replay"));
+            try {
+                MaterializedView replayed = starRocksAssert.getMv("test", "mv_zstd_replay");
+                Assertions.assertEquals(Sets.newHashSet("j"), replayed.getZstdCompressionColumnNames());
+                Assertions.assertEquals(ImmutableMap.of(replayed.getColumn("j").getColumnId(), 262144),
+                        replayed.getZstdCompressionPageSizes());
+            } finally {
+                starRocksAssert.dropMaterializedView("mv_zstd_replay");
+            }
         } finally {
-            mv.setZstdCompressionColumns(null, null);
+            starRocksAssert.dropMaterializedView("mv_zstd");
         }
     }
 
