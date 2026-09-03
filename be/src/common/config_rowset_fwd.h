@@ -61,9 +61,8 @@ CONF_Int32(data_page_size, "65536");
 // Write-time gate for the segment "small index region" layout. When true, a segment emits every
 // column's ordinal index and page zone map as one contiguous run immediately before the short
 // key index and the footer, instead of interleaving each column's indexes after that column's
-// data pages. Both
-// layouts are readable by any binary -- indexes are always located through absolute
-// PagePointers -- so this can be flipped at any time and mixed within a tablet.
+// data pages. Both layouts are readable by any binary -- indexes are always located through
+// absolute PagePointers -- so this can be flipped at any time and mixed within a tablet.
 //
 // The point is cold-read latency on shared-data: the reader must load the ordinal index of
 // every accessed column, and the page zone map of every predicate column, before it can read
@@ -77,30 +76,17 @@ CONF_Int32(data_page_size, "65536");
 // indexes still land at the tail rather than under a later group's data pages.
 CONF_mBool(enable_segment_tail_index_region, "false");
 
-// Read-time gate for the matching prefetch. When true, opening a segment whose footer carries
-// a small index region issues ONE read covering the whole region, so that the per-column index
-// loads that immediately follow are served from the block cache instead of going remote one at
-// a time. Segments without the footer fields are unaffected. Set false to measure the layout
-// change without the prefetch, or as a rollback valve.
-CONF_mBool(enable_segment_tail_index_prefetch, "true");
-
-// Upper bound on the small index region prefetch. A very wide table can produce a region far
-// larger than any query needs, and reading it whole would trade the round trips back for
-// wasted bytes. Regions above this size are not prefetched; their indexes are read per column
-// as in the legacy layout.
-CONF_mInt64(segment_tail_index_prefetch_max_bytes, "16777216");
-
 // Read-time gate for serving a segment's small index reads from one shared buffered stream.
-// The prefetch above pays off only through a block cache: it warms the region so the per-column
-// index loads that follow hit the cache. A scan that bypasses the cache -- skip_local_disk_cache,
-// or a table with datacache disabled -- gets nothing from it, and still spends one remote read
-// per column on indexes that are now contiguous. Pointing every column's small index reads at a
-// single stream closes that gap without a cache: the first read's buffer fill covers the region,
-// and the rest are memcpy.
+// The region makes those indexes contiguous, but each column still opens its own file, so a
+// cold scan spends one remote read per column on bytes that now sit next to each other.
+// Pointing every column's small index reads at a single stream collapses that: the first
+// read's buffer fill covers the region, and the rest are memcpy. This works with or without a
+// block cache in front of the file.
 //
 // Requires the tail index region. With the indexes scattered per column, consecutive reads land
 // outside the buffer window, so sharing a stream would pay a discard and a refill each time and
-// buy nothing -- which is why this is gated on the region existing, not on the config above.
+// buy nothing -- which is why this is gated on the region existing, not on
+// enable_segment_tail_index_region.
 CONF_mBool(enable_segment_shared_small_index_stream, "true");
 
 // Upper bound on the shared small index stream's buffer. The buffer is sized to the region so
@@ -174,10 +160,6 @@ CONF_Int16(bitmap_max_filter_ratio, "1");
 // 1 for LZ4_NULL
 CONF_mInt16(null_encoding, "0");
 
-#ifdef USE_STAROS
-CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
-
-#endif
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");

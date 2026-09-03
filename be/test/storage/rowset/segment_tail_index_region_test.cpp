@@ -330,49 +330,6 @@ TEST_F(SegmentTailIndexRegionTest, VerticalAndHorizontalRegionsAgree) {
     verify_all_rows(v_file, tablet_schema);
 }
 
-// The prefetch is worth paying for only when the region reaches past the file's last cache block.
-// The footer is at the very end and is always read first, and a block cache serves that read by
-// fetching the whole block -- so a region sitting inside it is already warm, and walking it again
-// is pure cost. A 17-column segment's region is ~74 KB and always lands there; a 105-column one is
-// ~1.8 MB and does not.
-TEST_F(SegmentTailIndexRegionTest, FooterReadCoversASmallRegion) {
-    constexpr uint64_t kBlock = 1024 * 1024;
-
-    // Region wholly inside the last block: 74 KB before a 40 MB file's end.
-    EXPECT_TRUE(
-            Segment::small_index_region_covered_by_footer_read(40 * 1024 * 1024 - 74 * 1024, 40 * 1024 * 1024, kBlock));
-    // Region reaching back past the block boundary: 1.8 MB before the same end.
-    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(40 * 1024 * 1024 - 1800 * 1024, 40 * 1024 * 1024,
-                                                                    kBlock));
-
-    // Exactly on the boundary: the last block of a 2 MB file starts at 1 MB, so a region starting
-    // there is covered and one byte earlier is not.
-    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(kBlock, 2 * kBlock, kBlock));
-    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(kBlock - 1, 2 * kBlock, kBlock));
-
-    // A file that does not fill one block has only that block, so anything in it is covered.
-    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(0, 4096, kBlock));
-
-    // Degenerate inputs must not skip the prefetch: with no block size there is no cache to
-    // reason about, and an unknown file size tells us nothing.
-    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 4096, 0));
-    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 0, kBlock));
-}
-
-// A real segment written by this test is far smaller than one cache block, so its region must be
-// judged covered -- the case the gate exists to catch.
-TEST_F(SegmentTailIndexRegionTest, RealSmallSegmentRegionIsCovered) {
-    auto tablet_schema = make_schema();
-    config::enable_segment_tail_index_region = true;
-
-    auto result = write_horizontal(kSegmentDir + "/region_covered", tablet_schema);
-    ASSERT_TRUE(result.footer.has_small_index_region_offset());
-    ASSERT_LT(result.file_size, 1024 * 1024) << "test segment outgrew a cache block; pick smaller data";
-
-    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(result.footer.small_index_region_offset(),
-                                                                   result.file_size, 1024 * 1024));
-}
-
 // Small index reads are routed to a shared stream only when one was supplied; everything else
 // keeps reading through the column's own file, as it always has.
 TEST_F(SegmentTailIndexRegionTest, IndexFileFallsBackToTheColumnFile) {

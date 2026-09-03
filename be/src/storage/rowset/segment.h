@@ -245,26 +245,9 @@ public:
     // the brute-force distance-computation fallback.
     bool skip_vector_index() const { return _skip_vector_index; }
 
-    // Warm the block cache with this segment's small index region, at most once per
-    // Segment object. Deliberately NOT done during open(): open() runs before any
-    // pruning, so a selective scan would pay for the region of every segment in the scan
-    // set and then throw most of them away. Called from the column-iterator setup
-    // instead, which only runs for segments that survived segment-level zone map pruning
-    // and are actually about to load their per-column indexes.
-    void prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache);
-
-    // Whether the file's last cache block already holds the whole small index region. The footer
-    // sits at the very end of the file and is always read before anything else, and a block cache
-    // serves that read by fetching the whole block it falls in -- so a region starting inside that
-    // block is warm before any prefetch could run. Takes the block size rather than reading the
-    // config so it stays a pure function, testable without a cache.
-    static bool small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
-                                                          uint64_t block_size);
-
-    // Extent of the small index region, zero when the segment predates the layout. Non-zero means
+    // Size of the small index region, zero when the segment predates the layout. Non-zero means
     // every column's ordinal index and page zone map are contiguous here, which is what lets one
     // buffered stream serve all of them.
-    uint64_t small_index_region_offset() const { return _small_index_region_offset; }
     uint64_t small_index_region_size() const { return _small_index_region_size; }
 
     // Load and decode short key index.
@@ -395,11 +378,9 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
-    // Byte range of the small index region, from the footer; zero size means the segment
-    // was written in the legacy interleaved layout.
-    uint64_t _small_index_region_offset = 0;
+    // Size of the small index region, from the footer; zero means the segment was written in
+    // the legacy interleaved layout.
     uint64_t _small_index_region_size = 0;
-    std::once_flag _small_index_prefetch_once;
     // Presence + page pointer for the optional full sort key index page (footer field 11). Set at
     // open(); the page itself is loaded lazily by ensure_full_sort_key_index_usable().
     bool _has_full_sort_key_index_page = false;

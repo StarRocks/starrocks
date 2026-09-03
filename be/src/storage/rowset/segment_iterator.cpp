@@ -2019,14 +2019,14 @@ Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const 
 }
 
 // One buffered stream for every column's small index reads, so that the tail index region is
-// fetched once instead of once per column.
+// fetched once instead of once per column. This is the whole read-side payoff of the region, and
+// it does not depend on a block cache: the region is contiguous, so a single stream whose buffer
+// spans it turns the first column's read into the only remote one.
 //
-// This is what makes the region pay off without a block cache. prefetch_small_index_region_once()
-// warms the cache and is therefore a no-op for a scan that bypasses it, but the region is
-// contiguous either way -- so a single stream whose buffer spans it turns the first column's read
-// into the only remote one. BufferInputStream fills forward from the read position and keeps its
-// buffer across any seek that lands inside the filled extent (buffer_stream.cc), which is exactly
-// the access pattern here: ascending offsets within one region.
+// BufferInputStream keeps only the window ahead of its read position -- it fills forward and
+// discards on any seek that lands outside the filled extent (buffer_stream.h). Reads inside the
+// region are ascending within each pass, so the buffer survives them; a backward seek between
+// passes is still correct, only slower -- it costs one refill.
 //
 // Returns nullptr, leaving every column on its own file, when there is no region to exploit. In
 // the legacy layout the indexes sit behind their own column's data pages, megabytes apart, so
@@ -2118,11 +2118,6 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
-        // Warm the segment's small index region before its first per-column index load. Doing
-        // it here rather than in Segment::open() means only segments that survived
-        // segment-level zone map pruning pay for it, and the once_flag inside collapses the
-        // repeat calls this site would otherwise make -- one per column.
-        _segment->prefetch_small_index_region_once(rfile.get(), _opts.lake_io_opts.fill_data_cache);
         // Small index reads go to the shared stream; data pages stay on this column's own file.
         // Routing the data pages here too would evict the region from the very buffer this exists
         // to hold.
