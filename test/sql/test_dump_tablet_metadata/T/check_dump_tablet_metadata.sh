@@ -25,7 +25,12 @@ check_table() {
 
     for attempt in $(seq 1 10); do
         ${mysql_cmd} -D"${database}" -Ne "SELECT COUNT(*) FROM ${table}" >/dev/null || return 1
-        endpoints=$(${mysql_cmd} -Ne "SHOW COMPUTE NODES" | awk -F '\t' '$9 == "true" { print $2 ":" $5 }')
+        # A shared-data cluster serves queries from nodes registered either as backends or as
+        # compute nodes, and each statement lists only its own kind, so probe the union of both.
+        # Their first nine columns agree (id, IP, HeartbeatPort, BePort, HttpPort, BrpcPort,
+        # LastStartTime, LastHeartbeat, Alive), which lets one awk program read either output.
+        endpoints=$( { ${mysql_cmd} -Ne "SHOW BACKENDS"; ${mysql_cmd} -Ne "SHOW COMPUTE NODES"; } |
+            awk -F '\t' '$9 == "true" { print $2 ":" $5 }')
         for endpoint in ${endpoints}; do
             curl -fsS --connect-timeout 1 --max-time 3 -u root: "http://${endpoint}/api/cloudnative/dump_tablet_metadata/${tablet_id}?version=${version}" |
                 jq -e '.status == "OK"' >/dev/null && return 0
