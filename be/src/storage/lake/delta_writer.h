@@ -130,6 +130,10 @@ public:
     // After cancellation, subsequent write/flush operations will fail quickly.
     void cancel(const Status& st);
 
+    // The status passed to the first `cancel()` call, or OK if never cancelled.
+    // Callers use it to report why the writer stopped working instead of a generic error.
+    [[nodiscard]] Status cancel_status() const;
+
     [[nodiscard]] int64_t partition_id() const;
 
     [[nodiscard]] int64_t tablet_id() const;
