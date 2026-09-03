@@ -14,9 +14,11 @@
 
 #include "storage/lake/lake_primary_index.h"
 
+#include <atomic>
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
@@ -281,14 +283,29 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
     std::mutex deletes_mutex;
     // One slot per chunk, owned here so the encoded key bytes outlive the task that reads them.
     std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
+    // Time actually spent inside the tasks, split by phase and summed across worker threads (so the
+    // totals can exceed wall clock). `parallel_get_wait_us` below only measures the tail wait on the
+    // token, which says how far behind the workers were but not what they were doing -- it cannot
+    // tell an expensive index lookup from an undersized pool or from key encoding dominating. These
+    // separate the three. Relaxed is enough: only the emit after join() reads them, and join()
+    // provides the ordering. They live in this scope because Trace is thread-local and does not
+    // survive the hop into the pool, so a TRACE_COUNTER inside a task would be silently dropped.
+    std::atomic<int64_t> pk_encode_ns{0};
+    std::atomic<int64_t> index_get_ns{0};
+    std::atomic<int64_t> drain_ns{0};
+    std::atomic<int64_t> looked_up_keys{0};
 
     for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
         auto current = segment_pk_iterator->current();
         slots.push_back(std::make_unique<ParallelPublishSlot>());
         auto* slot = slots.back().get();
 
-        runner.run([this, current, slot, segment_pk_iterator, new_deletes, &deletes_mutex]() -> Status {
+        runner.run([this, current, slot, segment_pk_iterator, new_deletes, &deletes_mutex, &pk_encode_ns, &index_get_ns,
+                    &drain_ns, &looked_up_keys]() -> Status {
+            MonotonicStopWatch phase;
+            phase.start();
             ASSIGN_OR_RETURN(slot->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
+            pk_encode_ns.fetch_add(phase.elapsed_time(), std::memory_order_relaxed);
             // Drop the siblings' keys first. Their old locations would otherwise reach
             // old_values_to_deletes below and be marked deleted in THIS child's delvec, and the
             // parent view ORs the children's delvecs -- so a sibling's lookup would erase a row
@@ -301,9 +318,16 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
                 return Status::OK();
             }
             slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
+            looked_up_keys.fetch_add(static_cast<int64_t>(slot->pk_column->size()), std::memory_order_relaxed);
+            phase.reset();
+            phase.start();
             RETURN_IF_ERROR(get(*slot->pk_column, &slot->old_values));
+            index_get_ns.fetch_add(phase.elapsed_time(), std::memory_order_relaxed);
+            phase.reset();
+            phase.start();
             std::lock_guard<std::mutex> l(deletes_mutex);
             old_values_to_deletes(slot->old_values, new_deletes);
+            drain_ns.fetch_add(phase.elapsed_time(), std::memory_order_relaxed);
             return Status::OK();
         });
         if (token != nullptr) {
@@ -315,6 +339,11 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
         TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
         RETURN_IF_ERROR(runner.join());
     }
+    // Emitted here rather than from the tasks: see the atomics' comment above.
+    TRACE_COUNTER_INCREMENT("parallel_get_pk_encode_us", pk_encode_ns.load() / 1000);
+    TRACE_COUNTER_INCREMENT("parallel_get_index_get_us", index_get_ns.load() / 1000);
+    TRACE_COUNTER_INCREMENT("parallel_get_drain_us", drain_ns.load() / 1000);
+    TRACE_COUNTER_INCREMENT("parallel_get_keys", looked_up_keys.load());
     return segment_pk_iterator->status();
 }
 
