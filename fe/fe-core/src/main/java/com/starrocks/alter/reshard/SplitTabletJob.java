@@ -801,6 +801,14 @@ public class SplitTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+<<<<<<< HEAD
+=======
+                    if (MetaUtils.hasSeparateSortKey(olapTable, newIndex.getMetaId())) {
+                        physicalPartition.pinQueryableIndex(
+                                newIndex.getMetaId(), reshardingIndex.getMaterializedIndexId());
+                    }
+                    newIndex.setTakeoverVersion(commitVersion);
+>>>>>>> afd5f56 ([BugFix] Keep the autovacuum retain floor at or above a reshard takeover (#78545))
                     physicalPartition.addMaterializedIndex(newIndex,
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
