@@ -50,9 +50,26 @@ bool can_generate_split_tasks(ScanMorsel* morsel, MorselQueue* morsel_queue) {
 
 } // namespace
 
+// Weight of one chunk in ConnectorChunkSource::_recent_chunk_mem_bytes: each chunk moves the value
+// by 1/8 of its distance from it. Chunk-level observations are far denser than the chunk-source-level
+// ones the node limiter averages, so this reacts faster than the window used there.
+constexpr int64_t kRecentChunkMemBytesWeight = 8;
+
 // ==================== ConnectorScanOperatorFactory ====================
 class ConnectorScanOperatorIOTasksMemLimiter {
 private:
+    // Number of observations the mean of `chunk_source_mem_bytes` averages over. An unbounded
+    // cumulative mean never forgets: after 10k chunk sources a 4GB outlier moves the estimate by
+    // 0.04%, so a workload switch (a partition of wider row groups, a dictionary-encoded column of
+    // long strings) leaves the limiter blind. Past this many observations the mean degrades into an
+    // exponential moving average with the same weight.
+    static constexpr int64_t kMemBytesMeanWindow = 16;
+    // Per-observation decay of the high-water mark. Admission is decided by the tail, not the mean,
+    // so the node stays cautious for a while after seeing an expensive chunk source instead of
+    // forgetting it as soon as a cheap one follows.
+    static constexpr int64_t kMemBytesHighWaterDecayNum = 15;
+    static constexpr int64_t kMemBytesHighWaterDecayDen = 16;
+
     mutable std::mutex lock;
 
     const int64_t dop = 0;
@@ -65,6 +82,8 @@ private:
     int64_t data_source_mem_bytes = 0;
     std::atomic<int64_t> chunk_source_mem_bytes = 0;
     int64_t chunk_source_mem_bytes_update_count = 0;
+    int64_t chunk_source_mem_bytes_mean = 0;
+    int64_t chunk_source_mem_bytes_high_water = 0;
     int64_t arb_chunk_source_mem_bytes = 0;
     mutable int64_t debug_output_timestamp = 0;
     std::atomic<int64_t> open_scan_operator_count = 0;
@@ -80,12 +99,18 @@ public:
         int64_t max_count = std::max<int64_t>(1, scan_mem_limit_value / chunk_source_mem_bytes_value);
         int64_t avail_count = max_count;
         int64_t per_count = avail_count / dop;
-        if (shared_scan) {
-            if (driver_sequence < (avail_count - per_count * dop)) {
-                per_count += 1;
-            }
-        } else {
+        // Hand the remainder to the first few drivers instead of granting every driver an extra
+        // slot. The non-shared path used to add 1 unconditionally, so the dop drivers summed to
+        // `max_count + dop` concurrent chunk sources and over-committed this node's budget by
+        // `dop * chunk_source_mem_bytes`, on top of whatever the estimate already got wrong.
+        if (driver_sequence < (avail_count - per_count * dop)) {
             per_count += 1;
+        }
+        if (!shared_scan) {
+            // Without shared scan each driver drains its own morsel queue, so a zero quota would
+            // park those morsels for the whole query. Keep that escape, but bound it at one chunk
+            // source for the drivers that would otherwise get none, rather than one extra for all.
+            per_count = std::max<int64_t>(1, per_count);
         }
 
         [[maybe_unused]] auto build_debug_string = [&]() {
@@ -118,9 +143,18 @@ public:
         value = std::min(value, query_scan_mem_limit);
 
         std::lock_guard<std::mutex> L(lock);
-        int64_t total = get_chunk_source_mem_bytes() * chunk_source_mem_bytes_update_count + value;
-        chunk_source_mem_bytes_update_count += 1;
-        chunk_source_mem_bytes.store(total / chunk_source_mem_bytes_update_count, std::memory_order_relaxed);
+        // Weight the old mean by at most `window - 1` observations. Below the window this is the
+        // exact running mean, unchanged from before; at and above it the update becomes
+        // `mean += (value - mean) / window`.
+        const int64_t weight = std::min(chunk_source_mem_bytes_update_count, kMemBytesMeanWindow - 1);
+        chunk_source_mem_bytes_mean = (chunk_source_mem_bytes_mean * weight + value) / (weight + 1);
+        chunk_source_mem_bytes_update_count = std::min(chunk_source_mem_bytes_update_count + 1, kMemBytesMeanWindow);
+        chunk_source_mem_bytes_high_water = std::max(
+                value, chunk_source_mem_bytes_high_water * kMemBytesHighWaterDecayNum / kMemBytesHighWaterDecayDen);
+        // Admit on whichever is larger: the mean tracks the trend, the decaying high-water mark
+        // keeps the tail from being averaged away.
+        chunk_source_mem_bytes.store(std::max(chunk_source_mem_bytes_mean, chunk_source_mem_bytes_high_water),
+                                     std::memory_order_relaxed);
     }
 
     void set_query_scan_mem_limit(int64_t value) { query_scan_mem_limit = value; }
@@ -819,7 +853,7 @@ void ConnectorChunkSource::_reset_reuse_state(RuntimeState* state, MorselPtr&& m
     _is_split_source_morsel = false;
     _split_source_morsel_reported = false;
     _chunk_rows_read = 0;
-    _chunk_mem_bytes = 0;
+    _recent_chunk_mem_bytes = 0;
     _mem_alloc_failed_count = 0;
     _cpu_time_spent_ns = 0;
     _scan_rows_num = 0;
@@ -927,7 +961,6 @@ void ConnectorChunkSource::close(RuntimeState* state) {
 
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
         limiter->update_running_chunk_source_count(-1);
-        uint64_t chunk_num = std::min<uint64_t>(state->chunk_size(), _chunk_rows_read);
 
         bool need_update = true;
         int64_t data_source_mem_bytes = _data_source->estimated_mem_usage();
@@ -944,7 +977,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
             if (data_source_mem_bytes == 0) {
                 data_source_mem_bytes = limiter->get_data_source_mem_bytes();
             }
-            chunk_source_mem_bytes = data_source_mem_bytes + avg_row_mem_bytes() * chunk_num;
+            chunk_source_mem_bytes = data_source_mem_bytes + _recent_chunk_mem_bytes;
             limiter->update_chunk_source_mem_bytes(chunk_source_mem_bytes);
         }
 
@@ -954,7 +987,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
                << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
                << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
                << ", chunk source mem bytes = " << chunk_source_mem_bytes
-               << ", chunk mem bytes = " << avg_row_mem_bytes() << " * " << chunk_num
+               << ", recent chunk mem bytes = " << _recent_chunk_mem_bytes
                << ", data source mem usage = " << data_source_mem_bytes;
             return ss.str();
         };
@@ -1105,7 +1138,14 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             P.cs_total_io_time += delta_io_time_ns;
             P.cs_total_scan_bytes += delta_scan_bytes;
             _chunk_rows_read += (*chunk)->num_rows();
-            _chunk_mem_bytes += (*chunk)->memory_usage();
+            const int64_t chunk_mem_bytes = (*chunk)->memory_usage();
+            // Seed on the first chunk, otherwise it would take several chunks to climb off zero and
+            // the estimate would understate a chunk source that only produces a couple of chunks.
+            if (_recent_chunk_mem_bytes == 0) {
+                _recent_chunk_mem_bytes = chunk_mem_bytes;
+            } else {
+                _recent_chunk_mem_bytes += (chunk_mem_bytes - _recent_chunk_mem_bytes) / kRecentChunkMemBytesWeight;
+            }
             _chunk_buffer.update_limiter(chunk->get());
             return Status::OK();
         }
@@ -1119,11 +1159,6 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_report_split_source_morsel_finished_once());
     }
     return ret;
-}
-
-uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
-    if (_chunk_rows_read == 0) return 0;
-    return _chunk_mem_bytes / _chunk_rows_read;
 }
 
 void ConnectorChunkSource::_update_catalog_metrics() {
