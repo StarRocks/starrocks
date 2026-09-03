@@ -1122,7 +1122,7 @@ public class InsertPlanTest extends PlanTestBase {
 
         String sql = "insert into iceberg_catalog_lineage.iceberg_db.iceberg_lineage_table select 1, 2, 3, 4";
         InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true, false);
 
         String actualRes = getInsertExecPlan(rewriteStmt, sql);
         Assertions.assertTrue(actualRes.contains(IcebergTable.ROW_ID), actualRes);
