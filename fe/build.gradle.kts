@@ -76,7 +76,7 @@ subprojects {
         set("parquet.version", "1.16.0")
         set("ranger.version", "2.8.0")
         set("orc.version", "1.9.1")
-        set("protobuf-java.version", "3.25.5")
+        set("protobuf-java.version", "3.25.9")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
         set("staros.version", "4.2-rc4")
