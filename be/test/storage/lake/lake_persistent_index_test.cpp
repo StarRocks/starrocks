@@ -752,7 +752,7 @@ TEST_F(LakePersistentIndexTest, test_erase_parallel_matches_serial) {
                 bks[j] = Slice((uint8_t*)(&bk[j]), sizeof(Key));
                 bv[j] = IndexValue((uint64_t)(gid + 1)); // distinct, non-null
             }
-            index->prepare(EditVersion(b + 1, 0), 0);
+            index->set_publish_version(EditVersion(b + 1, 0));
             std::vector<IndexValue> old(kPerBatch);
             ASSERT_OK(index->upsert(kPerBatch, bks.data(), bv.data(), old.data()));
             ASSERT_OK(index->flush_memtable(true));
@@ -822,13 +822,13 @@ TEST_F(LakePersistentIndexTest, test_bulk_erase_matches_memtable) {
                 bks[j] = key_slices[gid];
                 bv[j] = IndexValue((uint64_t)(gid + 1));
             }
-            index->prepare(EditVersion(b + 1, 0), 0);
+            index->set_publish_version(EditVersion(b + 1, 0));
             std::vector<IndexValue> old(per);
             CHECK_OK(index->upsert(per, bks.data(), bv.data(), old.data()));
             CHECK_OK(index->flush_memtable(true));
             CHECK_OK(index->sync_flush_all_memtables(10000000));
         }
-        index->prepare(EditVersion(batches + 1, 0), 0); // version stamped on the delete tombstones
+        index->set_publish_version(EditVersion(batches + 1, 0)); // version stamped on the delete tombstones
         return index;
     };
 
@@ -1215,7 +1215,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction) {
             total_values.emplace_back(j * 2);
             ++k;
         }
-        index->prepare(EditVersion(i, 0), 0);
+        index->set_publish_version(EditVersion(i, 0));
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
@@ -1316,7 +1316,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_drops_corrupted_cache) {
             key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
             values.emplace_back(j * 2);
         }
-        index->prepare(EditVersion(i, 0), 0);
+        index->set_publish_version(EditVersion(i, 0));
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
@@ -1404,7 +1404,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_open_corruption_drops_cach
             key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
             values.emplace_back(j * 2);
         }
-        index->prepare(EditVersion(i, 0), 0);
+        index->set_publish_version(EditVersion(i, 0));
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
@@ -1495,7 +1495,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_value_parse_corruption_dro
             key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
             values.emplace_back(j * 2);
         }
-        index->prepare(EditVersion(i, 0), 0);
+        index->set_publish_version(EditVersion(i, 0));
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         // generate sst files.
@@ -1566,7 +1566,7 @@ TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delv
         key_slices[i] = Slice((uint8_t*)(&keys[i]), sizeof(Key));
         values[i] = i * 2;
     }
-    index->prepare(EditVersion(1, 0), 0);
+    index->set_publish_version(EditVersion(1, 0));
     std::vector<IndexValue> old_values(kNumKeys);
     ASSERT_OK(index->upsert(kNumKeys, key_slices.data(), values.data(), old_values.data()));
     ASSERT_OK(index->flush_memtable(true));
@@ -1668,7 +1668,7 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
             key_slices.emplace_back(keys.back());
             values.emplace_back(j * 2 + i);
         }
-        index->prepare(EditVersion(i, 0), 0);
+        index->set_publish_version(EditVersion(i, 0));
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         ASSERT_OK(index->flush_memtable(true));
         // Wait for async flush to complete if any
@@ -1771,7 +1771,7 @@ TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
             key_slices.emplace_back(keys.back());
             values.emplace_back(key * 10);
         }
-        index->prepare(EditVersion(batch, 0), 0);
+        index->set_publish_version(EditVersion(batch, 0));
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         ASSERT_OK(index->flush_memtable(true));
         ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
@@ -2328,7 +2328,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
             key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
             values.emplace_back(j * 2);
         }
-        index->prepare(EditVersion(i, 0), 0);
+        index->set_publish_version(EditVersion(i, 0));
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         ASSERT_OK(index->flush_memtable(true));
@@ -2422,7 +2422,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
                 key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
                 values.emplace_back(j * 2);
             }
-            index->prepare(EditVersion(i, 0), 0);
+            index->set_publish_version(EditVersion(i, 0));
             vector<IndexValue> upsert_old_values(keys.size());
             ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
             ASSERT_OK(index->flush_memtable(true));
@@ -3099,7 +3099,7 @@ TEST_F(LakePersistentIndexTest, test_commit_stamps_version) {
         key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
         values.emplace_back(j * 2);
     }
-    index->prepare(EditVersion(publish_version, 0), 0);
+    index->set_publish_version(EditVersion(publish_version, 0));
     std::vector<IndexValue> old_values(N);
     ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), old_values.data()));
     ASSERT_OK(index->flush_memtable(true));
