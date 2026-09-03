@@ -684,6 +684,46 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id
     EXPECT_FALSE(op.has_new_schema_version());
 }
 
+// Without an FE-allocated schema id there is nothing to invalidate the by-id
+// schema caches with, and to_schema_pb() would otherwise leave FE's *catalog*
+// schema id in new_schema -- installing content under that id would bind it to a
+// schema the caches may already hold. Such a request must publish no new_schema at
+// all, keeping the pre-existing behaviour.
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_omits_new_schema_without_allocated_id) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    // Deliberately no new_index_schema_id.
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({"c1"});
+    request.__set_indexes_to_add({ix});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    ASSIGN_OR_ABORT(auto txn_log,
+                    _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
+                                                  /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    const auto& op = txn_log->op_add_index();
+    EXPECT_FALSE(op.has_new_schema()) << "no allocated id means no schema to install";
+    EXPECT_FALSE(op.has_new_schema_id());
+    // The index payloads themselves still publish.
+    EXPECT_EQ(1, op.new_indexes_size());
+    EXPECT_EQ(1, op.segment_entries_size());
+}
+
 // A materialized index (rollup / sync MV) whose schema lacks the indexed
 // column gets a task with an EMPTY index set: BE must write a no-op txn log
 // (version advance only) instead of erroring, so the reserved alter version

@@ -835,13 +835,19 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     //
     // apply_add_index composes this with new_indexes above into the final schema,
     // so the compose logic lives in exactly one place.
-    auto* target_schema_pb = op_add_index->mutable_new_schema();
-    new_schema->to_schema_pb(target_schema_pb);
-    if (request.__isset.new_index_schema_id) {
+    //
+    // Emitted only when FE allocated an id for this alter. Without one there is no
+    // id to invalidate the by-id schema caches with, and to_schema_pb() would leave
+    // FE's *catalog* schema id in place -- installing content under that id would
+    // bind it to a schema the caches may already hold. Publishing nothing instead
+    // keeps the pre-existing behaviour for such a request.
+    if (request.__isset.new_index_schema_id && request.new_index_schema_id > 0) {
+        auto* target_schema_pb = op_add_index->mutable_new_schema();
+        new_schema->to_schema_pb(target_schema_pb);
         target_schema_pb->set_id(request.new_index_schema_id);
-    }
-    if (request.__isset.new_index_schema_version) {
-        target_schema_pb->set_schema_version(static_cast<int32_t>(request.new_index_schema_version));
+        if (request.__isset.new_index_schema_version) {
+            target_schema_pb->set_schema_version(static_cast<int32_t>(request.new_index_schema_version));
+        }
     }
 
     AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
