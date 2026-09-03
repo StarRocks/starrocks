@@ -37,6 +37,8 @@ using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string_vi
 
 extern const uint8_t JSON_BASE_TYPE_BITS;
 extern const uint8_t JSON_BIGINT_TYPE_BITS;
+extern const uint8_t JSON_DOUBLE_TYPE_BITS;
+extern const uint8_t JSON_NONE_TYPE_BITS;
 extern const FlatJsonHashMap<vpack::ValueType, uint8_t> JSON_TYPE_BITS;
 extern const phmap::flat_hash_set<vpack::ValueType> JSON_BASE_TYPE;
 extern const FlatJsonHashMap<uint8_t, LogicalType> JSON_BITS_TO_LOGICAL_TYPE;
@@ -44,7 +46,10 @@ extern const FlatJsonHashMap<LogicalType, uint8_t> LOGICAL_TYPE_TO_JSON_BITS;
 extern const FlatJsonHashMap<LogicalType, JsonFlatExtractFunc> JSON_EXTRACT_FUNC;
 extern const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC;
 
+// merge the type of one more observed value into an accumulated type bitmap
 uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2);
+// merge two accumulated type bitmaps, e.g. the ones two segments of the same path settled on
+uint8_t merge_compatibility_type(uint8_t type1, uint8_t type2);
 
 } // namespace flat_json
 } // namespace starrocks

@@ -173,7 +173,8 @@ using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* r
 using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx);
 const uint8_t JSON_BASE_TYPE_BITS = 0;   // least flat to JSON type
 const uint8_t JSON_BIGINT_TYPE_BITS = 7; // bigint compatible type
-// static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
+const uint8_t JSON_DOUBLE_TYPE_BITS = 1; // double compatible type
+const uint8_t JSON_NONE_TYPE_BITS = 31;  // initial value of JsonFlatPath::json_type, nothing observed yet
 
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
@@ -241,9 +242,32 @@ const FlatJsonHashMap<LogicalType, JsonFlatMergeFunc> JSON_MERGE_FUNC {
 };
 // clang-format on
 
+// The bitmaps encode a lattice in which clearing a bit widens the value domain, so merging two observed
+// types is an intersection. That is faithful inside the integer family: SmallInt(15) -> Int(7) ->
+// UInt(3) are genuinely nested domains, so the AND of any two of them names an integer type that still
+// holds every value seen, exactly. Double(1) continues the same bit chain but not the same domain
+// chain -- it trades range for a 53-bit mantissa -- so it merges losslessly with nothing but itself,
+// and every other pairing degrades the path to TYPE_JSON, which stores the literal verbatim.
+uint8_t merge_compatibility_type(uint8_t type1, uint8_t type2) {
+    // None is the identity element: the initial value of JsonFlatPath::json_type, nothing observed yet.
+    if (type1 == JSON_NONE_TYPE_BITS) {
+        return type2;
+    }
+    if (type2 == JSON_NONE_TYPE_BITS) {
+        return type1;
+    }
+    if (type1 == type2) {
+        return type1;
+    }
+    if (type1 == JSON_DOUBLE_TYPE_BITS || type2 == JSON_DOUBLE_TYPE_BITS) {
+        return JSON_BASE_TYPE_BITS;
+    }
+    return type1 & type2;
+}
+
 uint8_t get_compatibility_type(vpack::ValueType type1, uint8_t type2) {
     auto iter = JSON_TYPE_BITS.find(type1);
-    return iter != JSON_TYPE_BITS.end() ? type2 & iter->second : JSON_BASE_TYPE_BITS;
+    return iter != JSON_TYPE_BITS.end() ? merge_compatibility_type(type2, iter->second) : JSON_BASE_TYPE_BITS;
 }
 
 } // namespace flat_json

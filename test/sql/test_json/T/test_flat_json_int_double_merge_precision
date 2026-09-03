@@ -1,0 +1,64 @@
+-- name: test_flat_json_int_double_merge_precision
+-- Flat JSON gives each JSON path one typed sub-column per segment, so JsonPathDeriver has to settle on
+-- a single type when the rows disagree about a path. It settled by ANDing a type bitmap in which
+-- clearing a bit widens the domain -- faithful inside the integer family, but not for Double, which
+-- buys range with a 53-bit mantissa. So "integer AND double" resolved to TYPE_DOUBLE and the integers
+-- were rewritten through a double on the way to disk, unrecoverably, since a flattened path is not
+-- also kept in remain. The same merge runs across segments, so compaction did it to segments that had
+-- been written correctly. The conflict now degrades the path to TYPE_JSON, which keeps the literal.
+-- Every integer below is above 2^53, where doubles start skipping representable values; 2^53 itself is
+-- the boundary that survives either way, and the small ones stand for the values never at risk. The
+-- single 1.5 is the whole conflict.
+create table t1_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t1_${uuid0} values
+  (1, parse_json('{"v":9007199254740993}')),
+  (2, parse_json('{"v":9007199254740995}')),
+  (3, parse_json('{"v":9223372036854775807}')),
+  (4, parse_json('{"v":-9223372036854775806}')),
+  (5, parse_json('{"v":123456789012345678}')),
+  (6, parse_json('{"v":9007199254740992}')),
+  (7, parse_json('{"v":1}')),
+  (8, parse_json('{"v":-7}')),
+  (9, parse_json('{"v":100}')),
+  (10, parse_json('{"v":1.5}'));
+-- $.v was flattened as v(DOUBLE) here.
+select flat_json_meta(j) from t1_${uuid0}[_META_];
+-- The rewrite happened on the way to disk, so reading the whole column showed it too.
+select k, j from t1_${uuid0} order by k;
+-- A typed read of the sub-column shows the same values, since there is only the one copy.
+select k, get_json_string(j, '$.v') as v from t1_${uuid0} order by k;
+-- A value no double can hold has to stay findable by its exact digits.
+select k from t1_${uuid0} where get_json_string(j, '$.v') = '9223372036854775807';
+-- Only the double conflict degrades. d is all fractions, i is all small integers, wide mixes vpack
+-- SmallInt with Int -- a real subset, so it stays BIGINT and keeps 2^53+1 exactly -- huge is above
+-- int64 so it needs LARGEINT, si mixes a string with integers and has been TYPE_JSON all along, and
+-- dbl_int is the defect: JSON now, DOUBLE before.
+create table t2_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t2_${uuid0} values
+  (1, parse_json('{"d":1.5,"i":3,"wide":1,"huge":18446744073709551615,"si":"a","dbl_int":1.5}')),
+  (2, parse_json('{"d":2.25,"i":4,"wide":9007199254740993,"huge":18446744073709551614,"si":7,"dbl_int":9007199254740993}')),
+  (3, parse_json('{"d":3.0,"i":5,"wide":2,"huge":18446744073709551613,"si":8,"dbl_int":3}'));
+select flat_json_meta(j) from t2_${uuid0}[_META_];
+select k, j from t2_${uuid0} order by k;
+-- Across segments the merge is worse: both segments below are written correctly and each is
+-- internally consistent, and it is compaction that destroys the first one.
+create table t3_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t3_${uuid0} values
+  (1, parse_json('{"v":9007199254740993}')),
+  (2, parse_json('{"v":9223372036854775807}')),
+  (3, parse_json('{"v":123456789012345678}'));
+insert into t3_${uuid0} values (4, parse_json('{"v":1.5}'));
+-- Two segments, one BIGINT and one DOUBLE, every value exact. Ordered because segment order is not.
+select flat_json_meta(j) from t3_${uuid0}[_META_] order by 1;
+select k, j from t3_${uuid0} order by k;
+alter table t3_${uuid0} compact;
+function: wait_compaction_finish("t3_${uuid0}", 1)
+-- One segment now. It used to be v(DOUBLE), with the three integers rounded on the way through.
+select flat_json_meta(j) from t3_${uuid0}[_META_];
+select k, j from t3_${uuid0} order by k;
+drop table t1_${uuid0};
+drop table t2_${uuid0};
+drop table t3_${uuid0};

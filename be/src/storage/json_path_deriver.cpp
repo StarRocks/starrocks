@@ -186,7 +186,8 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
             const auto& sub = (*reader->sub_readers())[i];
             // compaction only extract common leaf, extract parent node need more compute on remain, it's bad performance
             auto leaf = _normalize_exists_path(sub->name(), _path_root.get(), 0);
-            leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type());
+            leaf->json_type = flat_json::merge_compatibility_type(
+                    leaf->json_type, flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type()));
             leaf->hits += reader->num_rows();
         }
     }
@@ -219,7 +220,8 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
 
         for (size_t i = 0; i < paths.size(); i++) {
             auto leaf = _normalize_exists_path(paths[i], _path_root.get(), hits);
-            leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(types[i]);
+            leaf->json_type = flat_json::merge_compatibility_type(leaf->json_type,
+                                                                  flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(types[i]));
             leaf->hits += hits;
         }
     }

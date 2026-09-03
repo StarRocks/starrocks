@@ -59,7 +59,7 @@ public:
 
     // derived stats
     // json compatible type
-    uint8_t json_type = 31; // JSON_NULL_TYPE_BITS
+    uint8_t json_type = 31; // flat_json::JSON_NONE_TYPE_BITS, no value observed yet
     // column path hit count, some json may be null or none, so hit use to record the actual value
     // e.g: {"a": 1, "b": 2}, path "$.c" not exist, so hit is 0
     uint32_t hits = 0;
