@@ -58,6 +58,18 @@ public:
             return Status::Corruption(strings::Substitute("invalid bitshuffle compressed size:$0, page size:$1",
                                                           compressed_size, page_slice->size));
         }
+        // bitshuffle::decompress_lz4() takes no input length: it derives how far
+        // to read from the element count and the per-block framing, so a page
+        // that declares elements but carries an empty compressed body makes it
+        // read past the body into the trailer (or past the buffer entirely),
+        // before the post-call consumed-bytes check can reject the page. Only a
+        // genuinely empty page is header-only: the builder writes
+        // compressed_size == BITSHUFFLE_PAGE_HEADER_SIZE only when the padded
+        // element count is 0.
+        if (num_element_after_padding != 0 && compressed_size == BITSHUFFLE_PAGE_HEADER_SIZE) {
+            return Status::Corruption(
+                    strings::Substitute("empty bitshuffle compressed body for $0 elements", num_element_after_padding));
+        }
         // Same element sizes BitShufflePageDecoder::init accepts; anything else
         // (e.g. 0xffffffff) would drive an absurd allocation below.
         switch (size_of_element) {

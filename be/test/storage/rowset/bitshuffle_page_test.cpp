@@ -574,6 +574,19 @@ TEST_F(BitShufflePageTest, TestCorruptedPagePreDecodeRejected) {
         ASSERT_FALSE(decode(bad).ok());
     }
 
+    // A page that declares elements but carries an empty compressed body
+    // (compressed_size == BITSHUFFLE_PAGE_HEADER_SIZE) must be rejected before
+    // the decompressor runs: decompress_lz4() takes no input length, so it
+    // would read the trailer as block framing. Only a genuinely empty page
+    // (padded count 0) is header-only.
+    {
+        std::string bad = good;
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 0, 1);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 4, BITSHUFFLE_PAGE_HEADER_SIZE);
+        encode_fixed32_le(reinterpret_cast<uint8_t*>(bad.data()) + 8, 8);
+        ASSERT_FALSE(decode(bad).ok());
+    }
+
     // An element size outside the supported set would drive an absurd
     // allocation (e.g. 8 * 0xffffffff bytes) before any decode.
     {
