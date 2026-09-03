@@ -21,6 +21,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "compute_env/load_path/load_path_state_helper.h"
+#include "formats/csv/csv_record_framer.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -169,6 +170,54 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     } else {
         _use_v2 = true;
     }
+}
+
+Status CSVScanner::get_split_offsets(int64_t split_size, std::vector<int64_t>* offsets) {
+    constexpr size_t kReadBufferSize = 1024 * 1024;
+
+    if (_scan_range.ranges.size() != 1) {
+        return Status::InvalidArgument("split discovery expects exactly one file per scan range");
+    }
+    const TBrokerRangeDesc& range_desc = _scan_range.ranges[0];
+    if (range_desc.format_type != TFileFormatType::FORMAT_CSV_PLAIN) {
+        // A compressed file has no usable byte offsets to hand back, and is never split.
+        return Status::NotSupported("split discovery only applies to uncompressed CSV");
+    }
+
+    const TNetworkAddress address =
+            _scan_range.broker_addresses.empty() ? TNetworkAddress() : _scan_range.broker_addresses[0];
+    std::shared_ptr<SequentialFile> file;
+    RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &file));
+
+    ++_counter->num_files_read;
+
+    CSVRecordFramer framer(_parse_options, split_size);
+    raw::RawVector<char> buffer;
+    buffer.resize(kReadBufferSize);
+    while (true) {
+        // Accounted for the way ScannerCSVReader::_fill_buffer accounts for the reads it does. The
+        // load waits on this pass and it reads the file end to end, so leaving it out would hide
+        // half the bytes fetched and all of this phase's latency.
+        ++_counter->file_read_count;
+        auto res = [&] {
+            SCOPED_RAW_TIMER(&_counter->file_read_ns);
+            return file->read(buffer.data(), buffer.size());
+        }();
+        // Reaching the end of a file is reported as an empty read rather than an error, but check
+        // for the status too, as the SequentialFile contract allows either.
+        if (res.status().is_end_of_file()) {
+            break;
+        }
+        RETURN_IF_ERROR(res.status());
+        if (*res == 0) {
+            break;
+        }
+        _state->update_num_bytes_scan_from_source(*res);
+        framer.feed(buffer.data(), *res);
+    }
+    framer.finish();
+    *offsets = framer.split_offsets();
+    return Status::OK();
 }
 
 void CSVScanner::close() {
