@@ -96,10 +96,12 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
 void TabletSinkSender::set_enable_shard_write(bool enable, bool local_first) {
     _enable_shard_write = enable;
     _shard_write_local_first = enable && local_first;
-    if (_shard_write_local_first) {
+    if (_enable_shard_write) {
         // Resolved once: the backend id comes from the FE heartbeat and does not change while the
         // process runs. Absent (a CN that has not been assigned one yet) simply leaves local-first
-        // off for this load -- the round-robin spread below is always a correct fallback.
+        // off for this load -- the round-robin spread is always a correct fallback. Resolved under
+        // round-robin too, where it is not used for routing but makes the local/remote row counters
+        // in the profile mean the same thing under both policies.
         _local_node_id = get_backend_id().value_or(-1);
     }
 }
