@@ -214,6 +214,8 @@ public class OlapTableSinkTest {
                 result = globalTransactionMgr;
                 globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
                 result = explicitState;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = null;
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 result = new SystemInfoService();
                 dstTable.getId();
@@ -236,7 +238,8 @@ public class OlapTableSinkTest {
         Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
-    // Layout reservation applies to every explicit transaction source, including INSERT_STREAMING.
+    // Layout reservation applies to every explicit transaction source, but INSERT_STREAMING must
+    // keep its per-load-id logs rather than enabling the combined transaction log.
     @Test
     public void testInitDoesNotFallBackForInsertStreaming(
             @Mocked GlobalStateMgr globalStateMgr,
@@ -261,6 +264,8 @@ public class OlapTableSinkTest {
                 result = globalTransactionMgr;
                 globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
                 result = explicitState;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = null;
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 result = new SystemInfoService();
                 dstTable.getId();
@@ -280,11 +285,11 @@ public class OlapTableSinkTest {
                 TWriteQuorumType.MAJORITY, false, false, false);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
-        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
-    // An explicit entry remains authoritative after the transaction has been registered. Planning a newly
-    // touched table must reserve it before consulting the ordinary per-database transaction registry.
+    // A registered transaction still reserves its explicit layout before the normal lookup, while
+    // the registered state remains authoritative for the combined transaction-log mode.
     @Test
     public void testInitReservesExplicitTxnBeforeRegisteredTransactionLookup(
             @Mocked GlobalStateMgr globalStateMgr,
@@ -312,7 +317,7 @@ public class OlapTableSinkTest {
                 times = 2;
                 globalTransactionMgr.getTransactionState(4L, 3L);
                 result = registeredState;
-                minTimes = 0;
+                times = 1;
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 result = new SystemInfoService();
                 dstTable.getId();
@@ -333,8 +338,7 @@ public class OlapTableSinkTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
-        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
-        Assertions.assertNotSame(registeredState, explicitState);
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
     @Test

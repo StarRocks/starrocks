@@ -214,10 +214,12 @@ public class OlapTableSink extends DataSink {
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        TransactionState txnState = globalTransactionMgr.reserveExplicitTransactionLayout(
+        TransactionState explicitTxnState = globalTransactionMgr.reserveExplicitTransactionLayout(
                 txnId, dbId, dstTable.getId());
-        if (txnState == null) {
-            txnState = globalTransactionMgr.getTransactionState(dbId, txnId);
+        TransactionState txnState = globalTransactionMgr.getTransactionState(dbId, txnId);
+        if (txnState == null && explicitTxnState != null
+                && explicitTxnState.getSourceType() == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
+            txnState = explicitTxnState;
         }
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
