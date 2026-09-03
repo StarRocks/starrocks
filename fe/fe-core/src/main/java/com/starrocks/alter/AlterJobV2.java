@@ -68,6 +68,8 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -358,7 +360,14 @@ public abstract class AlterJobV2 implements Writable {
             Callable<Boolean> task = () -> {
                 return lakePublishVersion();
             };
-            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
+            try {
+                publishVersionFuture = executor.submit(task);
+            } catch (RejectedExecutionException e) {
+                LOG.warn("failed to submit publish task for job: {}: activeCount={}, poolSize={}, maximumPoolSize={}",
+                        jobId, executor.getActiveCount(), executor.getPoolSize(), executor.getMaximumPoolSize(), e);
+                return false;
+            }
             LOG.info("submit publish task for job: {}", jobId);
             return false;
         } else {
