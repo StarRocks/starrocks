@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 
 namespace starrocks {
 
@@ -53,6 +54,27 @@ bool is_frontend_aware_of_exit();
 
 // clear the flag of frontend awareness of the shutdown.
 void clear_frontend_aware_of_exit();
+
+// Whether a new request may be accepted during graceful shutdown.
+bool should_accept_new_request();
+
+class RequestAdmissionGuard {
+public:
+    RequestAdmissionGuard();
+    ~RequestAdmissionGuard();
+    RequestAdmissionGuard(const RequestAdmissionGuard&) = delete;
+    RequestAdmissionGuard& operator=(const RequestAdmissionGuard&) = delete;
+
+    bool accepted() const { return _accepted; }
+
+private:
+    bool _accepted = false;
+};
+
+size_t request_admissions_inflight();
+
+// Force the BE to reject new fragments immediately before teardown.
+void force_reject_exec_plan_fragment();
 
 void set_process_is_crashing();
 

@@ -83,12 +83,13 @@ stop_cn.sh -g
 收到信号后：
 
 - BE/CN 节点将自身标记为**Exiting**。
-- 它通过返回 `INTERNAL_ERROR` 拒绝**新的查询 Fragment**。
-- 它继续处理现有Fragment。
+- 当 `graceful_exit_wait_for_frontend_heartbeat` 为 `true` 时，继续接受新请求，直到以下两者中的先到者：BE 发送 shutdown 心跳（带 SHUTDOWN 标记的心跳响应）后的 admission 延迟，或从 graceful shutdown 开始计算的 fallback 截止时间。
+- 当 `graceful_exit_wait_for_frontend_heartbeat` 为 `false` 时，从 graceful shutdown 开始时立即拒绝新请求。
+- 随后拒绝**新请求**（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询），并继续处理已经准入的请求。
 
 #### 等待进行中的查询循环
 
-BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fragments_finish` 控制（默认值：2）。实际等待时间等于 `loop_count_wait_fragments_finish × 10 秒`（即默认 20 秒）。如果 Fragment 在超时后仍然存在，BE/CN 将继续正常关闭（关闭线程、网络和其他进程）。
+BE/CN 等待已准入工作（查询 Fragment、Load 和 short-circuit 查询）的时间最多为 `loop_count_wait_fragments_finish × 10 秒`（默认 60 秒）。达到该硬性预算后，BE/CN 关闭新请求准入并继续 teardown；剩余已准入工作不保证完成。已在 admission cutoff 前成功 BEGIN 的事务，在 drain 仍处于活动状态时可继续执行 LOAD、PREPARE、COMMIT 和 ROLLBACK；cutoff 后新的 BEGIN 请求仍会被拒绝。
 
 #### 改进的 FE 感知
 
@@ -115,14 +116,28 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 #### `loop_count_wait_fragments_finish`
 
 - 描述：BE/CN 等待现有 Fragment 的持续时间。将该值乘以 10 秒。
-- 默认值：2
+- 默认值：6
 - 如何应用：在 BE/CN 配置文件中修改或动态更新。
 
 #### `graceful_exit_wait_for_frontend_heartbeat`
 
-- 描述：BE/CN 是否等待 FE 通过心跳确认 **SHUTDOWN**。从 v3.4.5 开始支持。
-- 默认值：false
+- 描述：如果为 true，BE 等待其发送 shutdown 心跳（带 SHUTDOWN 标记的心跳响应，预期 FE 会观察到）后，在 `graceful_exit_reject_delay_ms` 窗口内继续接受新请求，之后开始拒绝。如果为 false，BE 在 graceful shutdown 开始时立即拒绝新请求，不等待 shutdown 心跳。已成功 BEGIN 的事务在排空窗口内继续被接受，不受此设置影响。
+- 默认值：true
+- 如何应用：在 BE/CN 配置文件中修改。需要重启 BE/CN 生效。
+
+#### `graceful_exit_reject_delay_ms`
+
+- 描述：BE/CN 发送 shutdown 心跳（带 SHUTDOWN 标记的心跳响应，预期 FE 会观察到）后，节点开始拒绝新请求之前的延迟（毫秒）。在此期间节点作为健康节点继续接受并运行新请求，给 FE 足够时间停止向该节点调度新的 Fragment。
+- 默认值：10000
 - 如何应用：在 BE/CN 配置文件中修改或动态更新。
+- 时序关系：必须小于排空预算 `loop_count_wait_fragments_finish` × 10 秒，以便在等待超时前开始拒绝。
+
+#### `graceful_exit_reject_fallback_ms`
+
+- 描述：优雅退出开始后，即使 FE 从未观察到 shutdown 心跳，BE/CN 拒绝新请求的绝对上限（毫秒）。防止 FE 从不确认或过晚确认时无限接受新请求。
+- 默认值：15000
+- 如何应用：在 BE/CN 配置文件中修改或动态更新。
+- 时序关系：必须小于排空预算 `loop_count_wait_fragments_finish` × 10 秒（默认 60000），以便新请求在排空等待超时前停止被接受。
 
 #### `stop_be.sh -g --timeout`, `stop_cn.sh -g --timeout`
 
@@ -182,7 +197,6 @@ BE/CN 等待现有 Fragment 完成的行为由 BE/CN 配置 `loop_count_wait_fra
 **配置**：
 
 - 确保 `loop_count_wait_fragments_finish` 设置为正整数。
-- 将 `graceful_exit_wait_for_frontend_heartbeat` 设置为 `true` 以允许 FE 检测 BE 的“Exiting”状态。
 
 ### 执行 FE 优雅退出
 
@@ -275,4 +289,4 @@ SHOW BACKENDS;
 
 ### 节点状态不是 SHUTDOWN
 
-如果节点状态不是 `SHUTDOWN`，请验证 `loop_count_wait_fragments_finish` 是否设置为正整数，或者 BE/CN 在退出前是否报告了心跳（如果没有，请将 `graceful_exit_wait_for_frontend_heartbeat` 设置为 `true`）。
+如果节点状态不是 `SHUTDOWN`，请验证 `loop_count_wait_fragments_finish` 是否为正整数，以及 BE 是否通过心跳报告了关闭状态。

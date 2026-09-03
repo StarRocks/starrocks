@@ -1673,14 +1673,18 @@ CONF_String(dependency_librdkafka_debug, "all");
 // DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, WARN by default
 CONF_mInt16(pulsar_client_log_level, "2");
 
-// max loop count when be waiting its fragments to finish. It has no effect if the var is configured with value <= 0.
-CONF_mInt64(loop_count_wait_fragments_finish, "2");
+// Maximum drain wait in seconds is this value * 10; each drain-loop iteration sleeps 1 second.
+CONF_mInt64(loop_count_wait_fragments_finish, "6");
 
-// Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit.
-//
-// When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC,
-// ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
-CONF_mBool(graceful_exit_wait_for_frontend_heartbeat, "false");
+// Wait for FE shutdown acknowledgement before rejecting requests.
+// When false, reject new requests immediately on shutdown.
+CONF_Bool(graceful_exit_wait_for_frontend_heartbeat, "true");
+
+// Delay (ms) after FE acknowledgement before rejecting new requests.
+CONF_mInt64(graceful_exit_reject_delay_ms, "10000");
+
+// Fallback (ms) from shutdown start before rejecting new requests.
+CONF_mInt64(graceful_exit_reject_fallback_ms, "15000");
 
 // the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");

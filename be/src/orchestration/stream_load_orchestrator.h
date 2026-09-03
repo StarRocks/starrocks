@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "common/status.h"
 
 namespace starrocks {
@@ -29,7 +31,25 @@ class StreamLoadOrchestrator {
 public:
     StreamLoadOrchestrator(ExecEnv* exec_env, FragmentMgr* fragment_mgr);
 
-    Status execute_plan_fragment(StreamLoadContext* ctx);
+    // seq_cst orders this guard with the drain re-sample.
+    void inc_load_inflight() { _load_inflight.fetch_add(1, std::memory_order_seq_cst); }
+    void dec_load_inflight() { _load_inflight.fetch_sub(1, std::memory_order_seq_cst); }
+    size_t load_inflight() const { return _load_inflight.load(std::memory_order_seq_cst); }
+
+    class LoadInflightGuard {
+    public:
+        explicit LoadInflightGuard(StreamLoadOrchestrator* orchestrator) : _orchestrator(orchestrator) {
+            _orchestrator->inc_load_inflight();
+        }
+        ~LoadInflightGuard() { _orchestrator->dec_load_inflight(); }
+
+        LoadInflightGuard(const LoadInflightGuard&) = delete;
+        LoadInflightGuard& operator=(const LoadInflightGuard&) = delete;
+
+    private:
+        StreamLoadOrchestrator* _orchestrator;
+    };
+    Status execute_plan_fragment(StreamLoadContext* ctx, bool admission_already_granted = false);
 
 private:
     // Legacy (non-pipeline) BE-local execution via FragmentMgr + PlanFragmentExecutor.
@@ -39,6 +59,7 @@ private:
 
     ExecEnv* _exec_env;
     [[maybe_unused]] FragmentMgr* _fragment_mgr;
+    std::atomic<size_t> _load_inflight{0};
 };
 
 } // namespace orchestration

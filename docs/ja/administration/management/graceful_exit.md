@@ -82,13 +82,14 @@ stop_cn.sh -g
 
 シグナルを受信すると：
 
-- BE/CN ノードは自分自身を**EXITING**とマークします。
-- **新しいクエリフラグメント**を拒否し、`INTERNAL_ERROR` を返します。
-- 既存のフラグメントの処理を続行します。
+- BE/CN ノードは自身を**EXITING**とマークします。
+- `graceful_exit_wait_for_frontend_heartbeat` が `true` の場合、新しいリクエストを受け入れ続け、次のいずれか早い方で受け入れを停止します：BE がシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答）を送信した後の admission 遅延、または Graceful Shutdown 開始から計測される fallback の期限。
+- `graceful_exit_wait_for_frontend_heartbeat` が `false` の場合、Graceful Shutdown の開始と同時に新しいリクエストの拒否を開始します。
+- その後、**新しいリクエスト**（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）を拒否し、すでに admission 済みの処理を続行します。
 
 #### フライト中のクエリの待機ループ
 
-BE/CN が既存のフラグメントの終了を待つ動作は、BE/CN の設定 `loop_count_wait_fragments_finish` によって制御されます（デフォルト：2）。実際の待機時間は `loop_count_wait_fragments_finish × 10 秒`（デフォルトでは 20 秒）です。タイムアウト後もフラグメントが残っている場合、BE/CN は通常のSHUTDOWNを続行します（スレッド、ネットワーク、その他のプロセスを閉じる）。
+BE/CN が admission 済みの処理（クエリフラグメント、ロード、short-circuit クエリ）を待機する時間は、`loop_count_wait_fragments_finish × 10 秒`（デフォルト 60 秒）を上限とします。このハード上限に達すると、BE/CN は新しいリクエストの admission を停止して teardown に進み、残っている admission 済みの処理が完了することは保証されません。admission cutoff 前に BEGIN が完了したトランザクションは、drain が有効な間は LOAD、PREPARE、COMMIT、ROLLBACK を続行できます。cutoff 後の新しい BEGIN リクエストは引き続き拒否されます。
 
 #### 改善された FE 認識
 
@@ -115,14 +116,28 @@ v3.4 以降、FE はハートビートの失敗に基づいて BE/CN を `DEAD` 
 #### `loop_count_wait_fragments_finish`
 
 - 説明：BE/CN が既存のフラグメントを待機する期間。値に 10 秒を掛けます。
-- デフォルト：2
+- デフォルト：6
 - 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
 
 #### `graceful_exit_wait_for_frontend_heartbeat`
 
-- 説明：BE/CN がハートビートを介して FE が**SHUTDOWN**を確認するのを待つかどうか。v3.4.5 以降。
-- デフォルト：false
+- 説明：true の場合、BE はシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答で、FE がこれを観測することを想定）を送信するまで待機し、その後 `graceful_exit_reject_delay_ms` の間新しいリクエストを受け入れ続けてから拒否を開始します。false の場合、BE は Graceful Shutdown 開始と同時に新しいリクエストの拒否を開始し、シャットダウン heartbeat を待ちません。既に BEGIN されたトランザクションは、この設定にかかわらず排空ウィンドウ中は引き続き受け入れられます。
+- デフォルト：true
+- 適用方法：BE/CN 設定ファイルで変更します。BE/CN の再起動が必要です。
+
+#### `graceful_exit_reject_delay_ms`
+
+- 説明：BE/CN がシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答で、FE がこれを観測することを想定）を送信してから、ノードが新しいリクエストの拒否を開始するまでの遅延（ミリ秒）。この期間中、ノードは正常なノードとして新しいリクエストを受け入れて実行し続け、FE がこのノードへの新しいフラグメントのスケジュールを停止する時間を確保します。
+- デフォルト：10000
 - 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
+- タイミング関係：排空予算 `loop_count_wait_fragments_finish` × 10 秒より短く、待機が期限切れになる前に拒否が開始されるようにします。
+
+#### `graceful_exit_reject_fallback_ms`
+
+- 説明：FE がシャットダウン heartbeat を観測しない場合でも、Graceful Exit の開始から BE/CN が新しいリクエストを拒否するまでの絶対上限（ミリ秒）。FE が確認しない、または大幅に遅れて確認する場合の無制限な受け入れを防ぎます。
+- デフォルト：15000
+- 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
+- タイミング関係：排空予算 `loop_count_wait_fragments_finish` × 10 秒（デフォルト 60000）より小さく、排空待機が期限切れになる前に新しいリクエストの受け入れが停止されるようにします。
 
 #### `stop_be.sh -g --timeout`, `stop_cn.sh -g --timeout`
 
@@ -182,7 +197,6 @@ Graceful Exit は以下を保証します：
 **設定**：
 
 - `loop_count_wait_fragments_finish` を正の整数に設定してください。
-- `graceful_exit_wait_for_frontend_heartbeat` を `true` に設定し、FE が BE の「EXITING」状態を検出できるようにします。
 
 ### FE Graceful Exit の実行
 
@@ -275,4 +289,4 @@ FE ログ `fe.log`、BE ログ `be.log`、または CN ログ `cn.log` を確認
 
 ### ノードの状態が SHUTDOWN でない
 
-ノードの状態が `SHUTDOWN` でない場合、`loop_count_wait_fragments_finish` が正の整数に設定されているか、BE/CN が終了前にハートビートを報告したかどうかを確認してください（そうでない場合、`graceful_exit_wait_for_frontend_heartbeat` を `true` に設定します）。
+ノードの状態が `SHUTDOWN` でない場合、`loop_count_wait_fragments_finish` が正の整数であり、BE が heartbeat を介してシャットダウン状態を報告したかどうかを確認してください。

@@ -70,11 +70,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### graceful_exit_wait_for_frontend_heartbeat
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
-- 変更可能: Yes
-- 説明: グレースフルシャットダウンを完了する前に、少なくとも1件のフロントエンドからの heartbeat 応答で SHUTDOWN 状態が返されるのを待つかどうかを決定します。有効にすると、heartbeat RPC を介して SHUTDOWN の確認が返されるまでグレースフルシャットダウン処理は継続され、フロントエンドが通常の2回のハートビート間隔内で終了状態を検出するための十分な時間を確保します。
+- 変更可能: いいえ
+- 説明: true の場合、BE は FE がハートビート応答（SHUTDOWN マーク）でシャットダウンを確認するまで待機し、その後 `graceful_exit_reject_delay_ms` の間新しいリクエストを受け入れ続けてから拒否を開始します。false の場合、BE は Graceful Shutdown 開始と同時に新しいリクエストの拒否を開始し、FE の確認を待ちません。既に BEGIN されたトランザクションは、この設定にかかわらず排空ウィンドウ中は引き続き受け入れられます。
 - 導入バージョン: v3.4.5
 
 ### lake_compaction_stream_buffer_size_bytes
@@ -255,11 +255,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### loop_count_wait_fragments_finish
 
-- デフォルト: 2
-- タイプ: Int
+- デフォルト: 6
+- タイプ: Int64
 - 単位: -
 - 変更可能: Yes
-- 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。v3.4 以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
+- 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。
 - 導入バージョン: v2.5
 
 ### starlet_filesystem_instance_cache_capacity

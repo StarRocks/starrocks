@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include <atomic>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -27,9 +28,12 @@
 #include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/compute_env.h"
@@ -54,8 +58,10 @@
 class mg_connection;
 
 namespace starrocks {
-
 extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
+extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<int64_t> k_starrocks_exit_start_ms;
+extern std::atomic<int64_t> k_starrocks_fe_aware_shutdown_ms;
 
 namespace {
 static std::string k_response_str;
@@ -107,6 +113,9 @@ public:
     static void SetUpTestSuite() { s_injected_send_reply = inject_send_reply; }
     static void TearDownTestSuite() { s_injected_send_reply = nullptr; }
     void SetUp() override {
+        k_starrocks_exit.store(false);
+        k_starrocks_exit_start_ms.store(0);
+        k_starrocks_fe_aware_shutdown_ms.store(0);
         k_stream_load_begin_result = TLoadTxnBeginResult();
         k_stream_load_commit_result = TLoadTxnCommitResult();
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
@@ -227,6 +236,66 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_normal) {
     auto* val = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), "Content-Type");
     ASSERT_NE(val, nullptr);
     ASSERT_STREQ("application/json", val);
+}
+TEST_F(TransactionStreamLoadActionTest, txn_begin_accepts_until_shutdown_delay) {
+    ASSERT_TRUE(set_process_exit());
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_after_shutdown_delay) {
+    k_starrocks_exit.store(true);
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("SERVICE_UNAVAILABLE", doc["Status"].GetString());
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_existing_context_after_shutdown_delay) {
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "123");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDp3cm9uZw==");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "123");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("SERVICE_UNAVAILABLE", doc["Status"].GetString());
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_commit_fail) {
@@ -358,7 +427,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_rollback) {
     }
 }
 
-TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
+TEST_F(TransactionStreamLoadActionTest, txn_commit_success_after_shutdown_cutoff) {
     TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
 
     {
@@ -373,6 +442,9 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
         doc.Parse(k_response_str.c_str());
         ASSERT_STREQ("OK", doc["Status"].GetString());
     }
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
 
     {
         TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
@@ -784,6 +856,19 @@ TEST_F(TransactionStreamLoadActionTest, txn_list) {
         ASSERT_STREQ("OK", doc["Status"].GetString());
         ASSERT_STREQ("123", doc["Label"].GetString());
     }
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_list_allowed_after_shutdown_cutoff) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_TXN_OP_KEY, TXN_LIST);
+    txn_action.handle(&request);
+
+    // LIST is read-only and remains available while new writes are rejected.
+    ASSERT_TRUE(k_response_str.empty());
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_idle_timeout) {

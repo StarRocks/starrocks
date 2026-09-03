@@ -384,6 +384,24 @@ This topic introduces the following types of BE configurations:
 - Description: Sets the number of worker threads for the "get_pindex" thread pool in UpdateManager, which is used to load / fetch persistent index data (used when applying rowsets for primary-key tables). At runtime, a config update will adjust the pool's maximum threads: if `>0` that value is applied; if 0 the runtime callback uses the number of CPU cores (CpuInfo::num_cores()). On initialization the pool's max threads is computed as max(get_pindex_worker_count, max_apply_thread_cnt * 2) where max_apply_thread_cnt is the apply-thread pool maximum. Increase to raise parallelism for pindex loading; lowering reduces concurrency and memory/CPU usage.
 - Introduced in: v3.2.0
 
+### graceful_exit_reject_delay_ms
+
+- Default: 10000
+- Type: Int64
+- Unit: ms
+- Is mutable: Yes
+- Description: The delay (in milliseconds) after the BE has sent the shutdown heartbeat (a heartbeat response marked SHUTDOWN, which the FE is expected to observe) before the BE starts rejecting new requests (query fragments, stream loads, transaction BEGINs, routine load tasks, and short-circuit queries). During this delay window the BE keeps accepting and running new requests as a healthy node, giving the FE enough time to stop scheduling new fragments to this BE. After the delay elapses, new requests are rejected if the BE is still exiting.
+- Introduced in: -
+
+### graceful_exit_reject_fallback_ms
+
+- Default: 15000
+- Type: Int64
+- Unit: ms
+- Is mutable: Yes
+- Description: The absolute upper bound (in milliseconds) from the start of a graceful exit before the BE rejects new requests (query fragments, stream loads, transaction BEGINs, routine load tasks, and short-circuit queries), even if the FE never observes the shutdown heartbeat. This avoids unbounded acceptance and must fire before the drain wait budget (`loop_count_wait_fragments_finish` x 10s). If the FE does not observe the shutdown heartbeat in time, this cap bounds acceptance until the drain wait starts.
+- Introduced in: -
+
 ### heartbeat_service_port
 
 - Default: 9050

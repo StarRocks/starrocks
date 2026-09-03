@@ -22,9 +22,11 @@
 #include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/process_exit.h"
 #include "data_sink/tablet/tablet_sink_index_channel.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
+#include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
@@ -267,6 +269,81 @@ TEST_F(InternalServiceTest, test_get_load_replica_status) {
     MockClosure closure;
     service.get_load_replica_status(&cntl, &request, &response, &closure);
     ASSERT_EQ(1, response.replica_statuses_size());
+}
+
+extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<bool> k_starrocks_force_reject;
+
+TEST_F(InternalServiceTest, test_short_circuit_rejected_while_shutting_down) {
+    // Verify rejection and guard cleanup for a short-circuit RPC.
+    k_starrocks_exit.store(true);
+    k_starrocks_force_reject.store(true);
+    orchestration::OrchestrationEnv orchestration_env;
+
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), &orchestration_env,
+                                                         _load_channel_mgr.get());
+
+    PExecShortCircuitRequest request;
+    PExecShortCircuitResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    service.exec_short_circuit(&cntl, &request, &response, &closure);
+
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
+    // ErrorText includes brpc's error-code prefix.
+    ASSERT_EQ("[E2001]BE is shutting down", cntl.ErrorText());
+
+    k_starrocks_exit.store(false);
+    k_starrocks_force_reject.store(false);
+}
+
+TEST_F(InternalServiceTest, test_exec_plan_fragment_rejected_while_shutting_down) {
+    // Verify rejection and guard cleanup for a fragment-prep RPC.
+    k_starrocks_exit.store(true);
+    k_starrocks_force_reject.store(true);
+
+    orchestration::OrchestrationEnv orchestration_env;
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), &orchestration_env,
+                                                         _load_channel_mgr.get());
+
+    PExecPlanFragmentRequest request;
+    PExecPlanFragmentResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    service._exec_plan_fragment(&cntl, &request, &response, &closure);
+
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
+    ASSERT_EQ("[E2001]BE is shutting down", cntl.ErrorText());
+
+    k_starrocks_exit.store(false);
+    k_starrocks_force_reject.store(false);
+}
+
+TEST_F(InternalServiceTest, test_exec_batch_plan_fragments_rejected_while_shutting_down) {
+    k_starrocks_exit.store(true);
+    k_starrocks_force_reject.store(true);
+
+    orchestration::OrchestrationEnv orchestration_env;
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), &orchestration_env,
+                                                         _load_channel_mgr.get());
+
+    PExecBatchPlanFragmentsRequest request;
+    PExecBatchPlanFragmentsResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    service._exec_batch_plan_fragments(&cntl, &request, &response, &closure);
+
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
+    ASSERT_EQ("[E2001]BE is shutting down", cntl.ErrorText());
+
+    k_starrocks_exit.store(false);
+    k_starrocks_force_reject.store(false);
 }
 
 } // namespace starrocks

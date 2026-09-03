@@ -405,6 +405,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：为 UpdateManager 中的 "get_pindex" 线程池设置工作线程数，该线程池用于加载/获取持久化索引数据（在为主键表应用 rowset 时使用）。如果设置为大于 0 则系统应用该值；如果设置为 0 则运行时回调使用 CPU 核心数。在初始化时，改线程池的最大线程数计算为 `max(get_pindex_worker_count, max_apply_thread_cnt * 2)`，其中 `max_apply_thread_cnt` 是 apply-thread 池的最大值。增大此值可提高 pindex 加载的并行度；降低则减少并发和内存/CPU 使用。
 - 引入版本：v3.2.0
 
+### graceful_exit_reject_delay_ms
+
+- 默认值：10000
+- 类型：Int64
+- 单位：ms
+- 是否动态：是
+- 描述：BE 发送 shutdown 心跳（带 SHUTDOWN 标记的心跳响应，预期 FE 会观察到）后，BE 开始拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询）之前的延迟（毫秒）。在该延迟窗口内，BE 继续作为健康节点接受并运行新请求，给 FE 足够时间停止向该 BE 调度新 fragment；延迟结束后，若 BE 仍在退出中，则拒绝新请求。
+- 引入版本：-
+
+### graceful_exit_reject_fallback_ms
+
+- 默认值：15000
+- 类型：Int64
+- 单位：ms
+- 是否动态：是
+- 描述：从优雅退出开始起的绝对上限（毫秒），即使 FE 从未观察到 shutdown 心跳，BE 也会在该时间点后拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询），避免无限期接受新请求。该上限必须早于排空等待预算（`loop_count_wait_fragments_finish` x 10s）触发。若 FE 未及时观察到 shutdown 心跳，该上限将限制接受新请求直至排空等待开始。
+- 引入版本：-
+
 ### heartbeat_service_port
 
 - 默认值：9050

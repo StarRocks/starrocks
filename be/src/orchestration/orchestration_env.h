@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 
 #include "common/status.h"
@@ -55,9 +56,17 @@ public:
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker.get(); }
     const RuntimeFilterWorker* runtime_filter_worker() const { return _runtime_filter_worker.get(); }
 
+    // seq_cst orders guards with the drain re-sample.
+    void inc_short_circuit_inflight() { _short_circuit_inflight.fetch_add(1, std::memory_order_seq_cst); }
+    void dec_short_circuit_inflight() { _short_circuit_inflight.fetch_sub(1, std::memory_order_seq_cst); }
+    void inc_rpc_prep_inflight() { _rpc_prep_inflight.fetch_add(1, std::memory_order_seq_cst); }
+    void dec_rpc_prep_inflight() { _rpc_prep_inflight.fetch_sub(1, std::memory_order_seq_cst); }
+
 private:
     size_t _get_running_fragments_count() const;
 
+    std::atomic<size_t> _short_circuit_inflight{0};
+    std::atomic<size_t> _rpc_prep_inflight{0};
     ExecEnv* _exec_env = nullptr;
     std::unique_ptr<FragmentMgr> _fragment_mgr;
     std::unique_ptr<OrchestrationMetrics> _metrics;

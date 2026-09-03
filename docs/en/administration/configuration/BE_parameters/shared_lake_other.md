@@ -70,11 +70,11 @@ This topic introduces the following types of BE configurations:
 
 ### graceful_exit_wait_for_frontend_heartbeat
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
-- Is mutable: Yes
-- Description: Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit. When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC, ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
+- Is mutable: No
+- Description: If true, the BE waits for the FE to acknowledge the shutdown (via a heartbeat response marked SHUTDOWN) and then keeps accepting new requests for a `graceful_exit_reject_delay_ms` window before rejecting them. If false, the BE starts rejecting new requests as soon as graceful shutdown begins, without waiting for FE acknowledgement. Already-begun transactions continue to be accepted during the drain window regardless of this setting.
 - Introduced in: v3.4.5
 
 ### lake_compaction_stream_buffer_size_bytes
@@ -255,11 +255,11 @@ This topic introduces the following types of BE configurations:
 
 ### loop_count_wait_fragments_finish
 
-- Default: 2
-- Type: Int
+- Default: 6
+- Type: Int64
 - Unit: -
 - Is mutable: Yes
-- Description: The number of loops to be waited when the BE/CN process exits. Each loop is a fixed interval of 10 seconds. You can set it to `0` to disable the loop wait. From v3.4 onwards, this item is changed to mutable and its default value is changed from `0` to `2`.
+- Description: The number of loops to be waited when the BE/CN process exits. Each loop is a fixed interval of 10 seconds. You can set it to `0` to disable the loop wait.
 - Introduced in: v2.5
 
 ### max_client_cache_size_per_host

@@ -104,6 +104,12 @@ using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params);
 static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
+// Count RPC prep before rejection; the guard covers rejection and completion.
+struct RpcPrepInflightGuard {
+    orchestration::OrchestrationEnv* env;
+    explicit RpcPrepInflightGuard(orchestration::OrchestrationEnv* e) : env(e) { env->inc_rpc_prep_inflight(); }
+    ~RpcPrepInflightGuard() { env->dec_rpc_prep_inflight(); }
+};
 
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env,
@@ -317,7 +323,10 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
                                                       google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (process_exit_in_progress()) {
+
+    RpcPrepInflightGuard rpc_prep_guard(_orchestration_env);
+
+    if (!should_accept_new_request()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -349,7 +358,11 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (process_exit_in_progress()) {
+
+    // Same admission gap as _exec_plan_fragment.
+    RpcPrepInflightGuard rpc_prep_guard(_orchestration_env);
+
+    if (!should_accept_new_request()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
@@ -1355,7 +1368,16 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     watch.start();
 
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    if (process_exit_in_progress()) {
+    // Track short-circuit RPCs before rejection; drain otherwise misses them.
+    struct ShortCircuitInflightGuard {
+        orchestration::OrchestrationEnv* env;
+        explicit ShortCircuitInflightGuard(orchestration::OrchestrationEnv* e) : env(e) {
+            env->inc_short_circuit_inflight();
+        }
+        ~ShortCircuitInflightGuard() { env->dec_short_circuit_inflight(); }
+    } inflight_guard(_orchestration_env);
+
+    if (!should_accept_new_request()) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
         return;
     }

@@ -24,6 +24,7 @@
 #include "common/process_exit.h"
 #include "common/system/master_info.h"
 #include "compute_env/compute_env.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/profile_report_worker.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/pipeline_fragment_reporter.h"
@@ -91,30 +92,60 @@ Status OrchestrationEnv::init(ExecEnv* exec_env, MetricRegistry* metrics, Stream
 }
 
 void OrchestrationEnv::wait_for_finish() {
-    if (config::loop_count_wait_fragments_finish < 0) {
-        LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
+    // New-request admission is handled by should_accept_new_request().
+    if (config::loop_count_wait_fragments_finish <= 0) {
+        if (config::loop_count_wait_fragments_finish < 0) {
+            LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
+        }
+        force_reject_exec_plan_fragment();
         return;
     }
 
     size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
-    if (max_loop_secs == 0) {
-        return;
+    const int64_t drain_budget_ms = static_cast<int64_t>(max_loop_secs) * 1000;
+    if (config::graceful_exit_reject_delay_ms >= drain_budget_ms ||
+        config::graceful_exit_reject_fallback_ms >= drain_budget_ms) {
+        LOG(WARNING) << "Graceful exit admission cutoff is not before the drain budget: delay_ms="
+                     << config::graceful_exit_reject_delay_ms
+                     << ", fallback_ms=" << config::graceful_exit_reject_fallback_ms
+                     << ", drain_budget_ms=" << drain_budget_ms;
     }
 
-    size_t running_fragments = _get_running_fragments_count();
     size_t loop_secs = 0;
-
-    // TODO: decouple the heartbeat with the graceful exit
-    // only wait for frontend's heartbeat when the node is ever received heartbeats from the frontend
-    bool need_wait_frontend_hb = config::graceful_exit_wait_for_frontend_heartbeat && get_backend_id().has_value();
-
-    while ((running_fragments > 0 || (need_wait_frontend_hb && !is_frontend_aware_of_exit())) &&
-           loop_secs < max_loop_secs) {
-        LOG(INFO) << "Frontend is aware of exit: " << is_frontend_aware_of_exit() << ", " << running_fragments
+    size_t running_fragments = 0;
+    // Separate reads may miss an RPC admitted while count is zero.
+    // Force-reject, then re-sample; seq_cst orders guards with the re-sample.
+    while (loop_secs < max_loop_secs) {
+        running_fragments = _get_running_fragments_count();
+        if (running_fragments == 0 && (!process_exit_in_progress() || !should_accept_new_request())) {
+            if (process_exit_in_progress()) {
+                force_reject_exec_plan_fragment();
+                running_fragments = _get_running_fragments_count();
+                if (running_fragments != 0) {
+                    LOG(INFO) << "Fragment admitted while closing admissions; " << running_fragments
+                              << " fragment(s) still running, keep draining...";
+                    sleep(1);
+                    loop_secs++;
+                    continue;
+                }
+            }
+            break;
+        }
+        LOG(INFO) << "Frontend is aware of exit: " << is_frontend_aware_of_exit()
+                  << ", reject new fragment: " << !should_accept_new_request() << ", " << running_fragments
                   << " fragment(s) are still running...";
         sleep(1);
-        running_fragments = _get_running_fragments_count();
         loop_secs++;
+    }
+
+    // Force rejection at budget expiry; report remaining admitted work.
+    if (process_exit_in_progress()) {
+        force_reject_exec_plan_fragment();
+        running_fragments = _get_running_fragments_count();
+        if (running_fragments != 0) {
+            LOG(WARNING) << "Drain wait budget exhausted; " << running_fragments
+                         << " admitted fragment(s) still running, proceed with shutdown.";
+        }
     }
 }
 
@@ -156,7 +187,13 @@ size_t OrchestrationEnv::_get_running_fragments_count() const {
     const auto pipeline_fragments = (_exec_env == nullptr || _exec_env->query_context_mgr() == nullptr)
                                             ? 0
                                             : _exec_env->query_context_mgr()->size();
-    return non_pipeline_fragments + pipeline_fragments;
+    const auto stream_loads = StreamLoadMetrics::instance()->streaming_load_current_processing.value();
+    const auto transaction_stream_loads =
+            StreamLoadMetrics::instance()->transaction_streaming_load_current_processing.value();
+    return non_pipeline_fragments + pipeline_fragments + _short_circuit_inflight.load(std::memory_order_seq_cst) +
+           _rpc_prep_inflight.load(std::memory_order_seq_cst) +
+           (_stream_load_orchestrator == nullptr ? 0 : _stream_load_orchestrator->load_inflight()) + stream_loads +
+           transaction_stream_loads + request_admissions_inflight();
 }
 
 } // namespace starrocks::orchestration

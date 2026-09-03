@@ -309,6 +309,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: UpdateManager の "get_pindex" スレッドプールのワーカースレッド数を設定します。このプールは永続インデックスデータをロード／取得するために使用され（主キー表の rowset 適用時に使用）、実行時の設定更新はプールの最大スレッド数を調整します：`>0` の場合はその値が適用され、0 の場合はランタイムコールバックが CPU コア数（`CpuInfo::num_cores()`）を使用します。初期化時にはプールの最大スレッド数は max(get_pindex_worker_count, max_apply_thread_cnt * 2) として計算され、ここで max_apply_thread_cnt は apply-thread プールの最大値です。pindex ロードの並列度を上げるには増やし、同時実行性とメモリ／CPU 使用量を減らすには減らしてください。
 - 導入バージョン: v3.2.0
 
+### graceful_exit_reject_delay_ms
+
+- デフォルト: 10000
+- タイプ: Int64
+- 単位: ms
+- 変更可能: はい
+- 説明: BE がシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答で、FE がこれを観測することを想定）を送信してから、BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）の拒否を開始するまでの遅延（ミリ秒）。この遅延期間中、BE は正常なノードとして新しいリクエストを受け入れて実行し続け、FE がこの BE への新しいフラグメントのスケジュールを停止する時間を確保します。遅延が経過した後、BE がまだ終了中であれば新しいリクエストは拒否されます。
+- 導入バージョン: -
+
+### graceful_exit_reject_fallback_ms
+
+- デフォルト: 15000
+- タイプ: Int64
+- 単位: ms
+- 変更可能: はい
+- 説明: グレースフルシャットダウン開始から、FE がシャットダウン heartbeat を観測しない場合でも BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）を拒否するまでの絶対上限（ミリ秒）。無制限な受け入れを避けるためです。排空待機予算（`loop_count_wait_fragments_finish` × 10 秒）より前に発動する必要があります。FE が時間内にシャットダウン heartbeat を観測しない場合、この上限が排空待機が開始されるまでの受け入れを制限します。
+- 導入バージョン: -
+
 ### heartbeat_service_port
 
 - デフォルト: 9050
