@@ -1,0 +1,61 @@
+-- name: test_cast_largeint_to_json_beyond_int64
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table src (k int, v largeint) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into src values
+  (1, 0),
+  (2, 9223372036854775807),
+  (3, 9223372036854775808),
+  (4, 18446744073709551615),
+  (5, 18446744073709551616),
+  (6, -9223372036854775808),
+  (7, -9223372036854775809);
+-- result:
+-- !result
+select k, cast(v as json) as j from src order by k;
+-- result:
+1	0
+2	9223372036854775807
+3	9223372036854775808
+4	18446744073709551615
+5	None
+6	-9223372036854775808
+7	None
+-- !result
+create table dst (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into dst select k, cast(v as json) from src;
+-- result:
+-- !result
+select k, j, cast(j as largeint) as back from dst order by k;
+-- result:
+1	0	0
+2	9223372036854775807	9223372036854775807
+3	9223372036854775808	9223372036854775808
+4	18446744073709551615	18446744073709551615
+5	None	None
+6	-9223372036854775808	-9223372036854775808
+7	None	None
+-- !result
+select cast(cast(18446744073709551615 as largeint) as json) as lit_u64max;
+-- result:
+18446744073709551615
+-- !result
+select cast(cast(-9223372036854775808 as bigint) as json) as from_bigint,
+  cast(cast(-32768 as smallint) as json) as from_smallint,
+  cast(cast(-128 as tinyint) as json) as from_tinyint;
+-- result:
+-9223372036854775808	-32768	-128
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

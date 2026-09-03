@@ -1,0 +1,32 @@
+-- name: test_cast_largeint_to_json_beyond_int64
+-- CAST(<LARGEINT> AS JSON) applied BIGINT's bounds to every integer source type, so a LARGEINT past
+-- int64 max became NULL even though JSON encodes an integer as either int64 or uint64. Snowflake-style
+-- 19-digit ids sit in exactly that range, and INSERT ... SELECT wrote NULL for every one of them without
+-- an error. The rows are the int64 and uint64 boundaries plus the first value outside each, so both the
+-- newly representable range and the two that still genuinely overflow are pinned.
+create database db_${uuid0};
+use db_${uuid0};
+create table src (k int, v largeint) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into src values
+  (1, 0),
+  (2, 9223372036854775807),
+  (3, 9223372036854775808),
+  (4, 18446744073709551615),
+  (5, 18446744073709551616),
+  (6, -9223372036854775808),
+  (7, -9223372036854775809);
+-- The column form is the one INSERT ... SELECT takes.
+select k, cast(v as json) as j from src order by k;
+-- Storing the cast and reading it back must keep the value.
+create table dst (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into dst select k, cast(v as json) from src;
+select k, j, cast(j as largeint) as back from dst order by k;
+-- The same cast on a literal.
+select cast(cast(18446744073709551615 as largeint) as json) as lit_u64max;
+-- Narrower integer source types keep their behaviour.
+select cast(cast(-9223372036854775808 as bigint) as json) as from_bigint,
+  cast(cast(-32768 as smallint) as json) as from_smallint,
+  cast(cast(-128 as tinyint) as json) as from_tinyint;
+drop database db_${uuid0};

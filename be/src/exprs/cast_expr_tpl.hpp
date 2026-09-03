@@ -175,7 +175,19 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 
         JsonValue value;
         bool overflow = false;
-        if constexpr (lt_is_integer<FromType>) {
+        if constexpr (FromType == TYPE_LARGEINT) {
+            // JSON encodes an integer as either int64 or uint64, so a LARGEINT above int64's range
+            // is still representable as long as it fits in uint64.
+            constexpr int128_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
+            constexpr int128_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
+            constexpr int128_t umax = std::numeric_limits<uint64_t>::max();
+            overflow = viewer.value(row) < min || viewer.value(row) > umax;
+            if (viewer.value(row) > max) {
+                value = JsonValue::from_uint(static_cast<uint64_t>(viewer.value(row)));
+            } else {
+                value = JsonValue::from_int(static_cast<int64_t>(viewer.value(row)));
+            }
+        } else if constexpr (lt_is_integer<FromType>) {
             constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
             constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
