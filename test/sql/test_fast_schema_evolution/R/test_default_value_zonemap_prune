@@ -1,168 +1,308 @@
 -- name: test_default_value_zonemap_prune
--- A column added by fast schema evolution is physically absent from every
--- pre-existing segment, so it reads through DefaultValueColumnIterator and every
--- row of it holds the column default. This case proves two things:
---   1. the read side never over-prunes -- a predicate that the default satisfies
---      still returns every row, in every key type;
---   2. a predicate that the default cannot satisfy prunes the segment outright,
---      which shows up in the profile as ZoneMapIndexFilterRows > 0.
--- Assertion (2) is the point of the optimisation: before it, such a query read
--- the whole segment and compared the synthesised default row by row, and
--- ZoneMapIndexFilterRows was necessarily 0 for a column absent from the segment.
 create database db_${uuid0};
+-- result:
+-- !result
 use db_${uuid0};
-
+-- result:
+-- !result
 CREATE TABLE t_dup (
     k1 int,
     v1 int
 ) DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1", "fast_schema_evolution" = "true");
-
--- One insert -> one rowset, so no compaction can materialise the added column
--- behind the test's back.
+-- result:
+-- !result
 insert into t_dup select x, x from table(generate_series(1, 1000)) t(x);
-
+-- result:
+-- !result
 ALTER TABLE t_dup ADD COLUMN c_int INT DEFAULT "0";
+-- result:
+-- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE t_dup ADD COLUMN c_str VARCHAR(20) DEFAULT "dv";
+-- result:
+-- !result
 function: wait_alter_table_finish()
--- Nullable, no declared default: the value is NULL on every row.
+-- result:
+None
+-- !result
 ALTER TABLE t_dup ADD COLUMN c_null INT;
+-- result:
+-- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE t_dup ADD COLUMN c_dec DECIMAL(10, 2) DEFAULT "1.23";
+-- result:
+-- !result
 function: wait_alter_table_finish()
-
--- Must not over-prune.
+-- result:
+None
+-- !result
 select count(*) from t_dup where c_int = 0;
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_int <= 0;
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_int in (0, 7);
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_int is not null;
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_str = 'dv';
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_str < 'zz';
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_null is null;
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_dec = 1.23;
--- The discriminating decimal case: a fold that ignored the scale would compare
--- 1 against 100 and wrongly decide nothing matches.
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_dec > 1.00;
-
--- Must prune, and must return the right (empty) answer.
+-- result:
+1000
+-- !result
 select count(*) from t_dup where c_int = 7;
+-- result:
+0
+-- !result
 select count(*) from t_dup where c_int > 0;
+-- result:
+0
+-- !result
 select count(*) from t_dup where c_int is null;
+-- result:
+0
+-- !result
 select count(*) from t_dup where c_str = 'zz';
+-- result:
+0
+-- !result
 select count(*) from t_dup where c_null is not null;
+-- result:
+0
+-- !result
 select count(*) from t_dup where c_null = 5;
+-- result:
+0
+-- !result
 select count(*) from t_dup where c_dec = 9.99;
-
--- Combinations across a materialised column and a defaulted one.
+-- result:
+0
+-- !result
 select count(*) from t_dup where k1 <= 10 and c_int = 0;
+-- result:
+10
+-- !result
 select count(*) from t_dup where k1 <= 10 and c_int = 7;
+-- result:
+0
+-- !result
 select count(*) from t_dup where k1 <= 10 or c_int = 7;
-
--- Profile evidence that the pruning actually happened, rather than the query
--- merely returning the right answer after a full scan.
+-- result:
+10
+-- !result
 set enable_profile = true;
+-- result:
+-- !result
 set enable_async_profile = false;
-
--- ZoneMapIndexFilterRows is fed by SegmentIterator::_get_row_ranges_by_zone_map.
--- Before this optimisation it was necessarily 0 for a column that is absent from
--- the segment, because DefaultValueColumnIterator kept every row unconditionally.
+-- result:
+-- !result
 [UC]select count(*) from t_dup where c_int = 7;
 create table profile_prune properties("replication_num"="1") as
     select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
 select assert_true(count(1) > 0)
     from profile_prune
     where line like '%- ZoneMapIndexFilterRows%';
+-- result:
+1
+-- !result
 select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
     from profile_prune
     where line like '%- ZoneMapIndexFilterRows%';
-
--- The mirror image: a predicate the default does satisfy must prune nothing.
+-- result:
+1
+-- !result
 [UC]select count(*) from t_dup where c_int = 0;
 create table profile_keep properties("replication_num"="1") as
     select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
 select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ZoneMapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) = 0)
     from profile_keep
     where line like '%- ZoneMapIndexFilterRows%';
-
+-- result:
+1
+-- !result
 set enable_profile = false;
+-- result:
+-- !result
 drop database db_${uuid0};
-
+-- result:
+-- !result
 -- name: test_default_value_zonemap_prune_key_types
--- The same read path on UNIQUE / AGGREGATE / PRIMARY KEY tables. Only
--- correctness is asserted here: those key types read through a merge path whose
--- profile counters are not comparable with the duplicate-key case.
 create database db_${uuid0};
+-- result:
+-- !result
 use db_${uuid0};
-
+-- result:
+-- !result
 CREATE TABLE t_uniq (
     k1 int,
     v1 int
 ) UNIQUE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1", "fast_schema_evolution" = "true");
+-- result:
+-- !result
 insert into t_uniq select x, x from table(generate_series(1, 1000)) t(x);
+-- result:
+-- !result
 ALTER TABLE t_uniq ADD COLUMN c_int INT DEFAULT "0";
+-- result:
+-- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 select count(*) from t_uniq where c_int = 0;
+-- result:
+1000
+-- !result
 select count(*) from t_uniq where c_int = 7;
+-- result:
+0
+-- !result
 select count(*) from t_uniq where c_int is null;
-
+-- result:
+0
+-- !result
 CREATE TABLE t_agg (
     k1 int,
     v1 int SUM
 ) AGGREGATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1", "fast_schema_evolution" = "true");
+-- result:
+-- !result
 insert into t_agg select x, x from table(generate_series(1, 1000)) t(x);
+-- result:
+-- !result
 ALTER TABLE t_agg ADD COLUMN c_int INT SUM DEFAULT "0";
+-- result:
+-- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 select count(*) from t_agg where c_int = 0;
+-- result:
+1000
+-- !result
 select count(*) from t_agg where c_int = 7;
+-- result:
+0
+-- !result
 select count(*) from t_agg where c_int is null;
-
+-- result:
+0
+-- !result
 CREATE TABLE t_pk (
     k1 int,
     v1 int
 ) PRIMARY KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1", "fast_schema_evolution" = "true");
+-- result:
+-- !result
 insert into t_pk select x, x from table(generate_series(1, 1000)) t(x);
+-- result:
+-- !result
 ALTER TABLE t_pk ADD COLUMN c_int INT DEFAULT "0";
+-- result:
+-- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 select count(*) from t_pk where c_int = 0;
+-- result:
+1000
+-- !result
 select count(*) from t_pk where c_int = 7;
+-- result:
+0
+-- !result
 select count(*) from t_pk where c_int is null;
-
+-- result:
+0
+-- !result
 drop database db_${uuid0};
-
+-- result:
+-- !result
 -- name: test_default_value_zonemap_prune_delete
--- The delete-predicate half: a DELETE condition on a column that only exists in
--- the schema cannot match the constant default, so the pre-existing segment
--- needs no per-row delete re-check. Correctness is what is asserted here -- the
--- saving is CPU, not rows.
 create database db_${uuid0};
+-- result:
+-- !result
 use db_${uuid0};
-
+-- result:
+-- !result
 CREATE TABLE t_del (
     k1 int,
     v1 int
 ) DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1", "fast_schema_evolution" = "true");
+-- result:
+-- !result
 insert into t_del select x, x from table(generate_series(1, 1000)) t(x);
-
+-- result:
+-- !result
 ALTER TABLE t_del ADD COLUMN c_int INT DEFAULT "0";
+-- result:
+-- !result
 function: wait_alter_table_finish()
-
--- Cannot match the default: nothing is deleted.
+-- result:
+None
+-- !result
 delete from t_del where c_int = 7;
+-- result:
+-- !result
 select count(*) from t_del;
+-- result:
+1000
+-- !result
 select count(*) from t_del where c_int = 0;
-
--- Matches the default: every pre-existing row is deleted.
+-- result:
+1000
+-- !result
 delete from t_del where c_int = 0;
+-- result:
+-- !result
 select count(*) from t_del;
-
+-- result:
+0
+-- !result
 drop database db_${uuid0};
+-- result:
+-- !result
