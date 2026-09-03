@@ -74,6 +74,28 @@ public class AgentTaskQueue {
     }
 
     public static synchronized boolean addTask(AgentTask task) {
+<<<<<<< HEAD
+=======
+        // Source guard for leader demotion: refuse to enqueue new agent tasks once this node is
+        // demoting OR has already finished demoting to a non-leader role. Together with
+        // abandonInFlightTasks() (which drains what is already queued) this closes both windows
+        // where a straggling leader-session thread (e.g. a user DDL that passed its admission
+        // checks before the demotion began) would otherwise enqueue after the drain, leaving a
+        // stale entry in a non-leader's queue that could shadow a same-signature task after
+        // re-election. Refuse by returning false (the duplicate-signature convention below), NOT
+        // by throwing: enqueues also happen inside WAL appliers (e.g. DROP TABLE ->
+        // OlapTable.onDrop -> sendDropAutoIncrementMapTaskBestEffort), where an exception after the journal
+        // committed would tear the apply in half, and on follower-resident schedulers started by
+        // image load / replay (e.g. CompactionControlScheduler), which run here on a timer.
+        // Callers uniformly treat false as "not enqueued, skip" and the AgentBatchTask.run()
+        // dispatch fence independently blocks the RPCs of anything already built.
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+            LOG.warn("node is demoting or not the leader ({}), refuse to enqueue agent task: {}",
+                    globalStateMgr.getFeType(), task);
+            return false;
+        }
+>>>>>>> 2bda1db ([BugFix] Skip dead nodes when dropping the auto-increment map (#78561))
         long backendId = task.getBackendId();
         TTaskType type = task.getTaskType();
 
