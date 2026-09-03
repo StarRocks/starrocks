@@ -355,6 +355,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：对象存储 Socket 连接的超时时间。`-1` 表示使用 SDK 中的默认时间。
 - 引入版本：v3.0.9
 
+### enable_poco_client_for_aws_sdk
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否为 AWS SDK 使用 Poco HTTP 客户端。`true` 表示使用 Poco 替换 AWS SDK 默认的 curl HTTP 客户端；`false` 表示使用默认的 curl 客户端。
+- 引入版本：-
+
 ### object_storage_request_timeout_ms
 
 - 默认值：-1
