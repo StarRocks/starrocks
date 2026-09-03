@@ -79,7 +79,7 @@ public class VariableVarConverters {
             try {
                 return SessionVariable.PaimonReaderMode.valueOf(mode).name();
             } catch (IllegalArgumentException e) {
-                throw new DdlException("paimon_reader_mode only supports AUTO, JNI, or NATIVE");
+                throw new DdlException("paimon_reader_mode only supports AUTO, JNI, NATIVE, or RAW_FILE");
             }
         }
     }

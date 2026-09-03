@@ -354,6 +354,139 @@ public class PaimonScanNodeTest {
     }
 
     @Test
+    public void testSetupScanRangeLocationsRawFileMode(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonReaderMode("raw_file");
+        ctx.setThreadLocalInfo();
+        try {
+            DeletionFile deletionFile = new DeletionFile("delete-file", 7, 11, 0L);
+            DataSplit parquetSplit = createRawConvertibleDataSplit("parquet", List.of(deletionFile));
+            DataSplit orcSplit = createRawConvertibleDataSplit("orc", List.of());
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(parquetSplit, orcSplit);
+            new Expectations() {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                    result = remoteFiles;
+                }
+            };
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.setupScanRangeLocations(desc, null, -1);
+
+            List<TScanRangeLocations> ranges = scanNode.getScanRangeLocations(10);
+            Assertions.assertEquals(2, ranges.size());
+            for (TScanRangeLocations range : ranges) {
+                THdfsScanRange hdfsScanRange = range.getScan_range().getHdfs_scan_range();
+                Assertions.assertNotEquals(THdfsFileFormat.UNKNOWN, hdfsScanRange.getFile_format());
+                Assertions.assertFalse(hdfsScanRange.isUse_paimon_jni_reader());
+                Assertions.assertFalse(hdfsScanRange.isUse_paimon_native_reader());
+                Assertions.assertFalse(hdfsScanRange.isSetPaimon_split_info());
+                Assertions.assertFalse(hdfsScanRange.isSetPaimon_split_info_binary());
+            }
+            Assertions.assertTrue(ranges.get(0).getScan_range().getHdfs_scan_range().isSetPaimon_deletion_file());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testRawFileModeRejectsSplitsNeedingSdk(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonReaderMode("RAW_FILE");
+        ctx.setThreadLocalInfo();
+        try {
+            // Every split that AUTO would silently route to the SDK readers must fail under RAW_FILE:
+            // a raw-convertible split in an unsupported file format, a split that needs merging,
+            // and a non-data (system table) split.
+            List<List<RemoteFileInfo>> rejected = List.of(
+                    createRemoteFiles(createRawConvertibleDataSplit("unknown", List.of())),
+                    createRemoteFiles(createDataSplit()),
+                    createRemoteFiles(new TestSplit()));
+            List<String> reasons = List.of("not in parquet or orc format", "merged by the Paimon SDK",
+                    "not a data split");
+            for (int i = 0; i < rejected.size(); i++) {
+                List<RemoteFileInfo> remoteFiles = rejected.get(i);
+                new Expectations() {
+                    {
+                        GlobalStateMgr.getCurrentState();
+                        result = globalStateMgr;
+                        globalStateMgr.getMetadataMgr();
+                        result = metadataMgr;
+                        metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                        result = remoteFiles;
+                        times = 1;
+                    }
+                };
+
+                TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+                desc.setTable(table);
+                PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+                StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                        () -> scanNode.setupScanRangeLocations(desc, null, -1));
+                Assertions.assertTrue(exception.getMessage().contains("paimon_reader_mode=RAW_FILE"),
+                        exception.getMessage());
+                Assertions.assertTrue(exception.getMessage().contains(reasons.get(i)), exception.getMessage());
+                Assertions.assertTrue(scanNode.getScanRangeLocations(10).isEmpty());
+            }
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testForceJniReaderOverridesRawFileMode(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable() {
+            @Override
+            public boolean getPaimonForceJNIReader() {
+                return true;
+            }
+        });
+        ctx.getSessionVariable().setPaimonReaderMode("RAW_FILE");
+        ctx.setThreadLocalInfo();
+        try {
+            List<RemoteFileInfo> remoteFiles =
+                    createRemoteFiles(createRawConvertibleDataSplit("parquet", List.of()), createDataSplit());
+            new Expectations() {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                    result = remoteFiles;
+                }
+            };
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.setupScanRangeLocations(desc, null, -1);
+
+            List<TScanRangeLocations> ranges = scanNode.getScanRangeLocations(10);
+            Assertions.assertEquals(2, ranges.size());
+            for (TScanRangeLocations range : ranges) {
+                THdfsScanRange hdfsScanRange = range.getScan_range().getHdfs_scan_range();
+                Assertions.assertTrue(hdfsScanRange.isUse_paimon_jni_reader());
+                Assertions.assertFalse(hdfsScanRange.isUse_paimon_native_reader());
+            }
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
     public void testNativeSplitSerializationFailure(@Mocked PaimonTable table) {
         ConnectContext ctx = new ConnectContext();
         ctx.setThreadLocalInfo();

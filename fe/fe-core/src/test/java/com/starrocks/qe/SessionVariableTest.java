@@ -38,6 +38,10 @@ public class SessionVariableTest {
         Assertions.assertEquals("NATIVE", nativeMode);
         sessionVariable.setPaimonReaderMode(nativeMode);
         Assertions.assertEquals(SessionVariable.PaimonReaderMode.NATIVE, sessionVariable.getPaimonReaderMode());
+        String rawFileMode = VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "raw_file");
+        Assertions.assertEquals("RAW_FILE", rawFileMode);
+        sessionVariable.setPaimonReaderMode(rawFileMode);
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.RAW_FILE, sessionVariable.getPaimonReaderMode());
 
         Assertions.assertThrows(DdlException.class,
                 () -> VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "invalid"));

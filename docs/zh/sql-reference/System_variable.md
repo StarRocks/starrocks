@@ -1340,7 +1340,7 @@ FROM test;
 
 ### paimon_reader_mode
 
-* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
+* 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI`、`NATIVE` 和 `RAW_FILE`（不区分大小写）。`AUTO` 表示由 StarRocks 自动选择合适的 Reader：能够直接按 Parquet 或 ORC 原始数据文件读取的 Split 使用 StarRocks 原生文件 Reader，其余 Split 使用 JNI Reader。`JNI` 始终使用 JNI Reader。`NATIVE` 使用 paimon-cpp 原生 Reader。`RAW_FILE` 只使用 StarRocks 原生文件 Reader，一旦存在无法按原始文件读取的 Split（例如仍需合并的主键表 Split、非 Parquet/ORC 格式的数据文件、系统表），查询将直接报错。`RAW_FILE` 主要用于测试和性能对比时精确控制 Reader 路径。注意 `paimon_force_jni_reader` 的优先级高于本变量：一旦其设置为 `true`，将始终使用 JNI Reader。
 * 默认值：AUTO
 * 类型：String
 * 引入版本：v4.2

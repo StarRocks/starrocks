@@ -1572,7 +1572,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### paimon_reader_mode
 
-* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, `NATIVE`, and `RAW_FILE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader: splits that can be read as raw Parquet or ORC data files use the StarRocks native file reader, and all other splits use the JNI reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. `RAW_FILE` only uses the StarRocks native file reader and fails the query if any split cannot be read that way, for example, a primary key table split that still needs to be merged, a data file in a format other than Parquet or ORC, or a system table. `RAW_FILE` is mainly intended for testing and benchmarking a specific reader path. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
 * **Default**: AUTO
 * **Data type**: String
 * **Introduced in**: v4.2

@@ -159,42 +159,66 @@ public class PaimonScanNode extends ScanNode {
         if (sessionVariable.getPaimonForceJNIReader()) {
             paimonReaderMode = PaimonReaderMode.JNI;
         }
+        boolean preferRawFiles =
+                paimonReaderMode == PaimonReaderMode.AUTO || paimonReaderMode == PaimonReaderMode.RAW_FILE;
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
-            if (split instanceof DataSplit dataSplit) {
-                Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
-                if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
-                    List<RawFile> rawFiles = optionalRawFiles.get();
-                    boolean supportedDataFileFormat =
-                            rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
-                    if (supportedDataFileFormat) {
-                        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
-                        for (int i = 0; i < rawFiles.size(); i++) {
-                            if (deletionFiles.isPresent()) {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
-                            } else {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
-                            }
-                        }
-                    } else {
-                        long totalFileLength = getTotalFileLength(dataSplit);
-                        addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
-                    }
-                } else {
-                    long totalFileLength = getTotalFileLength(dataSplit);
-                    addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
-                }
+            Optional<List<RawFile>> rawFiles =
+                    preferRawFiles ? rawFilesReadableByStarRocks(split) : Optional.empty();
+            if (rawFiles.isPresent()) {
+                DataSplit dataSplit = (DataSplit) split;
+                addRawFileScanRangeLocations(dataSplit, rawFiles.get());
+                selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId());
+            } else if (paimonReaderMode == PaimonReaderMode.RAW_FILE) {
+                throw rawFileReaderUnavailable(split);
+            } else if (split instanceof DataSplit dataSplit) {
+                long totalFileLength = getTotalFileLength(dataSplit);
+                addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                 selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId());
             } else {
                 // paimon system table
                 long length = getEstimatedLength(split.rowCount(), tupleDescriptor);
                 addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo, length);
             }
-
         }
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
         traceReaderMetrics();
         traceDeletionVectorMetrics();
+    }
+
+    // Raw parquet/orc files StarRocks can scan with its own reader; empty when the split needs a Paimon SDK reader.
+    private Optional<List<RawFile>> rawFilesReadableByStarRocks(Split split) {
+        if (!(split instanceof DataSplit dataSplit)) {
+            return Optional.empty();
+        }
+        return dataSplit.convertToRawFiles()
+                .filter(files -> files.stream().allMatch(f -> fromType(f.format()) != THdfsFileFormat.UNKNOWN));
+    }
+
+    private void addRawFileScanRangeLocations(DataSplit dataSplit, List<RawFile> rawFiles) {
+        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+        for (int i = 0; i < rawFiles.size(); i++) {
+            DeletionFile deletionFile = deletionFiles.isPresent() ? deletionFiles.get().get(i) : null;
+            splitRawFileScanRangeLocations(rawFiles.get(i), deletionFile);
+        }
+    }
+
+    private StarRocksConnectorException rawFileReaderUnavailable(Split split) {
+        String splitDesc;
+        String reason;
+        if (!(split instanceof DataSplit dataSplit)) {
+            splitDesc = split.getClass().getSimpleName();
+            reason = "it is not a data split (e.g. a system table)";
+        } else {
+            splitDesc = dataSplit.bucketPath();
+            reason = dataSplit.convertToRawFiles().isEmpty()
+                    ? "it must be merged by the Paimon SDK (e.g. an uncompacted primary-key split)"
+                    : "its data files are not in parquet or orc format";
+        }
+        return new StarRocksConnectorException(
+                "paimon_reader_mode=RAW_FILE cannot read split [%s] of table %s.%s because %s. " +
+                        "Run a full compaction on the table, or use paimon_reader_mode AUTO, JNI, or NATIVE.",
+                splitDesc, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), reason);
     }
 
     private void traceReaderMetrics() {

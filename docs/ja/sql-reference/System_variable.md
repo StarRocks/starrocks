@@ -1296,7 +1296,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### paimon_reader_mode
 
-* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE`、`RAW_FILE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。Parquet または ORC の生データファイルとして直接読み取れる Split には StarRocks ネイティブファイル Reader を使用し、それ以外の Split には JNI Reader を使用します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。`RAW_FILE` は StarRocks ネイティブファイル Reader のみを使用し、生データファイルとして読み取れない Split（マージが必要な主キーテーブルの Split、Parquet/ORC 以外の形式のデータファイル、システムテーブルなど）が存在する場合はクエリがエラーになります。`RAW_FILE` は主に、特定の Reader パスをテストおよびベンチマークする目的で使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
 * **デフォルト**: AUTO
 * **データ型**: String
 * **導入バージョン**: v4.2

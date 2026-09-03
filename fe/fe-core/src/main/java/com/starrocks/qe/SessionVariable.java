@@ -131,7 +131,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public enum PaimonReaderMode {
         AUTO,
         JNI,
-        NATIVE
+        NATIVE,
+        // StarRocks' own parquet/orc reader over raw data files; splits that cannot be read that way fail.
+        RAW_FILE
     }
 
     public enum BinaryEncodingFormat {
