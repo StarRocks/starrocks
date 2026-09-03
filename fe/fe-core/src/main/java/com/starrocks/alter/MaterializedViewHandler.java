@@ -881,7 +881,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
         if (rollupJobV2.isTimeout()) {
             // in run(), the timeout job will be cancelled.
-            runAlterJobV2Safely(rollupJobV2);
+            rollupJobV2.run();
             return;
         }
 
@@ -907,7 +907,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         if (shouldJobRun) {
-            runAlterJobV2Safely(rollupJobV2);
+            rollupJobV2.run();
         }
     }
 

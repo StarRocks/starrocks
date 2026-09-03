@@ -660,12 +660,8 @@ public class GlobalStateMgr {
                 new MaterializedViewHandler(),
                 new SystemHandler());
         this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-<<<<<<< HEAD
                 Config.lake_publish_version_max_threads, "alter-publish", false);
-=======
-                Config.publish_version_max_threads, "alter-publish", false);
         this.lakeAlterPublishExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
->>>>>>> d2658d6 ([BugFix] Prevent lake alter jobs from getting stuck after failover (#78517))
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
