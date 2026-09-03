@@ -23,6 +23,118 @@ Due to an unstable load order issue in the v4.1.0 container image, BE processes 
 
 :::
 
+## 4.1.4
+
+Release Date: August 5, 2026
+
+### Behavior Changes
+
+- In shared-data mode, the `TABLESAMPLE` / `SAMPLE` clause and `ANALYZE SAMPLE TABLE` now take effect on lake tables. Previously the sample options never reached the BE, so a full scan was performed. [#71874](https://github.com/StarRocks/starrocks/pull/71874)
+- `ALTER TABLE` changes to the `flat_json` configuration are now propagated to BE nodes through a versioned task so they take effect reliably. [#74747](https://github.com/StarRocks/starrocks/pull/74747)
+- `NOT MATCH` predicates answered by a GIN inverted index no longer return NULL rows; NULL rows are now correctly excluded from the result. [#75578](https://github.com/StarRocks/starrocks/pull/75578)
+- `ANALYZE ... UPDATE HISTOGRAM ON` no longer computes histograms for char-family columns (which the optimizer does not use) and computes only MCVs, reducing analyze cost. [#75968](https://github.com/StarRocks/starrocks/pull/75968)
+- `rewrite_manifests` now clusters output manifests by order-preserving partition ranges, producing tighter per-manifest partition bounds and better manifest pruning on tables with many partitions. [#76193](https://github.com/StarRocks/starrocks/pull/76193)
+- Multi-table stream load now honors each table's `file_bundling` property when deciding whether to use a combined transaction log, instead of following only the global `lake_use_combined_txn_log` config. [#76806](https://github.com/StarRocks/starrocks/pull/76806)
+- A GIN inverted index combined with column-mode partial update on a Primary Key table no longer returns corrupted results; the index is now served from the delta column group segment. [#76271](https://github.com/StarRocks/starrocks/pull/76271)
+- `array_difference` on integer arrays now computes adjacent differences in 64-bit before widening to `BIGINT`, fixing int32 overflow. [#76569](https://github.com/StarRocks/starrocks/pull/76569)
+- Division expressions with a non-constant divisor are no longer treated as monotonic, fixing incorrect ZoneMap pruning that could produce wrong results. [#76744](https://github.com/StarRocks/starrocks/pull/76744)
+- Array and map constructors now raise an error instead of silently corrupting data when the flattened result of a chunk exceeds 4 GB. [#76419](https://github.com/StarRocks/starrocks/pull/76419)
+- Primary Key inserts now correctly reject keys that already exist in the L1/L2 persistent index; the existence check was previously skipped. [#76591](https://github.com/StarRocks/starrocks/pull/76591)
+- Sample-based tablet pre-split on range-colocate tables now spreads new shards across compute nodes instead of packing them onto the source tablet's worker, fixing range batch imports that were roughly 3x slower than hash. [#76608](https://github.com/StarRocks/starrocks/pull/76608)
+- Incremental-or-AUTO materialized views now rebuild the maintenance query for the PCT fallback in `AUTO` refresh mode, fixing refresh failures for shapes that IVM does not support. [#75961](https://github.com/StarRocks/starrocks/pull/75961)
+- `ALTER MATERIALIZED VIEW ... ACTIVE` now works for non-aggregate INCREMENTAL materialized views; the storage-filled `__ROW_ID__` column is kept out of the MV DDL column list so an inactive IVM can be re-activated. [#77017](https://github.com/StarRocks/starrocks/pull/77017)
+- The Iceberg partition cache is now bounded by memory (not just entry count) and its usage is exposed, preventing unbounded growth on tables with many partitions. [#76165](https://github.com/StarRocks/starrocks/pull/76165)
+- Iceberg REST catalogs using OAuth2 client credentials now self-heal after the background token-refresh task dies, instead of failing all subsequent requests. [#76457](https://github.com/StarRocks/starrocks/pull/76457)
+- Lake full vacuum now reclaims orphaned `.lcrm` (Lake Compaction Rows Mapper) files that were previously skipped. [#76522](https://github.com/StarRocks/starrocks/pull/76522)
+- Shared-data publish now refuses to write a bundle tablet metadata file that is missing tablets, preventing a partition from getting permanently stuck on publish. [#76850](https://github.com/StarRocks/starrocks/pull/76850)
+- Abandoned external (Spark/Flink connector) scan contexts now cancel their pipeline fragments when reaped, and external scan plans set `query_delivery_timeout` to bound the QueryContext lifetime. [#76535](https://github.com/StarRocks/starrocks/pull/76535) [#76536](https://github.com/StarRocks/starrocks/pull/76536)
+- Materialized view pinned-range maps are now keyed correctly (by table UUID), fixing MV bootstrap pinning being disabled for OLAP tables and mishandling of same-named tables in different databases. [#76320](https://github.com/StarRocks/starrocks/pull/76320) [#76351](https://github.com/StarRocks/starrocks/pull/76351)
+- Audit logs for statements forwarded to the leader FE now record fully-qualified queried relations (matching the leader) instead of CTE aliases and unqualified table names. [#76387](https://github.com/StarRocks/starrocks/pull/76387)
+- Aggregating a full `STRUCT` column together with `ROLLUP`, `CUBE`, or `GROUPING SETS` no longer fails at plan time with a `usedStructFiledPos` error. [#76804](https://github.com/StarRocks/starrocks/pull/76804)
+- The FE memory `Estimator` now counts container overhead, and the Parquet scanner now pads missing columns using the bounded chunk size instead of the full batch size, improving memory accounting accuracy. [#75971](https://github.com/StarRocks/starrocks/pull/75971) [#75981](https://github.com/StarRocks/starrocks/pull/75981)
+
+### Improvements
+
+- Added support for an `INCLUDE METADATA` clause in Routine Load to expose Kafka/Pulsar message metadata (such as partition, offset, and timestamp). [#73840](https://github.com/StarRocks/starrocks/pull/73840)
+- Made the Routine Load metadata alias optional. [#76294](https://github.com/StarRocks/starrocks/pull/76294)
+- Added a `LAST_FRESHNESS_CONFIRMED_AT` column to `information_schema.materialized_views`. [#74585](https://github.com/StarRocks/starrocks/pull/74585)
+- Exposed data cache metrics through the `/metrics` endpoint, and added FE compaction metrics, `ALTER TABLE` column-operation metrics and durations, and a `CompressedInputBytes` metric on the exchange sink. [#58204](https://github.com/StarRocks/starrocks/pull/58204) [#72941](https://github.com/StarRocks/starrocks/pull/72941) [#76247](https://github.com/StarRocks/starrocks/pull/76247) [#76309](https://github.com/StarRocks/starrocks/pull/76309)
+- Exposed authentication and connectivity error details from connector metadata operations to end users. [#75490](https://github.com/StarRocks/starrocks/pull/75490)
+- Improved error messages for large-column capacity limit checks. [#76303](https://github.com/StarRocks/starrocks/pull/76303)
+- Added the `hdfs_backend_selector_cache_replica_num` variable, and made the object storage client cache size runtime mutable. [#75023](https://github.com/StarRocks/starrocks/pull/75023) [#75851](https://github.com/StarRocks/starrocks/pull/75851)
+- Extended sample-based tablet pre-split meta-tier readers to more sort-key types, including `CHAR`, composite sort keys, and UTC-adjusted Parquet `TIMESTAMP` / ORC `TIMESTAMP_INSTANT`. [#75937](https://github.com/StarRocks/starrocks/pull/75937) [#76011](https://github.com/StarRocks/starrocks/pull/76011) [#76114](https://github.com/StarRocks/starrocks/pull/76114)
+- Improved external-table statistics collection: predicate column usage is now tracked, multiple columns are collected in a single scan, and a bounded-cost scan budget is applied for Iceberg tables. [#75938](https://github.com/StarRocks/starrocks/pull/75938) [#76638](https://github.com/StarRocks/starrocks/pull/76638) [#76549](https://github.com/StarRocks/starrocks/pull/76549)
+- Supports right-outer, semi, anti, and full-outer range-colocate joins. [#76040](https://github.com/StarRocks/starrocks/pull/76040)
+- Optimized Query Queue V2 cost estimators. [#76609](https://github.com/StarRocks/starrocks/pull/76609)
+- Pushed the wildcard literal prefix down to the S3 `ListObjectsV2` call for `FILES()` globs, reducing objects listed. [#76210](https://github.com/StarRocks/starrocks/pull/76210)
+- When scanning Iceberg manifest entries in `remove_orphan_files`, only the `file_path` column is now projected. [#76020](https://github.com/StarRocks/starrocks/pull/76020)
+- Supports base compaction for lake Primary Key tablets, and load spill plus eager PK-index SST for separate-sort-key cloud-native PK tables. [#76794](https://github.com/StarRocks/starrocks/pull/76794) [#76094](https://github.com/StarRocks/starrocks/pull/76094)
+- Supports a metadata-only add of a trailing sort-key column on shared-data range-distribution tables. [#76341](https://github.com/StarRocks/starrocks/pull/76341)
+- Cancels in-flight exchange sink RPCs on fragment cancellation, and cancels in-flight compactions on resharded partitions during reshard cleaning. [#75613](https://github.com/StarRocks/starrocks/pull/75613) [#76759](https://github.com/StarRocks/starrocks/pull/76759)
+- Fires multi-statement stream load channels before waiting, reducing load latency. [#76715](https://github.com/StarRocks/starrocks/pull/76715)
+- Added a memory-limit check for column upgrades in `Analytor::process`. [#75821](https://github.com/StarRocks/starrocks/pull/75821)
+- Preserves the real error status when an async delta writer is stopped. [#76216](https://github.com/StarRocks/starrocks/pull/76216)
+- Records generation version on lake PK-index SSTables, applies `op_write.seg_delvecs` at lake Primary Key publish, and skips opening output segment footers during compaction publish conflict resolution. [#76208](https://github.com/StarRocks/starrocks/pull/76208) [#76474](https://github.com/StarRocks/starrocks/pull/76474) [#76657](https://github.com/StarRocks/starrocks/pull/76657)
+- Added stack-trace and fine-grained trace counters for lake load and publish-version paths to aid diagnosis. [#75901](https://github.com/StarRocks/starrocks/pull/75901) [#76810](https://github.com/StarRocks/starrocks/pull/76810)
+
+### Security
+
+- [CVE-2026-44891] Bumped Netty to 4.1.136.Final to fix a memory-exhaustion (DoS) vulnerability in the STOMP subframe decoder. [#76555](https://github.com/StarRocks/starrocks/pull/76555)
+- [CVE-2026-55971] [CVE-2026-43871] Bumped Apache Thrift to 0.24.0 to fix a heap-based buffer overflow in the C++ bindings and an infinite-loop vulnerability. [#76922](https://github.com/StarRocks/starrocks/pull/76922)
+- [CVE-2026-10050] Excluded vulnerable Jetty jars (client-side Digest auth bypass, pulled in transitively via Hadoop) and bumped pgjdbc to 42.7.12. [#76783](https://github.com/StarRocks/starrocks/pull/76783)
+- [CVE-2011-4969] [CVE-2014-6071] Excluded the unused `avro-ipc` jar that bundled a vulnerable jQuery 1.4.2 (and other jQuery XSS CVEs). [#76270](https://github.com/StarRocks/starrocks/pull/76270)
+- [CVE-2024-29857] Removed vulnerable stale transitive dependencies that shipped alongside their fixed counterparts (for example `bcprov-jdk15on` 1.70 and EOL `okhttp` 2.x) and added dependency bans to prevent regressions. [#76097](https://github.com/StarRocks/starrocks/pull/76097)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Planner crash on an empty range in join predicate derivation. [#75011](https://github.com/StarRocks/starrocks/pull/75011)
+- Aggregate incorrectly pushed down over a `CASE` with a non-null constant `ELSE`. [#75037](https://github.com/StarRocks/starrocks/pull/75037)
+- `PARTITION-TOP-N` partition-by rewritten to a pruned dictionary slot. [#75956](https://github.com/StarRocks/starrocks/pull/75956)
+- Wrong operator precedence in the join shuffle-join output-property branch, and `predicateCommonOperators` not carried through join operator construction. [#76203](https://github.com/StarRocks/starrocks/pull/76203) [#76330](https://github.com/StarRocks/starrocks/pull/76330) [#76388](https://github.com/StarRocks/starrocks/pull/76388)
+- Incorrect nullability for view columns and for `ROLLUP` keys at analysis time. [#75684](https://github.com/StarRocks/starrocks/pull/75684) [#76149](https://github.com/StarRocks/starrocks/pull/76149)
+- `regexp_extract_all` infinite loop on a zero-length capture group. [#75798](https://github.com/StarRocks/starrocks/pull/75798)
+- Wrong `nullsFraction` clamp in `LargeOrCalculatingVisitor`. [#75864](https://github.com/StarRocks/starrocks/pull/75864)
+- Incorrect `CAST` semantics for string-to-number schema-change conversion. [#75538](https://github.com/StarRocks/starrocks/pull/75538)
+- Sync MV rewrite losing a rollup column for same-column `min`/`max`. [#75528](https://github.com/StarRocks/starrocks/pull/75528)
+- Rewrite incorrectly applied inside an `array_map` lambda when pulling scan predicates up. [#76380](https://github.com/StarRocks/starrocks/pull/76380)
+- `COUNT(DISTINCT)` over-count on Iceberg bucket tables under bucket-aware execution. [#76601](https://github.com/StarRocks/starrocks/pull/76601)
+- Error on nullable output for `UNNEST` + `GROUP BY` of a required Iceberg column. [#76730](https://github.com/StarRocks/starrocks/pull/76730)
+- Reduced lock contention across the `INSERT OVERWRITE` code path, and restored `Operator` salt to avoid a Memo self-reference during CBO table prune. [#75828](https://github.com/StarRocks/starrocks/pull/75828) [#76542](https://github.com/StarRocks/starrocks/pull/76542)
+- Iceberg partition pruning, manifest row-count estimation, metadata delete, equality-delete application, and Delta Lake partition pruning were incorrect when a string date partition column is compared with a temporal value. [#76068](https://github.com/StarRocks/starrocks/pull/76068) [#76107](https://github.com/StarRocks/starrocks/pull/76107) [#76197](https://github.com/StarRocks/starrocks/pull/76197) [#76280](https://github.com/StarRocks/starrocks/pull/76280) [#76348](https://github.com/StarRocks/starrocks/pull/76348)
+- Iceberg reads did not honor the targeted snapshot's schema and partition spec; query failure on an Iceberg V1 table after dropping a partition field; and MV rewrite serving stale results after `rollback_to_snapshot`. [#74711](https://github.com/StarRocks/starrocks/pull/74711) [#75149](https://github.com/StarRocks/starrocks/pull/75149) [#75924](https://github.com/StarRocks/starrocks/pull/75924)
+- Iceberg manifest data-file cache served an incomplete file set; the incremental scan-range iterator was unsafe to close concurrently; and analysis-time time-travel snapshot binding is now best-effort. [#76215](https://github.com/StarRocks/starrocks/pull/76215) [#75953](https://github.com/StarRocks/starrocks/pull/75953) [#76448](https://github.com/StarRocks/starrocks/pull/76448)
+- Iceberg/Delta metadata-derived statistics are now tagged with `StatsSource=TABLE_METADATA`. [#76560](https://github.com/StarRocks/starrocks/pull/76560)
+- Delta Lake and Kudu un-partitioned materialized view query rewrite. [#76359](https://github.com/StarRocks/starrocks/pull/76359)
+- GCS vended credentials ignored due to a `gcs-connector` 3.x config rename. [#75979](https://github.com/StarRocks/starrocks/pull/75979)
+- Hive `getTable()` now reconnects before the `get_table_req` fallback and detects table-not-found by exception type instead of message text. [#76456](https://github.com/StarRocks/starrocks/pull/76456) [#76459](https://github.com/StarRocks/starrocks/pull/76459)
+- `BOOLEAN` min/max not supported in Parquet column-index statistics. [#74752](https://github.com/StarRocks/starrocks/pull/74752)
+- Flat-JSON subfield reads for keys whose name contains `.`, and reconstruction of an intermediate flat-JSON object instead of returning NULL; JSON subfield pushdown is now skipped when subfield keys collide case-insensitively. [#75583](https://github.com/StarRocks/starrocks/pull/75583) [#75764](https://github.com/StarRocks/starrocks/pull/75764) [#76594](https://github.com/StarRocks/starrocks/pull/76594)
+- Kept OR-nested predicates when only one branch is bitmap-indexed. [#76275](https://github.com/StarRocks/starrocks/pull/76275)
+- BE crash in Primary Key auto-increment partial-update apply. [#76119](https://github.com/StarRocks/starrocks/pull/76119)
+- BE crash from a `LoadChunkSpiller` init race during load spill. [#76098](https://github.com/StarRocks/starrocks/pull/76098)
+- Native Parquet reader crash on an incomplete nested lake schema, and an ASAN crash for `BOOLEAN` nested in Avro complex-type columns. [#76455](https://github.com/StarRocks/starrocks/pull/76455) [#76041](https://github.com/StarRocks/starrocks/pull/76041)
+- `bad_variant_access` during schema change when converting an invalid string to a `NOT NULL` numeric column. [#76707](https://github.com/StarRocks/starrocks/pull/76707)
+- Heap-buffer-overflow in the `SimdJsonConverter` error path, and a use-after-free on a multi-character CSV delimiter straddling a buffer expansion. [#76752](https://github.com/StarRocks/starrocks/pull/76752) [#76718](https://github.com/StarRocks/starrocks/pull/76718)
+- Use-after-free on `MorselQueueFactory` during scan teardown, in the spillable join build `set_finishing` at cancel time, and a global runtime-filter timer leak / unscheduled timer in the `PipelineDriver` destructor. [#76259](https://github.com/StarRocks/starrocks/pull/76259) [#76633](https://github.com/StarRocks/starrocks/pull/76633) [#76252](https://github.com/StarRocks/starrocks/pull/76252)
+- Null-safe `SparseRangeIterator::has_more()` to fix a physical-split empty-tablet CN crash, and a bRPC stub cache clean timer leak. [#75985](https://github.com/StarRocks/starrocks/pull/75985) [#75973](https://github.com/StarRocks/starrocks/pull/75973)
+- `ConnectContext` not restored on query-deploy workers. [#76366](https://github.com/StarRocks/starrocks/pull/76366)
+- Preserve upsert/delete order within a transaction for shared-data Primary Key tables, including making the spill merge op-aware. [#75338](https://github.com/StarRocks/starrocks/pull/75338) [#75366](https://github.com/StarRocks/starrocks/pull/75366)
+- Read durable metadata in `cal_new_base_version` to avoid a dangling `prev_garbage_version`; keep `base_version` in sync with `base_metadata` in `publish_version`; and persist the merged parallel-compaction transaction log on the regular path. [#75904](https://github.com/StarRocks/starrocks/pull/75904) [#76313](https://github.com/StarRocks/starrocks/pull/76313) [#76460](https://github.com/StarRocks/starrocks/pull/76460)
+- Range-colocate fixes: stopped an alignment job storm and fail-close unaligned colocate joins, fixed null-safe joins dropping matches under bucket-shuffle, and improved range-colocate join detection in plan feedback. [#75930](https://github.com/StarRocks/starrocks/pull/75930) [#76104](https://github.com/StarRocks/starrocks/pull/76104) [#76121](https://github.com/StarRocks/starrocks/pull/76121)
+- Tablet split/reshard fixes: bump the table optimistic version on split so concurrent queries re-plan, flush the PK-index memtable before identical-tablet reshard, retain lake vacuum files by version interval across reshard, stop the auto-split job loop on un-splittable range-distribution tablets, and fix `IS NULL` pruning on range-distributed sort keys after a split. [#76123](https://github.com/StarRocks/starrocks/pull/76123) [#76367](https://github.com/StarRocks/starrocks/pull/76367) [#76209](https://github.com/StarRocks/starrocks/pull/76209) [#76663](https://github.com/StarRocks/starrocks/pull/76663) [#76797](https://github.com/StarRocks/starrocks/pull/76797)
+- Reject a full-column `ORDER BY` that reorders the key columns of a key-derived range-distribution table. [#76256](https://github.com/StarRocks/starrocks/pull/76256)
+- Consolidate load-spill parallel merge results in flush order, and exclude touched indexes by `metaId` in file-bundling carry-forward. [#75951](https://github.com/StarRocks/starrocks/pull/75951) [#76368](https://github.com/StarRocks/starrocks/pull/76368)
+- Reserve dictionary size + 1 for NULL-absorbing dict-mapping group-by keys, and check driver readiness before a profile-report reschedule. [#75357](https://github.com/StarRocks/starrocks/pull/75357) [#75725](https://github.com/StarRocks/starrocks/pull/75725)
+- `PlannerMetaLocker` skipped unlock when the lock never succeeded. [#74041](https://github.com/StarRocks/starrocks/pull/74041)
+- Filter resource groups by warehouse. [#73209](https://github.com/StarRocks/starrocks/pull/73209)
+- Escape the `jsonpaths` value in `SHOW CREATE ROUTINE LOAD` output. [#75755](https://github.com/StarRocks/starrocks/pull/75755)
+- Fixed Arrow Flight prepared-statement forwarding. [#76310](https://github.com/StarRocks/starrocks/pull/76310)
+- Fixed dictionary refresh-interval overflow and unintended auto refresh. [#76634](https://github.com/StarRocks/starrocks/pull/76634)
+- Fixed a statistics cache load failure on empty min/max under `ERROR_IF_OVERFLOW`. [#76684](https://github.com/StarRocks/starrocks/pull/76684)
+- Made the catalog-drop existence check atomic under a write lock. [#76778](https://github.com/StarRocks/starrocks/pull/76778)
+
 ## 4.1.3
 
 Release Date: July 14, 2026
