@@ -229,17 +229,11 @@ public:
     bool is_loaded() const;
     Status get_load_status() const;
     std::size_t memory_usage() const;
-    size_t key_size() const { return _key_size; }
-
     std::string to_string() const;
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
-
-    // Derive the fixed encoded-key size from the tablet's primary-key columns. Replaces
-    // PrimaryIndex::_set_schema(), minus the in-memory hash index it also allocated.
-    void _init_encoded_key_size(const TabletMetadataPtr& metadata);
 
     void _unload_without_lock();
 
@@ -255,9 +249,6 @@ private:
     Status _status;
 
     int64_t _tablet_id = 0;
-    // Fixed encoded key size, or 0 for variable-length keys. Set by _init_encoded_key_size() at load
-    // time and consulted only by build_persistent_keys().
-    size_t _key_size = 0;
 
     // We don't support multi version yet, but we record the latest data version for some checking
     int64_t _data_version = 0;

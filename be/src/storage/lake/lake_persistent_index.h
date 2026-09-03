@@ -150,6 +150,10 @@ public:
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
+    // Fixed encoded key size, or 0 for variable-length keys. Set from the tablet's primary-key
+    // schema and encoding type in load_from_lake_tablet(), so it is only meaningful once loaded.
+    size_t key_size() const { return _key_size; }
+
     // During large import, we may have many sst files to ingest and get, so we do parallel compaction to speedup the process.
     StatusOr<AsyncCompactCBPtr> early_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
                                                   TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,

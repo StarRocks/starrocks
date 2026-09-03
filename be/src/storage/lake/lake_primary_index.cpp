@@ -21,7 +21,6 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "gutil/strings/substitute.h"
-#include "storage/chunk_helper.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/parallel_task_runner.h"
@@ -29,7 +28,6 @@
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/parallel_upsert_context.h"
-#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
@@ -112,25 +110,8 @@ std::size_t LakePrimaryIndex::memory_usage() const {
     return _index != nullptr ? _index->memory_usage() : 0;
 }
 
-void LakePrimaryIndex::_init_encoded_key_size(const TabletMetadataPtr& metadata) {
-    auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
-    std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
-    for (auto i = 0; i < tablet_schema->num_key_columns(); i++) {
-        pk_columns[i] = (ColumnId)i;
-    }
-    auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
-    // V1 rather than the tablet's own encoding type, which is what PrimaryIndex::_set_schema did and
-    // what this value's one consumer needs. build_persistent_keys() only reads it when the encoded
-    // column is NOT binary, and encoded_primary_key_type() produces a non-binary column exactly for
-    // a single-column V1 key -- the case this computation is right for. A V2 tablet encodes to
-    // VARCHAR, takes the binary path, and never looks.
-    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pk_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
-}
-
 Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                        int64_t base_version, const MetaFileBuilder* builder) {
-    _init_encoded_key_size(metadata);
-
     // A shared-data primary-key tablet has exactly one index implementation. The metadata is
     // normalized to enabled + CLOUD_NATIVE at load time (force_cloud_native_pk_persistent_index),
     // so there is nothing to choose between.
@@ -193,7 +174,8 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
     }
     Buffer<Slice> keys;
     std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
     // Cloud native index needs the delete's rssid as the rebuild point when erasing.
     RETURN_IF_ERROR(index->erase(pks.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()), del_rssid));
     old_values_to_deletes(old_values, deletes);
@@ -211,7 +193,8 @@ Status LakePrimaryIndex::bulk_erase(const TabletMetadataPtr& metadata, const Col
     }
     Buffer<Slice> keys;
     std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
     RETURN_IF_ERROR(index->bulk_erase(pks.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()), del_rssid,
                                       del_sst_meta, del_sst_range, version));
     old_values_to_deletes(old_values, deletes);
@@ -486,7 +469,8 @@ Status LakePrimaryIndex::get(const Column& pks, std::vector<uint64_t>* rowids) c
         return Status::InternalError("get on an unloaded lake primary index");
     }
     Buffer<Slice> keys;
-    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
     return index->get(pks.size(), vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
 }
 
@@ -504,7 +488,7 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Colu
     slot.values.reserve(n);
     slot.old_values.resize(n, NullIndexValue);
     ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, _key_size, idx_begin, idx_end, &slot.keys));
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), idx_begin, idx_end, &slot.keys));
     const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
     for (uint32_t i = idx_begin; i < idx_end; i++) {
         slot.values.emplace_back(base + i);
@@ -526,7 +510,8 @@ Status LakePrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std
     for (size_t i = 0; i < pks.size(); i++) {
         values.emplace_back(base + i);
     }
-    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
     return index->replace(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), replace_indexes);
 }
 
@@ -543,7 +528,8 @@ Status LakePrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const
     for (size_t i = 0; i < pks.size(); i++) {
         values.emplace_back(base + i);
     }
-    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
     return index->try_replace(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, failed);
 }
 
@@ -556,7 +542,8 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Colu
     const uint32_t n = pks.size();
     slot->values.reserve(n);
     slot->old_values.resize(n, NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, n, &slot->keys));
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, n, &slot->keys));
     const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
     for (uint32_t i = 0; i < n; i++) {
         slot->values.emplace_back(base + i);
@@ -575,7 +562,8 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& row
     DCHECK_EQ(rowids.size(), n);
     slot->values.reserve(n);
     slot->old_values.resize(n, NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys, PrimaryIndex::build_persistent_keys(pks, _key_size, 0, n, &slot->keys));
+    ASSIGN_OR_RETURN(const Slice* vkeys,
+                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, n, &slot->keys));
     const uint64_t base = ((uint64_t)rssid) << 32;
     for (uint32_t i = 0; i < n; i++) {
         slot->values.emplace_back(base + rowids[i]);
