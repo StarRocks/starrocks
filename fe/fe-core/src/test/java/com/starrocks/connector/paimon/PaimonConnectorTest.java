@@ -23,6 +23,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.options.Options;
@@ -32,6 +33,11 @@ import org.apache.paimon.types.IntType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+<<<<<<< HEAD
+=======
+import java.nio.file.Files;
+import java.time.Duration;
+>>>>>>> 65a9ea8 ([BugFix] Honor paimon.option.cache-enabled=false again (backport #78271) (#78609))
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -59,6 +65,60 @@ public class PaimonConnectorTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCacheLifetimeMatchesIceberg() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options options = connector.getPaimonOptions();
+        // 24h to match iceberg_meta_cache_ttl_sec; both must be set or a default becomes binding
+        Assertions.assertEquals(Duration.ofHours(24), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_ACCESS));
+        Assertions.assertEquals(Duration.ofHours(24), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_WRITE));
+    }
+
+    @Test
+    public void testMetaCacheTtlProperty() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+        properties.put(PaimonConnector.PAIMON_META_CACHE_TTL, "3600");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options options = connector.getPaimonOptions();
+        Assertions.assertEquals(Duration.ofHours(1), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_ACCESS));
+        Assertions.assertEquals(Duration.ofHours(1), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_WRITE));
+    }
+
+    @Test
+    public void testCacheOptionsCanBeOverridden() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", "hdfs://127.0.0.1:9999/warehouse");
+        properties.put("paimon.option.cache.expire-after-write", "1h");
+        properties.put("paimon.option.cache.partition.max-num", "50");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+        Options options = connector.getPaimonOptions();
+        // the paimon.option. passthrough runs after our defaults
+        Assertions.assertEquals(Duration.ofHours(1), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_WRITE));
+        Assertions.assertEquals(50L, options.get(CatalogOptions.CACHE_PARTITION_MAX_NUM));
+        Assertions.assertEquals(Duration.ofHours(24), options.get(CatalogOptions.CACHE_EXPIRE_AFTER_ACCESS));
+    }
+
+    @Test
+    public void testCacheCanBeDisabled() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", Files.createTempDirectory("paimon_no_cache").toString());
+        properties.put("paimon.option.cache-enabled", "false");
+        PaimonConnector connector = new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+
+        Assertions.assertFalse(connector.getPaimonOptions().get(CatalogOptions.CACHE_ENABLED));
+        Assertions.assertFalse(connector.getPaimonNativeCatalog() instanceof CachingCatalog);
+    }
+
+    @Test
+>>>>>>> 65a9ea8 ([BugFix] Honor paimon.option.cache-enabled=false again (backport #78271) (#78609))
     public void testCreateHivePaimonConnectorWithoutUris() {
         Map<String, String> properties = new HashMap<>();
         properties.put("paimon.catalog.type", "hive");
