@@ -142,6 +142,18 @@ static Status drop_corrupted_del_file_cache(const std::string& path) {
     return drop_status;
 }
 
+// Same recovery hook for delvec files: drop the local data cache after a page's crc32c
+// failed to verify, so the retry reads through to the remote object.
+static Status drop_corrupted_delvec_file_cache(const std::string& path) {
+    Status drop_status = Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    drop_status = drop_local_cache_data(path);
+#endif
+    // Outside the platform guard on purpose, so tests can drive the retry path on any build.
+    TEST_SYNC_POINT_CALLBACK("lake::drop_corrupted_delvec_file_cache", &drop_status);
+    return drop_status;
+}
+
 template <typename DelMetaPB>
 static StatusOr<std::string> do_read_and_verify_del_file(RandomAccessFile* rf, const DelMetaPB& del_meta,
                                                          int64_t tablet_id) {
@@ -1253,40 +1265,64 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
     }
     const auto& delvec_name = iter->second.name();
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-    {
+    const std::string delvec_path =
+            (lake_io_opts.fs && lake_io_opts.location_provider)
+                    ? lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)
+                    : tablet_mgr->delvec_location(metadata.id(), delvec_name);
+    auto read_page = [&]() -> Status {
         TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
         std::unique_ptr<RandomAccessFile> rf;
         if (lake_io_opts.fs && lake_io_opts.location_provider) {
-            ASSIGN_OR_RETURN(
-                    rf, lake_io_opts.fs->new_random_access_file(
-                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+            ASSIGN_OR_RETURN(rf, lake_io_opts.fs->new_random_access_file(opts, delvec_path));
         } else {
-            ASSIGN_OR_RETURN(rf,
-                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, delvec_path));
         }
-        RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
-    }
-    if (delvec_page.has_crc32c() && delvec_page.crc32c_gen_version() == delvec_page.version()) {
-        // check crc32c
+        return rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size());
+    };
+    // Returns Corruption only when strict checking is on; a mismatch is otherwise
+    // tolerated (see the ABA note below) and the page is used as read.
+    auto verify_page = [&]() -> Status {
+        if (!delvec_page.has_crc32c() || delvec_page.crc32c_gen_version() != delvec_page.version()) {
+            return Status::OK();
+        }
         uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
-        if (crc32c != crc32c::Unmask(delvec_page.crc32c())) {
-            // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
-            // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
-            // while version B does not yet support it.
-            // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
-            // After downgrading to version B, the delete vector is updated, but since version B does not support
-            // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
-            // the CRC32 verification fails.
-            LOG(ERROR) << fmt::format(
-                    "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
-                    "crc32c {}",
-                    metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
-                    crc32c::Unmask(delvec_page.crc32c()), crc32c);
-            if (config::enable_strict_delvec_crc_check) {
-                return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
-                                                      crc32c::Unmask(delvec_page.crc32c()), crc32c));
-            }
+        if (crc32c == crc32c::Unmask(delvec_page.crc32c())) {
+            return Status::OK();
         }
+        // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
+        // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
+        // while version B does not yet support it.
+        // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
+        // After downgrading to version B, the delete vector is updated, but since version B does not support
+        // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
+        // the CRC32 verification fails.
+        LOG(ERROR) << fmt::format(
+                "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
+                "crc32c {}",
+                metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
+                crc32c::Unmask(delvec_page.crc32c()), crc32c);
+        if (config::enable_strict_delvec_crc_check) {
+            return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                  crc32c::Unmask(delvec_page.crc32c()), crc32c));
+        }
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(read_page());
+    if (auto verify_st = verify_page(); !verify_st.ok()) {
+        // A delvec file is immutable once written, so bytes that do not match the
+        // recorded checksum are not the bytes that were written. The likeliest culprit
+        // is a corrupted block in the local data cache rather than in remote storage,
+        // so drop the cache and read once more -- the retry then reads through to the
+        // remote object. Del files (read_and_verify_del_file), segment pages and
+        // persistent-index sstables recover from cache corruption the same way.
+        auto drop_status = drop_corrupted_delvec_file_cache(delvec_path);
+        if (!drop_status.ok()) {
+            VLOG(2) << "skip clearing corrupted cache for " << delvec_path << ": " << drop_status;
+            return verify_st;
+        }
+        LOG(INFO) << "cleared corrupted cache for " << delvec_path << ", re-reading the delvec page";
+        RETURN_IF_ERROR(read_page());
+        RETURN_IF_ERROR(verify_page());
     }
     // parse delvec
     RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
