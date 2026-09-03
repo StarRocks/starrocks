@@ -204,9 +204,11 @@ For each range-distributed table, the tool compares freshly read source and targ
 
 Range distribution does not change shared-data version synchronization. Each replication uses the source physical partition's `visibleVersion`, compares the complete metadata and file sets, and skips files that already exist on the target.
 
+When transparent data encryption (TDE) is used in shared-data-to-shared-data migration, a newly copied private standalone physical file is read with its source encryption metadata and then re-encrypted under the target policy. If the source key hierarchy cannot be unwrapped, migration fails before the target publication. Newly copied shared or bundled physical files are unsupported when the source file is encrypted or target TDE is enabled. Objects that already exist on the target can be reused directly and retain their target encryption metadata. Migration from a shared-nothing source to a shared-data target fails closed when a source rowset or DCG file is encrypted; decrypting and re-encrypting those files on this path is not supported.
+
 :::warning
 
-This workflow supports split convergence only. It fails closed if convergence would require a target merge, including a source merge, a target-only boundary, crossing ranges, or a target topology finer than the source topology. Range-colocate layouts are also unsupported. When transparent data encryption is enabled on the target cluster, newly copying a physical file shared by split range tablets is unsupported; files that already exist on the target can still be reused with their existing encryption metadata.
+This workflow supports split convergence only. It fails closed if convergence would require a target merge, including a source merge, a target-only boundary, crossing ranges, or a target topology finer than the source topology. Range-colocate layouts are also unsupported.
 
 :::
 

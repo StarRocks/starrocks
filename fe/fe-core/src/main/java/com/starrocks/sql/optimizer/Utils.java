@@ -784,7 +784,7 @@ public class Utils {
                 continue;
             }
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                MaterializedIndex index = subPartition.getLatestIndex(selectedIndexMetaId);
+                MaterializedIndex index = subPartition.getQueryableIndex(selectedIndexMetaId);
                 if (index == null) {
                     continue;
                 }

@@ -23,11 +23,20 @@
 #include <manager.grpc.pb.h>
 #include <shard.pb.h>
 
+#include <algorithm>
 #include <condition_variable>
 #include <functional>
+#include <limits>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/utility/defer_op.h"
+#include "common/config_metrics_fwd.h"
+#include "common/logging.h"
 #include "common/shutdown_hook.h"
+#include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 
@@ -38,7 +47,50 @@ static void add_shard_listener(std::vector<StarOSWorker::ShardId>* shardIds, int
     ++*counter;
 }
 
+TEST(StarletRequestTimeoutTest, PreserveTimeoutSemanticsForEachHttpClient) {
+    auto positive = starlet_request_timeout_ms(10000, true);
+    ASSERT_TRUE(positive);
+    EXPECT_EQ(10000, *positive);
+
+    auto disabled = starlet_request_timeout_ms(0, true);
+    ASSERT_TRUE(disabled);
+    EXPECT_EQ(0, *disabled);
+
+    auto poco_unset = starlet_request_timeout_ms(-1, true);
+    ASSERT_TRUE(poco_unset);
+    EXPECT_EQ(-1, *poco_unset);
+
+    auto curl_unset = starlet_request_timeout_ms(-1, false);
+    ASSERT_TRUE(curl_unset);
+    EXPECT_EQ(0, *curl_unset);
+
+    auto max = starlet_request_timeout_ms(std::numeric_limits<int32_t>::max(), true);
+    ASSERT_TRUE(max);
+    EXPECT_EQ(std::numeric_limits<int32_t>::max(), *max);
+    EXPECT_FALSE(starlet_request_timeout_ms(static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1, true));
+}
+
 static Aws::SDKOptions _s_options;
+
+class RecordingLogSink final : public google::LogSink {
+public:
+    void send(google::LogSeverity severity, const char* full_filename, const char* base_filename, int line,
+              const google::LogMessageTime& time, const char* message, size_t message_len) override {
+        std::lock_guard lock(_mutex);
+        _messages.emplace_back(severity, std::string(message, message_len));
+    }
+
+    size_t count(google::LogSeverity severity, const std::string& needle) const {
+        std::lock_guard lock(_mutex);
+        return std::count_if(_messages.begin(), _messages.end(), [&](const auto& entry) {
+            return entry.first == severity && entry.second.find(needle) != std::string::npos;
+        });
+    }
+
+private:
+    mutable std::mutex _mutex;
+    std::vector<std::pair<google::LogSeverity, std::string>> _messages;
+};
 
 class StarOSWorkerTest : public ::testing::Test {
 public:
@@ -47,6 +99,23 @@ public:
     static void TearDownTestCase() {
         staros::starlet::common::ShutdownHook::shutdown();
         Aws::ShutdownAPI(_s_options);
+    }
+
+    static void expect_malformed_table_id(std::string table_id, StarOSWorker::ShardId shard_id) {
+        TableMetricsManager table_metrics_mgr;
+        StarOSWorker worker(&table_metrics_mgr);
+        RecordingLogSink sink;
+        google::AddLogSink(&sink);
+        DeferOp remove_sink([&] { google::RemoveLogSink(&sink); });
+
+        StarOSWorker::ShardInfo shard;
+        shard.id = shard_id;
+        shard.properties.emplace("tableId", table_id);
+        EXPECT_TRUE(worker.add_shard(shard).ok());
+        EXPECT_EQ(0, table_metrics_mgr.size());
+        EXPECT_TRUE(worker.remove_shard(shard.id).ok());
+        EXPECT_EQ(0, table_metrics_mgr.size());
+        EXPECT_EQ(2, sink.count(google::GLOG_WARNING, "failed to parse tableId: " + table_id));
     }
 };
 
@@ -100,6 +169,84 @@ TEST_F(StarOSWorkerTest, test_add_listener) {
 
     EXPECT_TRUE(worker->remove_shard(2).ok());
     EXPECT_EQ(0, shard_count_metric.value());
+}
+
+TEST_F(StarOSWorkerTest, TableMetricsIgnoreVirtualShard) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+
+    TableMetricsManager table_metrics_mgr;
+    StarOSWorker worker(&table_metrics_mgr);
+    RecordingLogSink sink;
+    google::AddLogSink(&sink);
+    DeferOp remove_sink([&] { google::RemoveLogSink(&sink); });
+
+    StarOSWorker::ShardInfo shard;
+    shard.id = 101;
+    EXPECT_TRUE(worker.add_shard(shard).ok());
+    EXPECT_EQ(0, table_metrics_mgr.size());
+    EXPECT_TRUE(worker.remove_shard(shard.id).ok());
+    EXPECT_EQ(0, table_metrics_mgr.size());
+    EXPECT_EQ(0, sink.count(google::GLOG_WARNING, "tableId"));
+}
+
+TEST_F(StarOSWorkerTest, TableMetricsRejectPartiallyParsedTableIds) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+    expect_malformed_table_id("-1", 102);
+    expect_malformed_table_id("42junk", 103);
+}
+
+TEST_F(StarOSWorkerTest, TableMetricsRejectEmptyTableId) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+    expect_malformed_table_id("", 104);
+}
+
+TEST_F(StarOSWorkerTest, TableMetricsRejectOverflowingTableId) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+    expect_malformed_table_id("18446744073709551616", 105);
+}
+
+TEST_F(StarOSWorkerTest, TableMetricsRejectEmbeddedNullTableId) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+    expect_malformed_table_id(std::string("42\0junk", 7), 108);
+}
+
+TEST_F(StarOSWorkerTest, TableMetricsPreserveTableShardReferenceCounts) {
+    const bool old_enable_table_metrics = config::enable_table_metrics;
+    DeferOp restore_config([&] { config::enable_table_metrics = old_enable_table_metrics; });
+    config::enable_table_metrics = true;
+
+    TableMetricsManager table_metrics_mgr;
+    StarOSWorker worker(&table_metrics_mgr);
+    RecordingLogSink sink;
+    google::AddLogSink(&sink);
+    DeferOp remove_sink([&] { google::RemoveLogSink(&sink); });
+
+    StarOSWorker::ShardInfo first;
+    first.id = 106;
+    first.properties.emplace("tableId", "42");
+    StarOSWorker::ShardInfo second;
+    second.id = 107;
+    second.properties.emplace("tableId", " 42 ");
+
+    EXPECT_TRUE(worker.add_shard(first).ok());
+    EXPECT_TRUE(worker.add_shard(second).ok());
+    ASSERT_EQ(1, table_metrics_mgr.size());
+    EXPECT_EQ(2, table_metrics_mgr.get_table_metrics(42)->ref_count);
+    EXPECT_TRUE(worker.remove_shard(first.id).ok());
+    EXPECT_EQ(1, table_metrics_mgr.get_table_metrics(42)->ref_count);
+    EXPECT_TRUE(worker.remove_shard(second.id).ok());
+    EXPECT_EQ(0, table_metrics_mgr.get_table_metrics(42)->ref_count);
+    EXPECT_EQ(0, sink.count(google::GLOG_WARNING, "tableId"));
 }
 
 TEST_F(StarOSWorkerTest, test_fs_cache) {

@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <set>
+#include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
 
@@ -56,6 +58,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/delete_handler.h"
 #include "storage/extends_column_utils.h"
 #include "storage/flat_json_metrics.h"
 #include "storage/metadata_util.h"
@@ -355,6 +358,20 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _unused_output_column_ids.erase(id);
     }
 
+    // The delete filter evaluates these on the outgoing chunk, so they must survive into the output schema.
+    // An empty unused set makes every erase a no-op, so skip the header lock and the condition parsing entirely.
+    if (!_unused_output_column_ids.empty()) {
+        std::set<ColumnId> delete_pred_cids;
+        {
+            std::shared_lock header_lock(_tablet->get_header_lock());
+            RETURN_IF_ERROR(DeleteHandler::delete_predicate_column_ids(_tablet->delete_predicates(), *_tablet_schema,
+                                                                       _version, &delete_pred_cids));
+        }
+        for (ColumnId cid : delete_pred_cids) {
+            _unused_output_column_ids.erase(cid);
+        }
+    }
+
     std::vector<ExprContext*> not_pushdown_conjuncts;
     _scan_ctx->conjuncts_manager().get_not_push_down_conjuncts(&not_pushdown_conjuncts);
     std::unordered_set<SlotId> conjuncts_slot_ids;
@@ -374,8 +391,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     }
 
     // A predicate evaluated above the segment iterator means the iterator cannot fold it into the ANN
-    // candidate; flag it so the vector filter resolver routes to exact brute-force instead of an unsafe
-    // segment-level k-limit. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
+    // candidate. Preserve that fact so the vector filter resolver can apply the configured underfill
+    // fallback policy. Two sources: (1) this scan's own non-pushdown conjuncts; (2) a row-filtering
     // operator placed ABOVE this scan in the execution tree (e.g. a SELECT for a residual the optimizer
     // could not push down, such as cat+tag>50) -- detected by FragmentExecutor's tree walk. See design §7.
     _params.has_predicate_above_iterator = !not_pushdown_conjuncts.empty() || !_non_pushdown_pred_tree.empty() ||

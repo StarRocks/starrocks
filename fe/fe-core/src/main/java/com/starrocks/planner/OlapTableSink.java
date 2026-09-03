@@ -241,8 +241,7 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
-        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView() ||
-                dstTable.isOlapExternalTable() && ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
+        tSink.setIs_lake_table(writesToCloudNativeTable());
         tSink.setKeys_type(ExprToThrift.keysTypeToThrift(dstTable.getKeysType()));
         tSink.setWrite_quorum_type(writeQuorum);
         // If table has Gin index, do not allow replicated storage
@@ -406,6 +405,16 @@ public class OlapTableSink extends DataSink {
         return txnState;
     }
 
+    // True when the load lands in object storage -- either the destination is itself a
+    // cloud-native table, or it is an ExternalOlapTable whose source table is one. This is the
+    // condition `is_lake_table` is derived from; anything that depends on "the BE will treat this
+    // as a lake write" must use the same predicate, or the two views drift apart.
+    private boolean writesToCloudNativeTable() {
+        return dstTable.isCloudNativeTableOrMaterializedView() ||
+                (dstTable.isOlapExternalTable() &&
+                        ((ExternalOlapTable) dstTable).isSourceTableCloudNativeTableOrMaterializedView());
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
@@ -424,11 +433,20 @@ public class OlapTableSink extends DataSink {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
         try {
+            // In shared-data mode a tablet has exactly one writer and exactly one copy in object
+            // storage, so `replication_num` carries no write redundancy there -- RunMode.SharedData
+            // already defaults it to 1. A cloud-native table created with an explicit
+            // replication_num > 1 (typically carried over from a shared-nothing DDL) would
+            // otherwise raise the sink's write-quorum threshold, letting a failed node channel be
+            // tolerated even though the tablets it owned have no data anywhere. Report a single
+            // replica for cloud-native tables so any node channel failure aborts the load.
             int numReplicas = 1;
-            Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
-            if (optionalPartition.isPresent()) {
-                long partitionId = optionalPartition.get().getId();
-                numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+            if (!writesToCloudNativeTable()) {
+                Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
+                if (optionalPartition.isPresent()) {
+                    long partitionId = optionalPartition.get().getId();
+                    numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
+                }
             }
             if (enableAutomaticPartition && enableDynamicOverwrite) {
                 tSink.setDynamic_overwrite(true);
@@ -444,6 +462,18 @@ public class OlapTableSink extends DataSink {
             tSink.setPartition(partitionParam);
             tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
+            // A column-mode partial update writes the new values into a DCG beside the segment it
+            // patches. A split's UNSHARE compaction rewrites every segment wholesale and does not carry
+            // those across, so the update would be silently lost the first time such a table is split.
+            // Row mode rewrites whole rows and is unaffected. hasSeparateSortKey carries the range and
+            // primary-key tests itself, so a HASH-distributed primary-key table with a separate ORDER BY
+            // -- long supported -- stays out of this.
+            if ((this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPDATE_MODE
+                    || this.partialUpdateMode == TPartialUpdateMode.COLUMN_UPSERT_MODE)
+                    && MetaUtils.hasSeparateSortKey(dstTable, dstTable.getBaseIndexMetaId())) {
+                throw new StarRocksException("Column-mode partial update is not supported on a range-distributed "
+                        + "primary key table whose ORDER BY key differs from the primary key");
+            }
             tSink.setPartial_update_mode(this.partialUpdateMode);
             tSink.setAutomatic_bucket_size(automaticBucketSize);
             if (canUseColocateMVIndex(dstTable)) {

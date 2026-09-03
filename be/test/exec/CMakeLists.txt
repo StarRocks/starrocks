@@ -92,3 +92,61 @@ target_link_libraries(starrocks_join_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_join_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(exec_join_core_test $<TARGET_OBJECTS:starrocks_join_core_test_objs>)
 target_link_libraries(exec_join_core_test ${JOIN_CORE_TEST_LINK_LIBS} gtest_main)
+
+set(AI_CHUNK_BUFFER_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    ../../src/exec/pipeline/ai/ai_chunk_buffer.cpp
+    pipeline/ai/ai_chunk_buffer_test.cpp
+)
+
+add_executable(ai_chunk_buffer_test ${AI_CHUNK_BUFFER_TEST_FILES})
+target_link_libraries(ai_chunk_buffer_test PRIVATE StarRocksPCH)
+set_target_properties(ai_chunk_buffer_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_chunk_buffer_test PRIVATE ${EXEC_RUNTIME_TEST_LINK_LIBS} gtest_main)
+
+set(AI_QUERY_MEMORY_ACCOUNT_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    ../../src/exec/pipeline/ai/ai_query_memory_account.cpp
+    pipeline/ai/ai_query_memory_account_test.cpp
+)
+
+add_executable(ai_query_memory_account_test ${AI_QUERY_MEMORY_ACCOUNT_TEST_FILES})
+target_link_libraries(ai_query_memory_account_test PRIVATE StarRocksPCH)
+set_target_properties(ai_query_memory_account_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_query_memory_account_test PRIVATE ${EXEC_RUNTIME_TEST_LINK_LIBS} gtest_main)
+
+set(AI_PROJECT_PROCESSOR_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    pipeline/ai/ai_project_processor_test.cpp
+)
+
+add_executable(ai_project_processor_test ${AI_PROJECT_PROCESSOR_TEST_FILES})
+target_link_libraries(ai_project_processor_test PRIVATE StarRocksPCH)
+set_target_properties(ai_project_processor_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_project_processor_test PRIVATE ${TEST_LINK_LIBS} gtest_main)
+
+set(AI_PROJECT_OPERATOR_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    pipeline/ai/ai_project_operator_test.cpp
+)
+
+add_executable(ai_project_operator_test ${AI_PROJECT_OPERATOR_TEST_FILES})
+target_link_libraries(ai_project_operator_test PRIVATE StarRocksPCH)
+set_target_properties(ai_project_operator_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_project_operator_test PRIVATE ${TEST_LINK_LIBS} gtest_main)
+
+set(AI_PROJECT_PIPELINE_TEST_FILES
+    ${BE_TEST_MACOS_LINK_STUBS}
+    ${BE_TEST_JNI_ENV_STUB}
+    ai_project_node_test.cpp
+    pipeline/ai/ai_project_pipeline_test.cpp
+)
+
+add_executable(ai_project_pipeline_test ${AI_PROJECT_PIPELINE_TEST_FILES})
+target_link_libraries(ai_project_pipeline_test PRIVATE StarRocksPCH)
+set_target_properties(ai_project_pipeline_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+target_link_libraries(ai_project_pipeline_test PRIVATE ${TEST_LINK_LIBS} gtest_main)

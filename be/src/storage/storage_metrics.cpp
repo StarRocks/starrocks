@@ -110,6 +110,7 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(zstd_compression_dict_pages_written);
     REGISTER_STORAGE_METRIC(zstd_compression_dict_bytes);
     REGISTER_STORAGE_METRIC(zstd_compression_dict_build_fallback);
+    REGISTER_STORAGE_METRIC(lake_tablet_metadata_get_not_found_total);
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, total, base_compaction_request_total);
     REGISTER_ENGINE_REQUEST_METRIC(base_compaction, failed, base_compaction_request_failed);
     REGISTER_ENGINE_REQUEST_METRIC(cumulative_compaction, total, cumulative_compaction_request_total);

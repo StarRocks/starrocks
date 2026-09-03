@@ -665,7 +665,14 @@ public class QueryTransformer {
                 for (Expr groupingField : grouping) {
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(
                             groupingField, subOpt.getExpressionMapping(), columnRefFactory);
-                    repeatColumnRef.add(groupingKey);
+                    // A grouping set may name the same column more than once, e.g. ROLLUP(a, b, a) expands
+                    // to the set (a, b, a), which groups exactly like (a, b). Record each key once: the
+                    // grouping-sets-to-union-all rewrite turns this list into an aggregation's group-by keys,
+                    // and a duplicated key there makes the FE emit one output slot fewer than group-by
+                    // expressions, which the BE then dereferences out of bounds.
+                    if (!repeatColumnRef.contains(groupingKey)) {
+                        repeatColumnRef.add(groupingKey);
+                    }
                     if (groupByColumnRefs.contains(groupingKey)) {
                         groupingIdBitSet.set(groupByColumnRefs.indexOf(groupingKey), false);
                     }

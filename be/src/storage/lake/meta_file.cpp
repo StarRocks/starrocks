@@ -28,7 +28,6 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
-#include "platform/key_cache.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -140,6 +139,18 @@ static Status drop_corrupted_del_file_cache(const std::string& path) {
 #endif
     // Outside the platform guard on purpose, so tests can drive the retry path on any build.
     TEST_SYNC_POINT_CALLBACK("lake::drop_corrupted_del_file_cache", &drop_status);
+    return drop_status;
+}
+
+// Same recovery hook for delvec files: drop the local data cache after a page's crc32c
+// failed to verify, so the retry reads through to the remote object.
+static Status drop_corrupted_delvec_file_cache(const std::string& path) {
+    Status drop_status = Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    drop_status = drop_local_cache_data(path);
+#endif
+    // Outside the platform guard on purpose, so tests can drive the retry path on any build.
+    TEST_SYNC_POINT_CALLBACK("lake::drop_corrupted_delvec_file_cache", &drop_status);
     return drop_status;
 }
 
@@ -1177,27 +1188,6 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     return Status::OK();
 }
 
-// This function cleans up the SSTable metadata after an alter operation that changes the persistent index type.
-void MetaFileBuilder::_sstable_meta_clean_after_alter_type() {
-    // Check if the persistent index type is LOCAL or if the persistent index is disabled,
-    // and there are SSTables present.
-    if ((_tablet_meta->persistent_index_type() == PersistentIndexTypePB::LOCAL ||
-         !_tablet_meta->enable_persistent_index()) &&
-        _tablet_meta->sstable_meta().sstables_size() > 0) {
-        // Iterate through all SSTables and move them to orphan files.
-        for (const auto& sstable : _tablet_meta->sstable_meta().sstables()) {
-            FileMetaPB file_meta;
-            file_meta.set_name(sstable.filename());
-            file_meta.set_size(sstable.filesize());
-            file_meta.set_shared(sstable.shared());
-            file_meta.set_version(sstable.generation_version());
-            _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
-        }
-        // Clear the SSTable metadata.
-        _tablet_meta->clear_sstable_meta();
-    }
-}
-
 Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata) {
     auto version = _tablet_meta->version();
 
@@ -1206,9 +1196,6 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
         TRACE_COUNTER_SCOPE_LATENCY_US("finalize_delvec_write_us");
         RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
     }
-
-    // Clean up SSTable metadata after an alter operation that changes the persistent index type
-    _sstable_meta_clean_after_alter_type();
 
     if (skip_write_tablet_metadata) {
         // Put metadata into cache only.
@@ -1278,40 +1265,64 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
     }
     const auto& delvec_name = iter->second.name();
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-    {
+    const std::string delvec_path =
+            (lake_io_opts.fs && lake_io_opts.location_provider)
+                    ? lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)
+                    : tablet_mgr->delvec_location(metadata.id(), delvec_name);
+    auto read_page = [&]() -> Status {
         TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
         std::unique_ptr<RandomAccessFile> rf;
         if (lake_io_opts.fs && lake_io_opts.location_provider) {
-            ASSIGN_OR_RETURN(
-                    rf, lake_io_opts.fs->new_random_access_file(
-                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+            ASSIGN_OR_RETURN(rf, lake_io_opts.fs->new_random_access_file(opts, delvec_path));
         } else {
-            ASSIGN_OR_RETURN(rf,
-                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, delvec_path));
         }
-        RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
-    }
-    if (delvec_page.has_crc32c() && delvec_page.crc32c_gen_version() == delvec_page.version()) {
-        // check crc32c
+        return rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size());
+    };
+    // Returns Corruption only when strict checking is on; a mismatch is otherwise
+    // tolerated (see the ABA note below) and the page is used as read.
+    auto verify_page = [&]() -> Status {
+        if (!delvec_page.has_crc32c() || delvec_page.crc32c_gen_version() != delvec_page.version()) {
+            return Status::OK();
+        }
         uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
-        if (crc32c != crc32c::Unmask(delvec_page.crc32c())) {
-            // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
-            // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
-            // while version B does not yet support it.
-            // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
-            // After downgrading to version B, the delete vector is updated, but since version B does not support
-            // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
-            // the CRC32 verification fails.
-            LOG(ERROR) << fmt::format(
-                    "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
-                    "crc32c {}",
-                    metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
-                    crc32c::Unmask(delvec_page.crc32c()), crc32c);
-            if (config::enable_strict_delvec_crc_check) {
-                return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
-                                                      crc32c::Unmask(delvec_page.crc32c()), crc32c));
-            }
+        if (crc32c == crc32c::Unmask(delvec_page.crc32c())) {
+            return Status::OK();
         }
+        // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
+        // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
+        // while version B does not yet support it.
+        // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
+        // After downgrading to version B, the delete vector is updated, but since version B does not support
+        // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
+        // the CRC32 verification fails.
+        LOG(ERROR) << fmt::format(
+                "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
+                "crc32c {}",
+                metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
+                crc32c::Unmask(delvec_page.crc32c()), crc32c);
+        if (config::enable_strict_delvec_crc_check) {
+            return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                  crc32c::Unmask(delvec_page.crc32c()), crc32c));
+        }
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(read_page());
+    if (auto verify_st = verify_page(); !verify_st.ok()) {
+        // A delvec file is immutable once written, so bytes that do not match the
+        // recorded checksum are not the bytes that were written. The likeliest culprit
+        // is a corrupted block in the local data cache rather than in remote storage,
+        // so drop the cache and read once more -- the retry then reads through to the
+        // remote object. Del files (read_and_verify_del_file), segment pages and
+        // persistent-index sstables recover from cache corruption the same way.
+        auto drop_status = drop_corrupted_delvec_file_cache(delvec_path);
+        if (!drop_status.ok()) {
+            VLOG(2) << "skip clearing corrupted cache for " << delvec_path << ": " << drop_status;
+            return verify_st;
+        }
+        LOG(INFO) << "cleared corrupted cache for " << delvec_path << ", re-reading the delvec page";
+        RETURN_IF_ERROR(read_page());
+        RETURN_IF_ERROR(verify_page());
     }
     // parse delvec
     RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
@@ -1345,60 +1356,49 @@ Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFil
         return Status::OK();
     }
 
-    offsets->clear();
-    offsets->reserve(old_delvec_files.size());
-
-    bool need_encrypt = false;
-    for (const auto& file_info : old_delvec_files) {
-        if (file_info.delvec_file.has_encryption_meta() && !file_info.delvec_file.encryption_meta().empty()) {
-            need_encrypt = true;
-            break;
-        }
-    }
-
     const std::string new_file_name = gen_delvec_filename(txn_id);
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    std::string new_encryption_meta;
-    if (need_encrypt) {
-        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
-        wopts.encryption_info = pair.info;
-        new_encryption_meta.swap(pair.encryption_meta);
-    }
     ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
 
+    std::vector<uint64_t> new_offsets;
+    new_offsets.reserve(old_delvec_files.size());
     uint64_t total_size = 0;
-    for (const auto& file_info : old_delvec_files) {
-        offsets->push_back(total_size);
-        RandomAccessFileOptions ropts;
-        if (file_info.delvec_file.has_encryption_meta() && !file_info.delvec_file.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(ropts.encryption_info,
-                             KeyCache::instance().unwrap_encryption_meta(file_info.delvec_file.encryption_meta()));
-        }
+    for (size_t i = 0; i < old_delvec_files.size(); ++i) {
+        const auto& file_info = old_delvec_files[i];
+        new_offsets.push_back(total_size);
         const std::string src_path = tablet_mgr->delvec_location(file_info.tablet_id, file_info.delvec_file.name());
-        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(ropts, src_path));
+        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(src_path));
         ASSIGN_OR_RETURN(auto content, reader->read_all());
+        Status append_status;
+        TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
+        RETURN_IF_ERROR(append_status);
         RETURN_IF_ERROR(writer->append(Slice(content.data(), content.size())));
         total_size += content.size();
     }
 
+    uint64_t new_extra_data_offset = 0;
     if (!extra_data.empty()) {
-        if (extra_data_offset != nullptr) {
-            *extra_data_offset = total_size;
-        }
+        new_extra_data_offset = total_size;
+        Status append_status;
+        TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
+        RETURN_IF_ERROR(append_status);
         RETURN_IF_ERROR(writer->append(extra_data));
         total_size += extra_data.size;
     }
 
+    Status close_status;
+    TEST_SYNC_POINT_CALLBACK("write_delvec_output:close", &close_status);
+    RETURN_IF_ERROR(close_status);
     RETURN_IF_ERROR(writer->close());
 
+    *offsets = std::move(new_offsets);
+    if (!extra_data.empty() && extra_data_offset != nullptr) {
+        *extra_data_offset = new_extra_data_offset;
+    }
     new_delvec_file->set_name(new_file_name);
     new_delvec_file->set_size(total_size);
-    if (need_encrypt) {
-        new_delvec_file->set_encryption_meta(std::move(new_encryption_meta));
-    } else {
-        new_delvec_file->clear_encryption_meta();
-    }
+    new_delvec_file->clear_encryption_meta();
     new_delvec_file->set_shared(false);
     return Status::OK();
 }
@@ -1413,13 +1413,14 @@ Status write_delvec_file_from_buffer(TabletManager* tablet_mgr, int64_t new_tabl
     const std::string new_file_name = gen_delvec_filename(txn_id);
     const std::string new_file_path = tablet_mgr->delvec_location(new_tablet_id, new_file_name);
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    // No encryption: merge_delvec_files only encrypts when at least one
-    // source file carried encryption_meta, and there are no source files
-    // here. A future caller wanting encrypted output should pass the
-    // encryption metadata in explicitly rather than implicitly fetching the
-    // KEK (which is not configured in unit tests).
     ASSIGN_OR_RETURN(auto writer, fs::new_writable_file(wopts, new_file_path));
+    Status append_status;
+    TEST_SYNC_POINT_CALLBACK("write_delvec_output:append", &append_status);
+    RETURN_IF_ERROR(append_status);
     RETURN_IF_ERROR(writer->append(buffer));
+    Status close_status;
+    TEST_SYNC_POINT_CALLBACK("write_delvec_output:close", &close_status);
+    RETURN_IF_ERROR(close_status);
     RETURN_IF_ERROR(writer->close());
 
     new_delvec_file->set_name(new_file_name);
@@ -1490,7 +1491,24 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
     for (size_t i = 0; i < dels.size(); ++i) {
         _pending_rowset_data.dels.emplace_back(dels[i]);
         const int64_t off = i < del_op_offsets.size() ? del_op_offsets[i] : -1;
-        _pending_rowset_data.del_op_offsets.push_back(off >= 0 ? off + seg_base : -1);
+        // Resolve the del's position into the merged rowset's segment-id space HERE, while the
+        // op_write that produced it is still in hand, with the same expression apply used for that
+        // op_write (build_del_interleave_plan(): `seg_base + get_segment_idx()` for a recorded
+        // offset, "right after this op_write's own last segment" for an unrecorded one). An
+        // op_write with no segments (a pure-delete statement) resolves to `seg_base`, the slot
+        // get_rowset_id_step() reserves for it and which therefore holds no segment, so it erases
+        // every earlier statement's rows and nothing later -- which is what apply did.
+        //
+        // An unrecorded offset used to be deferred to set_final_rowset() as -1, which resolved it
+        // against the MERGED rowset, i.e. after every LATER statement's segments too. The rebuild
+        // then replayed that del over rows a later statement of the same transaction had
+        // re-inserted (and, being at the max, without the ordering filter), erasing index entries
+        // whose rows are live and not delvec-masked. The next upsert of such a key finds nothing,
+        // writes no delete-vector mark, and leaves two live rows -- which a later index rebuild
+        // reports as "insert found duplicate key" (issue 78224).
+        const uint32_t local_idx =
+                off >= 0 ? get_segment_idx(rowset_pb, static_cast<int32_t>(off)) : get_max_segment_idx(rowset_pb);
+        _pending_rowset_data.del_op_offsets.push_back(static_cast<int64_t>(seg_base) + local_idx);
         _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : 0);
     }
 
@@ -1553,10 +1571,15 @@ Status MetaFileBuilder::set_final_rowset() {
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
-        // Preserve the in-transaction upsert/delete order when the writer recorded it; otherwise
-        // fall back to the max segment id (delete after all upserts).
-        del_file_with_rid.set_op_offset(
-                resolve_del_op_offset(_pending_rowset_data.del_op_offsets[i], /*column_mode=*/false, *rowset));
+        // op_offset is already resolved into this merged rowset's segment-id space by add_rowset(),
+        // which is the only place that knows which op_write each del came from. Clamp it to the
+        // merged rowset's last segment: a trailing pure-delete statement's reserved slot sits past
+        // that segment, and an op_offset outside the rowset's own rssid range would push the
+        // rebuild point into the next rowset. Clamping keeps the "erases everything in this rowset"
+        // meaning (the rebuild's ordering filter is skipped once op_offset reaches the max) without
+        // escaping the range.
+        del_file_with_rid.set_op_offset(static_cast<uint32_t>(
+                std::min<int64_t>(_pending_rowset_data.del_op_offsets[i], get_max_segment_idx(*rowset))));
         if (!del.encryption_meta().empty()) {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }

@@ -334,7 +334,7 @@ public class MaterializedViewAnalyzer {
         }
         // Only for a range distribution this CREATE selects: RANGE has no SQL syntax, so an explicit desc
         // means a reconstructed DDL, and rejecting one would leave an existing mv unable to reactivate.
-        if (statement.getDistributionDesc() == null && AnalyzerUtils.isEnableRangeDistribution(context)) {
+        if (statement.getDistributionDesc() == null && AnalyzerUtils.isEnableMvRangeDistribution(context)) {
             throw new SemanticException("ORDER BY is not supported on a range-distributed incremental "
                     + "materialized view. Add DISTRIBUTED BY HASH(...) to sort by the ORDER BY columns, "
                     + "or remove ORDER BY.");
@@ -346,10 +346,10 @@ public class MaterializedViewAnalyzer {
      * selected for an omitted clause or injected by internal DDL reconstruction.
      */
     private static boolean usesRangeDistribution(CreateMaterializedViewStatement statement,
-                                                 boolean enableRangeDistribution) {
+                                                 boolean enableMvRangeDistribution) {
         DistributionDesc distributionDesc = statement.getDistributionDesc();
         return distributionDesc instanceof RangeDistributionDesc
-                || (distributionDesc == null && enableRangeDistribution);
+                || (distributionDesc == null && enableMvRangeDistribution);
     }
 
     static class MaterializedViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
@@ -668,6 +668,7 @@ public class MaterializedViewAnalyzer {
                         continue;
                     }
                     FeNameFormat.checkColumnName(colName);
+                    FeNameFormat.checkVirtualColumnNameNotUsed(colName);
                 }
             }
             List<Column> mvColumns = Lists.newArrayList();
@@ -1432,27 +1433,30 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(connectContext);
+            boolean enableMvRangeDistribution = AnalyzerUtils.isEnableMvRangeDistribution(connectContext);
 
             if (KeysType.PRIMARY_KEYS.equals(statement.getKeysType())) {
                 // Incremental/AUTO primary-key MVs keep an internally injected RANGE descriptor, and an
-                // omitted clause selects RANGE when the session default is enabled. Explicit HASH/RANDOM,
-                // or an omitted clause with the range default disabled, is normalized to HASH over every
-                // target key column while preserving an explicitly requested bucket count.
-                distributionDesc = checkDistributionForPrimaryKey(statement, enableRangeDistribution);
-                if (distributionDesc == null && enableRangeDistribution) {
-                    // No distribution specified and range distribution is enabled: use it as the default.
+                // omitted clause selects RANGE when the range default applies to materialized views.
+                // Explicit HASH/RANDOM, or an omitted clause with that default off, is normalized to HASH
+                // over every target key column while preserving an explicitly requested bucket count.
+                distributionDesc = checkDistributionForPrimaryKey(statement, enableMvRangeDistribution);
+                if (distributionDesc == null && enableMvRangeDistribution) {
+                    // Still null, so the normalization above did not apply: this is a non-incremental
+                    // primary-key MV, which takes the same omitted-clause default as any other MV.
                     distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
-            } else if (enableRangeDistribution) {
+            } else if (enableMvRangeDistribution) {
+                // An explicit clause is left as written: only an incremental MV normalizes one,
+                // because only its refresh depends on locating rows by primary key.
                 if (distributionDesc == null) {
-                    // If no distribution specified, use range distribution
                     distributionDesc = new RangeDistributionDesc();
                     statement.setDistributionDesc(distributionDesc);
                 }
             } else {
-                // for non primary key tables, if user not specify distribution, we use hash distribution
+                // Range distribution is not this MV's default, so fall back to the previous one:
+                // RANDOM, or HASH over the first column when allow_default_partition asks for it.
                 if (distributionDesc == null) {
                     if (connectContext.getSessionVariable().isAllowDefaultPartition()) {
                         distributionDesc = new HashDistributionDesc(0,
@@ -1474,19 +1478,20 @@ public class MaterializedViewAnalyzer {
         }
 
         private DistributionDesc checkDistributionForPrimaryKey(CreateMaterializedViewStatement statement,
-                                                                  boolean enableRangeDistribution) {
+                                                                  boolean enableMvRangeDistribution) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             boolean isGeneratedByIncrementalMV = statement.getCurrentRefreshMode().isIncrementalOrAuto();
             if (!isGeneratedByIncrementalMV) {
                 return distributionDesc;
             }
             // RANGE must not be normalized back to HASH.
-            if (usesRangeDistribution(statement, enableRangeDistribution)) {
+            if (usesRangeDistribution(statement, enableMvRangeDistribution)) {
                 RangeDistributionDesc result = new RangeDistributionDesc();
                 statement.setDistributionDesc(result);
                 return result;
             }
-            // if the mv is primary key, we use hash distribution with all key columns.
+            // Incremental refresh locates rows by primary key, and hashing on every key column is
+            // what keeps a given key on exactly one tablet.
             List<String> keyColNames = statement.getMvColumnItems()
                     .stream()
                     .filter(col -> col.isKey())

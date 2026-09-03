@@ -501,7 +501,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             Long physicalPartitionId = internalScanRange.partition_id;
 
             PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-            final MaterializedIndex selectedTable = physicalPartition.getLatestIndex(index.indexMetaId);
+            final MaterializedIndex selectedTable = physicalPartition.getQueryableIndex(index.indexMetaId);
             final Tablet selectedTablet = selectedTable.getTablet(tabletId);
             if (selectedTablet == null) {
                 throw new StarRocksException("Tablet " + tabletId + " doesn't exist in partition " + physicalPartitionId);
@@ -838,7 +838,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 final List<Tablet> tablets = Lists.newArrayList();
-                final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
+                final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(index.indexMetaId);
                 final Collection<Long> tabletIds = distributionPrune(selectedIndex, partition.getDistributionInfo());
                 LOG.debug("distribution prune tablets: {}", tabletIds);
 
@@ -898,7 +898,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             Collection<PhysicalPartition> physicalPartitions = partition.getSubPartitions();
             totalPartitionNum += physicalPartitions.size();
             for (PhysicalPartition physicalPartition : physicalPartitions) {
-                final MaterializedIndex selectedTable = physicalPartition.getLatestIndex(index.indexMetaId);
+                final MaterializedIndex selectedTable = physicalPartition.getQueryableIndex(index.indexMetaId);
                 totalTabletsNum += selectedTable.getTablets().size();
             }
         }
@@ -1112,13 +1112,18 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             if (RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER.equals(
                     probeRuntimeFilter.runtimeFilterType())) {
                 Expr expr = probeRuntimeFilter.getNodeIdToProbeExpr().get(getId().asInt());
-                if (expr instanceof SlotRef) {
+                // The probe slot may carry no column: a heavy expr pushed into this scan
+                // (PlanFragmentBuilder#buildProjectNode) occupies a slot in the scan's tuple with
+                // no backing column, and a TopN filter on that expr probes it here. Such a slot is
+                // never a sort key or partition column, so there is no hint to assign.
+                SlotDescriptor probeSlot =
+                        expr instanceof SlotRef ? desc.getSlot(((SlotRef) expr).getSlotId().asInt()) : null;
+                if (probeSlot != null && probeSlot.getColumn() != null) {
                     // check key columns
-                    SlotId cid = ((SlotRef) expr).getSlotId();
                     // Identify the probe column by its storage-side id, the one handle a rename does
                     // not change, and compare both checks below against ids as well - keyColumnNames
                     // holds ids, and a partition column's name is just as mutable as this one's.
-                    String probeColumnId = desc.getSlot(cid.asInt()).getColumn().getColumnId().getId();
+                    String probeColumnId = probeSlot.getColumn().getColumnId().getId();
                     if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(probeColumnId)) {
                         sortKeyAscHint = outputAscHint;
                     }
@@ -1226,9 +1231,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
             msg.lake_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
-            if (!olapTable.hasDelete()) {
-                msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
-            }
+            // The BE reads delete-predicate columns even when pruned from output, so deleted tables stay prunable.
+            msg.lake_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
 
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(ExprToThrift.treesToThrift(bucketExprs));
@@ -1298,9 +1302,8 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
-            if (!olapTable.hasDelete()) {
-                msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
-            }
+            // The BE reads delete-predicate columns even when pruned from output, so deleted tables stay prunable.
+            msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
 
             if (!scanTabletIds.isEmpty()) {
                 msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
@@ -1411,7 +1414,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 return false;
             }
             long visibleVersion = partition.getVisibleVersion();
-            MaterializedIndex materializedIndex = partition.getLatestIndex(selectedIndexMetaId);
+            MaterializedIndex materializedIndex = partition.getQueryableIndex(selectedIndexMetaId);
             for (Long id : entry.getValue()) {
                 LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(id);
                 if (tablet.getQueryableReplicasSize(visibleVersion, schemaHash) != aliveBackendSize) {
@@ -1795,7 +1798,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                         partitionId, olapTable.getName()));
             }
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
+                MaterializedIndex materializedIndex = physicalPartition.getQueryableIndex(index.indexMetaId);
                 if (materializedIndex == null) {
                     throw new RuntimeException(String.format("Materialized index with meta id %d " +
                                     "not found in partition %s (physical partition id: %d) of table %s. ",

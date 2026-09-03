@@ -135,6 +135,10 @@ Usage: $0 <options>
      --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
+     --with-paimon-cpp {ON|OFF}
+                        build Backend with the paimon-cpp native reader and package its
+                        shared libraries. (default: OFF; thirdparty does not build
+                        paimon-cpp on macOS, so it is forced OFF there)
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -195,6 +199,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-thin-archive' \
   -l 'without-pch' \
   -l 'without-starcache' \
+  -l 'with-paimon-cpp:' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -238,6 +243,7 @@ else
     WITH_STARCACHE=ON
 fi
 WITH_PCH=ON
+WITH_PAIMON_CPP=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -363,6 +369,7 @@ else
             --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --with-paimon-cpp) WITH_PAIMON_CPP=$(echo "$2" | tr 'a-z' 'A-Z') ; shift 2 ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --configure-only) CONFIGURE_ONLY=ON; shift ;;
@@ -384,6 +391,11 @@ fi
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
 fi
 
 if [[ ${HELP} -eq 1 ]]; then
@@ -428,6 +440,7 @@ echo "Get params:
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
+    WITH_PAIMON_CPP             -- $WITH_PAIMON_CPP
     WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
@@ -582,6 +595,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+                  -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP}                  \
                   -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
@@ -684,6 +698,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/failpoint.btm ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -761,6 +776,18 @@ if [ ${BUILD_BE} -eq 1 ]; then
         fi
     elif [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ]]; then
         mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    fi
+    if [ "${WITH_PAIMON_CPP}" == "ON" ]; then
+        # libpaimon.so plus its plugin libraries (file formats, indexes, local fs).
+        # The plugins register themselves via load-time constructors, so they are
+        # linked as DT_NEEDED of starrocks_be and must sit next to libpaimon.so
+        # in be/lib, which start_backend.sh already puts on LD_LIBRARY_PATH.
+        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib*/libpaimon*.so*)
+        if (( ${#paimon_cpp_libs[@]} == 0 )); then
+            echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp"
+            exit 1
+        fi
+        cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/
     fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin

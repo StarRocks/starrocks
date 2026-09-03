@@ -574,6 +574,10 @@ public class ColumnTypeConverter {
             return DATETIME;
         }
 
+        public Type visit(org.apache.paimon.types.VariantType variantType) {
+            return VariantType.VARIANT;
+        }
+
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {
             return new ArrayType(fromPaimonType(arrayType.getElementType()));
         }
@@ -650,6 +654,8 @@ public class ColumnTypeConverter {
                     return DataTypes.CHAR(CharType.MAX_LENGTH);
                 case VARBINARY:
                     return DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH);
+                case VARIANT:
+                    return DataTypes.VARIANT();
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:

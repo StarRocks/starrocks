@@ -49,6 +49,11 @@ Paimon catalog はデータのクエリにのみ使用できます。Paimon cata
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` はv4.2以降、ネイティブリーダーで読み取られるsplit（Append-Onlyテーブル、およびPrimary KeyテーブルのCompaction済みデータ）でのみサポートされています。Compaction前のPrimary Keyデータから`VARIANT`を読み取るにはJNIリーダーが必要であり、現時点ではまだサポートされていません。該当するクエリはプランニング時にエラーとして拒否されます。
+:::
 
 ## 統合準備
 
@@ -405,6 +410,15 @@ Google GCS を Paimon クラスターのストレージとして選択する場�
     | gcp.gcs.service_account_private_key_id | ""          | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"           | メタサービスアカウントの作成時に生成された JSON ファイル内のプライベートキー ID。 |
     | gcp.gcs.service_account_private_key    | ""          | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n" | メタサービスアカウントの作成時に生成された JSON ファイル内のプライベートキー。 |
     | gcp.gcs.impersonation_service_account  | ""          | "hello"                                              | インパーソネートしたいデータサービスアカウント。       |
+
+#### MetadataCacheParams（オプション）
+
+StarRocks は Paimon のメタデータをキャッシュし、バックグラウンドで更新します。以下のオプションのプロパティでそのキャッシュを調整できます。
+
+| パラメータ                                | デフォルト値 | 説明                                                         |
+| ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+| paimon_meta_cache_ttl_sec                | 86400        | キャッシュエントリの有効期間（秒）。 |
+| paimon_table_cache_refresh_interval_sec  | 60           | 同一テーブルに対してクエリが起点となる更新を 2 回行う間の最小間隔（秒）。クエリがより新しい Snapshot を読み取った場合に発生し、更新はバックグラウンドで実行されるためクエリは待機しません。`0` を設定すると、定期的なバックグラウンド更新のみになります。v4.2.0 以降でサポートされます。 |
 
 ### 例
 

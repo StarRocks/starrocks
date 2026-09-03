@@ -18,6 +18,9 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishResult;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishState;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeUtils;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -28,7 +31,9 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -40,6 +45,7 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletReshardJobsItem;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -54,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import javax.annotation.Nullable;
 
 /*
  * MergeTabletJob is for tablet merging.
@@ -194,9 +201,10 @@ public class MergeTabletJob extends TabletReshardJob {
 
     /*
      * 1. Publish the merge transaction, update new tablet ranges
-     * 2. Add the new versions of materialized index to catalog
-     * 3. Get end transaction id
-     * 4. Set job state to CLEANING
+     * 2. Re-arm the colocate checker if any new tablet crosses a ColocateRange boundary
+     * 3. Add the new versions of materialized index to catalog
+     * 4. Get end transaction id
+     * 5. Set job state to CLEANING
      */
     @Override
     protected void runRunningJob() {
@@ -291,18 +299,23 @@ public class MergeTabletJob extends TabletReshardJob {
             return;
         }
 
-        // 2. Add the new versions of materialized index to catalog
+        // 2. Re-arm the colocate checker if this merge left any tablet spanning a ColocateRange
+        //    boundary (a peer split spliced a boundary under us, or the index carried a
+        //    pre-existing spanning tablet through as an identical replacement).
+        applyColocateRangeMergeResult();
+
+        // 3. Add the new versions of materialized index to catalog
         addNewMaterializedIndexes();
 
-        // 2b. Now that the merged tablets are visible, proactively enqueue them for async
+        // 3b. Now that the merged tablets are visible, proactively enqueue them for async
         // vector-index build (leader-only path; no-op for non-async-vector-index tables).
         VectorIndexBuildScheduler.onReshardComplete(dbId, tableId, reshardingPhysicalPartitions.keySet());
 
-        // 3. Get end transaction id
+        // 4. Get end transaction id
         endTransactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                 .peekNextTransactionId();
 
-        // 4. Set job state to CLEANING
+        // 5. Set job state to CLEANING
         setJobState(JobState.CLEANING);
     }
 
@@ -514,7 +527,6 @@ public class MergeTabletJob extends TabletReshardJob {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             item.setDb_name("");
-            LOG.warn("Failed to get database name for tablet reshard job. {}", this);
         } else {
             item.setDb_name(db.getFullName());
         }
@@ -523,7 +535,6 @@ public class MergeTabletJob extends TabletReshardJob {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
         if (table == null) {
             item.setTable_name("");
-            LOG.warn("Failed to get table name for tablet reshard job. {}", this);
         } else {
             item.setTable_name(table.getName());
         }
@@ -616,15 +627,16 @@ public class MergeTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                    newIndex.setTakeoverVersion(commitVersion);
                     physicalPartition.addMaterializedIndex(newIndex,
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
 
-            // Installing the new materialized indexes changes the partition's tablet layout:
-            // PhysicalPartition.getLatestIndex() now returns a different tablet set. A query that
-            // captured the old layout during planning (OlapScanNode fills scanTabletIds from
-            // getLatestIndex(), then mapTabletsToPartitions() re-reads it) would otherwise hard-fail
+            // Installing the new materialized indexes changes both the writable and queryable tablet
+            // layouts. A query that captured the old layout during planning (OlapScanNode fills
+            // scanTabletIds from getQueryableIndex(), then mapTabletsToPartitions() re-reads it) would
+            // otherwise hard-fail
             // at plan build ("Invalid tablet id ... may have been dropped") or hand a CN a stale
             // tablet/version whose metadata object no longer exists. Bump the table's optimistic
             // version so StatementPlanner's retry loop (OptimisticVersion.validateTableUpdate) detects
@@ -735,6 +747,19 @@ public class MergeTabletJob extends TabletReshardJob {
      */
     void createShardsOnStarOS() {
         OlapTable table = getOlapTable();
+        // Snapshot the colocate ranges once: the createShard RPCs in the inner loop cannot change
+        // them, and every shard of this job must be placed against the same topology.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId colocateGroupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        // Null means the table has no range-colocate group. An EMPTY list is different and must not
+        // be flattened into it: the group is registered but its ranges have not been replayed yet, and
+        // creating SPREAD-only shards there would strand them -- ColocateChecker only visits UNSTABLE
+        // groups, and a merge that never marked one leaves no trace. resolveShardGroupIds fails closed
+        // on that list instead, which aborts a still-PENDING job. Mirrors SplitTabletJob.
+        List<ColocateRange> colocateRanges = colocateGroupId == null ? null
+                : colocateTableIndex.getColocateRanges(colocateGroupId.grpId);
+        int colocateColumnCount = colocateRanges == null ? 0
+                : colocateTableIndex.getGroupSchema(colocateGroupId).getColocateColumnCount();
         try {
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 long physicalPartitionId = reshardingPhysicalPartition.getPhysicalPartitionId();
@@ -745,10 +770,13 @@ public class MergeTabletJob extends TabletReshardJob {
                     // RPC payload follows the ReshardingTablet iteration order; the same batch
                     // produced by a leader-switch re-run emits a byte-equivalent payload.
                     Map<Long, List<Long>> newToOldTabletIds = new LinkedHashMap<>();
+                    Map<Long, List<Long>> newTabletIdToGroupIds = new LinkedHashMap<>();
                     for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                         List<Long> oldTabletIds = reshardingTablet.getOldTabletIds();
                         for (long newTabletId : reshardingTablet.getNewTabletIds()) {
                             newToOldTabletIds.put(newTabletId, oldTabletIds);
+                            newTabletIdToGroupIds.put(newTabletId, resolveShardGroupIds(newIndex, newTabletId,
+                                    colocateRanges, colocateColumnCount));
                         }
                     }
 
@@ -759,15 +787,118 @@ public class MergeTabletJob extends TabletReshardJob {
 
                     GlobalStateMgr.getCurrentState().getStarOSAgent().createShardsForMerge(
                             newToOldTabletIds,
+                            newTabletIdToGroupIds,
                             table.getPartitionFilePathInfo(physicalPartitionId),
                             table.getPartitionFileCacheInfo(physicalPartitionId),
-                            newIndex.getShardGroupId(),
                             properties, resolveComputeResource(tableId));
                 }
             }
         } catch (StarRocksException e) {
             throw new TabletReshardException(
                     "Failed to create new shards on StarOS: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * The index SPREAD group, plus the PACK shard group of the colocate range this new tablet
+     * belongs to when the table is range-colocate.
+     *
+     * <p>The PACK group is knowable here, before publish, because {@code MergeTabletJobFactory}
+     * confines every merge group to one {@link ColocateRange}: the merged tablet's union range
+     * therefore has the same colocate prefix as its first source tablet, which is the range
+     * {@code createMaterializedIndex} already seeded the new tablet with. An identical (unmerged)
+     * replacement carries its source tablet's range unchanged.
+     */
+    private static List<Long> resolveShardGroupIds(MaterializedIndex newIndex, long newTabletId,
+            @Nullable List<ColocateRange> colocateRanges, int colocateColumnCount) {
+        if (colocateRanges == null) {
+            return List.of(newIndex.getShardGroupId());
+        }
+        Tablet newTablet = newIndex.getTablet(newTabletId);
+        Preconditions.checkState(newTablet != null && newTablet.getRange() != null,
+                "Tablet %s in range-colocate group has no TabletRange", newTabletId);
+        long packShardGroupId = ColocateRangeUtils.lookupPackShardGroupId(
+                newTablet.getRange().getRange(), colocateRanges, colocateColumnCount);
+        Preconditions.checkState(packShardGroupId != PhysicalPartition.INVALID_SHARD_GROUP_ID,
+                "Tablet %s has no covering ColocateRange", newTabletId);
+        return List.of(newIndex.getShardGroupId(), packShardGroupId);
+    }
+
+    /**
+     * Re-arm the colocate checker when this merge leaves the table misaligned. Runs after BE publish
+     * and before {@code addNewMaterializedIndexes}, mirroring
+     * {@link SplitTabletJob#applyColocateRangeSplitResult}.
+     *
+     * <p>Inspects EVERY tablet of each new index, not only the merged ones: the factory deliberately
+     * skips a tablet that already spans a boundary, so such a tablet reaches the new index as an
+     * unmerged identical replacement. A merged-only check would never see it and the group would stay
+     * wrongly stable. The other case this catches is a peer table's split splicing a new boundary
+     * after this job planned — the merge was correct against the topology it saw, and crossing
+     * against the one that now exists.
+     *
+     * <p>Like the split counterpart, the offending tablet is found under the table read lock but the
+     * journal write happens after the lock is released.
+     */
+    private void applyColocateRangeMergeResult() {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        if (groupId == null) {
+            return;
+        }
+        long grpId = groupId.grpId;
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRanges(grpId);
+        if (colocateRanges.isEmpty()) {
+            return;
+        }
+        int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+
+        long crossingTabletId = -1;
+        Range<Tuple> crossingRange = null;
+        // One Classifier per index meta, not per (partition, index): the expansion depends on nothing
+        // else, and this scan walks every partition of the job under the table READ lock.
+        Map<Long, ColocateRangeUtils.Classifier> classifiers = new HashMap<>();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
+            OlapTable olapTable = lockedTable.get();
+            scan:
+            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+                // A partition dropped mid-job never published, so its tablets still carry the seeded
+                // pre-publish range; re-arming the checker over it would be pure noise. Mirrors the
+                // same skip in SplitTabletJob#applyColocateRangeSplitResult.
+                if (olapTable.getPhysicalPartition(
+                        reshardingPhysicalPartition.getPhysicalPartitionId()) == null) {
+                    continue;
+                }
+                for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                        .getReshardingIndexes().values()) {
+                    MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                    // Bound per index: a rollup / MV can have a shorter sort key than the base index,
+                    // and classifying its tablets against the base arity would compare bounds of
+                    // different widths.
+                    ColocateRangeUtils.Classifier classifier = classifiers.computeIfAbsent(
+                            newIndex.getMetaId(), metaId -> ColocateRangeUtils.Classifier.of(colocateRanges,
+                                    MetaUtils.getRangeDistributionColumns(olapTable, metaId),
+                                    colocateColumnCount));
+                    // indexOf reports an unclassifiable range as -1 rather than throwing, which
+                    // matters most here: this runs after updateNextVersions crossed the no-abort
+                    // boundary, so an escaping exception would leave the scheduler re-entering
+                    // runRunningJob every cycle -- pinning the table in TABLET_RESHARD and blocking
+                    // all DDL on it.
+                    for (Tablet tablet : newIndex.getTablets()) {
+                        if (classifier.indexOf(tablet) < 0) {
+                            crossingTabletId = tablet.getId();
+                            crossingRange = tablet.getRange() == null ? null : tablet.getRange().getRange();
+                            break scan;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (crossingTabletId >= 0) {
+            LOG.warn("Tablet {} range {} is not contained in a single ColocateRange of colocate group {} "
+                    + "after merging table {}; marking the group unstable so the colocate checker "
+                    + "re-aligns it.", crossingTabletId, crossingRange, grpId, tableId);
+            colocateTableIndex.markAllGroupsWithSameColocateGroupIdUnstable(grpId, true);
         }
     }
 }

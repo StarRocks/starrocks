@@ -204,7 +204,6 @@ set(STORAGE_FILES
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
     lake/tablet_merger.cpp
-    lake/tablet_merger_split_family.cpp
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
@@ -266,13 +265,13 @@ set(STORAGE_FILES
     binlog_reader.cpp
     lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
-    lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
     persistent_index_load_executor.cpp
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
-    lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
+    lake/parallel_task_runner.cpp
+    parallel_upsert_context.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
     lake/persistent_index_sstable.cpp

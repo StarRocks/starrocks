@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -1015,6 +1016,12 @@ public class Analyzer {
         @Override
         public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
             RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropSnapshotStatement(DropSnapshotStmt statement, ConnectContext context) {
+            DropSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
 

@@ -19,6 +19,7 @@
 
 #include <unordered_map>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
@@ -31,7 +32,6 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
-#include "storage/tablet_schema.h"
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
@@ -265,6 +265,7 @@ CONTINUE_HANDLE_MERGING_TABLET:
     return Status::OK();
 }
 
+DEFINE_FAIL_POINT(tablet_reshard_after_identical_pk_flush);
 Status handle_identical_tablet(TabletManager* tablet_manager, const IdenticalTabletInfoPB& identical_tablet,
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas) {
@@ -337,6 +338,14 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
         return flushed_old_metadata_or.status();
     }
     const auto& old_tablet_old_metadata = flushed_old_metadata_or.value();
+
+    // The identical path's only file write is the PK-index flush above, so this is its only
+    // orphan-file window: the flushed sstables exist but no metadata references them yet. Armed
+    // WITH PAUSE, a thread parks here holding no data, index or metacache mutex -- the flush released
+    // its sharded PK-index lock before returning -- and the only lake serialization state it still
+    // holds is this reshard's publish token. (libfiu holds its own read lock across the callback; see
+    // fail_point.h.) Armed ENABLE, the publish fails and the frontend retries.
+    FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_reshard_after_identical_pk_flush);
 
     auto old_tablet_new_metadata = std::make_shared<TabletMetadataPB>(*old_tablet_old_metadata);
     old_tablet_new_metadata->set_version(new_version);
@@ -421,22 +430,8 @@ Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr&
     }
     tablet_reshard_helper::set_all_data_files_shared(txn_log);
     RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
-    // Pass this sibling's range so the stat apportionment can tell a sibling that provably owns
-    // none of the rowset's keys (a true 0, so the siblings' stats sum to the source) from one that
-    // may own them (the plain share).
-    //
-    // The classifier compares a rowset's sort_key_min/sort_key_max envelope against the range, which
-    // is sound only while the sort key IS the range key. A primary-key tablet with a separate ORDER
-    // BY has the two at the same arity in different key spaces, and the classifier's arity check
-    // cannot tell them apart -- it would compare, say, a varchar envelope against a bigint bound and
-    // could prove kNo for a sibling that does own rows. Withhold the range there: every rowset then
-    // classifies kUnknown and keeps the plain apportionment.
-    const auto base_schema = TabletSchema::create(base_tablet_metadata->schema());
-    const bool envelope_shares_the_range_key =
-            !(base_schema->keys_type() == KeysType::PRIMARY_KEYS && base_schema->has_separate_sort_key());
-    tablet_reshard_helper::update_txn_log_data_stats(
-            txn_log, publish_tablet_info.get_split_count(), publish_tablet_info.get_split_index(),
-            envelope_shares_the_range_key ? &base_tablet_metadata->range() : nullptr);
+    tablet_reshard_helper::update_txn_log_data_stats(txn_log, publish_tablet_info.get_split_count(),
+                                                     publish_tablet_info.get_split_index());
     return Status::OK();
 }
 
@@ -548,6 +543,7 @@ StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetada
     return new_txn_log;
 }
 
+DEFINE_FAIL_POINT(tablet_reshard_between_metadata_writes);
 Status publish_resharding_tablet(TabletManager* tablet_manager, const ReshardingTabletInfoPB& resharding_tablet,
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                  bool skip_write_tablet_metadata,
@@ -604,9 +600,18 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                 g_tablet_reshard_failed << 1;
                 return st;
             }
-            tablet_manager->metacache()->cache_aggregation_partition(
-                    tablet_manager->tablet_metadata_root_location(tablet_id), true);
+            tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
         }
+        // Deliberately at the END of the body: one tablet is now switched to the new version and the
+        // rest are not, which is the partial-switch state a reshard has to recover from. At the top of
+        // the loop this would instead stop before any write, and a released pause would then let the
+        // whole loop finish.
+        //
+        // Two caveats for a consumer. |tablet_metadatas| is an unordered_map, so WHICH tablet lands
+        // first is unspecified -- assert "some but not all", never a specific id. And under aggregate
+        // publish (skip_write_tablet_metadata) the loop only populates the metacache, so the partial
+        // state is a partial CACHE population rather than a durable one.
+        FAIL_POINT_TRIGGER_RETURN_ERROR(tablet_reshard_between_metadata_writes);
     }
 
     g_tablet_reshard_latency << (butil::gettimeofday_us() - reshard_start_ts);

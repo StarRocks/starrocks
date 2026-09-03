@@ -320,7 +320,13 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             sort_column_idx_by_column_index[column_index] = i;
         }
     }
-    if (!sort_column_idx_by_column_index.empty()) {
+    // Only a key-columns pass builds the short key / full sort key index out of these positions (see
+    // the `if (_has_key)` branch of append_chunk), so only it needs the whole sort key present. A
+    // value-only pass -- a partial-update segment rewrite, or a vertical writer's value column group
+    // -- never touches _sort_column_indexes, and demanding the full sort key there is a false alarm:
+    // fatal once ORDER BY puts value columns into a primary key table's sort key, since the pass then
+    // holds SOME sort key columns (map non-empty) but not the key ones.
+    if (has_key && !sort_column_idx_by_column_index.empty()) {
         for (auto& column_idx : _tablet_schema->sort_key_idxes()) {
             auto iter = sort_column_idx_by_column_index.find(column_idx);
             if (iter != sort_column_idx_by_column_index.end()) {

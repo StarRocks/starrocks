@@ -1354,7 +1354,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
 // through the lake reader path (TabletReader::get_segment_iterators builds RowsetReadOptions,
 // Rowset::read builds SegmentReadOptions). Before the fix, lake/tablet_reader.cpp dropped the
 // flag when copying params into RowsetReadOptions, so the whole chain delivered the default
-// (false) to SegmentIterator even when an above-iterator residual was present.
+// (false) to SegmentIterator and could not apply the configured top-k underfill fallback policy.
 TEST_F(LakeDuplicateTabletReaderTest, test_propagate_has_predicate_above_iterator) {
     std::vector<int> k0{1, 2, 3, 4, 5};
     std::vector<int> v0{2, 4, 6, 8, 10};
@@ -1767,6 +1767,53 @@ TEST_F(LakeTabletReaderSpit, test_seek_range_cached_across_reopen) {
     EXPECT_EQ(1u, reader->_cached_seek_ranges->size());
 
     reader->close();
+}
+
+TEST(LakeDeletePredicateColumnIdsTest, CollectsAllThreePredicateKinds) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS, 4);
+    auto schema = TabletSchema::create(metadata->schema());
+
+    // c1 via a binary predicate, c2 via IS NULL, c3 via IN: the reader evaluates all three kinds.
+    auto* binary_pred = metadata->add_rowsets()->mutable_delete_predicate()->add_binary_predicates();
+    binary_pred->set_column_name("c1");
+    binary_pred->set_op("=");
+    binary_pred->set_value("1");
+
+    auto* is_null_pred = metadata->add_rowsets()->mutable_delete_predicate()->add_is_null_predicates();
+    is_null_pred->set_column_name("c2");
+    is_null_pred->set_is_not_null(false);
+
+    auto* in_pred = metadata->add_rowsets()->mutable_delete_predicate()->add_in_predicates();
+    in_pred->set_column_name("c3");
+    in_pred->set_is_not_in(false);
+    in_pred->add_values("7");
+
+    // A rowset without a delete predicate contributes nothing.
+    metadata->add_rowsets();
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(delete_predicate_column_ids(*metadata, *schema, &cids));
+    ASSERT_EQ((std::set<ColumnId>{1, 2, 3}), cids);
+}
+
+TEST(LakeDeletePredicateColumnIdsTest, KeepsNonKeyColumnsAndIgnoresUnknownOnes) {
+    // Unlike the shared-nothing reader, the lake reader filters neither by key column nor by version.
+    auto metadata = generate_simple_tablet_metadata(AGG_KEYS, 2);
+    auto schema = TabletSchema::create(metadata->schema());
+
+    auto* pred = metadata->add_rowsets()->mutable_delete_predicate();
+    auto* binary_pred = pred->add_binary_predicates();
+    binary_pred->set_column_name("c1");
+    binary_pred->set_op("=");
+    binary_pred->set_value("1");
+    auto* missing = pred->add_binary_predicates();
+    missing->set_column_name("nosuchcol");
+    missing->set_op("=");
+    missing->set_value("1");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(delete_predicate_column_ids(*metadata, *schema, &cids));
+    ASSERT_EQ((std::set<ColumnId>{1}), cids);
 }
 
 } // namespace starrocks::lake

@@ -37,7 +37,11 @@ This is a failpoint written in Byteman script that triggers an exception when ca
 - `ENDRULE`: Marks the end of the rule definition.
 
 ## Using failpoints
-1. Place the written Byteman script in `conf/failpoint.btm` and add the startup option `--failpoint`.
+1. `conf/failpoint.btm` ships with the build and already contains the rules listed under
+   [Range-distribution reshard failpoints](#range-distribution-reshard-failpoints); add the startup
+   option `--failpoint` to load it. Put your own rules in that same file. A restart is required for a
+   new rule: Byteman loads the script once, at agent init, so `ADMIN ENABLE FAILPOINT` can only arm a
+   rule that is already in the file.
 
 2. Use admin commands to trigger failpoints:  
 
@@ -111,3 +115,84 @@ FE failpoints need `--failpoint` at FE startup. **BE/CN failpoints exist only in
 with `ENABLE_FAULT_INJECTION=ON`** (`ENABLE_FAULT_INJECTION=ON ./build.sh --be`); the default build
 has them compiled out and `ADMIN ENABLE FAILPOINT ... ON BACKEND` returns
 `FailPoint is not supported, need re-compile BE with ENABLE_FAULT_INJECTION`.
+
+**A fault-injection build is a test-only build.** The SQL statements require the `OPERATE` privilege,
+but the backend's `update_fail_point_status` RPC has no authorization of its own, and this document
+describes driving it directly over HTTP. So on a node built with `ENABLE_FAULT_INJECTION=ON`, anyone
+who can reach the internal BE port can arm any failpoint, bypassing the SQL privilege check entirely
+— and with the reshard hooks below that includes parking the publish thread pool. Deploy such builds
+only to test clusters whose internal ports are network-isolated, never to production. (This is a
+property of the failpoint framework as a whole, not of any individual hook.)
+
+## Range-distribution reshard failpoints
+
+A forced tablet split finishes in well under a second, while the fastest external fault lever — an FE
+restart — takes about 17 seconds. So no externally injected fault can land inside a reshard's `RUNNING`
+sub-phases; only `WITH PAUSE` on one of the hooks below can stop the job there.
+
+### Backend hooks (`ENABLE_FAULT_INJECTION=ON` only)
+
+Every hook returns an `InternalError` when armed `ENABLE` (the reshard publish task fails and the
+frontend retries) and parks the thread when armed `WITH PAUSE`. The "reached when" column matters:
+only three are unconditional, and each of those is unconditional **within its own path**, not on every
+reshard.
+
+| Failpoint | Phase it stops at | Reached when |
+|---|---|---|
+| `tablet_reshard_between_metadata_writes` | inside the loop that persists the new tablet metadatas, after one has been written | every reshard publish (split, merge, identical) |
+| `tablet_merge_after_rssid_reassign` | merge phase 1 done: per-source rowset-id offsets and the merged range are computed, nothing projected yet | every merge |
+| `tablet_reshard_after_identical_pk_flush` | identical reshard, right after the PK-index flush wrote its sstables and before any metadata references them | every identical reshard |
+| `tablet_merge_before_delete_predicate_range` | a delete-predicate rowset has been copied into the merged metadata but not yet confined to its source tablet's range | a merge where some source rowset carries a delete predicate, i.e. a `DELETE` ran on a source tablet (DUP / AGG / UNIQUE; primary-key tables use delvecs instead) |
+| `tablet_merge_after_write_delvec` | the merged delvec file is written, metadata not yet updated | primary-key table with delete/update history (the phase is skipped when there is no source delvec and no synthesized gap) |
+| `tablet_merge_after_write_dcg_cols` | a rebuilt `.cols` segment is written, metadata not yet updated | two delta-column-group entries claim the **same** column id for the same segment, i.e. a partial-column update on both merge sources touching one column |
+
+The two `after_write_*` hooks are the orphan-file windows: the file is durable and unreferenced.
+They differ in what an armed `ENABLE` leaves behind, and the difference matters if you are counting
+orphan files.
+
+- **`tablet_merge_after_write_dcg_cols` does not.** Its caller records the rebuilt path only *after*
+  the rebuild returns successfully, so an injected error returns before the caller learns the
+  filename and the `.cols` file is left for ordinary orphan-file vacuum.
+- **`tablet_merge_after_write_delvec` does not either.** Nothing arms a cleanup guard over the merged
+  delvec file, so an injected error leaves it for vacuum as well.
+
+Do not expect a whole-tablet garbage-file check to read zero straight after an armed `ENABLE`: an
+error at either hook leaves its newly written file for ordinary orphan-file vacuum.
+
+### Frontend rules (in `conf/failpoint.btm`)
+
+| Rule | Phase it stops at |
+|---|---|
+| `tablet_reshard_job_run` | job entry — holds the job at whatever state it is in. The general-purpose amplifier for making an external fault land in flight |
+| `split_before_metadata_switch` / `merge_before_metadata_switch` | split points computed and the transaction published, catalog **not** yet switched |
+| `split_after_metadata_switch` / `merge_after_metadata_switch` | catalog switched and the `CLEANING` transition already journalled, job not yet `FINISHED` |
+| `colocate_mid_align_table` | after the first table of a colocate group has been processed and before the next — partial orchestration, not a half-aligned tablet layout |
+
+### Where a pause parks
+
+The operational question is whether a pause wedges the cluster. It does not, but the blast radius is
+worth knowing.
+
+**Backend.** Each parked task occupies one thread of the `publish_version` pool. brpc workers are not
+affected: the RPC handler waits on a bthread latch and yields its worker. The only StarRocks
+serialization state a parked thread holds is that reshard's publish token, so a concurrent publish on
+the same source tablet is told to retry rather than blocked — no data, index, or metacache mutex is
+held. The parked thread does still hold libfiu's own read lock and thread-local recursion counter for
+the duration of the pause, which is why the wait must never migrate threads, plus whatever buffers,
+open readers, and cleanup guards its site had live.
+
+**The bound to respect:** the publish pool has roughly as many threads as the node has cores, and it
+serves *every* publish including ordinary loads. Park more reshard tasks than that and all publishing
+on that node stalls until release or timeout. Pause a handful of tablets, not a whole table.
+`ADMIN DISABLE FAILPOINT` still gets through regardless — `update_fail_point_status` is served inline
+on a brpc worker with no thread-pool handoff.
+
+**Frontend.** All six rules park the single `TabletReshardJobMgr` daemon thread, which runs the
+colocate checker, the reshard-candidate drain, and the reshard jobs in sequence. So any one of them
+freezes every reshard job *and* colocate convergence on that frontend, and only one frontend pause can
+be in effect at a time. The daemon loop has no watchdog, so a park simply means missed ticks.
+
+**One hard prohibition:** never place a rule inside `SplitTabletJob.addNewMaterializedIndexes` or its
+merge peer. Those hold the table WRITE lock, so a pause there makes the table unavailable to queries
+and DDL for the whole pause. The `*_before_metadata_switch` rules deliberately sit at the *call* to
+that method, which is outside every lock.

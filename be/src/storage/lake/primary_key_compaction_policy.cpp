@@ -14,10 +14,13 @@
 
 #include "storage/lake/primary_key_compaction_policy.h"
 
+#include <algorithm>
+
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/update_manager.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
 
@@ -137,6 +140,29 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
+}
+
+StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
+    std::vector<RowsetPtr> input_rowsets;
+    for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
+        const auto& rowset = _tablet_metadata->rowsets(i);
+        const bool contains_shared_segment =
+                std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                            [](const SegmentMetadataPB& segment) { return segment.shared(); });
+        if (contains_shared_segment) {
+            input_rowsets.emplace_back(
+                    std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
+        }
+    }
+    return input_rowsets;
+}
+
+StatusOr<CompactionAlgorithm> UnshareCompactionPolicy::choose_compaction_algorithm(
+        const std::vector<RowsetPtr>& rowsets) {
+    if (rowsets.empty()) {
+        return CLOUD_NATIVE_INDEX_COMPACTION;
+    }
+    return CompactionPolicy::choose_compaction_algorithm(rowsets);
 }
 
 // Return true if segment number meet the requirement of min input
@@ -481,6 +507,37 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_base_rowsets(
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+    // Everyday compaction has to stay off the files a split left shared, for a tablet whose rows are
+    // not in sort-key order.
+    //
+    // Such a child reads a shared segment whole: Rowset::set_segment_tablet_range withholds the
+    // tablet range because it has no rowid interval in sort-key space, and the row-level
+    // PrimaryKeyRangeFilter is only built for the UNSHARE compaction. So an ordinary compaction here
+    // would merge the siblings' rows into its output and mark that output private -- and
+    // UnshareCompactionPolicy only picks rowsets that still carry a shared segment, so the
+    // contaminated rowset is never rewritten and those rows go on to be served by the wrong child
+    // after cutover.
+    //
+    // The window is bounded: the UNSHARE transaction is scheduled with the split and, once it
+    // commits, no rowset carries a shared segment and this guard stops matching. Waiting is what the
+    // design trades for the split being metadata-only.
+    // Tested cheapest-first: only a ranged tablet whose sort key is not the primary key can ever be
+    // in this state, and both of those are schema properties. The segment walk below is
+    // O(rowsets x segments), so it must not run for every ordinary ranged tablet.
+    if (tablet_metadata->has_range() && TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
+        const bool carries_shared_segment =
+                std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
+                            [](const RowsetMetadataPB& rowset) {
+                                return std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                                                   [](const SegmentMetadataPB& segment) { return segment.shared(); });
+                            });
+        if (carries_shared_segment) {
+            VLOG(2) << "skip ordinary compaction while a split's shared segments await UNSHARE, tablet="
+                    << tablet_metadata->id() << " version=" << tablet_metadata->version();
+            return std::vector<RowsetPtr>{};
+        }
+    }
+
     // Base compaction reclaims space from delete-bearing rowsets. Trigger it when a manual
     // ALTER TABLE ... COMPACT requested a base compaction, or when the tablet has accumulated
     // enough deletes to be worth reclaiming -- either as a fraction of its rows

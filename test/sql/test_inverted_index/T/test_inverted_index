@@ -248,3 +248,74 @@ select id, v from t_gin_or_prune_${uuid0} where v like '%red%' and (v = 'redx' o
 select id from t_gin_or_prune_${uuid0} where v like '%red%' order by id;
 
 DROP TABLE t_gin_or_prune_${uuid0};
+
+-- name: test_gin_prune_primary_key_table @native
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
+CREATE TABLE `t_gin_prune_pk_${uuid0}` (
+  `id` bigint NOT NULL,
+  `ts` datetime NOT NULL,
+  `v`  varchar(255) NOT NULL,
+  INDEX gin_v (`v`) USING GIN ("parser" = "none")
+) ENGINE=OLAP
+PRIMARY KEY(`id`, `ts`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+
+insert into t_gin_prune_pk_${uuid0} values
+  (1, "2024-01-01 00:00:00", "redx"),
+  (2, "2024-01-01 00:00:00", "redy"),
+  (3, "2024-01-01 00:00:00", "blue"),
+  (4, "2024-01-01 00:00:00", "redx");
+
+-- the indexed column is a value column and is not projected, so it must be prunable on a primary key table
+select max(id) from t_gin_prune_pk_${uuid0} where v = 'redx';
+select count(1) from t_gin_prune_pk_${uuid0} where v = 'redx';
+select id from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+select id, v from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+select max(id) from t_gin_prune_pk_${uuid0} where v like '%red%';
+
+set enable_prune_column_after_index_filter = false;
+select max(id) from t_gin_prune_pk_${uuid0} where v = 'redx';
+select count(1) from t_gin_prune_pk_${uuid0} where v = 'redx';
+select id from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+select id, v from t_gin_prune_pk_${uuid0} where v = 'redx' order by id;
+select max(id) from t_gin_prune_pk_${uuid0} where v like '%red%';
+set enable_prune_column_after_index_filter = true;
+
+DROP TABLE t_gin_prune_pk_${uuid0};
+
+-- name: test_gin_prune_on_table_with_delete @native
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+CREATE TABLE `t_gin_del_prune_${uuid0}` (
+  `id` bigint NOT NULL,
+  `k`  bigint NOT NULL,
+  `v`  varchar(255) NOT NULL,
+  INDEX gin_v (`v`) USING GIN ("parser" = "none")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "replicated_storage" = "false");
+
+insert into t_gin_del_prune_${uuid0} values (1, 7, "redx"), (2, 8, "redy"), (3, 7, "blue"), (4, 9, "redz"), (5, 7, "redx");
+
+-- one DELETE used to disable unused-column pruning for the whole table
+delete from t_gin_del_prune_${uuid0} where k = 7;
+
+set enable_filter_unused_columns_in_scan_stage = true;
+-- k is both the delete-predicate column and a pruned query predicate column
+select id from t_gin_del_prune_${uuid0} where k = 7 order by id;
+select id from t_gin_del_prune_${uuid0} where k = 8 order by id;
+select id from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+select id, k from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+select count(*) from t_gin_del_prune_${uuid0};
+
+set enable_filter_unused_columns_in_scan_stage = false;
+select id from t_gin_del_prune_${uuid0} where k = 7 order by id;
+select id from t_gin_del_prune_${uuid0} where k = 8 order by id;
+select id from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+select id, k from t_gin_del_prune_${uuid0} where v like '%red%' order by id;
+select count(*) from t_gin_del_prune_${uuid0};
+
+DROP TABLE t_gin_del_prune_${uuid0};

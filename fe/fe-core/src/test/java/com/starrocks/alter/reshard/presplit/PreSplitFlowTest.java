@@ -576,14 +576,21 @@ public class PreSplitFlowTest {
         // StarRocksException from the sampler -> caught, null returned.
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
         PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        PreSplitProfile profile = new PreSplitProfile();
 
         try (MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
                 (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class)))
                         .thenThrow(new StarRocksException("synthetic checked sample failure")))) {
-            Assertions.assertNull(
-                    PreSplitFlow.runDataTierSampler(table, prepared, LoadKind.INSERT_FROM_FILES),
-                    "StarRocksException sampler failure must yield null");
+            try (PreSplitProfile.Scope attempt =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                Assertions.assertNull(
+                        PreSplitFlow.runDataTierSampler(table, prepared, LoadKind.INSERT_FROM_FILES),
+                        "StarRocksException sampler failure must yield null");
+            }
         }
+        Assertions.assertEquals(DefaultPreSplitPipeline.TIER_LABEL_DATA_TIER,
+                profile.toRuntimeProfile().getInfoString("SourceTiers"),
+                "a failed sampler must still expose the tier that ran");
     }
 
     @Test
@@ -644,14 +651,21 @@ public class PreSplitFlowTest {
                 new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false),
                 new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false),
                 new RowGroupStatistics(bigintTuple(0), bigintTuple(100), 100L, false));
+        PreSplitProfile profile = new PreSplitProfile();
 
         try (MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> ignored =
                 Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class,
                         (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(overlapping))) {
-            Assertions.assertNull(
-                    PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.INSERT_FROM_FILES),
-                    "overlapping row groups must fall back to the data tier");
+            try (PreSplitProfile.Scope attempt =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                Assertions.assertNull(
+                        PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.INSERT_FROM_FILES),
+                        "overlapping row groups must fall back to the data tier");
+            }
         }
+        Assertions.assertEquals(DefaultPreSplitPipeline.TIER_LABEL_META_TIER,
+                profile.toRuntimeProfile().getInfoString("SourceTiers"),
+                "a footer attempt must remain visible when it triggers fallback");
     }
 
     @Test

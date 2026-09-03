@@ -1,0 +1,175 @@
+-- name: test_grouping_sets_pushdown
+-- PushDownAggregateGroupingSetsRule (cbo_push_down_groupingset, ON by default) pre-aggregates to the
+-- finest grain and expands the small result for coarser rollup levels, instead of running REPEAT over
+-- the raw rows. MAX/MIN/SUM are self-recombining so re-applying the same function is trivially correct;
+-- AVG and COUNT are not, and are rewritten (avg -> sum/count with a final divide, count -> re-summed
+-- partial counts). Those rewrites can produce a wrong VALUE while still producing a plausible PLAN, so
+-- this case is a differential oracle on rows: same query with the rule off vs on must return identical
+-- result sets. Plan-shape assertions for the same queries live in GroupingSetsTest.java.
+drop table if exists gs_pushdown_src_${uuid0};
+CREATE TABLE `gs_pushdown_src_${uuid0}` (
+    `k1` varchar(20),
+    `k2` varchar(20),
+    `k3` varchar(20),
+    `v_big` bigint,
+    `v_int` int,
+    `v_dec` decimal(27,9),
+    `v_dbl` double,
+    `v_bool` boolean
+) DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES ( "replication_num" = "1");
+
+-- Rows are shaped to break a naive rewrite:
+--  * groups (a,x,*) hold 3 rows while (a,y,*) holds 1, so re-averaging the per-group averages at the
+--    coarser level gives a different answer than averaging the underlying rows.
+--  * group (b,y,q) has v_big entirely NULL, so its partial sum is NULL and its partial count is 0;
+--    the coarser level must still fold that in as "contributes nothing", not as NULL or as a zero mean.
+--  * genuine NULL group keys collide with the NULLs REPEAT pads the rolled-up columns with.
+INSERT INTO gs_pushdown_src_${uuid0} VALUES
+ ('a','x','p',  10,  1,  1.500000000,  1.5, 1)
+,('a','x','p',  20,  2,  2.500000000,  2.5, 0)
+,('a','x','q',  30,  3,  3.500000000,  3.5, 1)
+,('a','y','p',   7,  7,  7.250000000,  7.25, 1)
+,('b','x','p', 100, 10, 10.125000000, 10.125, 0)
+,('b','y','q',NULL,NULL,NULL,NULL,NULL)
+,('b','y','q',NULL,  5,  5.000000000,  5.0, 1)
+,('c',NULL,'p', 40,  4,  4.750000000,  4.75, 0)
+,('c',NULL,NULL,50,  5,  5.250000000,  5.25, 1)
+,(NULL,'x','p', 60,  6,  6.125000000,  6.125, 0)
+,(NULL,NULL,NULL,70, 7,  7.875000000,  7.875, 1);
+
+-- ---------------------------------------------------------------------------
+-- 1. AVG / COUNT / mixed aggregates over ROLLUP.
+--    v_dbl is rounded because the rewrite changes the summation order of a double accumulator; a real
+--    logic error moves the value far more than 6 decimal places, so this does not weaken the check.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, round(avg(v_dbl), 6) a_dbl, avg(v_bool) a_bool,
+       grouping(k1) g1, grouping_id(k1, k2) gid
+from gs_pushdown_src_${uuid0} group by rollup(k1, k2, k3);
+set cbo_push_down_groupingset = true;
+create table gs_res_on_1_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3,
+       avg(v_big) a_big, count(v_big) c_big, count(*) c_star,
+       sum(v_big) s_big, max(v_int) mx, min(v_int) mn,
+       avg(v_dec) a_dec, round(avg(v_dbl), 6) a_dbl, avg(v_bool) a_bool,
+       grouping(k1) g1, grouping_id(k1, k2) gid
+from gs_pushdown_src_${uuid0} group by rollup(k1, k2, k3);
+select (select count(*) from gs_res_off_1_${uuid0}) - (select count(*) from gs_res_on_1_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_1_${uuid0}) except (select * from gs_res_on_1_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_res_on_1_${uuid0}) except (select * from gs_res_off_1_${uuid0})) d) only_on;
+
+-- ---------------------------------------------------------------------------
+-- 2. CUBE, and HAVING on a COUNT output. HAVING on COUNT is expected to push down (a re-summed count
+--    is already the final value); HAVING on AVG must NOT push down (the pre-divide sum/count columns
+--    are not the real value yet) - either way the rows must match the rule-off baseline.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_2_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, count(v_big) c, avg(v_big) a
+from gs_pushdown_src_${uuid0} group by cube(k1, k2, k3) having count(v_big) > 1;
+set cbo_push_down_groupingset = true;
+create table gs_res_on_2_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, count(v_big) c, avg(v_big) a
+from gs_pushdown_src_${uuid0} group by cube(k1, k2, k3) having count(v_big) > 1;
+select (select count(*) from gs_res_off_2_${uuid0}) - (select count(*) from gs_res_on_2_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_2_${uuid0}) except (select * from gs_res_on_2_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_res_on_2_${uuid0}) except (select * from gs_res_off_2_${uuid0})) d) only_on;
+
+-- ---------------------------------------------------------------------------
+-- 3. AVG under a filter on grouping() applied above the rollup - the exact shape that regressed twice
+--    before (#49928 lost the repeat predicate, #58831 copied the having predicate without remapping).
+--    The rule fires here, so this exercises predicate remapping across the CTE/union split with an
+--    aggregate that no longer exists as a CTE output column.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_3_${uuid0} properties("replication_num"="1") as
+select * from (
+  select grouping(k1, k2) aa, k1, k2, k3, avg(v_big) a, count(v_big) c
+  from gs_pushdown_src_${uuid0} group by rollup(k1, k2, k3)
+) t where aa = 1;
+set cbo_push_down_groupingset = true;
+create table gs_res_on_3_${uuid0} properties("replication_num"="1") as
+select * from (
+  select grouping(k1, k2) aa, k1, k2, k3, avg(v_big) a, count(v_big) c
+  from gs_pushdown_src_${uuid0} group by rollup(k1, k2, k3)
+) t where aa = 1;
+select (select count(*) from gs_res_off_3_${uuid0}) - (select count(*) from gs_res_on_3_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_3_${uuid0}) except (select * from gs_res_on_3_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_res_on_3_${uuid0}) except (select * from gs_res_off_3_${uuid0})) d) only_on;
+
+-- ---------------------------------------------------------------------------
+-- 4. HAVING directly on an AVG output. check() refuses to push down here; the rows must still match
+--    the baseline, and this pins the guard so that relaxing it later cannot silently change results.
+-- ---------------------------------------------------------------------------
+set cbo_push_down_groupingset = false;
+create table gs_res_off_4_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, avg(v_big) a
+from gs_pushdown_src_${uuid0} group by rollup(k1, k2, k3) having avg(v_big) > 20;
+set cbo_push_down_groupingset = true;
+create table gs_res_on_4_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, avg(v_big) a
+from gs_pushdown_src_${uuid0} group by rollup(k1, k2, k3) having avg(v_big) > 20;
+select (select count(*) from gs_res_off_4_${uuid0}) - (select count(*) from gs_res_on_4_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_res_off_4_${uuid0}) except (select * from gs_res_on_4_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_res_on_4_${uuid0}) except (select * from gs_res_off_4_${uuid0})) d) only_on;
+
+-- ---------------------------------------------------------------------------
+-- 5. AVG over the full range of DECIMAL widths. avg(decimal) is decomposed into sum/count and put back
+--    together by a DIVIDE, and the BE dispatches that DIVIDE on its own decimal width, reading BOTH
+--    operands at that width - so the synthesized count operand has to be cast to a matching width.
+--    Getting that wrong does not fail: it reinterprets the column and silently returns 0 for every row,
+--    which no plan assertion can see. DECIMAL256 (precision > 38) is the case that actually regressed.
+-- ---------------------------------------------------------------------------
+drop table if exists gs_dec_src_${uuid0};
+CREATE TABLE `gs_dec_src_${uuid0}` (
+    `k1` int,
+    `k2` int,
+    `k3` int,
+    `d32` decimal(9,2),
+    `d64` decimal(18,4),
+    `d128` decimal(38,10),
+    `d256` decimal(76,10),
+    `dv2` decimalv2(20,5)
+) DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES ( "replication_num" = "1");
+INSERT INTO gs_dec_src_${uuid0} VALUES
+ (1,1,1, 1.25, 1.5005, 1.0000000001, 10.5, 10.5)
+,(1,1,2, 2.50, 2.2500, 2.0000000002, 20.25, 20.25)
+,(1,2,1, 3.75, 3.1250, 3.0000000003, 30.125, 30.125)
+,(2,1,1, 4.00, 4.0625, 4.0000000004, 40.0625, 40.0625)
+,(2,2,2, 5.10, 5.9375, 5.0000000005, 1234567890123456789012345678901234.5, 50.5)
+,(2,2,2, NULL, NULL, NULL, NULL, NULL);
+set cbo_push_down_groupingset = false;
+create table gs_dec_off_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, avg(d32) a32, avg(d64) a64, avg(d128) a128, avg(d256) a256,
+       avg(dv2) av2, sum(dv2) sv2, count(dv2) cv2
+from gs_dec_src_${uuid0} group by rollup(k1, k2, k3);
+set cbo_push_down_groupingset = true;
+create table gs_dec_on_${uuid0} properties("replication_num"="1") as
+select k1, k2, k3, avg(d32) a32, avg(d64) a64, avg(d128) a128, avg(d256) a256,
+       avg(dv2) av2, sum(dv2) sv2, count(dv2) cv2
+from gs_dec_src_${uuid0} group by rollup(k1, k2, k3);
+select (select count(*) from gs_dec_off_${uuid0}) - (select count(*) from gs_dec_on_${uuid0}) cnt_diff,
+       (select count(*) from ((select * from gs_dec_off_${uuid0}) except (select * from gs_dec_on_${uuid0})) d) only_off,
+       (select count(*) from ((select * from gs_dec_on_${uuid0}) except (select * from gs_dec_off_${uuid0})) d) only_on;
+
+set cbo_push_down_groupingset = true;
+drop table gs_dec_off_${uuid0};
+drop table gs_dec_on_${uuid0};
+drop table gs_dec_src_${uuid0};
+drop table gs_res_off_1_${uuid0};
+drop table gs_res_on_1_${uuid0};
+drop table gs_res_off_2_${uuid0};
+drop table gs_res_on_2_${uuid0};
+drop table gs_res_off_3_${uuid0};
+drop table gs_res_on_3_${uuid0};
+drop table gs_res_off_4_${uuid0};
+drop table gs_res_on_4_${uuid0};
+drop table gs_pushdown_src_${uuid0};

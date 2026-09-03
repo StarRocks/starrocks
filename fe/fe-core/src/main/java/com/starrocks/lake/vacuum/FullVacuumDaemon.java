@@ -181,7 +181,8 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index :
+                    partition.getMaterializedIndicesForVacuum(MaterializedIndex.IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
             }
             visibleVersion = partition.getVisibleVersion();

@@ -124,6 +124,36 @@ TEST_F(PersistentIndexSstableTest, test_generate_sst_seek_and_check) {
     delete iter;
 }
 
+TEST_F(PersistentIndexSstableTest, test_sample_data_keys_returns_complete_keys) {
+    constexpr int kNumKeys = 10000;
+    const std::string filename = "test_sample_data_keys.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> entries;
+    for (int i = 0; i < kNumKeys; ++i) {
+        entries.emplace(fmt::format("sample_key_{:016X}", i), std::make_pair(100, IndexValue(i)));
+    }
+
+    uint64_t file_size = 0;
+    PersistentIndexSstableRangePB range;
+    ASSERT_OK(PersistentIndexSstable::build_sstable(entries, file.get(), &file_size, &range));
+
+    ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+    PersistentIndexSstablePB sstable_pb;
+    sstable_pb.set_filename(filename);
+    sstable_pb.set_filesize(file_size);
+    sstable_pb.mutable_range()->CopyFrom(range);
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    ASSERT_OK(sstable->init(std::move(read_file), sstable_pb, nullptr, false));
+
+    std::vector<std::string> samples;
+    // Empty bounds are unbounded on that side, i.e. sample the whole table.
+    ASSERT_OK(sstable->sample_data_keys(&samples, Slice(), Slice(), 1));
+    ASSERT_FALSE(samples.empty());
+    for (const auto& sample : samples) {
+        EXPECT_NE(entries.end(), entries.find(sample)) << "sampled an index separator rather than a data key";
+    }
+}
+
 TEST_F(PersistentIndexSstableTest, test_merge) {
     std::vector<sstable::Iterator*> list;
     std::vector<std::unique_ptr<RandomAccessFile>> read_files;

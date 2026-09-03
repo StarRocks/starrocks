@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -199,7 +200,16 @@ public class UpdatePlanner {
                 olapTable.enableReplicatedStorage(), false,
                 olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
         if (updateStmt.usePartialUpdate()) {
-            ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+            // Row mode for a range-distributed primary-key table whose ORDER BY differs from its primary
+            // key: its column-mode DCG would be dropped by the UNSHARE rewrite a split drags behind it,
+            // so OlapTableSink refuses that mode. Refusing here instead would leave the statement with no
+            // way to run at all -- UpdateAnalyzer only reaches setUsePartialUpdate() with no WHERE
+            // clause, and dropping partial update is what makes a WHERE mandatory. Row mode rewrites
+            // whole rows, survives the split, and needs no WHERE.
+            TPartialUpdateMode mode = MetaUtils.hasSeparateSortKey(olapTable, olapTable.getBaseIndexMetaId())
+                    ? TPartialUpdateMode.ROW_MODE
+                    : TPartialUpdateMode.COLUMN_UPDATE_MODE;
+            ((OlapTableSink) dataSink).setPartialUpdateMode(mode);
         }
         if (session.getTxnId() != 0) {
             ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);

@@ -66,9 +66,96 @@ public class TransactionGraphTest {
         graph.remove(3);
         graph.remove(4);
         assertEquals(graph.size(), 4);
-        expectNextBatch(graph, Lists.newArrayList(1L, 2L, 5L, 6L));
+        // removing the middle writers must keep txn5/txn6 ordered after txn1/txn2
+        expectNextBatch(graph, Lists.newArrayList(1L, 2L));
+        expectNextBatch(graph, Lists.newArrayList(5L, 6L));
         assertEquals(graph.size(), 0);
         assertEquals(graph.getTxnsWithoutDependency().size(), 0);
+    }
+
+    @Test
+    public void testRemoveTailKeepsLastTableWriter() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L));
+        // the tail of table 1's chain becomes visible first, e.g. via single publish
+        graph.remove(2);
+        // a new writer of table 1 must still depend on the remaining txn1
+        graph.add(3, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(3L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveMiddleNodeKeepsOrdering() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(3, Lists.newArrayList(1L));
+        graph.remove(2);
+        // txn3 must still wait for txn1
+        assertEquals(Lists.newArrayList(1L), graph.getTxnsWithoutDependency());
+        // the single-table batch walk follows the spliced chain 1 -> 3
+        assertEquals(Lists.newArrayList(1L, 3L), graph.getTxnsWithTxnDependencyBatch(1, 5, 1));
+        graph.remove(1);
+        expectNextBatch(graph, Lists.newArrayList(3L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveMiddleNodeWithMultipleSuccessors() {
+        // table1: txn1 -> txn2 -> txn3 -> txn4
+        // table2:         txn2 ---------> txn4
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(1L, 2L));
+        graph.add(3, Lists.newArrayList(1L));
+        graph.add(4, Lists.newArrayList(1L, 2L));
+        graph.remove(2);
+        // table1 is spliced to txn1 -> txn3; txn4's table2 dependency on txn2 is satisfied
+        // but its table1 dependency on txn3 remains
+        expectNextBatch(graph, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(3L));
+        expectNextBatch(graph, Lists.newArrayList(4L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveWithMultiplePredecessorsOnSameTable() {
+        // table1: txn1 -> txn2 -> txn3
+        // table2: txn1 ---------> txn3
+        // txn3's ins contain two writers of table1; the fallback for lastTableWriter must
+        // pick the immediate one (txn2), not txn1
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L, 2L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(3, Lists.newArrayList(1L, 2L));
+        graph.remove(3);
+        graph.add(4, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(2L));
+        expectNextBatch(graph, Lists.newArrayList(4L));
+        assertEquals(0, graph.size());
+    }
+
+    @Test
+    public void testRemoveWithOutOfOrderTxnIds() {
+        // txns enter the graph in commit order, which can differ from txn id order:
+        // table1: txn5 -> txn2 -> txn7
+        // table2: txn5 ---------> txn7
+        // the fallback for table1's last writer must pick txn2 (added last), not txn5
+        // (the larger txn id)
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(5, Lists.newArrayList(1L, 2L));
+        graph.add(2, Lists.newArrayList(1L));
+        graph.add(7, Lists.newArrayList(1L, 2L));
+        graph.remove(7);
+        graph.add(9, Lists.newArrayList(1L));
+        expectNextBatch(graph, Lists.newArrayList(5L));
+        expectNextBatch(graph, Lists.newArrayList(2L));
+        expectNextBatch(graph, Lists.newArrayList(9L));
+        assertEquals(0, graph.size());
     }
 
     @Test

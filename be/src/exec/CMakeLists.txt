@@ -107,6 +107,12 @@ set(PIPELINE_ADAPTERS_SRCS
 )
 
 set(PIPELINE_OPERATORS_BATCH_SRCS
+    pipeline/ai/ai_chunk_buffer.cpp
+    pipeline/ai/ai_project_factory.cpp
+    pipeline/ai/ai_project_operator.cpp
+    pipeline/ai/ai_project_processor.cpp
+    pipeline/ai/ai_project_runtime.cpp
+    pipeline/ai/ai_query_memory_account.cpp
     pipeline/capture_version_operator.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_parallel_merge_source_operator.cpp
@@ -224,6 +230,7 @@ set(PIPELINE_EXTENSIONS_SRCS
 )
 
 set(EXEC_NON_PIPELINE_FILES
+    ai_project_node.cpp
     catalog_scan_metrics.cpp
     fetch_node.cpp
     lookup_node.cpp

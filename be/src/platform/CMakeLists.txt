@@ -37,7 +37,17 @@ set(PLATFORM_FILES
   http/http_response.cpp
   http/http_status.cpp
   http/http_stream_channel.cpp
+  http/resolved_http_endpoint.cpp
   key_cache.cpp
+  llm/ai_admission_controller.cpp
+  llm/ai_http_client.cpp
+  llm/ai_metrics.cpp
+  llm/ai_provider.cpp
+  llm/ai_provider_options.cpp
+  llm/ai_rate_limiter.cpp
+  llm/ai_runtime.cpp
+  llm/ai_task_dispatcher.cpp
+  llm/openai_compatible_provider.cpp
   llm/llm_cache.cpp
   llm/llm_query_service.cpp
   llm/model_config.cpp

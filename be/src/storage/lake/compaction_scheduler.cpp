@@ -340,9 +340,9 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
-        auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                               request->force_base_compaction(),
-                                                               request->skip_write_txnlog(), cb);
+        auto context = std::make_unique<CompactionTaskContext>(
+                request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
+                request->skip_write_txnlog(), cb, 0, 0, request->unshare_segments());
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
     }
@@ -402,9 +402,10 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
     };
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto result = _parallel_mgr->create_parallel_tasks(
-                tablet_id, request->txn_id(), request->version(), request->parallel_config(), callback,
-                request->force_base_compaction(), _threads.get(), acquire_token, release_token);
+        auto result = _parallel_mgr->create_parallel_tasks(tablet_id, request->txn_id(), request->version(),
+                                                           request->parallel_config(), callback,
+                                                           request->force_base_compaction(), _threads.get(),
+                                                           acquire_token, release_token, request->unshare_segments());
 
         if (result.ok() && result.value() > 0) {
             // Parallel compaction tasks created successfully
@@ -422,9 +423,9 @@ void CompactionScheduler::process_parallel_compaction(const CompactRequest* requ
                 VLOG(1) << "Parallel compaction not applicable for tablet " << tablet_id
                         << ", falling back to normal compaction";
             }
-            auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-                                                                   request->force_base_compaction(),
-                                                                   request->skip_write_txnlog(), callback);
+            auto context = std::make_unique<CompactionTaskContext>(
+                    request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
+                    request->skip_write_txnlog(), callback, 0, 0, request->unshare_segments());
             context->enqueue_time_sec = ::time(nullptr);
 
             {

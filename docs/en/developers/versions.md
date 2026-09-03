@@ -81,3 +81,37 @@ The minor version status will change with some baseline triggers, as shown below
   - 5.3 is in the `bugfix-only` state
   - 5.2 is also in the `bugfix-only` state
   - 5.1 is in the `code-freeze` state
+
+## JDK Support Policy
+
+StarRocks FE, BE, and CN nodes depend on a JDK. The JDK versions that StarRocks requires and recommends follow the Java LTS calendar published by [Eclipse Adoptium](https://adoptium.net/support), not StarRocks version numbers. For the JDK versions of each StarRocks version, see [JDK version by StarRocks version](../deployment/preparation/environment_configurations.md#jdk-version-by-starrocks-version).
+
+Each StarRocks minor version defines two JDK versions:
+
+- **Minimum JDK**: the oldest Java LTS release that Adoptium still builds. The FE does not start on an older JDK. The BE and CN log an error on an older JDK, and Java-dependent features such as Java UDFs and JNI-based connectors are not supported on it.
+- **Recommended JDK**: the next Java LTS release. It is the JDK that the official container images ship, and it becomes the minimum JDK at the next change. Starting on a JDK that is older than the recommended JDK prints a deprecation warning that names the recommended JDK.
+
+Java LTS releases newer than the recommended JDK are not yet covered by this policy. They usually work but are not tested. Non-LTS Java releases are not supported.
+
+Currently, the minimum JDK is JDK 17 and the recommended JDK is JDK 21.
+
+### When the minimum JDK changes
+
+- The minimum JDK changes when the current minimum reaches its end of availability on Adoptium. At that point, the previous recommended JDK becomes the minimum, and the next Java LTS release becomes the recommended JDK.
+- The recommended JDK is published one full cycle before it becomes the minimum, so you get about two years of notice through this policy, the JDK matrix, and the startup warning.
+- The change takes effect in the first minor version released after the date, and only if the previous minor version already printed the startup warning for the new minimum. Otherwise, the change moves to the next minor version.
+- A minor version keeps its minimum and recommended JDK for its whole life. A patch version never raises the minimum JDK, so upgrading to a patch version never requires a JDK upgrade. Support for a newer JDK can be added to an existing minor version in a patch version.
+
+### Schedule
+
+| Effective from | Minimum JDK | Recommended JDK | Reason |
+| --- | --- | --- | --- |
+| Oct 2027 | JDK 21 | JDK 25 | Java 17 reaches end of availability |
+| Dec 2029 | JDK 25 | JDK 29 | Java 21 reaches end of availability |
+| Sep 2031 | JDK 29 | JDK 33 | Java 25 reaches end of availability |
+
+The dates are the end-of-availability dates published by Adoptium, which Adoptium states as "at least". They are fixed: if Adoptium later extends the availability of a Java version, the schedule does not change. Java 29 and Java 33 assume that Adoptium continues to designate an LTS release every two years.
+
+### Components that run in another JVM
+
+The Spark Load DPP library, the Hive Bitmap UDF library, and the Broker run inside another system's JVM. They target Java 8 and follow the JDK requirements of that system, not this policy.

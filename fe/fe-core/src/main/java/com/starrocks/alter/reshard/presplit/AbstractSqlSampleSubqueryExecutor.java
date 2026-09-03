@@ -324,6 +324,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         try {
             return simpleExecutor.executeDQL(sampleSql, sampleContext);
         } finally {
+            PreSplitProfile.recordSampleQueryId(priorContext, sampleContext.getQueryId());
             ConnectContext.remove();
             if (priorContext != null) {
                 priorContext.setThreadLocalInfo();

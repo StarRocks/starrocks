@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.presplit.BrokerLoadPreSplitHook;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -109,6 +110,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     private static final Logger LOG = LogManager.getLogger(BrokerLoadJob.class);
     private ConnectContext context;
+    private transient PreSplitProfile preSplitProfile = new PreSplitProfile();
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
     private long writeDurationMs = 0;
     private LoadStmt stmt;
@@ -297,6 +299,7 @@ public class BrokerLoadJob extends BulkLoadJob {
         BrokerDesc brokerDesc = newBrokerDescFromPersistInfo();
         ensureConnectContext(db);
         List<PreSplitHookInput> perTableInputs = snapshotPerTableInputsUnderReadLock(db, attachment);
+        PreSplitProfile currentPreSplitProfile = getOrCreatePreSplitProfile();
 
         // Fire the hook OUTSIDE the DB lock (sampling can take seconds).
         // See unprotectedExecute() for why T_load is deferred until after this returns.
@@ -304,12 +307,12 @@ public class BrokerLoadJob extends BulkLoadJob {
         // (processTimeout, user cancel), the hook releases the pending-task scheduler
         // slot promptly instead of holding it until the post-submit deadline expires.
         firePreSplitHooks(context, db, brokerDesc, computeResource, perTableInputs, sessionVariables,
-                this::isTxnDone);
+                this::isTxnDone, currentPreSplitProfile);
 
         if (!beginTransaction()) {
             return;
         }
-        buildLoadingTasksUnderReadLock(db, perTableInputs, brokerDesc);
+        buildLoadingTasksUnderReadLock(db, perTableInputs, brokerDesc, currentPreSplitProfile);
         // Submit outside the DB lock; submit() can block when the loading-task scheduler queue is full.
         for (LoadTask loadTask : newLoadingTasks) {
             submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
@@ -464,7 +467,8 @@ public class BrokerLoadJob extends BulkLoadJob {
      * fail the load cleanly rather than planning against the wrong object.
      */
     private void buildLoadingTasksUnderReadLock(
-            Database db, List<PreSplitHookInput> perTableInputs, BrokerDesc brokerDesc) throws StarRocksException {
+            Database db, List<PreSplitHookInput> perTableInputs, BrokerDesc brokerDesc,
+            PreSplitProfile currentPreSplitProfile) throws StarRocksException {
         TPartialUpdateMode partialUpdateThriftMode = resolvePartialUpdateThriftMode(partialUpdateMode);
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -507,6 +511,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setLoadId(loadId)
                         .setJSONOptions(jsonOptions)
                         .setComputeResource(computeResource)
+                        .setPreSplitProfile(currentPreSplitProfile)
                         .build();
 
                 task.prepare();
@@ -518,6 +523,13 @@ public class BrokerLoadJob extends BulkLoadJob {
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
+    }
+
+    private PreSplitProfile getOrCreatePreSplitProfile() {
+        if (preSplitProfile == null) {
+            preSplitProfile = new PreSplitProfile();
+        }
+        return preSplitProfile;
     }
 
     /**
@@ -544,7 +556,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     static void firePreSplitHooks(
             ConnectContext context, Database db, BrokerDesc brokerDesc, ComputeResource computeResource,
             List<PreSplitHookInput> preSplitInputs, Map<String, String> sessionVariables,
-            BooleanSupplier shouldAbort) {
+            BooleanSupplier shouldAbort, PreSplitProfile preSplitProfile) {
         if (preSplitInputs.isEmpty()) {
             return;
         }
@@ -559,7 +571,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
                 BrokerLoadPreSplitHook.maybeRunPreSplit(
                         context, db, input.targetTable(), brokerDesc,
-                        input.fileGroups(), input.fileStatuses(), computeResource, shouldAbort);
+                        input.fileGroups(), input.fileStatuses(), computeResource, shouldAbort, preSplitProfile);
             }
         }
     }
@@ -656,6 +668,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     @Override
     protected void reset() {
         super.reset();
+        preSplitProfile = new PreSplitProfile();
         if (context != null) {
             context.setStartTime();
             createTimestamp = context.getStartTime();

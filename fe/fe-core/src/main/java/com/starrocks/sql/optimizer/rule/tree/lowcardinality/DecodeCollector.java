@@ -46,9 +46,11 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -776,8 +778,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         DistributionProperty leftDistribution = optExpression.getRequiredProperties().get(0).getDistributionProperty();
         DistributionProperty rightDistribution = optExpression.getRequiredProperties().get(1).getDistributionProperty();
-        // Currently only supports broadcast join.
+        // Only broadcast hash join keeps its ON columns dict-encoded: DecodeRewriter rewrites the ON
+        // predicate to dict refs only in visitPhysicalHashJoin. For any non-hash join (NestLoop, Merge)
+        // the generic rewriter never touches onPredicate, so keeping those ON columns encoded would
+        // leave the onPredicate referencing string refs the dict-encoded scan no longer emits, which
+        // fails planning with "Invalid plan: Input dependency cols check failed".
         if (!sessionVariable.isEnableLowCardinalityOptimizeForJoin() ||
+                !(join instanceof PhysicalHashJoinOperator) ||
                 (leftDistribution.isShuffle() && rightDistribution.isShuffle())) {
             onColumns.getStream().forEach(disableRewriteStringColumns::union);
         } else {
@@ -810,6 +817,32 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return visitPhysicalSetOperation(optExpression, context);
     }
 
+    /*
+     * Merge the dictionaries of the columns every UNION ALL branch contributes to one output
+     * position, and return the column whose dictionary the position ends up encoded with: one of
+     * the child columns, or the output column itself when the position is all constants and a
+     * dictionary was generated for it. Returns null when the position cannot be encoded at all.
+     */
+    private ColumnRefOperator mergeUnionDictionaries(List<ColumnRefOperator> childColumns,
+                                                     ColumnRefOperator outputColumn,
+                                                     ColumnRefSet encodableColumns) {
+        boolean isCandidate = childColumns.stream().allMatch(
+                c -> encodableColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
+        if (!isCandidate) {
+            return null;
+        }
+        Integer merged = unionDictionaryManager.mergeDictionaries(
+                childColumns.stream().map(ColumnRefOperator::getId).toList(), outputColumn.getId());
+        if (merged == null) {
+            return null;
+        }
+        final int mergedId = merged;
+        if (mergedId == outputColumn.getId()) {
+            return outputColumn;
+        }
+        return childColumns.stream().filter(c -> c.getId() == mergedId).findAny().orElseThrow();
+    }
+
     private DecodeInfo visitPhysicalSetOperation(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
             return DecodeInfo.empty();
@@ -820,32 +853,47 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             Preconditions.checkState(!(dist instanceof HashDistributionSpec));
             DecodeInfo result = DecodeInfo.create();
             result.inputStringColumns.union(context.outputStringColumns);
-            for (int i = 0; i < setOp.getOutputColumnRefOp().size(); ++i) {
-                final int finalI = i;
-                List<ColumnRefOperator> childColumns = setOp.getChildOutputColumns().stream()
-                        .map(l -> l.get(finalI)).toList();
-                List<Integer> childColumnIds = childColumns.stream().map(ColumnRefOperator::getId).toList();
-                boolean isCandidate = childColumns.stream().allMatch(
-                        c -> context.outputStringColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
-                ColumnRefOperator outputColumn = setOp.getOutputColumnRefOp().get(i);
-                Integer mergedId;
-                if (isCandidate && (mergedId =
-                        unionDictionaryManager.mergeDictionaries(childColumnIds, outputColumn.getId())) != null) {
-                    childColumnIds.stream().filter(context.outputStringColumns::contains).forEach(c -> {
-                        result.usedStringColumns.union(c);
-                        expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
-                    });
-                    if (mergedId == outputColumn.getId()) {
-                        setDefineExpr(outputColumn, outputColumn, 1);
-                    } else {
-                        setDefineExpr(outputColumn, childColumns.stream()
-                                .filter(c -> c.getId() == mergedId).findAny().orElseThrow(), 1);
+            List<ColumnRefOperator> outputColumns = setOp.getOutputColumnRefOp();
+            // childColumns.get(i) holds the column every branch contributes to output position i
+            List<List<ColumnRefOperator>> childColumns = IntStream.range(0, outputColumns.size())
+                    .mapToObj(i -> setOp.getChildOutputColumns().stream().map(l -> l.get(i)).toList())
+                    .toList();
+            // the column whose dictionary output position i is encoded with,
+            // null when the position cannot be dictionary encoded
+            List<ColumnRefOperator> useChildColumns = IntStream.range(0, outputColumns.size())
+                    .mapToObj(i -> mergeUnionDictionaries(childColumns.get(i), outputColumns.get(i),
+                            context.outputStringColumns))
+                    .collect(Collectors.toCollection(Lists::newArrayList));
+
+            // A child column that has to be decoded for one output position cannot stay encoded for
+            // another one: the same column ref would then reach the union as a string on one branch
+            // and as a dictionary code on another. Give up on every position sharing a column with a
+            // position we already gave up on, until the set of decoded columns stops growing.
+            int decodedColumns;
+            do {
+                decodedColumns = result.decodeStringColumns.size();
+                for (int i = 0; i < outputColumns.size(); ++i) {
+                    if (useChildColumns.get(i) != null
+                            && childColumns.get(i).stream().noneMatch(result.decodeStringColumns::contains)) {
+                        continue;
                     }
-                    result.outputStringColumns.union(outputColumn);
-                } else {
-                    childColumns.stream().filter(c -> context.outputStringColumns.contains(c))
+                    useChildColumns.set(i, null);
+                    childColumns.get(i).stream().filter(c -> context.outputStringColumns.contains(c))
                             .forEach(result.decodeStringColumns::union);
                 }
+            } while (decodedColumns != result.decodeStringColumns.size());
+
+            for (int i = 0; i < outputColumns.size(); ++i) {
+                if (useChildColumns.get(i) == null) {
+                    continue;
+                }
+                childColumns.get(i).stream().map(ColumnRefOperator::getId)
+                        .filter(context.outputStringColumns::contains).forEach(c -> {
+                            result.usedStringColumns.union(c);
+                            expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
+                        });
+                setDefineExpr(outputColumns.get(i), useChildColumns.get(i), 1);
+                result.outputStringColumns.union(outputColumns.get(i));
             }
             result.inputStringColumns.except(result.decodeStringColumns);
             return result;
@@ -1387,19 +1435,35 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return false;
     }
 
+    private static void addScanConjuncts(List<ScalarOperator> predicates, ScanOperatorPredicates scanPredicates) {
+        predicates.addAll(scanPredicates.getNoEvalPartitionConjuncts());
+        predicates.addAll(scanPredicates.getNonPartitionConjuncts());
+        predicates.addAll(scanPredicates.getMinMaxConjuncts());
+    }
+
     private void collectPredicate(Operator operator, DecodeInfo info) {
-        if (operator.getPredicate() == null) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        if (operator.getPredicate() != null) {
+            predicates.add(operator.getPredicate());
+        }
+        if (operator instanceof PhysicalHiveScanOperator hiveScan) {
+            addScanConjuncts(predicates, hiveScan.getScanOperatorPredicates());
+        } else if (operator instanceof PhysicalIcebergScanOperator icebergScan) {
+            addScanConjuncts(predicates, icebergScan.getScanOperatorPredicates());
+        }
+        if (predicates.isEmpty()) {
             return;
         }
         DictExpressionCollector dictExpressionCollector = new DictExpressionCollector(info.outputStringColumns,
                 structManager);
-        dictExpressionCollector.collect(operator.getPredicate());
+        predicates.forEach(dictExpressionCollector::collect);
 
         info.outputStringColumns.getStream().forEach(c -> {
             List<ScalarOperator> expressions = dictExpressionCollector.getDictExpressions(c);
             if (!expressions.isEmpty()) {
                 // predicate only translate to string expression
                 stringExpressions.computeIfAbsent(c, l -> Lists.newArrayList()).addAll(expressions);
+                info.usedStringColumns.union(c);
             }
         });
 
@@ -1564,8 +1628,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         private ScalarOperator merge(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
-            if (collectors.stream().anyMatch(s -> s.getType().isArrayType()
-                    || s.getType().isStructType())) {
+            // the result becomes a new dictionary, so it must be a scalar string; the collectors are
+            // BOOLEAN sentinels for constant operands and cannot report the operator's own type
+            Type selfType = scalarOperator.getType();
+            if (selfType.isArrayType() || selfType.isStructType()
+                    || collectors.stream().anyMatch(s -> s.getType().isArrayType()
+                        || s.getType().isStructType())) {
                 return forbidden(collectors, scalarOperator);
             }
             return mergeWithArray(collectors, scalarOperator);

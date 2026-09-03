@@ -52,8 +52,10 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -245,6 +247,9 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 // in the txn-log apply path (OSS read of txn_log, broken segment, ...),
 // which no_op_publish=true bypasses entirely (transactions.cpp:320).
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
+// Forces the query-side parent alias back to the pre-fix behaviour (merge the primary-index
+// sstables too), so the cost of that merge can be measured against the same data.
+DEFINE_FAIL_POINT(lake_parent_alias_force_sstable_merge);
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::PublishVersionRequest* request,
@@ -279,6 +284,19 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
         cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
         return;
+    }
+
+    for (const auto& resharding_tablet_info : request->resharding_tablet_infos()) {
+        if (!resharding_tablet_info.has_splitting_tablet_info()) {
+            continue;
+        }
+        const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
+        const int split_count = splitting_tablet_info.new_tablet_ids_size();
+        if (split_count <= 1) {
+            cntl->SetFailed(fmt::format("splitting tablet {} requires at least 2 new tablet ids, got {}",
+                                        splitting_tablet_info.old_tablet_id(), split_count));
+            return;
+        }
     }
 
     int task_num = request->tablet_ids_size();
@@ -705,6 +723,86 @@ static void collect_expected_metadata_tablet_ids(const AggregatePublishVersionRe
     }
 }
 
+// Build the query-only parent metadata after all child publishes have succeeded.
+// merge_tablet is also the range-tablet merge primitive, so it already provides
+// rowset-family deduplication and PK delvec union. Phase one intentionally rejects
+// DCG/IDG instead of copying incomplete metadata into a query-visible parent.
+static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
+                                           const AggregatePublishVersionRequest& request,
+                                           std::map<int64_t, TabletMetadata>* tablet_metas) {
+    if (request.parent_tablet_publish_infos().empty()) {
+        return Status::OK();
+    }
+    if (request.publish_reqs().empty() || request.publish_reqs(0).txn_infos().empty()) {
+        return Status::InvalidArgument("parent tablet publish requires transaction info");
+    }
+
+    const auto& publish_req = request.publish_reqs(0);
+    const auto& txn_info = publish_req.txn_infos(publish_req.txn_infos_size() - 1);
+    const int64_t new_version = publish_req.new_version();
+    for (const auto& parent_info : request.parent_tablet_publish_infos()) {
+        if (!parent_info.has_parent_tablet_id() || parent_info.child_tablet_ids_size() < 1) {
+            return Status::InvalidArgument("parent tablet publish requires one parent and at least one child");
+        }
+
+        std::vector<TabletMetadataPtr> child_metas;
+        child_metas.reserve(parent_info.child_tablet_ids_size());
+        MergingTabletInfoPB merging_info;
+        merging_info.set_new_tablet_id(parent_info.parent_tablet_id());
+        for (int64_t child_id : parent_info.child_tablet_ids()) {
+            if (child_id == parent_info.parent_tablet_id()) {
+                return Status::InvalidArgument("parent tablet id cannot also be a child tablet id");
+            }
+            auto it = tablet_metas->find(child_id);
+            if (it == tablet_metas->end()) {
+                return Status::NotFound(fmt::format("missing child tablet {} metadata for parent {}", child_id,
+                                                    parent_info.parent_tablet_id()));
+            }
+            const auto& child = it->second;
+            if (child.version() != new_version) {
+                return Status::InvalidArgument(
+                        fmt::format("child tablet {} metadata version {} does not match publish version {}", child_id,
+                                    child.version(), new_version));
+            }
+            if ((child.has_dcg_meta() && !child.dcg_meta().dcgs().empty()) ||
+                (child.has_idg_meta() && !child.idg_meta().idgs().empty())) {
+                return Status::NotSupported("parent tablet publish does not support DCG or IDG metadata yet");
+            }
+            child_metas.emplace_back(std::make_shared<TabletMetadata>(child));
+            merging_info.add_old_tablet_ids(child_id);
+        }
+
+        bool force_sstable_merge = false;
+        FAIL_POINT_TRIGGER_EXECUTE(lake_parent_alias_force_sstable_merge, { force_sstable_merge = true; });
+        const int64_t merge_begin_us = butil::gettimeofday_us();
+
+        MutableTabletMetadataPtr parent_meta;
+        if (child_metas.size() == 1) {
+            // An untouched sibling is represented by an IdenticalTablet in the new index. Its
+            // query parent only needs an id-adjusted copy; no rowset/delvec aggregation is needed.
+            parent_meta = std::make_shared<TabletMetadata>(*child_metas.front());
+            parent_meta->set_id(parent_info.parent_tablet_id());
+        } else {
+            ASSIGN_OR_RETURN(parent_meta,
+                             lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version, txn_info,
+                                                /*skip_sstable_merge=*/!force_sstable_merge));
+        }
+        // This runs on the publish critical path once per parent per version, so keep its cost
+        // visible: it is what wedged loads before the sstable merge was dropped from it.
+        const int64_t merge_cost_us = butil::gettimeofday_us() - merge_begin_us;
+        LOG(INFO) << "build parent tablet alias, parent=" << parent_info.parent_tablet_id()
+                  << " children=" << child_metas.size() << " version=" << new_version
+                  << " sstable_merge=" << (force_sstable_merge ? "on" : "off") << " cost=" << merge_cost_us << "us";
+        // The parent is a read alias, never the owner of child files. Mark every
+        // inherited reference shared so retiring the parent cannot delete a file
+        // that remains live in a child. Its merged delvec is reclaimed through the
+        // shared-file vacuum path once the parent disappears from retained bundles.
+        lake::tablet_reshard_helper::set_all_data_files_shared(parent_meta.get());
+        (*tablet_metas)[parent_info.parent_tablet_id()] = std::move(*parent_meta);
+    }
+    return Status::OK();
+}
+
 struct AggregatePublishContext {
     bthread::Mutex mutex;
     bool has_failure{false};
@@ -720,11 +818,18 @@ struct AggregatePublishContext {
 
     using PublishRequestCtx = RequestContext<PublishVersionResponse>;
     std::vector<PublishRequestCtx> publish_request_ctx;
+    // "host:port txn=.. tablets=.." per sub-request, filled before any dispatch so the completion
+    // callback can name the peer it is reporting on without racing the dispatch loop.
+    std::vector<std::string> sub_desc;
 
     AggregatePublishContext() : begin_us(butil::gettimeofday_us()) {}
 
     void handle_failure(const std::string& error) {
         std::lock_guard l(mutex);
+        // Log here: the FE's own RPC budget equals the one this aggregator hands each sub-request,
+        // so a sub-request failure is reported back after the FE has already timed out and the
+        // reason never reaches it. Without this line the failure is invisible on both sides.
+        LOG(WARNING) << "aggregate publish sub-request failed: " << error;
         has_failure = true;
         publish_status = Status::InternalError(error);
     }
@@ -778,7 +883,7 @@ struct AggregatePublishContext {
         publish_request_ctx.clear();
     }
 
-    void put_aggregate_metadata(ExecEnv* env) {
+    void put_aggregate_metadata(ExecEnv* env, const AggregatePublishVersionRequest& request) {
         if (!has_failure) {
             auto thread_pool = env->lake_services().put_aggregate_metadata_thread_pool;
             if (UNLIKELY(thread_pool == nullptr)) {
@@ -788,9 +893,12 @@ struct AggregatePublishContext {
                 auto task = std::make_shared<CancellableRunnable>(
                         [&] {
                             DeferOp defer([&] { latch.count_down(); });
-                            publish_status =
-                                    StorageEnv::GetInstance()->lake_tablet_manager()->put_bundle_tablet_metadata(
-                                            tablet_metas, expected_tablet_ids);
+                            auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+                            publish_status = build_parent_tablet_metadata(tablet_mgr, request, &tablet_metas);
+                            if (publish_status.ok()) {
+                                publish_status =
+                                        tablet_mgr->put_bundle_tablet_metadata(tablet_metas, expected_tablet_ids);
+                            }
                             if (!publish_status.ok()) {
                                 g_aggregate_publish_version_failed_tasks << 1;
                                 LOG(WARNING) << "Fail to write bundle tablet metadata: " << publish_status;
@@ -817,18 +925,28 @@ struct AggregatePublishContext {
     }
 };
 
-static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx) {
+// A sub-publish this slow is on course to burn the whole shared 60s budget; name it while we still can.
+static constexpr int64_t kSlowSubRequestUs = 20 * 1000 * 1000;
+static const std::string kUnknownSubRequest = "unknown sub-request";
+
+static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse* resp, AggregatePublishContext* ctx,
+                                 int sub_index) {
     // no need to release cntl and resp.
     // the resource will be release after all publish_request finished.
     DeferOp defer([&]() { ctx->count_down(); });
+    const std::string& desc =
+            sub_index < static_cast<int>(ctx->sub_desc.size()) ? ctx->sub_desc[sub_index] : kUnknownSubRequest;
     if (cntl->Failed()) {
-        ctx->handle_failure("link rpc channel failed");
+        ctx->handle_failure(fmt::format("[{}] rpc failed after {}us: errcode={} {}", desc, cntl->latency_us(),
+                                        cntl->ErrorCode(), cntl->ErrorText()));
     } else if (resp->status().status_code() != 0) {
         std::string msg;
         for (const auto& str : resp->status().error_msgs()) {
             msg += str;
         }
-        ctx->handle_failure(msg);
+        ctx->handle_failure(fmt::format("[{}] returned error after {}us: {}", desc, cntl->latency_us(), msg));
+    } else if (cntl->latency_us() > kSlowSubRequestUs) {
+        LOG(WARNING) << "aggregate publish sub-request slow: [" << desc << "] took " << cntl->latency_us() << "us";
     }
     ctx->aggregate_response(resp);
 }
@@ -843,6 +961,16 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
     // Collected up front, over every sub-request: the loop below stops dispatching once one of
     // them fails, and the expected set must describe the whole publish either way.
     collect_expected_metadata_tablet_ids(*request, &ctx.expected_tablet_ids);
+
+    // Fill every description first: a callback may fire while this loop is still dispatching, and
+    // appending to the vector then would reallocate under it.
+    ctx.sub_desc.reserve(request->publish_reqs_size());
+    for (int i = 0; i < request->publish_reqs_size(); ++i) {
+        const auto& node = request->compute_nodes(i);
+        const auto& req = request->publish_reqs(i);
+        ctx.sub_desc.push_back(fmt::format("{}:{} txns={} tablets={}", node.host(), node.brpc_port(),
+                                           get_txn_ids_string(&req), JoinInts(req.tablet_ids(), ",")));
+    }
 
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
         if (ctx.has_failure) {
@@ -871,13 +999,13 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
         auto* cntl_ptr = ctx.publish_request_ctx.back().cntl.get();
         auto* resp_ptr = ctx.publish_request_ctx.back().resp.get();
         (*res)->publish_version(cntl_ptr, &single_req, resp_ptr,
-                                brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx));
+                                brpc::NewCallback(aggregate_publish_cb, cntl_ptr, resp_ptr, &ctx, i));
     }
 
     // wait for publish task finish
     ctx.wait();
     // write aggregate metadata
-    ctx.put_aggregate_metadata(_env);
+    ctx.put_aggregate_metadata(_env, *request);
 
     ctx.publish_status.to_protobuf(response->mutable_status());
 }
@@ -1600,7 +1728,84 @@ struct AggregateCompactContext {
         }
     }
 
-    void write_combined_txn_log(ExecEnv* env) {
+    Status validate_unshare_result(lake::TabletManager* tablet_mgr, const AggregateCompactRequest& request) {
+        const bool has_unshare_request = std::any_of(request.requests().begin(), request.requests().end(),
+                                                     [](const CompactRequest& req) { return req.unshare_segments(); });
+        const bool has_default_request = std::any_of(request.requests().begin(), request.requests().end(),
+                                                     [](const CompactRequest& req) { return !req.unshare_segments(); });
+        if (has_unshare_request && has_default_request) {
+            return Status::InvalidArgument("aggregate compaction cannot mix UNSHARE and default modes");
+        }
+        if (!has_unshare_request) {
+            return Status::OK();
+        }
+
+        std::unordered_map<int64_t, const TxnLogPB*> tablet_to_log;
+        for (const auto& log : combined_txn_log.txn_logs()) {
+            if (!tablet_to_log.emplace(log.tablet_id(), &log).second) {
+                return Status::Corruption(fmt::format("duplicate unshare txn log for tablet {}", log.tablet_id()));
+            }
+        }
+
+        for (const auto& compact_request : request.requests()) {
+            if (compact_request.allow_partial_success() || !compact_request.skip_write_txnlog()) {
+                return Status::InvalidArgument(
+                        "UNSHARE aggregate compaction requires allow_partial_success=false and skip_write_txnlog=true");
+            }
+            for (int64_t tablet_id : compact_request.tablet_ids()) {
+                auto log_it = tablet_to_log.find(tablet_id);
+                if (log_it == tablet_to_log.end()) {
+                    return Status::Corruption(fmt::format("missing unshare txn log for tablet {}", tablet_id));
+                }
+                const auto* txn_log = log_it->second;
+                // A tablet that took the parallel path reports one OpParallelCompaction holding
+                // every subtask's OpCompaction instead of a single top-level one. Both shapes are
+                // valid UNSHARE output, so validate against the flattened subtask list.
+                std::vector<const TxnLogPB::OpCompaction*> compactions;
+                if (txn_log->has_op_compaction()) {
+                    compactions.push_back(&txn_log->op_compaction());
+                } else if (txn_log->has_op_parallel_compaction()) {
+                    for (const auto& subtask : txn_log->op_parallel_compaction().subtask_compactions()) {
+                        compactions.push_back(&subtask);
+                    }
+                    if (compactions.empty()) {
+                        return Status::Corruption(fmt::format(
+                                "unshare txn log for tablet {} has an empty parallel compaction", tablet_id));
+                    }
+                } else {
+                    return Status::Corruption(fmt::format(
+                            "unshare txn log for tablet {} has neither op_compaction nor op_parallel_compaction",
+                            tablet_id));
+                }
+
+                std::unordered_set<uint32_t> selected;
+                for (const auto* compaction : compactions) {
+                    for (const auto& segment : compaction->output_rowset().segment_metas()) {
+                        if (segment.shared()) {
+                            return Status::Corruption(fmt::format(
+                                    "unshare output for tablet {} still contains a shared segment", tablet_id));
+                        }
+                    }
+                    selected.insert(compaction->input_rowsets().begin(), compaction->input_rowsets().end());
+                }
+
+                ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, compact_request.version()));
+                for (const auto& rowset : metadata->rowsets()) {
+                    const bool contains_shared =
+                            std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                                        [](const SegmentMetadataPB& segment) { return segment.shared(); });
+                    if (contains_shared && !selected.contains(rowset.id())) {
+                        return Status::Corruption(
+                                fmt::format("unshare result for tablet {} did not rewrite shared rowset {}", tablet_id,
+                                            rowset.id()));
+                    }
+                }
+            }
+        }
+        return Status::OK();
+    }
+
+    void write_combined_txn_log(ExecEnv* env, const AggregateCompactRequest& request) {
         if (final_status.ok()) {
             VLOG(2) << "Write combined txn log. pb=" << combined_txn_log.ShortDebugString();
             auto thread_pool = env->execution_services().put_combined_txn_log_thread_pool;
@@ -1611,7 +1816,11 @@ struct AggregateCompactContext {
                 auto task = std::make_shared<CancellableRunnable>(
                         [&] {
                             DeferOp defer([&] { latch.count_down(); });
-                            final_status = starrocks::write_combined_txn_log(combined_txn_log);
+                            auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+                            final_status = validate_unshare_result(tablet_mgr, request);
+                            if (final_status.ok()) {
+                                final_status = starrocks::write_combined_txn_log(combined_txn_log);
+                            }
                         },
                         [&] {
                             final_status = Status::Cancelled("write combined_txn_log task has been cancelled");
@@ -1717,7 +1926,7 @@ void LakeServiceImpl::aggregate_compact(::google::protobuf::RpcController* contr
     ac_context.wait();
 
     // write combined txn log
-    ac_context.write_combined_txn_log(_env);
+    ac_context.write_combined_txn_log(_env, *request);
 
     // fill response
     ac_context.final_status.to_protobuf(response->mutable_status());

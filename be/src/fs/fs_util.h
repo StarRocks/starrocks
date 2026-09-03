@@ -169,11 +169,12 @@ inline StatusOr<int64_t> copy_file(const std::string& src_path, const std::strin
     return ncopy;
 }
 
-// copy the file from src path to dest path with custom WritableFileOptions.
-// This overload supports encryption by passing encryption_info in opts.
+// copy the file from src path to dest path with custom read and write options.
+// This overload supports source and destination encryption by passing encryption_info in the options.
 inline StatusOr<int64_t> copy_file(const std::string& src_path, std::shared_ptr<FileSystem> src_fs,
-                                   const std::string& dst_path, std::shared_ptr<FileSystem> dst_fs,
-                                   const WritableFileOptions& opts, size_t buffer_size = 8192) {
+                                   const SequentialFileOptions& src_opts, const std::string& dst_path,
+                                   std::shared_ptr<FileSystem> dst_fs, const WritableFileOptions& opts,
+                                   size_t buffer_size = 8192) {
     TEST_ERROR_POINT("fs::copy_file");
     if (src_fs == nullptr) {
         ASSIGN_OR_RETURN(src_fs, FileSystemFactory::CreateSharedFromString(src_path));
@@ -181,11 +182,20 @@ inline StatusOr<int64_t> copy_file(const std::string& src_path, std::shared_ptr<
     if (dst_fs == nullptr) {
         ASSIGN_OR_RETURN(dst_fs, FileSystemFactory::CreateSharedFromString(dst_path));
     }
-    ASSIGN_OR_RETURN(auto src_file, src_fs->new_sequential_file(src_path));
+    ASSIGN_OR_RETURN(auto src_file, src_fs->new_sequential_file(src_opts, src_path));
     ASSIGN_OR_RETURN(auto dst_file, dst_fs->new_writable_file(opts, dst_path));
     ASSIGN_OR_RETURN(auto file_size, copy(src_file.get(), dst_file.get(), buffer_size));
     RETURN_IF_ERROR(dst_file->close());
     return file_size;
+}
+
+// copy the file from src path to dest path with custom WritableFileOptions.
+// This overload supports encryption by passing encryption_info in opts.
+inline StatusOr<int64_t> copy_file(const std::string& src_path, std::shared_ptr<FileSystem> src_fs,
+                                   const std::string& dst_path, std::shared_ptr<FileSystem> dst_fs,
+                                   const WritableFileOptions& opts, size_t buffer_size = 8192) {
+    return copy_file(src_path, std::move(src_fs), SequentialFileOptions{}, dst_path, std::move(dst_fs), opts,
+                     buffer_size);
 }
 
 // copy the file range [offset, offset + size] from src path to dest path, it will overwrite the existing files

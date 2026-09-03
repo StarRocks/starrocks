@@ -606,6 +606,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述:
 - 引入版本: -
 
+### `lake_scheduler_enable_colocate_group_sample`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: Tablet 调度器是否通过抽样 Tablet 来估算大型 Colocate Group 的副本分布，而不是扫描该 Group 中的全部 Tablet。调度一个属于 Colocate Group 的 Tablet 时，调度器需要在整个 Group 上构建各 Compute Node 的副本直方图，以决定新副本的落点。对于包含数万个 Tablet 的 Group，这次全量扫描会成为调度开销的主要来源，而健康的 Colocate Group 本身分布均匀，其中每个 Tablet 给出的信号都相同。当该配置项设置为 `true` 时，对于 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 的 Group，调度器改为随机抽取 `lake_scheduler_colocate_group_sample_size` 个 Tablet，并将抽样得到的各 Compute Node 计数按 Group 实际大小等比放大。健康且已完全放置的 Colocate Group，其全部 Tablet 位于相同的 Compute Node 上，因此抽样结果与真实分布完全一致；正在均衡中的 Group 会引入有界误差，最坏情况下只会产生次优（而非非法）的放置，后续由后台 Tablet 均衡流程修正。抽样仅适用于 Colocate Group。设置为 `false` 表示始终扫描全部 Tablet。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- 默认值: 256
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: Colocate Group 的 Tablet 数超过该值后才会被抽样。Tablet 数不超过该值的 Group 始终全量扫描，因为此时全量扫描本身开销很低，抽样只会额外引入误差。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- 默认值: 128
+- 类型: Int
+- 单位: 个
+- 是否可变: Yes
+- 描述: 当 Colocate Group 的 Tablet 数超过 `lake_scheduler_colocate_group_sample_threshold` 时，抽样的 Tablet 数量。抽样数越大，对分布倾斜（正在均衡中）的 Group 估算误差越小，但每次调度决策的开销也越高，即以调度延迟换取放置精度。该值应明显小于 `lake_scheduler_colocate_group_sample_threshold`，否则抽样相比全量扫描节省有限。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- 默认值: 40
+- 类型: Int
+- 单位: 百分比
+- 是否可变: Yes
+- 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
+- 引入版本: v4.1.5
+
 ## 数据湖
 
 ### `files_enable_insert_push_down_column_type`
@@ -873,6 +909,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 在 LDAP 对象中标识用户的属性名称。
 - 引入版本: -
 
+### `backup_clean_check_interval_seconds`
+
+- 默认值: 3600
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: Leader FE 扫描到期备份快照的周期。仅在 `enable_backup_snapshot_auto_clean` 为 `true` 时生效。修改后从下一轮开始生效，无需重启。
+- 引入版本: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- 默认值: 3
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 自动清理在同一个快照上连续失败多少次后不再重试。只统计自动清理自身的失败次数。计数保存在内存中，因此重启 FE、切换 Leader 或调大该值都会恢复重试。DROP SNAPSHOT 不受该值约束。
+- 引入版本: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - 默认值: 86400 * 1000
@@ -881,6 +935,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 备份作业的超时时长。如果超过此值，备份作业将失败。
 - 引入版本: -
+
+### `enable_backup_snapshot_auto_clean`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否自动删除仓库中已到期的备份快照。只有当远端 job info 文件中记录的创建集群是本集群、且到期时间已过时，该快照才会被删除。其他集群创建的快照、本特性引入之前创建的快照，以及保留策略读取失败的快照都不会被自动删除。参见 [BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md) 的 `ttl` 属性。
+- 引入版本: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 

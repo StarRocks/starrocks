@@ -88,6 +88,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 低基数全局字典缓存（`CacheDictManager`）的最大总字节数。该缓存以所缓存字典的总字节数为上界（而非条目数），因此可直接限制内存占用（每个字典最大约 1 MB）。达到上限时会淘汰价值最低的字典，受影响的列在重新采集前回退到非字典查询计划。修改会在一个配置刷新周期内应用到运行中的缓存。当前统计的大小通过 `low_cardinality_dict_cache_bytes` 指标导出。
 - 引入版本: v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用全局字典抖动守卫（thrash guard）。对于"滚动"低基数列——其瞬时不同值数量始终低于字典阈值，但取值集合持续轮换（例如按天分区、每天导入新值的列）——不会触发基数黑名单，但每次导入都会引入当前全局字典中缺失的值并使其失效。每次失效都会触发一次全表字典重采集，浪费 IO，并在存算分离集群中严重争用 segment 元数据缓存锁。启用该守卫后，StarRocks 会统计每个列的字典在 `dict_thrash_guard_window_sec` 时间窗口内的失效次数；当某列达到 `dict_thrash_guard_threshold` 次失效时，StarRocks 会禁止采集该列的全局字典。该禁用立即生效，并作为表的 `no_dict_columns` 属性持久化，因此能在 FE 重启和 Leader 切换后保留。如需重新启用某列的字典采集，执行 `ALTER TABLE ... ENABLE DICTIONARY (column)`。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 全局字典抖动守卫统计某列字典失效次数所用的时间窗口长度（秒）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 在 `dict_thrash_guard_window_sec` 时间窗口内，触发全局字典抖动守卫禁止采集某列全局字典的失效次数阈值。设置为 `0` 可在保持守卫启用的同时禁用次数检查（不会自动禁用任何列）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true
@@ -270,7 +298,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `enable_online_optimize_table`
 
-- 默认值: true
+- 默认值: false
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
@@ -569,8 +597,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在创建表或物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。
+- 描述: 在创建表时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的表数据分布方式。该配置仅在存算分离模式下生效，在存算一体模式下无效。设置为 `false` 可禁用该默认行为，此时这类表将改用此前的默认分布行为（PRIMARY KEY 表默认使用 hash 分布，DUPLICATE KEY 表默认使用 random 分布，AGGREGATE KEY 或 UNIQUE KEY 表则必须显式指定 `DISTRIBUTED BY` 子句）。未指定 `DISTRIBUTED BY` 子句的物化视图还需同时启用 `enable_mv_range_distribution`。
 - 引入版本: v4.1.0
+
+### `enable_mv_range_distribution`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 在创建异步物化视图时未指定 `DISTRIBUTED BY` 子句的情况下，是否将 Range-based Distribution 语意作为默认的数据分布方式。该配置不影响表。仅当该配置与 `enable_range_distribution` 同时为 `true` 且处于存算分离模式时，默认分布才会选择 Range-based Distribution 语意；否则物化视图使用此前的默认分布行为（增量维护的物化视图默认按其 Key 列使用 hash 分布，其他物化视图默认使用 random 分布），即使同一集群中的表会使用 Range 分布。
+- 引入版本: v4.2.0
 
 ### `tablet_reshard_max_parallel_tablets`
 
@@ -598,6 +635,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 旧 Tablet 最多可分割成多少个新 Tablet。
 - 引入版本: v4.1.0
+
+### `tablet_reshard_orderby_max_split_count`
+
+- 默认值: 2
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当分裂会附带一次完整的 UNSHARE 重写时（即 Range 分布的主键表，其 `ORDER BY` 键与主键不同），单个源 Tablet 最多可分裂成的新 Tablet 数量。此类分裂无法对父 Tablet 的共享 Segment 做 Range 过滤，每个子 Tablet 都会被整体重写，因此过大的扇出会成倍放大读放大。该值还会被 `tablet_reshard_max_split_count` 进一步限制。取值小于或等于 `1` 时禁用该额外限制。
+- 引入版本: -
+
+### `tablet_reshard_orderby_max_split_tablets_per_job`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 当分裂会附带一次完整的 UNSHARE 重写时，单个分裂任务最多可**分裂**的源 Tablet 数量。优先选择最大的 Tablet。注意该值限制的是分裂扇出而非重写量：未被分裂的兄弟 Tablet 仍会在新索引中成为 Identical Tablet，而 UNSHARE Compaction 是分区级的，因此这些 Tablet 同样会被重写。取值小于或等于 `0` 时表示使用该 Warehouse 的计算节点数量。
+- 引入版本: -
+
+### `tablet_reshard_orderby_split_interval_second`
+
+- 默认值: 180
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 对于分裂会附带完整 UNSHARE 重写的表，上一个 Tablet Reshard 任务完成后，自动分裂再次触发前的静默期。用于给 Size-tiered Compaction 留出窗口，清理占用 Compaction 槽位期间累积的小文件。取值小于或等于 `0` 时禁用等待。注意该间隔仅在上一个任务仍被保留期间生效，即最长不超过 `tablet_reshard_history_job_keep_max_ms`。
+- 引入版本: -
 
 ### `tablet_reshard_min_split_size`
 
@@ -671,6 +735,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
+### `enable_tablet_pre_split_for_mv_refresh`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否为 Range 分布的增量物化视图（incremental materialized view）刷新启用基于采样的 Tablet 预分裂。这类物化视图以一个隐藏的 row-id 列作为键，其取值域是预先已知的，因此边界由推导得出而非采样得出，完全不读取数据。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。
+- 引入版本: v4.2.0
+
 ### `tablet_pre_split_pre_submit_timeout_seconds`
 
 - 默认值: 300
@@ -737,7 +810,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 降级或线上回滚前安全关闭该特性的步骤：
 
-1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
+1. 将四个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table` 和 `enable_tablet_pre_split_for_mv_refresh`。新导入将立即跳过预分裂。
 2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 

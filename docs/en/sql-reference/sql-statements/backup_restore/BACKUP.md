@@ -69,7 +69,7 @@ TO <repository_name>
 | repository_name | Repository name. You can create a repository using [CREATE REPOSITORY](./CREATE_REPOSITORY.md). |
 | ON              | Name of the tables to be backed up. The whole database is backed up if this parameter is not specified. |
 | PARTITION       | Name of the partitions to be backed up. The whole table is backed up if this parameter is not specified. |
-| PROPERTIES      | Properties of the data snapshot. Valid keys:<ul><li>`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li></ul> |
+| PROPERTIES      | Properties of the data snapshot. Valid keys:<ul><li>`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li><li>`ttl`: How long the snapshot is kept, written as `<number> <unit>` where the unit is one of `SECOND`, `MINUTE`, `HOUR`, `DAY`, `WEEK`, `MONTH`, or `YEAR`, for example `7 DAY`. The snapshot is kept forever if this key is not set. Supported from v4.2.0 onwards.</li></ul> |
 
 ## Syntax supported from v3.4.0 onwards
 
@@ -111,7 +111,17 @@ backup_object ::= [
 | view_name       | Name of the logical view(s) to be backed up.                 |
 | udf_name        | Name of the UDF(s) to be backed up.                          |
 | PARTITION       | Name of the partitions to be backed up. The whole table is backed up if this parameter is not specified. |
-| PROPERTIES      | Properties of the data snapshot. Valid keys:<ul><li>`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li></ul> |
+| PROPERTIES      | Properties of the data snapshot. Valid keys:<ul><li>`type`: Backup type. Currently, only full backup `FULL` is supported. Default: `FULL`.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li><li>`ttl`: How long the snapshot is kept, written as `<number> <unit>` where the unit is one of `SECOND`, `MINUTE`, `HOUR`, `DAY`, `WEEK`, `MONTH`, or `YEAR`, for example `7 DAY`. The snapshot is kept forever if this key is not set. Supported from v4.2.0 onwards.</li></ul> |
+
+## Snapshot retention
+
+The `ttl` property sets how long the snapshot created by a BACKUP job is kept. It is resolved to an absolute expiration time when the backup finishes, and written into the snapshot itself, together with the ID of the cluster that created it. Both are shown by [SHOW SNAPSHOT](./SHOW_SNAPSHOT.md).
+
+A snapshot is deleted automatically once it expires. Only a snapshot that was given a `ttl` ever carries an expiration, so a backup taken without one is never touched. Set the FE configuration item `enable_backup_snapshot_auto_clean` to `false` to stop cleanup entirely. Cleanup only ever deletes snapshots created by the cluster running it, so clusters sharing a repository never delete each other's snapshots. Snapshots created before v4.2.0 record no cluster ID and are never deleted automatically.
+
+The retention of an existing snapshot cannot be changed. Use [DROP SNAPSHOT](./DROP_SNAPSHOT.md) to delete a snapshot before it expires.
+
+Retention is supported from v4.2.0 onwards.
 
 ## Examples
 

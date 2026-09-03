@@ -83,6 +83,34 @@ This topic introduces the following types of FE configurations:
 
 ## Query engine
 
+### `ai_default_chat_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a fragment, or control characters. When the port is omitted, HTTPS uses its default port. An explicitly specified port must be in the range 1 through 65535. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
+- Introduced in: -
+
+### `ai_default_chat_model`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The default model used by the prompt-only forms of SYSTEM `ai_complete`. The value cannot contain C0 control characters (`U+0000` through `U+001F`) or DEL (`U+007F`). It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Introduced in: -
+
+### `ai_default_chat_provider`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Valid values: `openai_compatible`
+- Is mutable: Yes
+- Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible`; an empty value or any additional characters, including control characters, cause analysis to fail. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Introduced in: -
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - Default: 60000
@@ -263,15 +291,6 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Whether to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronous materialized views.
 - Introduced in: v3.2.0
-
-### `enable_batch_insert_histogram_statistics`
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to batch inserts when collecting histograms for multiple columns. This parameter applies to both StarRocks tables and external tables. If this parameter is set to `false`, StarRocks inserts histogram statistics separately for each column.
-- Introduced in: -
 
 ### `enable_collect_full_statistic`
 

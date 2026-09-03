@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -81,6 +82,7 @@ public final class InsertPreSplitHook {
         try {
             tryRunPreSplit(parsedStmt, context);
         } catch (Throwable unexpected) {
+            PreSplitProfile.recordOutcome("FAILED_FALLBACK");
             LOG.warn("Sample-Based Tablet Pre-Split (INSERT) hook failed; proceeding without pre-split", unexpected);
         }
     }
@@ -99,6 +101,7 @@ public final class InsertPreSplitHook {
             tryRunEligibleInsert(insertStmt, context, overwriteTransactionId,
                     PreSplitPartitionScope.unrestricted(), false);
         } catch (Throwable unexpected) {
+            PreSplitProfile.recordOutcome("FAILED_FALLBACK");
             LOG.warn("Sample-Based Tablet Pre-Split (dynamic INSERT OVERWRITE) hook failed; "
                     + "proceeding without pre-split", unexpected);
         }
@@ -107,10 +110,14 @@ public final class InsertPreSplitHook {
     /**
      * Runs after a static overwrite job has cloned its source partitions to temporary partitions
      * and before the INSERT is replanned to write those temporary partitions.
+     *
+     * @param estimates the statement's estimated output, taken from the plan the optimizer already
+     *                  built. Only the derived materialized-view route below reads it; the sampled
+     *                  routes learn their input size from the sample itself.
      */
     public static void maybeRunStaticOverwritePreSplit(
             InsertStmt insertStmt, ConnectContext context,
-            List<String> sourcePartitionNames, List<String> temporaryPartitionNames) {
+            List<String> sourcePartitionNames, List<String> temporaryPartitionNames, Estimates estimates) {
         try {
             if (!passesStaticOverwritePreFilters(insertStmt, context)
                     || sourcePartitionNames == null || sourcePartitionNames.isEmpty()
@@ -119,10 +126,74 @@ public final class InsertPreSplitHook {
             }
             PreSplitPartitionScope partitionScope =
                     PreSplitPartitionScope.staticOverwrite(sourcePartitionNames, temporaryPartitionNames);
+            // Classify the target BEFORE tryRunEligibleInsert, which returns on a set-operation or CTE
+            // query shape before it ever looks at the target. A materialized view refreshed by one of
+            // those shapes would otherwise be dropped with nothing recorded, even though the derived
+            // tier does not care what the refresh query looks like.
+            ResolvedTable resolvedTable = resolveTarget(insertStmt, context);
+            if (resolvedTable != null && resolvedTable.olapTable() instanceof MaterializedView) {
+                // Establish that the derived tier can carve this view BEFORE the feature flag gets a
+                // say: an ordinary async view's full refresh is also an INSERT OVERWRITE and lands
+                // here, and consulting the flag first would count every such refresh against this
+                // feature's own config gate, describing a view pre-split was never a candidate for.
+                // The skip reason itself is the same one resolveEligibleTable would record -- that
+                // resolver has always declined materialized-view targets -- so this only reports it
+                // earlier, and spares those refreshes a table lock they gain nothing from.
+                if (!MaterializedViewRowIdBoundaries.isDerivable(resolvedTable.olapTable())) {
+                    PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
+                    return;
+                }
+                // Part of identifying the candidate, not of serving it: turning the flag on would not make
+                // a multi-partition refresh eligible, so charging it to the config gate would misreport it.
+                if (partitionScope.catalogPartitionNames().size() != 1) {
+                    PreSplitMetrics.recordEligibilitySkip(SkipReason.MULTIPLE_TEMPORARY_PARTITIONS);
+                    return;
+                }
+                runStaticOverwriteMaterializedViewPreSplit(resolvedTable, context, partitionScope, estimates);
+                return;
+            }
             tryRunEligibleInsert(insertStmt, context, -1L, partitionScope, true);
         } catch (Throwable unexpected) {
+            PreSplitProfile.recordOutcome("FAILED_FALLBACK");
             LOG.warn("Sample-Based Tablet Pre-Split (static INSERT OVERWRITE) hook failed; "
                     + "proceeding without pre-split", unexpected);
+        }
+    }
+
+    /**
+     * Derived-tier route for a static overwrite whose target is a materialized view. The sampled
+     * sources cannot serve one (see {@link #resolveEligibleTable}), but an incremental view's hidden
+     * row-id sort key needs no sample at all.
+     *
+     * <p>Deliberately does NOT run {@link #authorizeTargetSideEffects}. That re-check guards the
+     * sampled paths because they read source data through an internal ROOT context, so it verifies the
+     * invoking user could have read it and could have written the target. The derived tier reads
+     * nothing whatsoever, which removes the first half; and the only way to reach this code is a
+     * refresh of this view, which already required privileges on the view, which covers the second.
+     * Adding the re-check anyway would be worse than redundant: an {@link AccessDeniedException} here
+     * is swallowed by the caller's catch-all, so a context the authorizer happens to reject would turn
+     * the feature into a silent no-op instead of an error anyone can see.
+     */
+    private static void runStaticOverwriteMaterializedViewPreSplit(
+            ResolvedTable resolvedTable, ConnectContext context,
+            PreSplitPartitionScope partitionScope, Estimates estimates) {
+        // Both gates are checked here rather than left to TabletPreSplitCoordinator#maybeAct, which
+        // checks them again: the flow below resolves its target and its boundary source first, and
+        // each of those records its own skip reason, so reaching maybeAct with the flag off would
+        // report a second, unrelated reason alongside DISABLED_BY_CONFIG. Returning here keeps it to
+        // one recorded reason per statement, matching the sampled path.
+        if (!Config.enable_tablet_pre_split_for_mv_refresh) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.DISABLED_BY_CONFIG);
+            return;
+        }
+        if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
+            return;
+        }
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(context, LoadKind.MV_REFRESH)) {
+            PreSplitProfile.recordTable(resolvedTable.olapTable().getName());
+            PreSplitFlow.runStaticOverwriteMaterializedViewFlow(
+                    resolvedTable.database(), resolvedTable.olapTable(), partitionScope, estimates,
+                    context.getCurrentComputeResource(), context::isStatementCancelled);
         }
     }
 
@@ -159,30 +230,36 @@ public final class InsertPreSplitHook {
         if (PreSplitMetrics.shortCircuitOnSessionOptOut(context.getSessionVariable())) {
             return;
         }
-        ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
-        if (resolvedTable == null) {
-            return;
-        }
-        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(resolvedTable.olapTable());
-        if (!targetColumnListIsPreSplitSafe(insertStmt, resolvedTable.olapTable(), sortKeyColumns)) {
-            return;
-        }
-        authorizeTargetSideEffects(resolvedTable, context);
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(context, source.loadKind())) {
+            ResolvedTable resolvedTable = resolveEligibleTable(insertStmt, context);
+            if (resolvedTable == null) {
+                PreSplitProfile.recordOutcome("SKIPPED: TARGET_NOT_ELIGIBLE");
+                return;
+            }
+            PreSplitProfile.recordTable(resolvedTable.olapTable().getName());
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(resolvedTable.olapTable());
+            if (!targetColumnListIsPreSplitSafe(insertStmt, resolvedTable.olapTable(), sortKeyColumns)) {
+                PreSplitProfile.recordOutcome("SKIPPED: UNSUPPORTED_TARGET_COLUMN_LIST");
+                return;
+            }
+            authorizeTargetSideEffects(resolvedTable, context);
 
-        PreSplitFlow.Prepared prepared = source.prepare(
-                insertStmt, selectRelation, resolvedTable.olapTable(), resolvedTable.database(), context);
-        if (prepared == null) {
-            return;
-        }
-        if (overwriteTransactionId > 0) {
-            PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isKilled, context, overwriteTransactionId);
-        } else if (staticOverwrite) {
-            PreSplitFlow.runStaticOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isKilled, context, partitionScope);
-        } else {
-            PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
-                    prepared, source.loadKind(), context::isKilled, context, partitionScope);
+            PreSplitFlow.Prepared prepared = source.prepare(
+                    insertStmt, selectRelation, resolvedTable.olapTable(), resolvedTable.database(), context);
+            if (prepared == null) {
+                PreSplitProfile.recordOutcome("SKIPPED: SOURCE_NOT_ELIGIBLE");
+                return;
+            }
+            if (overwriteTransactionId > 0) {
+                PreSplitFlow.runDynamicOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
+                        prepared, source.loadKind(), context::isStatementCancelled, context, overwriteTransactionId);
+            } else if (staticOverwrite) {
+                PreSplitFlow.runStaticOverwriteFlow(resolvedTable.database(), resolvedTable.olapTable(),
+                        prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
+            } else {
+                PreSplitFlow.dispatch(resolvedTable.database(), resolvedTable.olapTable(),
+                        prepared, source.loadKind(), context::isStatementCancelled, context, partitionScope);
+            }
         }
     }
 
@@ -385,7 +462,12 @@ public final class InsertPreSplitHook {
         return null;
     }
 
-    private static ResolvedTable resolveEligibleTable(InsertStmt insertStmt, ConnectContext context) {
+    /**
+     * Resolves the statement's target through the session's catalog, applying no eligibility gate.
+     * {@link #resolveEligibleTable} layers the gates on top; the static-overwrite entry needs the bare
+     * target so it can route a materialized view to the derived tier, which those gates reject.
+     */
+    private static ResolvedTable resolveTarget(InsertStmt insertStmt, ConnectContext context) {
         TableRef normalizedTableRef = normalizeTableRefOrNull(insertStmt, context);
         if (normalizedTableRef == null) {
             return null;
@@ -395,18 +477,34 @@ public final class InsertPreSplitHook {
             return null;
         }
         OlapTable olapTable = resolveOlapTarget(normalizedTableRef, database, context);
-        if (olapTable == null) {
+        return olapTable == null ? null : new ResolvedTable(database, olapTable);
+    }
+
+    private static ResolvedTable resolveEligibleTable(InsertStmt insertStmt, ConnectContext context) {
+        ResolvedTable resolvedTable = resolveTarget(insertStmt, context);
+        if (resolvedTable == null) {
             return null;
         }
+        OlapTable olapTable = resolvedTable.olapTable();
+        // Materialized-view targets have always been declined here; this only records the reason
+        // instead of returning silently, so an operator can tell it apart from the statement never
+        // having been a pre-split candidate. An eligible incremental view is served by the derived
+        // tier, which reaches its target without going through this resolver.
+        //
+        // The exclusion is not one rule: an INCREMENTAL view is keyed by its hidden row-id column,
+        // which no sampled source can map back to a column of the refresh query, so sampling cannot
+        // serve it at all. A PCT view is keyed by ordinary columns and could in principle be sampled
+        // -- it is declined by this pre-existing conservative gate, not by a technical limit.
         if (olapTable instanceof MaterializedView) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.MATERIALIZED_VIEW_TARGET);
             return null;
         }
-        SkipReason tableLevelSkip = PreSplitTargets.findEligibleTable(database, olapTable);
+        SkipReason tableLevelSkip = PreSplitTargets.findEligibleTable(resolvedTable.database(), olapTable);
         if (tableLevelSkip != null) {
             PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
             return null;
         }
-        return new ResolvedTable(database, olapTable);
+        return resolvedTable;
     }
 
     private static void authorizeTargetSideEffects(ResolvedTable resolvedTable, ConnectContext context)

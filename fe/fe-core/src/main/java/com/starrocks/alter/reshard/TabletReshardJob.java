@@ -428,10 +428,11 @@ public abstract class TabletReshardJob implements Writable {
      * record is parked. A split reuses the parent's shard group for the child, so the group is never
      * orphaned; keeping the old index installed is what protects its shards, because
      * {@code StarMgrMetaSyncer.syncTableMetaInternal} reaps a group's shards per-shard by subtracting
-     * the tablets of every index still on the partition. Reads/writes never pick the old index: every
-     * scan/load resolves the partition via {@code getLatestIndex}/{@code getLatestMaterializedIndices},
-     * which return only the new child. On erase, the recycle bin detaches the old index and drops its
-     * tablets, and {@code StarMgrMetaSyncer} then reclaims the now-unreferenced shards per-shard --
+     * the tablets of every index still on the partition. New writes resolve through the writable APIs
+     * and use only the child layout. Queries resolve through the queryable APIs: an ORDER BY != PK split
+     * deliberately pins them to the old parent until UNSHARE finishes, while other reshard operations
+     * switch immediately. On erase, the recycle bin detaches the old index and drops its tablets, and
+     * {@code StarMgrMetaSyncer} then reclaims the now-unreferenced shards per-shard --
      * never a partition-directory delete, which for a split would destroy the live child tablets that
      * share the parent's object-storage directory.
      *

@@ -18,6 +18,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.InsertStmt;
@@ -31,6 +34,11 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
+import org.apache.velocity.VelocityContext;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +48,12 @@ import java.util.Map;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 
 public class HistogramStatisticsUtilsTest {
+    // Touches every key buildDefaultBucketSql populates: if one stops being set, Velocity leaks the
+    // literal "$key" into the rendered SQL and the assertions below catch it.
+    private static final String IDENTITY_TEMPLATE =
+            "SELECT $tableId, '$columnNameStr', $dbId, '$catalogName', '$tableUUID', $bucketExpr, $mcv" +
+                    " FROM `$dbName`.`$tableName`$sampleClause$randFilter";
+
     @Test
     public void testMcvJsonEscaping() {
         String key = "a\"b\\c'd";
@@ -116,5 +130,144 @@ public class HistogramStatisticsUtilsTest {
         Assertions.assertEquals(HistogramStatisticsUtils.buildStatsTargetColumnNames(HISTOGRAM_STATISTICS_TABLE_NAME),
                 first.getTargetColumnNames());
         Assertions.assertEquals(sql, first.getOrigStmt().getOrigStmt());
+    }
+
+    @Test
+    public void testMostCommonValuesScaleSampledCountsBackToFullTable() {
+        List<TStatisticData> mcv = Lists.newArrayList(mcvRow("a", "10"), mcvRow("b", "7"));
+
+        Map<String, String> sampled = HistogramStatisticsUtils.buildMostCommonValues(mcv, 0.1);
+        Assertions.assertEquals(ImmutableMap.of("a", "100", "b", "70"), sampled);
+
+        // A ratio of 1.0 means the query was unsampled, so the counts must pass through untouched.
+        Map<String, String> unsampled = HistogramStatisticsUtils.buildMostCommonValues(mcv, 1.0);
+        Assertions.assertEquals(ImmutableMap.of("a", "10", "b", "7"), unsampled);
+        Assertions.assertEquals(unsampled, HistogramStatisticsUtils.buildMostCommonValues(mcv, 0.0));
+    }
+
+    @Test
+    public void testDefaultBucketExprSubtractsMcvsFromCount() {
+        Map<String, String> mcv = ImmutableMap.of("a", "10", "b", "7");
+
+        Assertions.assertEquals(
+                "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v7`) - 17) as bigint) as varchar), ',0]]')",
+                HistogramStatisticsUtils.buildDefaultBucketExpr("`v7`", 1.0, mcv));
+
+        // Under a sample the count is divided back up first, which is why the bigint cast is needed.
+        Assertions.assertEquals(
+                "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v7`) / cast(0.1 as double) - 17) as bigint) as varchar), " +
+                        "',0]]')",
+                HistogramStatisticsUtils.buildDefaultBucketExpr("`v7`", 0.1, mcv));
+
+        Assertions.assertEquals(
+                "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v7`) - 0) as bigint) as varchar), ',0]]')",
+                HistogramStatisticsUtils.buildDefaultBucketExpr("`v7`", 1.0, ImmutableMap.of()));
+    }
+
+    @Test
+    public void testSampleRatioRendersAsPlainDecimalLiteral() {
+        Assertions.assertEquals("0.1", HistogramStatisticsUtils.formatSampleRatio(0.1));
+        Assertions.assertEquals("0.5", HistogramStatisticsUtils.formatSampleRatio(0.50));
+        // Sub-1% ratios must not come out in scientific notation - the SQL parser cannot consume it.
+        Assertions.assertEquals("0.0000001", HistogramStatisticsUtils.formatSampleRatio(0.0000001));
+    }
+
+    @Test
+    public void testMcvExcludeQuotesOnlyStringLikeValues() {
+        Map<String, String> mcv = ImmutableMap.of("a", "10", "b", "7");
+
+        Assertions.assertEquals(" and `v2` not in (a,b)", mcvExclude(mcv, IntegerType.BIGINT));
+        Assertions.assertEquals(" and `v7` not in (\"a\",\"b\")", mcvExclude(mcv, VarcharType.VARCHAR, "`v7`"));
+        Assertions.assertEquals(" and `v4` not in (\"a\",\"b\")", mcvExclude(mcv, DateType.DATE, "`v4`"));
+
+        // No MCVs means nothing to exclude, and the slot still has to be filled for the template.
+        Assertions.assertEquals("", mcvExclude(ImmutableMap.of(), IntegerType.BIGINT));
+    }
+
+    private static TStatisticData mcvRow(String columnValue, String count) {
+        TStatisticData row = new TStatisticData();
+        row.columnName = columnValue;
+        row.histogram = count;
+        return row;
+    }
+
+    private static String mcvExclude(Map<String, String> mostCommonValues, Type columnType) {
+        return mcvExclude(mostCommonValues, columnType, "`v2`");
+    }
+
+    private static String mcvExclude(Map<String, String> mostCommonValues, Type columnType, String quotedColumnName) {
+        VelocityContext context = new VelocityContext();
+        HistogramStatisticsUtils.putMcvExclude(context, mostCommonValues, quotedColumnName, columnType);
+        return (String) context.get("MCVExclude");
+    }
+
+    @Test
+    public void testBaseContextCarriesEveryIdentityKey() {
+        VelocityContext context = HistogramStatisticsUtils.buildBaseContext(
+                testDb(), testTable(), "default_catalog", "v1");
+
+        Assertions.assertEquals(2L, context.get("tableId"));
+        Assertions.assertEquals(1L, context.get("dbId"));
+        Assertions.assertEquals("default_catalog", context.get("catalogName"));
+        Assertions.assertEquals(testDb().getOriginName(), context.get("dbName"));
+        Assertions.assertEquals("t0", context.get("tableName"));
+        Assertions.assertEquals("`v1`", context.get("columnName"));
+        Assertions.assertEquals("v1", context.get("columnNameStr"));
+        // Only the external templates read tableUUID, but an internal table must still resolve one:
+        // Table.getUUID() falls back to the table id.
+        Assertions.assertEquals(StatisticUtils.hashTableUuidForPkStorage("2"), context.get("tableUUID"));
+    }
+
+    @Test
+    public void testDefaultBucketSqlLeavesAnUnsampledScanUnfiltered() {
+        String sql = HistogramStatisticsUtils.buildDefaultBucketSql(
+                testDb(), testTable(), "hive0", "v1", ImmutableMap.of("a", "10"), 1.0, IDENTITY_TEMPLATE);
+
+        Assertions.assertEquals(
+                "SELECT 2, 'v1', 1, 'hive0', '" + StatisticUtils.hashTableUuidForPkStorage("2") + "', " +
+                        "concat('[[\"Infinity\",\"Infinity\",', " +
+                        "cast(cast(greatest(0, count(`v1`) - 10) as bigint) as varchar), ',0]]'), " +
+                        "'[[\"a\",\"10\"]]' FROM `test`.`t0`",
+                sql);
+    }
+
+    @Test
+    public void testDefaultBucketSqlScalesAndFiltersASampledScan() {
+        boolean originalUseTableSample = Config.enable_use_table_sample_collect_statistics;
+        try {
+            Config.enable_use_table_sample_collect_statistics = true;
+            Assertions.assertTrue(sampledDefaultBucketSql().endsWith("FROM `test`.`t0` SAMPLE('percent'='10')"),
+                    sampledDefaultBucketSql());
+
+            Config.enable_use_table_sample_collect_statistics = false;
+            Assertions.assertTrue(sampledDefaultBucketSql().endsWith("FROM `test`.`t0` WHERE rand() <= 0.1"),
+                    sampledDefaultBucketSql());
+
+            // Either way the bucket count is divided back up to a full-table estimate.
+            Assertions.assertTrue(
+                    sampledDefaultBucketSql().contains("count(`v1`) / cast(0.1 as double) - 10"),
+                    sampledDefaultBucketSql());
+        } finally {
+            Config.enable_use_table_sample_collect_statistics = originalUseTableSample;
+        }
+    }
+
+    private static String sampledDefaultBucketSql() {
+        return HistogramStatisticsUtils.buildDefaultBucketSql(
+                testDb(), testTable(), "hive0", "v1", ImmutableMap.of("a", "10"), 0.1, IDENTITY_TEMPLATE);
+    }
+
+    private static Database testDb() {
+        return new Database(1, "test");
+    }
+
+    private static OlapTable testTable() {
+        OlapTable table = new OlapTable();
+        table.setId(2);
+        table.setName("t0");
+        return table;
     }
 }

@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.OlapTable;
@@ -732,6 +733,37 @@ public class BrokerLoadJobTest {
     }
 
     @Test
+    public void testCreateLoadingTaskCarriesProfileThroughEmptyInput(
+            @Mocked GlobalTransactionMgr globalTransactionMgr,
+            @Mocked Locker locker,
+            @Injectable Database db,
+            @Injectable BrokerPendingTaskAttachment attachment) throws Exception {
+        new Expectations() {
+            {
+                db.getId();
+                result = 100L;
+                minTimes = 0;
+                globalTransactionMgr.beginTransaction(anyLong, (List<Long>) any, anyString, (TUniqueId) any,
+                        (TransactionState.TxnCoordinator) any,
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, (ComputeResource) any);
+                result = 200L;
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.setConnectContext(Mockito.mock(ConnectContext.class));
+        Deencapsulation.setField(brokerLoadJob, "dbId", 100L);
+        Deencapsulation.setField(brokerLoadJob, "label", "profile-carry-through");
+
+        Deencapsulation.invoke(brokerLoadJob, "createLoadingTask", db, attachment);
+
+        Assertions.assertEquals(JobState.LOADING, brokerLoadJob.getState());
+        Assertions.assertNotNull(Deencapsulation.getField(brokerLoadJob, "preSplitProfile"));
+        List<LoadLoadingTask> loadingTasks = Deencapsulation.getField(brokerLoadJob, "newLoadingTasks");
+        Assertions.assertTrue(loadingTasks.isEmpty());
+    }
+
+    @Test
     public void testEnsureConnectContextRebuildsFromPersistedSessionVarsOnFailover(
             @Mocked ConnectContext mockContext) throws Exception {
         // FE-failover happy path: context is null and sessionVariables carries the
@@ -1253,7 +1285,8 @@ public class BrokerLoadJobTest {
                 new BrokerLoadJob.PreSplitHookInput(snapshotTable, List.of(), List.of()));
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () ->
-                Deencapsulation.invoke(brokerLoadJob, "buildLoadingTasksUnderReadLock", db, perTableInputs, brokerDesc));
+                Deencapsulation.invoke(brokerLoadJob, "buildLoadingTasksUnderReadLock", db, perTableInputs, brokerDesc,
+                        new PreSplitProfile()));
         assertStaleTableMetaNotFound(thrown, 2001L);
     }
 
@@ -1282,7 +1315,8 @@ public class BrokerLoadJobTest {
                 new BrokerLoadJob.PreSplitHookInput(snapshotTable, List.of(), List.of()));
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () ->
-                Deencapsulation.invoke(brokerLoadJob, "buildLoadingTasksUnderReadLock", db, perTableInputs, brokerDesc));
+                Deencapsulation.invoke(brokerLoadJob, "buildLoadingTasksUnderReadLock", db, perTableInputs, brokerDesc,
+                        new PreSplitProfile()));
         assertStaleTableMetaNotFound(thrown, 2001L);
     }
 

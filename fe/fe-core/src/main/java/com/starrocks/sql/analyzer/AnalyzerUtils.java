@@ -167,19 +167,37 @@ public class AnalyzerUtils {
     private static final Logger LOG = LogManager.getLogger(AnalyzerUtils.class);
 
     /**
-     * Whether a table/materialized view created without an explicit {@code DISTRIBUTED BY} clause
-     * should default to range distribution.
-     * <p>
-     * Range distribution (with dynamic tablet split/merge) is only functional in shared-data mode,
-     * so the {@code enable_range_distribution} config default only takes effect there; it has no
-     * effect in shared-nothing mode. The INVISIBLE session variable is an explicit per-session
-     * opt-in that can still enable range distribution in any run mode (and even when the config is
-     * turned off).
+     * Whether a table created without an explicit {@code DISTRIBUTED BY} clause should default to
+     * range distribution. A materialized view asks
+     * {@link #isEnableMvRangeDistribution(ConnectContext)} instead, which answers under a stricter
+     * rule.
      */
     public static boolean isEnableRangeDistribution(ConnectContext connectContext) {
-        if (Config.enable_range_distribution && RunMode.isSharedDataMode()) {
-            return true;
-        }
+        return isRangeDistributionEnabledByClusterDefault() || isRangeDistributionEnabledBySession(connectContext);
+    }
+
+    /**
+     * The same question for an asynchronous materialized view, whose cluster default additionally
+     * requires {@code enable_mv_range_distribution} -- a cluster can therefore adopt
+     * range-distributed tables while its materialized views stay on the previous default
+     * distribution. Range distribution has no {@code DISTRIBUTED BY} syntax, so with that
+     * config off the per-session opt-in below is the only remaining way to ask for it.
+     */
+    public static boolean isEnableMvRangeDistribution(ConnectContext connectContext) {
+        return (Config.enable_mv_range_distribution && isRangeDistributionEnabledByClusterDefault())
+                || isRangeDistributionEnabledBySession(connectContext);
+    }
+
+    // Range distribution comes with dynamic tablet split/merge, which is only functional in
+    // shared-data mode, so the cluster default is scoped to that run mode as well as to the config.
+    private static boolean isRangeDistributionEnabledByClusterDefault() {
+        return Config.enable_range_distribution && RunMode.isSharedDataMode();
+    }
+
+    // An explicit per-session opt-in, so unlike the cluster default it applies in any run mode, and
+    // a null context (no session to read, e.g. a replayed or internally issued statement) means no
+    // opt-in.
+    private static boolean isRangeDistributionEnabledBySession(ConnectContext connectContext) {
         return connectContext != null && connectContext.getSessionVariable().isEnableRangeDistribution();
     }
 
@@ -2035,6 +2053,27 @@ public class AnalyzerUtils {
                     throw new SemanticException("Materialized view query statement select item " +
                             ExprToSql.toSql(expr) + " not supported nondeterministic function", expr.getPos());
                 }
+                return super.visitFunctionCall(expr, context);
+            }
+
+            @Override
+            public Void visitSetOp(SetOperationRelation node, Void context) {
+                super.visitSetOp(node, context);
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitValues(ValuesRelation node, Void context) {
+                if (node.hasWithClause()) {
+                    node.getCteRelations().forEach(cte -> visit(cte, context));
+                }
+                if (node.getOrderBy() != null) {
+                    node.getOrderBy().forEach(orderBy -> visit(orderBy.getExpr(), context));
+                }
+                node.getRows().forEach(row -> row.forEach(expr -> visit(expr, context)));
                 return null;
             }
         }.visit(node);

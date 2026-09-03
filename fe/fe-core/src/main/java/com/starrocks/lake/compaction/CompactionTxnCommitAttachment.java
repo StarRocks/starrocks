@@ -21,21 +21,31 @@ import com.starrocks.transaction.TxnCommitAttachment;
 public class CompactionTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("fc")
     private boolean forceCommit = false;
+    @SerializedName("ds")
+    private boolean unshare = false;
 
     public CompactionTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
         this.forceCommit = false;
+        this.unshare = false;
     }
 
     public CompactionTxnCommitAttachment(boolean forceCommit) {
+        this(forceCommit, false);
+    }
+
+    public CompactionTxnCommitAttachment(boolean forceCommit, boolean unshare) {
         super(TransactionState.LoadJobSourceType.LAKE_COMPACTION);
         this.forceCommit = forceCommit;
+        this.unshare = unshare;
     }
 
     public boolean getForceCommit() {
         return forceCommit;
     }
 
-
+    public boolean isUnshare() {
+        return unshare;
+    }
 
 }

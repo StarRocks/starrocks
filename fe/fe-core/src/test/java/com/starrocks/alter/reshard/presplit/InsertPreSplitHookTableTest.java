@@ -418,6 +418,33 @@ public class InsertPreSplitHookTableTest {
         }
     }
 
+    @Test
+    public void testMaterializedViewTargetRecordsItsSkipReason() {
+        // The sampled sources cannot map an MV's hidden row-id sort key back to a source column, so
+        // they must decline -- but declining silently left an operator unable to tell this apart from
+        // the statement never having been a pre-split candidate at all.
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (SourceFixture fixture = sourceFixture()) {
+            MaterializedView mv = mock(MaterializedView.class);
+            when(mv.getName()).thenReturn("mv_target");
+            fixture.metaUtils.when(() -> MetaUtils.getSessionAwareTable(
+                            any(), Mockito.argThat(db -> db != fixture.sourceDb), any()))
+                    .thenReturn(mv);
+
+            String label = SkipReason.MATERIALIZED_VIEW_TARGET.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            fixture.assertNoSubmit();
+
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
+                    "an MV target on a sampled path must bump the materialized_view_target bucket");
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
     // ---------- tryRunPreSplit: partition-branch gate ----------
 
     @Test

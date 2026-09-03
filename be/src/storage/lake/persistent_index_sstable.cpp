@@ -274,7 +274,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             return Status::InternalError("parse index value info failed");
         }
         // Check if this rowid is already filtered by delvec
-        if (_delvec) {
+        if (_delvec && !_delvec->empty()) {
             if (_delvec->roaring()->contains(index_value_with_ver_pb.values(0).rowid())) {
                 ++i;
                 continue;

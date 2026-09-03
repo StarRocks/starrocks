@@ -698,6 +698,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitDropSnapshotStatement(DropSnapshotStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -844,6 +848,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, C context) {
         return visitNode(clause, context);
     }
 

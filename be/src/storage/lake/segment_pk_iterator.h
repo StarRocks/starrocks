@@ -102,6 +102,12 @@ public:
 
     const MutableColumnPtr& standalone_pk_column() const { return _standalone_pk_column; }
 
+    // Ownership mask over standalone_pk_column(), position for position. Empty when there is no
+    // selector, which every consumer reads as "own every row". Only meaningful alongside
+    // standalone_pk_column(), i.e. in non-lazy mode, where the single loaded chunk IS the segment --
+    // in lazy mode _owned describes only the piece currently loaded.
+    const Filter& standalone_owned() const { return _owned; }
+
 private:
     Status _load();
 

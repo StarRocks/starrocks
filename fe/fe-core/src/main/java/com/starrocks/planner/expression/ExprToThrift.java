@@ -513,6 +513,9 @@ public final class ExprToThrift {
                 if (fn.hasVarArgs()) {
                     msg.setVararg_start_idx(fn.getNumArgs() - 1);
                 }
+                if (fn.isAi() && node.getAiModelConfigId() != null) {
+                    msg.setAi_model_config_id(node.getAiModelConfigId());
+                }
             }
             return null;
         }

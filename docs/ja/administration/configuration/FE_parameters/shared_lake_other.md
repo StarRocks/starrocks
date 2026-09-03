@@ -606,6 +606,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - 導入時期：-
 
+### `lake_scheduler_enable_colocate_group_sample`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：tablet スケジューラが大規模な colocate group のレプリカ分布を、group 内の全 tablet を走査する代わりに tablet のサンプリングによって推定するかどうか。colocate group に属する tablet をスケジュールする際、スケジューラは新しいレプリカの配置先を決めるために group 全体に対して Compute Node ごとのレプリカヒストグラムを構築します。数万個の tablet を含む group では、この全走査がスケジューリングコストの大部分を占めますが、正常な colocate group は均一に配置されており、その中のどの tablet も同じシグナルを返します。この項目が `true` に設定されている場合、スケジューラは `lake_scheduler_colocate_group_sample_threshold` を超える group について `lake_scheduler_colocate_group_sample_size` 個の tablet をランダムに抽出し、サンプリングした Compute Node ごとの件数を group 全体のサイズに線形にスケールアップします。正常で完全に配置された colocate group は全 tablet が同じ Compute Node 上にあるため、サンプルは真の分布を正確に再現します。リバランス中の group では誤差が生じますが、その誤差は有界であり、最悪でも準最適 (不正ではない) な配置になるだけで、バックグラウンドの tablet バランサーが後から調整します。サンプリングの対象は colocate group のみです。常に全 tablet を走査するには `false` に設定します。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_threshold`
+
+- デフォルト：256
+- タイプ：Int
+- 単位：Count
+- 変更可能：Yes
+- 説明：colocate group がサンプリングの対象になるために超えている必要がある tablet 数。このサイズ以下の group は常に全走査されます。全走査のコストがもともと低く、サンプリングは誤差を増やすだけだからです。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_size`
+
+- デフォルト：128
+- タイプ：Int
+- 単位：Count
+- 変更可能：Yes
+- 説明：colocate group が `lake_scheduler_colocate_group_sample_threshold` を超えたときにサンプリングされる tablet の数。サンプル数を増やすとリバランス中で偏った group に対する推定誤差は小さくなりますが、スケジューリング判断ごとのコストが増えるため、配置精度とスケジューリング遅延のトレードオフになります。この値は `lake_scheduler_colocate_group_sample_threshold` より十分に小さく保つべきです。そうでないと全走査に対する削減効果がほとんどなくなります。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
+### `lake_scheduler_colocate_group_sample_empty_fallback_percent`
+
+- デフォルト：40
+- タイプ：Int
+- 単位：Percent
+- 変更可能：Yes
+- 説明：colocate group サンプリングの密度ガードで、許容される空サンプルの最大割合をパーセントで表します。抽出された tablet が候補 Compute Node 上にレプリカを持たない場合 (まだ配置されていない、またはその Compute Node 上にない場合)、その抽出は空サンプルとみなされます。空サンプルの割合がこのパーセンテージを超える場合、その group は配置が疎すぎてサンプルが真の分布を表せない (group が空の状態から一括で埋められている最中に起こります) ため、スケジューラはサンプルを破棄して全走査にフォールバックします。言い換えると、抽出された tablet の少なくとも (100 - この値)% が候補 Compute Node 上に配置されている場合にのみサンプルが信頼されます。したがって値が小さいほど保守的になり、サンプリングを行うためにより密な group が必要になります。安定して完全に配置された group は空サンプルがほぼ 0% になり、この値にかかわらず常に高速なサンプリング経路を通るため、この項目は一括充填中の過渡期のみを制御します。フォールバックを完全に無効にするには `100` に設定します。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
+- 導入時期：v4.1.5
+
 ## データレイク
 
 ### `files_enable_insert_push_down_column_type`
@@ -877,6 +913,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：LDAP オブジェクトでユーザーを識別する属性の名前。
 - 導入時期：-
 
+### `backup_clean_check_interval_seconds`
+
+- デフォルト: 3600
+- タイプ: Long
+- 単位: 秒
+- 変更可能: Yes
+- 説明: Leader FE が期限切れのバックアップスナップショットを探す間隔。`enable_backup_snapshot_auto_clean` が `true` の場合のみ有効です。変更は次回のラウンドから反映され、再起動は不要です。
+- 導入バージョン: v4.2.0
+
+### `backup_clean_retry_limit`
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: 自動クリーンアップが 1 つのスナップショットに対して連続で何回失敗したら、そのスナップショットを対象から外すか。カウントされるのは自動クリーンアップ自身の失敗のみです。カウントはメモリ上にのみ保持されるため、FE の再起動、Leader の切り替え、またはこの値を大きくすると再試行が再開されます。DROP SNAPSHOT はこの値に関係なくスナップショットを削除します。
+- 導入バージョン: v4.2.0
+
 ### `backup_job_default_timeout_ms`
 
 - デフォルト：86400 * 1000
@@ -885,6 +939,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：バックアップジョブのタイムアウト期間。この値を超えると、バックアップジョブは失敗します。
 - 導入時期：-
+
+### `enable_backup_snapshot_auto_clean`
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 期限切れのバックアップスナップショットをリポジトリから自動的に削除するかどうか。リポジトリ内の job info ファイルに、作成元クラスタとして本クラスタが記録されており、かつ有効期限を過ぎている場合にのみ削除されます。他のクラスタが作成したスナップショット、本機能の導入前に作成されたスナップショット、および保持ポリシーを読み取れないスナップショットが自動的に削除されることはありません。[BACKUP](../../../sql-reference/sql-statements/backup_restore/BACKUP.md) の `ttl` プロパティを参照してください。
+- 導入バージョン: v4.2.0
 
 ### `enable_collect_tablet_num_in_show_proc_backend_disk_path`
 

@@ -1345,10 +1345,30 @@ public class ShowStmtMetaTest {
     public void testShowSnapshotStmt() {
         ShowSnapshotStmt stmt = new ShowSnapshotStmt("test_db", null, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(3, metaData.getColumnCount());
+        Assertions.assertEquals(7, metaData.getColumnCount());
         Assertions.assertEquals("Snapshot", metaData.getColumn(0).getName());
         Assertions.assertEquals("Timestamp", metaData.getColumn(1).getName());
         Assertions.assertEquals("Status", metaData.getColumn(2).getName());
+        Assertions.assertEquals("ClusterId", metaData.getColumn(3).getName());
+        Assertions.assertEquals("FinishTime", metaData.getColumn(4).getName());
+        Assertions.assertEquals("TTL", metaData.getColumn(5).getName());
+        Assertions.assertEquals("ExpireTime", metaData.getColumn(6).getName());
+    }
+
+    @Test
+    public void testShowSnapshotStmtWithTimestamp() {
+        ShowSnapshotStmt stmt = new ShowSnapshotStmt("test_db", null, NodePosition.ZERO);
+        stmt.setSnapshotName("backup1");
+        stmt.setTimestamp("2018-05-05-15-34-26");
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
+        Assertions.assertEquals(9, metaData.getColumnCount());
+        Assertions.assertEquals("Database", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Details", metaData.getColumn(3).getName());
+        Assertions.assertEquals("Status", metaData.getColumn(4).getName());
+        Assertions.assertEquals("ClusterId", metaData.getColumn(5).getName());
+        Assertions.assertEquals("FinishTime", metaData.getColumn(6).getName());
+        Assertions.assertEquals("TTL", metaData.getColumn(7).getName());
+        Assertions.assertEquals("ExpireTime", metaData.getColumn(8).getName());
     }
 
     @Test

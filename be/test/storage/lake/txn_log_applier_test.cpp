@@ -15,7 +15,12 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include "exec/exec_env.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -246,6 +251,28 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogUncountedSegmentIsKept) {
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_EQ(1, meta->rowsets_size());
     EXPECT_EQ(1, meta->rowsets(0).segment_metas_size());
+}
+
+// The primary key applier's skip predicate moved the same way, so check it did not broaden: an
+// op_write that really is empty -- a segment was written but holds no rows, no del files, no delete
+// predicate -- must still be skipped. Note the delete-only case never depended on this predicate;
+// dels_meta_size() > 0 short circuits it.
+//
+// The assertion has teeth because the skip returns BEFORE prepare_primary_index(): had the predicate
+// let this through, publish would go on to open "seg_empty", which does not exist.
+TEST(TxnLogApplierBatchTest, PrimaryKeySingleLogEmptySegmentIsSkipped) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30010);
+    auto meta = build_pk_metadata(30010);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    auto log = make_op_write_log(30010, 60, /*num_rows=*/0, /*data_size=*/0, {"seg_empty"});
+    log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(0);
+    ASSERT_EQ(0, log->op_write().dels_meta_size());
+    ASSERT_FALSE(log->op_write().rowset().has_delete_predicate());
+
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, meta->rowsets_size());
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
@@ -518,6 +545,119 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
     EXPECT_EQ(200, meta->rowsets(0).num_rows());
     EXPECT_EQ(4096, meta->rowsets(0).data_size());
     EXPECT_EQ(15u, meta->next_rowset_id());
+}
+
+// Build an incremental replication log carrying |op_writes| plus a dcg_meta keyed by SOURCE rssids.
+// Incremental is the shape that routes through build_rssid_remap; the version arithmetic
+// (snapshot - data + base == new) has to line up or apply_replication_log rejects the log outright.
+std::shared_ptr<TxnLogPB> make_incremental_replication_log(int64_t tablet_id, int64_t txn_id, int64_t base_version,
+                                                           int64_t new_version,
+                                                           const std::vector<TxnLogPB_OpWrite>& op_writes,
+                                                           const std::vector<uint32_t>& dcg_source_rssids) {
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(tablet_id);
+    log->set_txn_id(txn_id);
+    auto* op_replication = log->mutable_op_replication();
+
+    auto* txn_meta = op_replication->mutable_txn_meta();
+    txn_meta->set_txn_id(txn_id);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_incremental_snapshot(true);
+    txn_meta->set_data_version(10);
+    txn_meta->set_snapshot_version(10 + (new_version - base_version));
+
+    for (const auto& op_write : op_writes) {
+        op_replication->add_op_writes()->CopyFrom(op_write);
+    }
+    for (uint32_t src_rssid : dcg_source_rssids) {
+        // The payload only has to be distinguishable; the column file name records which source
+        // rssid the entry came from so the assertions can follow it through the remap.
+        DeltaColumnGroupVerPB dcg_ver;
+        dcg_ver.add_column_files("src_" + std::to_string(src_rssid) + ".cols");
+        (*op_replication->mutable_dcg_meta()->mutable_dcgs())[src_rssid] = dcg_ver;
+    }
+    return log;
+}
+
+TxnLogPB_OpWrite make_replication_op_write(uint32_t source_rowset_id, int64_t rowset_num_rows,
+                                           const std::vector<int64_t>& per_segment_num_rows) {
+    TxnLogPB_OpWrite op_write;
+    auto* rowset = op_write.mutable_rowset();
+    rowset->set_id(source_rowset_id);
+    rowset->set_num_rows(rowset_num_rows);
+    for (size_t i = 0; i < per_segment_num_rows.size(); i++) {
+        auto* sm = rowset->add_segment_metas();
+        sm->set_filename("repl_seg_" + std::to_string(source_rowset_id) + "_" + std::to_string(i));
+        sm->set_size(123);
+        sm->set_num_rows(per_segment_num_rows[i]);
+    }
+    return op_write;
+}
+
+// build_rssid_remap decides which op_writes advance the target rssid, and it MUST reach the same
+// verdict as the applier that attaches the rowsets -- its comment says so, because the two run over
+// the same op_writes and the remap is what re-keys the replicated delta column groups. A drift makes
+// every dcg entry after the first disagreement point at an rssid no attached rowset owns: silently
+// wrong columns, no error anywhere.
+//
+// #77511 moved that predicate (num_rows alone -> ask the segments) in both places at once. This
+// pins the agreement so a future one-sided edit fails here instead of in production.
+//
+// The three op_writes below exercise all three verdicts:
+//   src 100: rowset num_rows > 0                      -> attached, step 1
+//   src 200: a segment written but holding no rows     -> skipped, must NOT advance the target id
+//   src 300: num_rows apportioned to 0, segments hold rows -> attached, step 2
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyIncrementalReplicationRssidRemapMatchesAttachedRowsets) {
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30010);
+    auto meta = build_non_pk_metadata(30010);
+    ASSERT_EQ(0u, meta->next_rowset_id());
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+
+    std::vector<TxnLogPB_OpWrite> op_writes{
+            make_replication_op_write(/*source_rowset_id=*/100, /*rowset_num_rows=*/5, {5}),
+            make_replication_op_write(/*source_rowset_id=*/200, /*rowset_num_rows=*/0, {0}),
+            make_replication_op_write(/*source_rowset_id=*/300, /*rowset_num_rows=*/0, {7, 0}),
+    };
+    // One dcg per source rssid the writes own, plus one (999) that no write owns.
+    auto log = make_incremental_replication_log(30010, 70, /*base_version=*/1, /*new_version=*/2, op_writes,
+                                                {100, 200, 300, 301, 999});
+
+    Status st = applier->apply(*log);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // Two rowsets attached at 0 and 1; the empty one contributed nothing, so 300 lands at 1 (not 2)
+    // and owns rssids 1 and 2 for its two segments.
+    ASSERT_EQ(2, meta->rowsets_size());
+    EXPECT_EQ(0u, meta->rowsets(0).id());
+    EXPECT_EQ(1u, meta->rowsets(1).id());
+    EXPECT_EQ(3u, meta->next_rowset_id());
+
+    // Every rssid the attached rowsets own.
+    std::set<uint32_t> owned_rssids;
+    for (const auto& rowset : meta->rowsets()) {
+        for (uint32_t i = 0; i < get_rowset_id_step(rowset); i++) {
+            owned_rssids.insert(rowset.id() + i);
+        }
+    }
+    EXPECT_EQ(std::set<uint32_t>({0, 1, 2}), owned_rssids);
+
+    // The dcgs of a skipped write, and of a source rssid nobody owns, are left on their source key
+    // (apply_replication_dcg_meta keeps unmapped keys unchanged), so filter to the remapped ones and
+    // require each to land on an rssid an attached rowset actually owns. This is the assertion that
+    // catches a predicate drift: including the skipped write in the remap would push 300 to 2 and 301
+    // to 3, and 3 is owned by nothing.
+    const auto& dcgs = meta->dcg_meta().dcgs();
+    auto source_of = [&](uint32_t key) {
+        auto it = dcgs.find(key);
+        return it == dcgs.end() ? std::string() : it->second.column_files(0);
+    };
+    EXPECT_EQ("src_100.cols", source_of(0)) << "source rssid 100 must be remapped onto the first attached rowset";
+    EXPECT_EQ("src_300.cols", source_of(1)) << "the skipped write must not have advanced the target rssid";
+    EXPECT_EQ("src_301.cols", source_of(2));
+    // Untouched keys: the skipped write's own rssid and the orphan one.
+    EXPECT_EQ("src_200.cols", source_of(200));
+    EXPECT_EQ("src_999.cols", source_of(999));
+    EXPECT_EQ(5u, dcgs.size()) << "no dcg entry may be dropped or collide";
 }
 
 // Test that bundle_file_offsets from multiple TxnLogs are correctly merged into the combined rowset.
