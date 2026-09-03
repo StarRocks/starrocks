@@ -1,0 +1,244 @@
+-- name: test_json_double_at_integer_bound
+create table t1_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t1_${uuid0} values
+  (1, parse_json('{"v":9223372036854774784.0}')),
+  (2, parse_json('{"v":9223372036854775808.0}')),
+  (3, parse_json('{"v":9223372036854777856.0}')),
+  (4, parse_json('{"v":-9223372036854775808.0}')),
+  (5, parse_json('{"v":1.7014118346046923e38}')),
+  (6, parse_json('{"v":1.7014118346046921e38}')),
+  (7, parse_json('{"v":-1.7014118346046923e38}')),
+  (8, parse_json('{"v":1e19}')),
+  (9, parse_json('{"v":1e100}')),
+  (10, parse_json('{"v":1.5}')),
+  (11, parse_json('{"v":9223372036854775807}')),
+  (12, parse_json('{"v":-1.5}')),
+  (13, parse_json('{"v":0.0}')),
+  (14, parse_json('{"v":-0.0}'));
+-- result:
+-- !result
+select k, cast(j->'$.v' as bigint) as v from t1_${uuid0} order by k;
+-- result:
+1	9223372036854774784
+2	None
+3	None
+4	-9223372036854775808
+5	None
+6	None
+7	None
+8	None
+9	None
+10	1
+11	9223372036854775807
+12	-1
+13	0
+14	0
+-- !result
+select k, get_json_int(j, '$.v') as v from t1_${uuid0} order by k;
+-- result:
+1	9223372036854774784
+2	None
+3	None
+4	-9223372036854775808
+5	None
+6	None
+7	None
+8	None
+9	None
+10	1
+11	9223372036854775807
+12	-1
+13	0
+14	0
+-- !result
+select k, cast(j->'$.v' as largeint) as v from t1_${uuid0} order by k;
+-- result:
+1	9223372036854774784
+2	9223372036854775808
+3	9223372036854777856
+4	-9223372036854775808
+5	None
+6	170141183460469212842221372237303250944
+7	-170141183460469231731687303715884105728
+8	10000000000000000000
+9	None
+10	1
+11	9223372036854775807
+12	-1
+13	0
+14	0
+-- !result
+select k, cast(j->'$.v' as bigint) as b, cast(j->'$.v' as double) as d
+  from t1_${uuid0} where k in (10, 12, 13, 14) order by k;
+-- result:
+10	1	1.5
+12	-1	-1.5
+13	0	0.0
+14	0	-0.0
+-- !result
+set cbo_prune_json_subfield = false;
+-- result:
+-- !result
+select k, cast(j->'$.v' as bigint) as v from t1_${uuid0} order by k;
+-- result:
+1	9223372036854774784
+2	None
+3	None
+4	-9223372036854775808
+5	None
+6	None
+7	None
+8	None
+9	None
+10	1
+11	9223372036854775807
+12	-1
+13	0
+14	0
+-- !result
+select k, cast(j->'$.v' as largeint) as v from t1_${uuid0} order by k;
+-- result:
+1	9223372036854774784
+2	9223372036854775808
+3	9223372036854777856
+4	-9223372036854775808
+5	None
+6	170141183460469212842221372237303250944
+7	-170141183460469231731687303715884105728
+8	10000000000000000000
+9	None
+10	1
+11	9223372036854775807
+12	-1
+13	0
+14	0
+-- !result
+create table t2_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t2_${uuid0} values
+  (1, parse_json('{"v":127.0}')),
+  (2, parse_json('{"v":127.5}')),
+  (3, parse_json('{"v":128.0}')),
+  (4, parse_json('{"v":-128.0}')),
+  (5, parse_json('{"v":-128.5}')),
+  (6, parse_json('{"v":32767.0}')),
+  (7, parse_json('{"v":32767.5}')),
+  (8, parse_json('{"v":32768.0}')),
+  (9, parse_json('{"v":-32768.0}')),
+  (10, parse_json('{"v":2147483647.0}')),
+  (11, parse_json('{"v":2147483647.5}')),
+  (12, parse_json('{"v":2147483648.0}')),
+  (13, parse_json('{"v":-2147483648.0}'));
+-- result:
+-- !result
+select k, cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b
+  from t2_${uuid0} order by k;
+-- result:
+1	127	127	127	127
+2	None	127	127	127
+3	None	128	128	128
+4	-128	-128	-128	-128
+5	None	-128	-128	-128
+6	None	32767	32767	32767
+7	None	None	32767	32767
+8	None	None	32768	32768
+9	None	-32768	-32768	-32768
+10	None	None	2147483647	2147483647
+11	None	None	None	2147483647
+12	None	None	None	2147483648
+13	None	None	-2147483648	-2147483648
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+create table t3_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t3_${uuid0} values
+  (1, parse_json('{"v":9223372036854774784.0}')),
+  (2, parse_json('{"v":9223372036854775808.0}')),
+  (3, parse_json('{"v":9223372036854777856.0}')),
+  (4, parse_json('{"v":-9223372036854775808.0}')),
+  (5, parse_json('{"v":1.7014118346046923e38}')),
+  (6, parse_json('{"v":1.7014118346046921e38}')),
+  (7, parse_json('{"v":-1.7014118346046923e38}')),
+  (8, parse_json('{"v":1e19}')),
+  (9, parse_json('{"v":1e100}')),
+  (10, parse_json('{"v":1.5}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t3_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), v(DOUBLE)"]
+-- !result
+select k, cast(j->'$.v' as bigint) as v from t3_${uuid0} order by k;
+-- result:
+1	9223372036854774784
+2	None
+3	None
+4	-9223372036854775808
+5	None
+6	None
+7	None
+8	None
+9	None
+10	1
+-- !result
+select k, cast(j->'$.v' as largeint) as v from t3_${uuid0} order by k;
+-- result:
+1	9223372036854774784
+2	9223372036854775808
+3	9223372036854777856
+4	-9223372036854775808
+5	None
+6	170141183460469212842221372237303250944
+7	-170141183460469231731687303715884105728
+8	10000000000000000000
+9	None
+10	1
+-- !result
+create table t4_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into t4_${uuid0} values
+  (1, parse_json('{"dbl":9223372036854775808.0,"mix":9223372036854775808.0,"ints":1,"uints":18446744073709551615}')),
+  (2, parse_json('{"dbl":1.5,"mix":7,"ints":9223372036854775807,"uints":18446744073709551614}')),
+  (3, parse_json('{"dbl":1.7014118346046923e38,"mix":-3,"ints":-9223372036854775806,"uints":18446744073709551613}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t4_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), dbl(DOUBLE), ints(BIGINT), mix(JSON), uints(LARGEINT)"]
+-- !result
+select k, j from t4_${uuid0} order by k;
+-- result:
+1	{"dbl": 9223372036854776000, "ints": 1, "mix": 9223372036854776000, "uints": 18446744073709551615}
+2	{"dbl": 1.5, "ints": 9223372036854775807, "mix": 7, "uints": 18446744073709551614}
+3	{"dbl": 1.7014118346046923e+38, "ints": -9223372036854775806, "mix": -3, "uints": 18446744073709551613}
+-- !result
+select k, cast(j->'$.ints' as bigint) as i from t4_${uuid0} order by k;
+-- result:
+1	1
+2	9223372036854775807
+3	-9223372036854775806
+-- !result
+drop table t1_${uuid0};
+-- result:
+-- !result
+drop table t2_${uuid0};
+-- result:
+-- !result
+drop table t3_${uuid0};
+-- result:
+-- !result
+drop table t4_${uuid0};
+-- result:
+-- !result

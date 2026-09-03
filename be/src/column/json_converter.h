@@ -47,7 +47,18 @@ static StatusOr<RunTimeCppType<ResultType>> get_number_from_vpjson(const vpack::
             return static_cast<RunTimeCppType<ResultType>>(v);
         } else if (slice.isDouble()) {
             auto v = slice.getDouble();
-            if (v < static_cast<double>(min) || v > static_cast<double>(max)) {
+            // The bounds have to be compared in real arithmetic, and static_cast<double>(max) does
+            // not carry one: a double has a 53-bit mantissa, so INT64_MAX rounds up to 2^63 and
+            // INT128_MAX rounds up to 2^127. `v > static_cast<double>(max)` therefore admitted the
+            // rounded-up bound itself, and the conversion below is undefined for a value the type
+            // cannot hold. Powers of two are exact in a double, so reject 2^(N-1) and above as well:
+            // no double lies between max and 2^(N-1) at those two widths, and at the narrower ones
+            // 2^(N-1) is already above max, so the added bound never decides anything there.
+            // static_cast<double>(min) is -2^(N-1) and stays exact at every width.
+            constexpr double lower_bound = static_cast<double>(min);
+            constexpr double upper_bound_exclusive = -lower_bound;
+            // v != v is a NaN, which compares false against every bound.
+            if (v < lower_bound || v > static_cast<double>(max) || v >= upper_bound_exclusive || v != v) {
                 return Status::JsonFormatError("cast number overflow");
             }
             return static_cast<RunTimeCppType<ResultType>>(v);

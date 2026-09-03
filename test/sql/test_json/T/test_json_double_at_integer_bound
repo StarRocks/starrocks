@@ -1,0 +1,112 @@
+-- name: test_json_double_at_integer_bound
+-- get_number_from_vpjson() guards a JSON double against the target integer type with
+-- `v < static_cast<double>(min) || v > static_cast<double>(max)`. A double carries a 53-bit
+-- mantissa, so static_cast<double>(max) is not faithful at the two widest types: INT64_MAX rounds up
+-- to 2^63 and INT128_MAX rounds up to 2^127, and the guard degenerates into `v > 2^63` and
+-- `v > 2^127`. A bound is not greater than itself, so exactly 2^63 reached static_cast<int64_t> and
+-- exactly 2^127 reached static_cast<int128_t>, which is undefined for a value the type cannot hold
+-- and produced the type minimum. Powers of two are exact in a double, so the guard now rejects
+-- everything at or above 2^(N-1) as well. TINYINT, SMALLINT and INT hold their maximum exactly, so
+-- their guard was already right and does not move, which the second table pins down.
+create table t1_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
+-- Every value here is a JSON double except k=11, a vpack integer that stands for the branch this
+-- does not touch. k=2 and k=5 are the two defective bounds, and the rows around them are their
+-- neighbours: the largest double below the bound, the first double above it, and the negative bound,
+-- which is a power of two, is a value the type does hold, and has always been accepted.
+insert into t1_${uuid0} values
+  (1, parse_json('{"v":9223372036854774784.0}')),
+  (2, parse_json('{"v":9223372036854775808.0}')),
+  (3, parse_json('{"v":9223372036854777856.0}')),
+  (4, parse_json('{"v":-9223372036854775808.0}')),
+  (5, parse_json('{"v":1.7014118346046923e38}')),
+  (6, parse_json('{"v":1.7014118346046921e38}')),
+  (7, parse_json('{"v":-1.7014118346046923e38}')),
+  (8, parse_json('{"v":1e19}')),
+  (9, parse_json('{"v":1e100}')),
+  (10, parse_json('{"v":1.5}')),
+  (11, parse_json('{"v":9223372036854775807}')),
+  (12, parse_json('{"v":-1.5}')),
+  (13, parse_json('{"v":0.0}')),
+  (14, parse_json('{"v":-0.0}'));
+-- The FE pushes this down as a BIGINT-typed sub-field read, so the guard is reached through flat
+-- JSON's read-time extraction. k=2 came back as the BIGINT minimum.
+select k, cast(j->'$.v' as bigint) as v from t1_${uuid0} order by k;
+-- The same guard through a json function instead of a cast.
+select k, get_json_int(j, '$.v') as v from t1_${uuid0} order by k;
+-- k=5 came back as the LARGEINT minimum, which is also the correct answer for k=7 and was the only
+-- way to tell the two apart. 2^63 is an ordinary value at this width.
+select k, cast(j->'$.v' as largeint) as v from t1_${uuid0} order by k;
+-- Truncation towards zero, and the sign of a zero, are the existing semantics and stay.
+select k, cast(j->'$.v' as bigint) as b, cast(j->'$.v' as double) as d
+  from t1_${uuid0} where k in (10, 12, 13, 14) order by k;
+-- Without the sub-field pruning the plan keeps an ordinary CAST over json_query(), which reaches the
+-- same guard through the expression path rather than through the extraction. Same two rows move.
+set cbo_prune_json_subfield = false;
+select k, cast(j->'$.v' as bigint) as v from t1_${uuid0} order by k;
+select k, cast(j->'$.v' as largeint) as v from t1_${uuid0} order by k;
+create table t2_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
+-- With the pruning on a narrow cast is routed through BIGINT and never reaches the narrow guards, so
+-- with it still off this is the only statement in the case that exercises them. 127, 32767 and
+-- 2147483647 are all below 2^53 and a double holds them exactly, so these guards were already right
+-- and none of these answers may move: a fraction just above the maximum is rejected, as it was
+-- before, while the same value one width up is accepted and truncated.
+insert into t2_${uuid0} values
+  (1, parse_json('{"v":127.0}')),
+  (2, parse_json('{"v":127.5}')),
+  (3, parse_json('{"v":128.0}')),
+  (4, parse_json('{"v":-128.0}')),
+  (5, parse_json('{"v":-128.5}')),
+  (6, parse_json('{"v":32767.0}')),
+  (7, parse_json('{"v":32767.5}')),
+  (8, parse_json('{"v":32768.0}')),
+  (9, parse_json('{"v":-32768.0}')),
+  (10, parse_json('{"v":2147483647.0}')),
+  (11, parse_json('{"v":2147483647.5}')),
+  (12, parse_json('{"v":2147483648.0}')),
+  (13, parse_json('{"v":-2147483648.0}'));
+select k, cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b
+  from t2_${uuid0} order by k;
+set cbo_prune_json_subfield = true;
+create table t3_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into t3_${uuid0} values
+  (1, parse_json('{"v":9223372036854774784.0}')),
+  (2, parse_json('{"v":9223372036854775808.0}')),
+  (3, parse_json('{"v":9223372036854777856.0}')),
+  (4, parse_json('{"v":-9223372036854775808.0}')),
+  (5, parse_json('{"v":1.7014118346046923e38}')),
+  (6, parse_json('{"v":1.7014118346046921e38}')),
+  (7, parse_json('{"v":-1.7014118346046923e38}')),
+  (8, parse_json('{"v":1e19}')),
+  (9, parse_json('{"v":1e100}')),
+  (10, parse_json('{"v":1.5}'));
+-- A path of doubles alone is stored as a DOUBLE sub-column. The BIGINT cast is pushed into the scan
+-- as a typed sub-field read, which the transformer serves by casting that sub-column, so it never
+-- enters get_number_from_vpjson: 2^63 was already null here, and this is what the answers above
+-- should have looked like all along. The LARGEINT cast is not pushed down at all, so it reads the
+-- reassembled document and goes through the guard exactly like the plain column does.
+select flat_json_meta(j) from t3_${uuid0}[_META_];
+select k, cast(j->'$.v' as bigint) as v from t3_${uuid0} order by k;
+select k, cast(j->'$.v' as largeint) as v from t3_${uuid0} order by k;
+create table t4_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- get_number_from_vpjson() also runs on the write path, where flat JSON turns a document into typed
+-- sub-columns, so the fix could change stored bytes only if a BIGINT or LARGEINT sub-column could be
+-- fed a double. It cannot, because a path is typed from every value seen: dbl is doubles alone and
+-- becomes DOUBLE, mix pairs the 2^63 double with integers and degrades to JSON, ints has no double
+-- at all and stays BIGINT, uints needs the unsigned width and stays LARGEINT. Nothing reaches
+-- storage through the double-to-integer branch, and every value below survives verbatim.
+insert into t4_${uuid0} values
+  (1, parse_json('{"dbl":9223372036854775808.0,"mix":9223372036854775808.0,"ints":1,"uints":18446744073709551615}')),
+  (2, parse_json('{"dbl":1.5,"mix":7,"ints":9223372036854775807,"uints":18446744073709551614}')),
+  (3, parse_json('{"dbl":1.7014118346046923e38,"mix":-3,"ints":-9223372036854775806,"uints":18446744073709551613}'));
+select flat_json_meta(j) from t4_${uuid0}[_META_];
+select k, j from t4_${uuid0} order by k;
+select k, cast(j->'$.ints' as bigint) as i from t4_${uuid0} order by k;
+drop table t1_${uuid0};
+drop table t2_${uuid0};
+drop table t3_${uuid0};
+drop table t4_${uuid0};
