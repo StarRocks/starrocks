@@ -572,7 +572,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：字节
 - 是否动态：是
-- 描述：BE Thrift 层允许的单个 `TFramedTransport` 帧的最大大小（字节）。该值映射到 thrift 的 `TConfiguration`，同时作用于客户端（反）序列化路径和接收外部 RPC 的服务端传输层。注意该限制仅在使用 `TFramedTransport` 时生效（BE Thrift 服务端默认以 `THREADED` 模式运行、使用 `TBufferedTransport`，因此该配置主要与 `NON_BLOCKING` 服务端路径相关）；当其与 `thrift_max_message_size` 冲突时，取两者中较小值。由于该配置为动态配置，运行时修改仅对修改之后新建立的连接生效；已建立的连接仍沿用其创建时的取值，若要对所有连接生效可能需要重连。
+- 描述：BE Thrift 层允许的单个 `TFramedTransport` 帧的最大大小（字节）。该值映射到 thrift 的 `TConfiguration`。注意该限制仅在使用 `TFramedTransport` 且传输层在创建时附带该 `TConfiguration` 时才会生效；BE Thrift 服务端默认以 `THREADED` 模式运行、使用 `TBufferedTransport`，因此该配置不会作用于默认服务端连接。当其与 `thrift_max_message_size` 冲突时，取两者中较小值。由于该配置为动态配置，运行时修改仅对修改之后新建立的连接生效；已建立的连接仍沿用其创建时的取值，若要对所有连接生效可能需要重连。
 - 引入版本：-
 
 ### thrift_max_message_size
