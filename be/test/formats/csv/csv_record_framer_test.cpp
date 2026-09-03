@@ -205,14 +205,11 @@ TEST(CSVRecordFramerTest, test_escaped_character_inside_enclosed_field_stays_in_
     EXPECT_EQ(std::vector<int64_t>({0, 13}), frame(options("\n", ",", '\\'), "a,\"x\\yz\nq\",b\nc,d,e\n"));
 }
 
-// The behaviour below reads as a parser defect. It is asserted so that the framer and the parser
-// stay in step: whichever way more_rows() is changed, this must be changed with it, and a framer
-// that quietly disagreed would hand out split points the parser reads differently.
-
 // NOLINTNEXTLINE
-TEST(CSVRecordFramerTest, test_enclose_outside_a_field_escapes_the_next_character) {
-    // The quote at offset 2 is not opening a field, so it escapes the row delimiter after it.
-    EXPECT_EQ(std::vector<int64_t>({0, 7}), frame(options(), "ab\"\ncd\nef\n"));
+TEST(CSVRecordFramerTest, test_lone_enclose_outside_a_field_leaves_the_delimiter_alone) {
+    // The quote at offset 2 opens nothing and is not doubled, so it is dropped from the column but
+    // the row delimiter behind it still ends the record.
+    EXPECT_EQ(std::vector<int64_t>({0, 4, 7}), frame(options(), "ab\"\ncd\nef\n"));
 }
 
 // NOLINTNEXTLINE
