@@ -221,15 +221,13 @@ public class OlapTableSink extends DataSink {
                 && explicitTxnState.getSourceType() == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
             txnState = explicitTxnState;
         }
-        TransactionState combinedTxnLogState = explicitTxnState != null
-                && explicitTxnState.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING
-                ? null : txnState;
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
-        }
-        if (combinedTxnLogState != null) {
-            tSink.setWrite_txn_log(combinedTxnLogState.isUseCombinedTxnLog());
+            if (explicitTxnState == null
+                    || explicitTxnState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+                tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+            }
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
