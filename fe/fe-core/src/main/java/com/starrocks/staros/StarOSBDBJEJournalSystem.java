@@ -20,6 +20,7 @@ import com.staros.exception.ExceptionCode;
 import com.staros.exception.StarException;
 import com.staros.journal.JournalSystem;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.epack.persist.EditLogEPack;
@@ -120,7 +121,8 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
             long replayEndTime = System.currentTimeMillis();
             LOG.info("finish star manager replay in " + (replayEndTime - replayStartTime) + " msec.");
 
-            journalWriter.init(bdbjeJournal.getMaxJournalId());
+            Pair<Long, Long> journalIdRange = bdbjeJournal.getJournalIdRange();
+            journalWriter.init(journalIdRange.first, journalIdRange.second);
 
             journalWriter.startDaemon();
         } catch (Exception e) {

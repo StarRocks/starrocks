@@ -65,6 +65,7 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.JournalType;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.bookmark.BookmarkManager;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -347,6 +348,9 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
     public static LongCounterMetric COUNTER_EDIT_LOG_READ;
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
+    private static final Map<JournalType, RetainedJournalState> RETAINED_JOURNAL_STATES = Map.of(
+            JournalType.FE_META, new RetainedJournalState(),
+            JournalType.STAR_MGR, new RetainedJournalState());
     public static LongCounterMetric COUNTER_IMAGE_WRITE;
     public static LongCounterMetric COUNTER_IMAGE_PUSH;
     public static LeaderAwareCounterMetricLong COUNTER_TXN_REJECT;
@@ -996,6 +1000,9 @@ public final class MetricRepo {
         COUNTER_EDIT_LOG_SIZE_BYTES =
                 new LongCounterMetric("edit_log_size_bytes", MetricUnit.BYTES, "size of edit log");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_EDIT_LOG_SIZE_BYTES);
+        for (JournalType journalType : JournalType.values()) {
+            registerEditLogRetainedMetrics(journalType);
+        }
         COUNTER_IMAGE_WRITE = new LongCounterMetric("image_write", MetricUnit.OPERATIONS, "counter of image generated");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_WRITE);
         COUNTER_IMAGE_PUSH = new LongCounterMetric("image_push", MetricUnit.OPERATIONS,
@@ -1480,6 +1487,98 @@ public final class MetricRepo {
                 stat.counterCloneTaskIntraNodeCopyDurationMs);
         cloneTaskIntraNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
         STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyDurationMs);
+    }
+
+    private static void registerEditLogRetainedMetrics(JournalType journalType) {
+        RetainedJournalState state = RETAINED_JOURNAL_STATES.get(journalType);
+        Metric<Long> count = new LeaderAwareGaugeMetricLong(
+                "edit_log_retained", MetricUnit.OPERATIONS, "number of retained edit logs") {
+            @Override
+            public Long getValueLeader() {
+                return state.getCount();
+            }
+        };
+        count.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
+        STARROCKS_METRIC_REGISTER.addMetric(count);
+
+        Metric<Long> bytes = new LeaderAwareGaugeMetricLong(
+                "edit_log_retained_bytes_estimate", MetricUnit.BYTES, "estimated retained edit log bytes") {
+            @Override
+            public Long getValueLeader() {
+                return state.getEstimatedBytes();
+            }
+        };
+        bytes.addLabel(new MetricLabel("journal", journalType.getMetricLabel()));
+        STARROCKS_METRIC_REGISTER.addMetric(bytes);
+    }
+
+    public static void initializeEditLogRetained(
+            JournalType journalType, long minJournalId, long maxJournalId) {
+        RETAINED_JOURNAL_STATES.get(journalType).initialize(minJournalId, maxJournalId);
+    }
+
+    public static void recordEditLogBatch(
+            JournalType journalType, long lastJournalId, long count, long bytes) {
+        RETAINED_JOURNAL_STATES.get(journalType).record(lastJournalId, count, bytes);
+    }
+
+    public static void updateEditLogRetainedMinJournalId(JournalType journalType, long minJournalId) {
+        RETAINED_JOURNAL_STATES.get(journalType).updateMinJournalId(minJournalId);
+    }
+
+    public static long getEditLogRetainedCount(JournalType journalType) {
+        return RETAINED_JOURNAL_STATES.get(journalType).getCount();
+    }
+
+    public static long getEditLogRetainedBytesEstimate(JournalType journalType) {
+        return RETAINED_JOURNAL_STATES.get(journalType).getEstimatedBytes();
+    }
+
+    private static final class RetainedJournalState {
+        private long minJournalId = -1L;
+        private long maxJournalId = -1L;
+        private long observedCount;
+        private long observedBytes;
+
+        private synchronized void initialize(long minJournalId, long maxJournalId) {
+            this.minJournalId = minJournalId;
+            this.maxJournalId = maxJournalId;
+            observedCount = 0L;
+            observedBytes = 0L;
+        }
+
+        private synchronized void record(long lastJournalId, long count, long bytes) {
+            if (count <= 0L) {
+                return;
+            }
+            if (minJournalId < 0L) {
+                minJournalId = lastJournalId - count + 1L;
+            }
+            maxJournalId = Math.max(maxJournalId, lastJournalId);
+            observedCount += count;
+            observedBytes += bytes;
+        }
+
+        private synchronized void updateMinJournalId(long minJournalId) {
+            this.minJournalId = minJournalId;
+        }
+
+        private synchronized long getCount() {
+            return minJournalId < 0L || maxJournalId < minJournalId
+                    ? 0L : maxJournalId - minJournalId + 1L;
+        }
+
+        private synchronized long getEstimatedBytes() {
+            long count = getCount();
+            if (count == 0L) {
+                return 0L;
+            }
+            if (observedCount == 0L) {
+                return -1L;
+            }
+            double estimate = (double) count * observedBytes / observedCount;
+            return estimate >= Long.MAX_VALUE ? Long.MAX_VALUE : Math.round(estimate);
+        }
     }
 
     // to generate the metrics related to tablets of each backend
