@@ -54,6 +54,7 @@
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "types/date_value.hpp"
+#include "util/bit_util.h"
 #include "util/coding.h"
 #include "util/faststring.h"
 #include "util/slice.h"
@@ -256,7 +257,10 @@ public:
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _compressed_size = decode_fixed32_le((const uint8_t*)&_data[4]);
         _num_element_after_padding = decode_fixed32_le((const uint8_t*)&_data[8]);
-        if (_num_element_after_padding != ALIGN_UP(_num_elements, 8U)) {
+        // Not ALIGN_UP(): its mask is 32-bit, so ALIGN_UP(0xffffffff, 8U) wraps
+        // to 0 and would accept a corrupted page whose padded count is 0.
+        // RoundUpToPowerOf2() rounds at full 64-bit width instead.
+        if (_num_element_after_padding != static_cast<size_t>(BitUtil::RoundUpToPowerOf2(_num_elements, 8))) {
             std::stringstream ss;
             ss << "num of element information corrupted,"
                << " _num_element_after_padding:" << _num_element_after_padding << ", _num_elements:" << _num_elements;
