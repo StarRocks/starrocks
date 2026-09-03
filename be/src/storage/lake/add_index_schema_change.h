@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -144,6 +145,9 @@ private:
     std::vector<TabletIndexPB> _indexes_to_build;
     const int64_t _alter_version;
     TabletSchemaPtr _authoritative_schema;
+    // (segment, index) pairs skipped for a physically absent column, summed across
+    // the per-segment pool tasks so run() can log one aggregate line per tablet.
+    std::atomic<int64_t> _skipped_pairs{0};
     std::mutex _op_mtx;                      // protects concurrent writes to op_add_index.segment_entries
     std::mutex _written_paths_mtx;           // protects _written_paths
     std::vector<std::string> _written_paths; // absolute paths of .idx files created by build_idg_for_segment

@@ -469,23 +469,25 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //     the tablet never fetches the real schema again: a transient FE/BE schema
     //     gap frozen into a permanent one, with no error surface anywhere.
     //
-    //     Gated on new_schema_id as well, so content and id always move together.
-    //     Either both come from this alter or neither does; installing content
-    //     under the old id would poison every by-id schema cache instead.
+    //     The id travels INSIDE new_schema (see the field comment in
+    //     lake_types.proto), so content and id always move together: a worker that
+    //     does not understand new_schema finds no id to stamp either, and skips
+    //     schema mutation instead of binding a new id to stale content. The
+    //     standalone new_schema_id path below stays only for logs written before
+    //     new_schema existed.
     const int64_t pre_apply_schema_id = schema->id();
-    if (op.has_new_schema() && op.has_new_schema_id() && op.new_schema_id() > 0) {
+    const bool install_new_schema = op.has_new_schema() && op.new_schema().has_id() && op.new_schema().id() > 0;
+    if (install_new_schema) {
         // Never move backwards. op.new_schema() is the snapshot FE took when it
         // dispatched the alter; publish happens later, and tablet metadata may
         // have advanced to a newer schema in between. Installing the older
         // snapshot would DROP the columns that arrived meanwhile.
         //
-        // Compare against the version this apply TARGETS, not the snapshot's own
-        // version. FE allocates the target as (catalog schema version + 1), so the
-        // two always differ by one, and comparing the snapshot's would reject every
-        // REPLAY: after the first apply the metadata already carries the target
-        // version, which is newer than the snapshot it came from.
-        const int64_t target_version =
-                op.has_new_schema_version() ? op.new_schema_version() : op.new_schema().schema_version();
+        // Compare against the version this apply TARGETS. The writer stamped it
+        // onto new_schema, so it is the allocated target, not the FE catalog
+        // snapshot's own version -- comparing the latter would reject every REPLAY,
+        // since after the first apply the metadata already carries the target.
+        const int64_t target_version = op.new_schema().schema_version();
         if (schema->has_schema_version() && target_version < schema->schema_version()) {
             return Status::InternalError(strings::Substitute(
                     "apply_add_index: refusing to install schema version $0 over newer version $1. tablet=$2",
@@ -634,15 +636,22 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    keys on id and would keep returning the stale pre-index schema — so data
     //    loaded after the index, and compaction output, would build no index.
     //    A new id forces every cache to miss and pick up this indexed schema.
-    if (op.has_new_schema_id() && op.new_schema_id() > 0) {
-        const int64_t new_schema_id = op.new_schema_id();
+    // Either encoding supplies the target id: new_schema for logs this version
+    // writes, the standalone field for logs written before it existed.
+    const bool has_target_schema_id = install_new_schema || (op.has_new_schema_id() && op.new_schema_id() > 0);
+    if (has_target_schema_id) {
+        const int64_t new_schema_id = install_new_schema ? op.new_schema().id() : op.new_schema_id();
         // The id tablet metadata carried before this apply. NOT schema->id():
         // installing op.new_schema() above overwrites it with FE's catalog id,
         // and the rowset_to_schema repointing below must match the pins that
         // reference the pre-apply id.
         const int64_t old_schema_id = pre_apply_schema_id;
         schema->set_id(new_schema_id);
-        if (op.has_new_schema_version()) {
+        if (install_new_schema) {
+            // Already carried by the installed content; keep it explicit so both
+            // encodings converge on the same end state.
+            schema->set_schema_version(op.new_schema().schema_version());
+        } else if (op.has_new_schema_version()) {
             schema->set_schema_version(static_cast<int32_t>(op.new_schema_version()));
         }
         // Durability across the two schema-resolution regimes:

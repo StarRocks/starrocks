@@ -810,20 +810,39 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     // onto the tablet metadata schema — this invalidates every by-id schema cache
     // so data loaded after the index (and compaction output) build the new index
     // instead of reusing the cached pre-index schema.
+
+    // Publish the authoritative column definitions, carrying the FE-allocated
+    // schema id/version INSIDE them rather than in the standalone new_schema_id /
+    // new_schema_version fields.
+    //
+    // Sending only an id would let apply_add_index stamp FE's new schema id onto
+    // tablet-metadata content that still lacks the indexed column;
+    // update_metadata_schema() then short-circuits on the matching id and the
+    // tablet never fetches the real schema again, freezing a transient FE/BE
+    // schema gap into a permanent silent one.
+    //
+    // Keeping the id out of the standalone fields is what makes this safe across
+    // a rolling upgrade. The alter runs on the worker FE assigned at RUNNING, but
+    // publish resolves its worker separately at FINISHED_REWRITING, so a log
+    // written by an upgraded worker can be applied by one that predates this
+    // change. Such a worker ignores new_schema (an unknown field) but would still
+    // honour new_schema_id -- and would then perform exactly the id-onto-stale-
+    // content stamping described above. With the id reachable only through
+    // new_schema, its `op.has_new_schema_id()` gate is false, so it skips schema
+    // mutation entirely: the IDG entries still publish, the schema keeps its old
+    // id, and the next write's update_metadata_schema() resyncs it from FE. The
+    // index is delayed, never permanently mis-bound.
+    //
+    // apply_add_index composes this with new_indexes above into the final schema,
+    // so the compose logic lives in exactly one place.
+    auto* target_schema_pb = op_add_index->mutable_new_schema();
+    new_schema->to_schema_pb(target_schema_pb);
     if (request.__isset.new_index_schema_id) {
-        op_add_index->set_new_schema_id(request.new_index_schema_id);
+        target_schema_pb->set_id(request.new_index_schema_id);
     }
     if (request.__isset.new_index_schema_version) {
-        op_add_index->set_new_schema_version(request.new_index_schema_version);
+        target_schema_pb->set_schema_version(static_cast<int32_t>(request.new_index_schema_version));
     }
-    // Publish the authoritative column definitions next to that id. Sending only
-    // the id lets apply_add_index stamp FE's new schema id onto tablet-metadata
-    // content that may still lack the indexed column; update_metadata_schema()
-    // then short-circuits on the matching id and the tablet never fetches the
-    // real schema again, freezing a transient FE/BE schema gap into a permanent
-    // silent one. apply_add_index composes this with new_indexes above into the
-    // final schema, so the compose logic lives in exactly one place.
-    new_schema->to_schema_pb(op_add_index->mutable_new_schema());
 
     AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
                             alter_version, new_schema, _lake_schema_change_pool);

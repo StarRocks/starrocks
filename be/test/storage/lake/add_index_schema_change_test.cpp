@@ -631,6 +631,18 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_happy_path) {
 // apply_add_index can stamp them onto the tablet metadata schema (durability fix
 // — invalidates every by-id schema cache so post-index loads / compaction build
 // the index instead of reusing the cached pre-index schema).
+//
+// They now travel INSIDE new_schema rather than in the standalone new_schema_id /
+// new_schema_version fields. The contract is unchanged -- the id still reaches the
+// log and still drives the stamp -- but the transport matters for rolling
+// upgrades: the alter runs on the worker FE assigned at RUNNING, while publish
+// resolves its worker separately at FINISHED_REWRITING, so a log written by an
+// upgraded worker can be applied by one that predates new_schema. That worker
+// ignores new_schema but would still honour a standalone new_schema_id, stamping
+// the new id onto content that lacks the ALTER-added column -- which
+// update_metadata_schema() then treats as current, freezing the incomplete schema
+// permanently. Leaving the standalone fields unset makes it skip schema mutation
+// instead, so the index is merely delayed until the next resync.
 TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
@@ -659,8 +671,17 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id
                     _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
                                                   /*fill_cache=*/false));
     ASSERT_TRUE(txn_log->has_op_add_index());
-    EXPECT_EQ(987654, txn_log->op_add_index().new_schema_id());
-    EXPECT_EQ(9, txn_log->op_add_index().new_schema_version());
+    const auto& op = txn_log->op_add_index();
+    // The id/version reached the log...
+    ASSERT_TRUE(op.has_new_schema());
+    EXPECT_EQ(987654, op.new_schema().id());
+    EXPECT_EQ(9, op.new_schema().schema_version());
+    // ...only through new_schema. If someone re-adds set_new_schema_id() to the
+    // writer, a pre-new_schema publish worker regains the ability to bind the new
+    // id to schema content lacking the added column, so this must stay false.
+    EXPECT_FALSE(op.has_new_schema_id()) << "standalone new_schema_id would let an old publish worker "
+                                            "bind the new id to schema content lacking the added column";
+    EXPECT_FALSE(op.has_new_schema_version());
 }
 
 // A materialized index (rollup / sync MV) whose schema lacks the indexed

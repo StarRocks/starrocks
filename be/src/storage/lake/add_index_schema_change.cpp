@@ -253,6 +253,14 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         }
     }
     Status run_st = runner.wait();
+    if (const auto skipped = _skipped_pairs.load(std::memory_order_relaxed); skipped > 0 && run_st.ok()) {
+        // One line per tablet, not per segment. Says the alter succeeded with
+        // partial index coverage, which is otherwise only visible in a metric.
+        LOG(INFO) << "ADD INDEX fast path: tablet=" << _new_tablet.id() << " txn_id=" << _txn_id << " skipped "
+                  << skipped << " (segment, index) pair(s) whose column is absent from the segment; those rows "
+                  << "read as the column default and carry no index until rewritten under a schema that has one. "
+                  << "Per-segment detail at VLOG(2).";
+    }
     if (!run_st.ok()) {
         // Best-effort remove any .idx files already written by tasks that
         // succeeded before the first failure. The caller (schema_change.cpp)
@@ -349,7 +357,7 @@ StatusOr<AddIndexSchemaChange::IndexDisposition> AddIndexSchemaChange::classify_
     //     rowset and the small new ones start in different levels and only meet as
     //     levels merge; a partition that stops receiving writes can stay
     //     index-free indefinitely.
-    // See MetaFileTest.test_apply_add_index_older_pins_do_not_converge_on_compaction.
+    // See MetaFileTest.test_apply_add_index_old_pin_is_a_compaction_fixed_point.
     //
     // Only option: a bloom filter must carry exactly one filter per data page of
     // the source column, because ColumnReader::bloom_filter addresses them by
@@ -418,18 +426,22 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
         ASSIGN_OR_RETURN(auto disposition, classify_index_for_segment(segment.get(), ix, &column));
         if (disposition == IndexDisposition::kSkip) {
             ++skipped;
-            LOG(INFO) << "ADD INDEX fast path: skipping index type " << static_cast<int>(ix.index_type())
-                      << " on column " << column->name() << " (unique_id " << column->unique_id()
-                      << "): absent from segment " << seg_name << ". tablet=" << _new_tablet.id()
-                      << " txn_id=" << _txn_id
-                      << ". Rows read as the column default; this segment carries no index for it until it is "
-                         "rewritten under a schema that has one.";
+            // Deliberately VLOG, not LOG(INFO): this branch is the EXPECTED outcome
+            // for every historical segment of a table whose indexed column was added
+            // by ALTER, so an INFO line here means one line per (segment, index) --
+            // potentially millions during a single alter on a large table, for a
+            // benign condition. run() logs one aggregate line per tablet instead,
+            // and lake_add_index_segments_skipped_total carries the count.
+            VLOG(2) << "ADD INDEX fast path: skipping index type " << static_cast<int>(ix.index_type()) << " on column "
+                    << column->name() << " (unique_id " << column->unique_id() << "): absent from segment " << seg_name
+                    << ". tablet=" << _new_tablet.id() << " txn_id=" << _txn_id;
             continue;
         }
         to_build.emplace_back(&ix, column);
     }
     if (skipped > 0) {
         StorageMetrics::instance()->lake_add_index_segments_skipped_total.increment(skipped);
+        _skipped_pairs.fetch_add(skipped, std::memory_order_relaxed);
     }
     if (to_build.empty()) {
         // Nothing to write for this segment. Leave `out_entry` untouched so the

@@ -135,10 +135,13 @@ public:
     // stopped receiving writes. See classify_index_for_segment() in
     // lake/add_index_schema_change.cpp.
     //
-    // Non-zero means index coverage is incomplete, which is otherwise invisible:
-    // the alter reports FINISHED and queries stay correct, so without this counter
-    // a user who set bloom_filter_columns has no way to tell that part of the data
-    // is not being pruned.
+    // This is a monotonic count of skip EVENTS over the process's lifetime, not a
+    // gauge of current coverage: it is never decremented when a later rewrite
+    // closes the gap, and an alter that fails after skipping still contributes.
+    // Read it as "this BE has skipped index payloads N times" -- useful to notice
+    // that the condition occurs at all and how often, since the alter reports
+    // FINISHED and queries stay correct, so a user who set bloom_filter_columns
+    // otherwise has no signal. It cannot answer "is coverage complete right now".
     METRIC_DEFINE_INT_COUNTER(lake_add_index_segments_skipped_total, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);

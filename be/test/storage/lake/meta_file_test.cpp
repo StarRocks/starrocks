@@ -3378,18 +3378,16 @@ TEST_F(MetaFileTest, test_apply_add_index_installs_new_schema_content_with_new_i
     MetaFileBuilder builder(*tablet, metadata);
 
     TxnLogPB_OpAddIndex op;
-    // FE's catalog schema: c1 plus the ALTER-added c5. Its own id (999) is the
-    // catalog id, which is neither the pre-apply id nor the id this alter
-    // publishes -- apply must not leak it into the metadata.
+    // The schema this alter publishes: c1 plus the ALTER-added c5, carrying the
+    // FE-allocated target id/version inside it (the writer emits no standalone
+    // new_schema_id, so a pre-new_schema worker finds nothing to stamp).
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999);
+    fe_schema->set_id(777);
     fe_schema->set_schema_version(4);
     push_column(fe_schema, /*col_uid=*/42, "c1");
     auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
     c5->set_is_nullable(true);
     c5->set_default_value("0");
-    op.set_new_schema_id(777);
-    op.set_new_schema_version(4);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(105);
@@ -3427,11 +3425,9 @@ TEST_F(MetaFileTest, test_apply_add_index_rejects_schema_version_regression) {
 
     TxnLogPB_OpAddIndex op;
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999);
+    fe_schema->set_id(777);
     fe_schema->set_schema_version(4); // older than the metadata's 10
     push_column(fe_schema, /*col_uid=*/42, "c1");
-    op.set_new_schema_id(777);
-    op.set_new_schema_version(4);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(42);
@@ -3459,14 +3455,12 @@ TEST_F(MetaFileTest, test_apply_add_index_new_schema_replay_is_idempotent) {
 
     TxnLogPB_OpAddIndex op;
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999);
-    fe_schema->set_schema_version(3); // catalog snapshot; target below is 4
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4); // catalog snapshot; target below is 4
     push_column(fe_schema, /*col_uid=*/42, "c1");
     auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
     c5->set_is_nullable(true);
     c5->set_default_value("0");
-    op.set_new_schema_id(777);
-    op.set_new_schema_version(4);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(105);
@@ -3532,8 +3526,8 @@ TEST_F(MetaFileTest, test_apply_add_index_preserves_be_only_schema_fields) {
 
     TxnLogPB_OpAddIndex op;
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999);
-    fe_schema->set_schema_version(4);
+    fe_schema->set_id(888);
+    fe_schema->set_schema_version(5);
     // FE recomputes these from what it knows, and cannot express the tombstone.
     fe_schema->set_next_column_unique_id(107);
     fe_schema->set_num_rows_per_row_block(65535);
@@ -3545,8 +3539,6 @@ TEST_F(MetaFileTest, test_apply_add_index_preserves_be_only_schema_fields) {
     auto* fe_new = push_column(fe_schema, /*col_uid=*/106, "bfc");
     fe_new->set_is_nullable(true);
     fe_new->set_default_value("0");
-    op.set_new_schema_id(888);
-    op.set_new_schema_version(5);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_id(-1);
     new_ix->set_index_name("bf_bfc");
@@ -3605,15 +3597,13 @@ TEST_F(MetaFileTest, test_apply_add_index_next_unique_id_takes_the_higher_mark) 
 
     TxnLogPB_OpAddIndex op;
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999);
-    fe_schema->set_schema_version(2);
+    fe_schema->set_id(701);
+    fe_schema->set_schema_version(3);
     fe_schema->set_next_column_unique_id(44); // FE just allocated uid 43
     push_column(fe_schema, /*col_uid=*/42, "c1");
     auto* added = push_column(fe_schema, /*col_uid=*/43, "bfc");
     added->set_is_nullable(true);
     added->set_default_value("0");
-    op.set_new_schema_id(701);
-    op.set_new_schema_version(3);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(43);
@@ -3623,6 +3613,41 @@ TEST_F(MetaFileTest, test_apply_add_index_next_unique_id_takes_the_higher_mark) 
     EXPECT_EQ(44, schema->next_column_unique_id()) << "allocation mark must not lag FE";
     ASSERT_EQ(2, schema->column_size());
     EXPECT_TRUE(schema->column(1).is_bf_column());
+}
+
+// The id may arrive either inside new_schema (what this version writes) or in the
+// standalone new_schema_id field (logs written before new_schema existed). Both
+// must reach the same end state for the id, and the legacy encoding must keep
+// working -- an upgraded BE still has to apply logs an older one left behind.
+TEST_F(MetaFileTest, test_apply_add_index_accepts_legacy_standalone_schema_id) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20118);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20118);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Legacy shape: no new_schema at all, id/version in the standalone fields.
+    TxnLogPB_OpAddIndex op;
+    op.set_new_schema_id(777);
+    op.set_new_schema_version(4);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(42);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // Old behaviour preserved: id/version stamped, index appended, flag bumped,
+    // and the column set untouched (no content to install).
+    EXPECT_EQ(777, schema->id());
+    EXPECT_EQ(4, schema->schema_version());
+    ASSERT_EQ(1, schema->table_indices_size());
+    ASSERT_EQ(1, schema->column_size());
+    EXPECT_TRUE(schema->column(0).has_bitmap_index());
 }
 
 // Guard: apply_add_index() decides, field by field, whether TabletSchemaPB content
@@ -3684,16 +3709,14 @@ TEST_F(MetaFileTest, test_apply_add_index_keeps_earlier_bloom_filter_entry) {
     // no table_indices entry for any bloom filter (FE cannot express them).
     TxnLogPB_OpAddIndex op;
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999);
-    fe_schema->set_schema_version(4);
+    fe_schema->set_id(888);
+    fe_schema->set_schema_version(5);
     push_column(fe_schema, /*col_uid=*/42, "c1");
     auto* fe_bfc = push_column(fe_schema, /*col_uid=*/105, "bfc");
     fe_bfc->set_is_nullable(true);
     auto* fe_bfc2 = push_column(fe_schema, /*col_uid=*/107, "bfc2");
     fe_bfc2->set_is_nullable(true);
     fe_bfc2->set_default_value("0");
-    op.set_new_schema_id(888);
-    op.set_new_schema_version(5);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_id(-1);
     new_ix->set_index_name("bf_bfc2");
@@ -3782,15 +3805,13 @@ TEST_F(MetaFileTest, test_apply_add_index_old_pin_is_a_compaction_fixed_point) {
 
     TxnLogPB_OpAddIndex op;
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999);
-    fe_schema->set_schema_version(3);
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
     fe_schema->set_keys_type(DUP_KEYS);
     push_column(fe_schema, /*col_uid=*/42, "c1");
     auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
     c5->set_is_nullable(true);
     c5->set_default_value("0");
-    op.set_new_schema_id(777);
-    op.set_new_schema_version(4);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(105);
@@ -3860,14 +3881,12 @@ TEST_F(MetaFileTest, test_apply_add_index_repoints_rowset_pins_from_pre_apply_id
 
     TxnLogPB_OpAddIndex op;
     auto* fe_schema = op.mutable_new_schema();
-    fe_schema->set_id(999); // FE catalog id, deliberately != 500
+    fe_schema->set_id(777); // FE catalog id, deliberately != 500
     fe_schema->set_schema_version(4);
     push_column(fe_schema, /*col_uid=*/42, "c1");
     auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
     c5->set_is_nullable(true);
     c5->set_default_value("0");
-    op.set_new_schema_id(777);
-    op.set_new_schema_version(4);
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(105);

@@ -597,18 +597,25 @@ message TxnLogPB {
         // Indexes added by this alter; redundant w.r.t. schema.table_indices
         // that FE has already published, kept for idempotent reconciliation.
         repeated TabletIndexPB new_indexes = 3;
-        // New schema id/version allocated by FE for this fast-path ADD INDEX.
-        // apply_add_index stamps these onto the tablet metadata schema so every
-        // by-id schema cache (GS{id} metacache, GlobalTabletSchemaMap dedup,
-        // SCHEMA_{id} file) misses and picks up the now-indexed schema; without
-        // an id change, data loaded after the index — and compaction output —
-        // would keep reusing the cached pre-index schema and build no index.
+        // DEPRECATED for writing; still read for logs written before new_schema
+        // existed. New schema id/version allocated by FE for this fast-path ADD
+        // INDEX. apply_add_index stamps these onto the tablet metadata schema so
+        // every by-id schema cache (GS{id} metacache, GlobalTabletSchemaMap dedup,
+        // SCHEMA_{id} file) misses and picks up the now-indexed schema.
+        //
+        // DO NOT set these alongside new_schema. A worker predating new_schema
+        // ignores that field but still honours these two, and would stamp the new
+        // id onto schema content that lacks the added column -- the permanent
+        // mis-binding new_schema exists to prevent. Writers put the id/version
+        // inside new_schema instead, so such a worker skips schema mutation
+        // altogether and the schema resyncs from FE on the next write.
         optional int64 new_schema_id = 4;
         optional int64 new_schema_version = 5;
         // The authoritative COLUMN DEFINITIONS this alter must publish, taken
         // from the schema FE attached to the alter request (TAlterTabletReqV2
-        // .base_tablet_read_schema). Carries no entry for the indexes being
-        // added -- those stay in `new_indexes` above, and apply_add_index
+        // .base_tablet_read_schema), with `id` and `schema_version` set to the
+        // values FE allocated for this alter. Carries no entry for the indexes
+        // being added -- those stay in `new_indexes` above, and apply_add_index
         // composes the two into the final schema, so the compose logic exists
         // in exactly one place.
         //

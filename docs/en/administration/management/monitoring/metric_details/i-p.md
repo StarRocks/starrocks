@@ -254,6 +254,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
 
+## `lake_add_index_segments_skipped_total`
+
+- Unit: Count
+- Description: Counter of (segment, index) pairs that a shared-data `ADD INDEX` fast path could not build because the indexed column is physically absent from that segment. This is the normal outcome for a column added by `ALTER TABLE ... ADD COLUMN`, which updates metadata without rewriting historical segments: those rows read the column's default value, so query results stay correct and only index pruning is unavailable for them. A segment gains the index when a later rewrite (such as compaction) resolves a schema that carries the index. This is a monotonic count of skip events over the BE's lifetime, not a gauge of current coverage — it is never decremented once a rewrite closes the gap, and an alter that fails after skipping still contributes. Use it to see whether, and how often, the condition occurs; it cannot answer whether index coverage is complete right now.
+
 ## `lake_compaction_failed`
 
 - Unit: Count
