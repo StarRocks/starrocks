@@ -19,6 +19,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.thrift.TTaskType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -27,11 +29,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * A node that is not alive never receives the task {@code AgentBatchTask.run()} would have sent it,
- * so nobody ever counts its latch mark down and the caller waits out the whole latch timeout - once
- * per auto-increment table, all of it under the database WRITE lock held by DROP DATABASE.
- * {@link OlapTable#sendDropAutoIncrementMapTask()} therefore has to leave dead nodes out of the
- * latch entirely.
+ * The two invalidation contracts of {@link OlapTable}, and why they cannot be one method.
+ *
+ * <p>A node that is not alive never receives the task {@code AgentBatchTask.run()} would have sent
+ * it, so nobody counts its latch mark down and the caller waits out the whole timeout. The drop path
+ * must not pay that - it runs once per auto-increment table under the database WRITE lock - while
+ * ALTER and RESTORE must, because they use the result as proof that no stale interval survives.
  */
 public class DropAutoIncrementMapTaskTest {
     private static final int SECOND_BACKEND_ID = 10002;
@@ -61,55 +64,87 @@ public class DropAutoIncrementMapTaskTest {
     }
 
     @AfterEach
-    public void reviveBackends() {
+    public void resetCluster() {
         clusterInfo().getBackends().forEach(backend -> backend.setAlive(true));
+        // A task the strict variant left behind for a dead node stays queued forever here: there is
+        // no BE report to make ReportHandler resend it and no finishTask to remove it.
+        AgentTaskQueue.clearAllTasks();
     }
 
     @Test
-    public void testAllNodesAlive() {
-        long elapsedMs = timeSendDropTask();
+    public void testBestEffortWithEveryNodeAlive() {
+        long elapsedMs = timeBestEffort();
         Assertions.assertTrue(elapsedMs < NO_TIMEOUT_WAIT_MS, "elapsedMs=" + elapsedMs);
     }
 
     @Test
-    public void testDeadNodeIsSkipped() {
+    public void testBestEffortSkipsDeadNode() {
         setAlive(SECOND_BACKEND_ID, false);
 
-        long elapsedMs = timeSendDropTask();
+        long elapsedMs = timeBestEffort();
 
         Assertions.assertTrue(elapsedMs < NO_TIMEOUT_WAIT_MS,
                 "a dead node must not be waited for, elapsedMs=" + elapsedMs);
+        // Never enqueued, so there was never a mark to wait on. A task queued for a dead node would
+        // still be here - nothing acknowledges it - so zero means it was skipped, not completed.
+        Assertions.assertEquals(0, queuedTaskNum(SECOND_BACKEND_ID));
     }
 
     @Test
-    public void testEveryNodeDead() {
+    public void testBestEffortWithNoNodeAlive() {
         clusterInfo().getBackends().forEach(backend -> backend.setAlive(false));
 
         // Nothing to tell, so nothing to wait for: no task is built and no mark is ever added.
-        long elapsedMs = timeSendDropTask();
+        long elapsedMs = timeBestEffort();
 
         Assertions.assertTrue(elapsedMs < NO_TIMEOUT_WAIT_MS,
                 "with no live node there is nothing to wait for, elapsedMs=" + elapsedMs);
     }
 
     /**
-     * Returns how long the call took. Also asserts it succeeded: before dead nodes were filtered out
-     * the latch could not reach zero, so {@code latch.await} returned false after the full timeout.
+     * ALTER TABLE ... AUTO_INCREMENT and RESTORE move the table's counter and only proceed when this
+     * returns true, so it must NOT report success while a node that could still hold a reserved
+     * interval was never told. Such a node goes {@code isAlive == false} on failed heartbeats and
+     * comes back on the next successful one without restarting, so its cache outlives the outage.
+     *
+     * <p>Deliberately slow (~60s): proving the call does not let the ALTER through means letting the
+     * latch time out. Do not "fix" this by shortening it - the wait is the assertion.
      */
-    private static long timeSendDropTask() {
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb(DB_NAME).getTable(TABLE_NAME);
+    @Test
+    public void testStrictRefusesWhenANodeIsDead() {
+        setAlive(SECOND_BACKEND_ID, false);
+
+        Assertions.assertFalse(getTable().sendDropAutoIncrementMapTask(),
+                "a node that was never told must not be reported as invalidated");
+        // Still queued, which is what lets ReportHandler resend it once the node reports again.
+        Assertions.assertEquals(1, queuedTaskNum(SECOND_BACKEND_ID));
+    }
+
+    /**
+     * Runs the best-effort variant and returns how long it took, asserting it succeeded on the way:
+     * every node it targets is alive, so every mark it adds gets counted down.
+     */
+    private static long timeBestEffort() {
         long start = System.currentTimeMillis();
-        boolean ok = table.sendDropAutoIncrementMapTask();
+        boolean ok = getTable().sendDropAutoIncrementMapTaskBestEffort();
         long elapsedMs = System.currentTimeMillis() - start;
-        Assertions.assertTrue(ok, "sendDropAutoIncrementMapTask() must not report failure");
+        Assertions.assertTrue(ok, "every targeted node is alive, so none of them can time out");
         return elapsedMs;
+    }
+
+    private static int queuedTaskNum(long backendId) {
+        return AgentTaskQueue.getTaskNum(backendId, TTaskType.DROP_AUTO_INCREMENT_MAP, false);
     }
 
     private static void setAlive(long backendId, boolean alive) {
         Backend backend = clusterInfo().getBackend(backendId);
         Assertions.assertNotNull(backend);
         backend.setAlive(alive);
+    }
+
+    private static OlapTable getTable() {
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(DB_NAME).getTable(TABLE_NAME);
     }
 
     private static SystemInfoService clusterInfo() {
