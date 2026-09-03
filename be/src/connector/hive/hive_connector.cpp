@@ -1098,6 +1098,21 @@ void HiveDataSourceProvider::prepare_scan_ranges(const std::vector<TScanRangePar
 
 void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
     DataSourceProvider::default_data_source_mem_bytes(min_value, max_value);
+    // Pinning min == max here is deliberate: it makes the largest file this scan will touch the
+    // whole initial estimate, and discards the per-field term that
+    // ConnectorScanNode::_estimate_data_source_mem_bytes() would otherwise apply.
+    //
+    // The reasoning is that this path is mainly parquet, where the file length is a real physical
+    // ceiling on one reader's footprint -- the coalesced IO buffers, the per-column page buffers and
+    // the per-column dictionaries all come out of that file -- whereas `slots.size() *
+    // PER_FIELD_MEM_BYTES` is a flat per-column guess that ignores the file entirely. On the many
+    // small files that Hive tables usually consist of, the per-field term over-estimates by orders
+    // of magnitude and would cut io task concurrency for no reason, so we prefer to stay on the
+    // slightly conservative, file-derived bound.
+    //
+    // The known gap is the opposite direction: a dictionary-encoded column of long strings expands
+    // to far more memory than the file it came from, and no file-size prior can see that. The
+    // measured estimate takes over once the first chunk source closes; the first one is unprotected.
     // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
     int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
     *min_value = *max_value = size;

@@ -229,6 +229,17 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     ASSERT_EQ(values.size() * 2, c1->size());
     ASSERT_EQ(total_length * 2, c1->get_bytes().size());
 
+    // A dictionary of long values can still hand out a batch whose selected values are all
+    // empty. The offsets must repeat the current end and the byte buffer must not grow.
+    auto c3 = BinaryColumn::create();
+    std::vector<Slice> empties(4, Slice(backing.data(), 0));
+    ASSERT_TRUE(c3->append_strings_overflow(empties.data(), empties.size(), max_length));
+    ASSERT_EQ(empties.size(), c3->size());
+    ASSERT_EQ(0u, c3->get_bytes().size());
+    for (size_t i = 0; i < empties.size(); i++) {
+        ASSERT_EQ(0u, c3->immutable_data()[i].size);
+    }
+
     // Nullable BinaryColumn forwards to the same path.
     auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     ASSERT_TRUE(c2->append_strings_overflow(values.data(), values.size(), max_length));

@@ -52,7 +52,7 @@ CONF_mInt64(object_storage_request_timeout_ms, "10000");
 CONF_mBool(s3_use_list_objects_v1, "false");
 
 // use poco client to replace default curl client
-CONF_Bool(enable_poco_client_for_aws_sdk, "true");
+CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
