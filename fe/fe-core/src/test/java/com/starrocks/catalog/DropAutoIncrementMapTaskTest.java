@@ -41,9 +41,17 @@ public class DropAutoIncrementMapTaskTest {
     private static final String DB_NAME = "test_drop_auto_increment_map";
     private static final String TABLE_NAME = "t_auto_inc";
 
+    private static final long DEFAULT_TIMEOUT_MS = OlapTable.dropAutoIncrementMapTimeoutMs;
+
     /**
-     * Well below the 60s latch timeout, well above the milliseconds the call needs when every mark
-     * is counted down. Only has to tell "returned" apart from "waited out the timeout".
+     * Long enough that a healthy fan-out never trips it, short enough that the one case which has to
+     * observe a timeout does not cost a minute.
+     */
+    private static final long SHORT_TIMEOUT_MS = 2000;
+
+    /**
+     * Well below the production latch timeout, well above the milliseconds the call needs when every
+     * mark is counted down. Only has to tell "returned" apart from "waited out the timeout".
      */
     private static final long NO_TIMEOUT_WAIT_MS = 30000;
 
@@ -66,6 +74,7 @@ public class DropAutoIncrementMapTaskTest {
     @AfterEach
     public void resetCluster() {
         clusterInfo().getBackends().forEach(backend -> backend.setAlive(true));
+        OlapTable.dropAutoIncrementMapTimeoutMs = DEFAULT_TIMEOUT_MS;
         // A task the strict variant left behind for a dead node stays queued forever here: there is
         // no BE report to make ReportHandler resend it and no finishTask to remove it.
         AgentTaskQueue.clearAllTasks();
@@ -107,12 +116,13 @@ public class DropAutoIncrementMapTaskTest {
      * interval was never told. Such a node goes {@code isAlive == false} on failed heartbeats and
      * comes back on the next successful one without restarting, so its cache outlives the outage.
      *
-     * <p>Deliberately slow (~60s): proving the call does not let the ALTER through means letting the
-     * latch time out. Do not "fix" this by shortening it - the wait is the assertion.
+     * <p>This is the one case that has to observe a timeout - the refusal only arrives once the
+     * latch gives up - so it shortens the wait instead of sitting out the production minute.
      */
     @Test
     public void testStrictRefusesWhenANodeIsDead() {
         setAlive(SECOND_BACKEND_ID, false);
+        OlapTable.dropAutoIncrementMapTimeoutMs = SHORT_TIMEOUT_MS;
 
         Assertions.assertFalse(getTable().sendDropAutoIncrementMapTask(),
                 "a node that was never told must not be reported as invalidated");

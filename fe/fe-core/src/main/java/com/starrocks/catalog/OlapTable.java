@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -1003,6 +1004,13 @@ public class OlapTable extends Table {
     }
 
     /**
+     * How long to wait for the targeted nodes to acknowledge a drop of their auto-increment map.
+     * Mutable only so a test can pin the strict variant's refusal without sitting out a full minute.
+     */
+    @VisibleForTesting
+    static long dropAutoIncrementMapTimeoutMs = 60L * 1000L;
+
+    /**
      * Strict invalidation: tell every registered node, alive or not, to drop its cached
      * auto-increment map for this table, and report failure unless all of them acknowledged.
      *
@@ -1077,8 +1085,7 @@ public class OlapTable extends Table {
             }
             AgentTaskExecutor.submit(batchTask);
 
-            // estimate timeout, at most 10 min
-            long timeout = 60L * 1000L;
+            long timeout = dropAutoIncrementMapTimeoutMs;
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
                         batchTask.getTaskNum(), timeout);
