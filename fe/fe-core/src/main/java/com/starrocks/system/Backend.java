@@ -85,7 +85,7 @@ public class Backend extends ComputeNode {
     private boolean initPathInfo = false;
 
     // the max tablet compaction score of this backend.
-    // this field is set by tablet report, and just for metric monitor, no need to persist.
+    // this field is set by tablet report or collection, and just for metric monitor, no need to persist.
     private volatile long tabletMaxCompactionScore = 0;
 
     // additional backendStatus information for BE, display in JSON format
