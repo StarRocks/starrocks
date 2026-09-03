@@ -2024,9 +2024,11 @@ Status SegmentIterator::_init_virtual_column_iterator(const ColumnId cid, const 
 // spans it turns the first column's read into the only remote one.
 //
 // BufferInputStream keeps only the window ahead of its read position -- it fills forward and
-// discards on any seek that lands outside the filled extent (buffer_stream.h). Reads inside the
-// region are ascending within each pass, so the buffer survives them; a backward seek between
-// passes is still correct, only slower -- it costs one refill.
+// discards on any seek that lands outside the filled extent (buffer_stream.h). The region is
+// written to match: short key index, then every ordinal index, then every page zone map, which is
+// the order _init_column_iterators() and _get_row_ranges_by_zone_map() read them in, so the walk
+// is forward and the buffer survives it. A backward seek is still correct, only slower -- it
+// costs one refill.
 //
 // Returns nullptr, leaving every column on its own file, when there is no region to exploit. In
 // the legacy layout the indexes sit behind their own column's data pages, megabytes apart, so

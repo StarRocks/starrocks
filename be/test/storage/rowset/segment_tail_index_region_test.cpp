@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Covers config::enable_segment_tail_index_region: the segment writer gathers every column's
-// ordinal index and page zone map into one contiguous run immediately before the footer, instead
-// of interleaving each column's indexes after that column's own data pages.
+// Covers config::enable_segment_tail_index_region: the segment writer gathers the short key index
+// and every column's ordinal index and page zone map into one contiguous run immediately before
+// the footer -- grouped by index kind, in the order a scan reads them -- instead of interleaving
+// each column's indexes after that column's own data pages.
 //
 // The two layouts must be indistinguishable to a reader -- every index is located through an
 // absolute PagePointer either way -- so each test that asserts something about the layout also
@@ -56,16 +57,26 @@ struct WriteResult {
     uint64_t footer_position = 0;
 };
 
-// Every byte range the read path must load before it can touch a data page: the ordinal index of
-// each column, and the page zone map of each column that has one. Reported as offsets in the same
-// space as the rest of the footer's PagePointers.
-std::vector<uint64_t> collect_small_index_offsets(const SegmentFooterPB& footer) {
+// Offsets of every column's ordinal index, in the same space as the rest of the footer's
+// PagePointers.
+std::vector<uint64_t> collect_ordinal_index_offsets(const SegmentFooterPB& footer) {
     std::vector<uint64_t> offsets;
     for (const auto& column : footer.columns()) {
         for (const auto& index : column.indexes()) {
             if (index.type() == ORDINAL_INDEX && index.ordinal_index().has_root_page()) {
                 offsets.push_back(index.ordinal_index().root_page().root_page().offset());
-            } else if (index.type() == ZONE_MAP_INDEX && index.zone_map_index().has_page_zone_maps()) {
+            }
+        }
+    }
+    return offsets;
+}
+
+// Offsets of every column's page zone map.
+std::vector<uint64_t> collect_zone_map_offsets(const SegmentFooterPB& footer) {
+    std::vector<uint64_t> offsets;
+    for (const auto& column : footer.columns()) {
+        for (const auto& index : column.indexes()) {
+            if (index.type() == ZONE_MAP_INDEX && index.zone_map_index().has_page_zone_maps()) {
                 const auto& zone_maps = index.zone_map_index().page_zone_maps();
                 if (zone_maps.has_ordinal_index_meta()) {
                     offsets.push_back(zone_maps.ordinal_index_meta().root_page().offset());
@@ -76,6 +87,14 @@ std::vector<uint64_t> collect_small_index_offsets(const SegmentFooterPB& footer)
             }
         }
     }
+    return offsets;
+}
+
+// Every byte range the read path must load before it can touch a data page.
+std::vector<uint64_t> collect_small_index_offsets(const SegmentFooterPB& footer) {
+    std::vector<uint64_t> offsets = collect_ordinal_index_offsets(footer);
+    auto zone_maps = collect_zone_map_offsets(footer);
+    offsets.insert(offsets.end(), zone_maps.begin(), zone_maps.end());
     return offsets;
 }
 
@@ -217,7 +236,7 @@ TEST_F(SegmentTailIndexRegionTest, RegionCoversEverySmallIndex) {
     const uint64_t region_begin = result.footer.small_index_region_offset();
     const uint64_t region_end = region_begin + result.footer.small_index_region_size();
 
-    // The region is closed after the short key index, right where the footer starts.
+    // The region ends right where the footer starts.
     EXPECT_EQ(result.footer_position, region_end);
 
     auto offsets = collect_small_index_offsets(result.footer);
@@ -328,6 +347,40 @@ TEST_F(SegmentTailIndexRegionTest, VerticalAndHorizontalRegionsAgree) {
 
     verify_all_rows(h_file, tablet_schema);
     verify_all_rows(v_file, tablet_schema);
+}
+
+// The region is laid out short key index, then every ordinal index, then every page zone map --
+// the order a scan reads them in. _init_column_iterators() loads the ordinal index of every
+// projected column, and only afterwards does _get_row_ranges_by_zone_map() load the zone map of
+// every predicate column, so grouping them this way lets the shared small index stream walk the
+// region forward once instead of seeking back and refilling its buffer. The short key index leads
+// because it is read through the Segment's own file, not that stream, and only when the scan
+// carries a key range -- so it should not occupy the tail of the file, which the footer read
+// brings into the cache for free.
+TEST_F(SegmentTailIndexRegionTest, RegionIsOrderedByIndexKind) {
+    auto tablet_schema = make_schema();
+    config::enable_segment_tail_index_region = true;
+
+    for (bool vertical : {false, true}) {
+        SCOPED_TRACE(vertical ? "vertical" : "horizontal");
+        const std::string file_name = kSegmentDir + (vertical ? "/order_vertical" : "/order_horizontal");
+        auto result = vertical ? write_vertical(file_name, tablet_schema) : write_horizontal(file_name, tablet_schema);
+
+        auto ordinals = collect_ordinal_index_offsets(result.footer);
+        auto zone_maps = collect_zone_map_offsets(result.footer);
+        ASSERT_FALSE(ordinals.empty());
+        ASSERT_FALSE(zone_maps.empty());
+
+        ASSERT_TRUE(result.footer.has_short_key_index_page());
+        const uint64_t short_key = result.footer.short_key_index_page().offset();
+        const uint64_t first_ordinal = *std::min_element(ordinals.begin(), ordinals.end());
+        const uint64_t last_ordinal = *std::max_element(ordinals.begin(), ordinals.end());
+        const uint64_t first_zone_map = *std::min_element(zone_maps.begin(), zone_maps.end());
+
+        // Short key index first, then the ordinal indexes as a block, then the zone maps.
+        EXPECT_LT(short_key, first_ordinal);
+        EXPECT_LT(last_ordinal, first_zone_map);
+    }
 }
 
 // Small index reads are routed to a shared stream only when one was supplied; everything else

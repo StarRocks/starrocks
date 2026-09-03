@@ -410,11 +410,19 @@ CONF_Int32(min_file_descriptor_number, "60000");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
-// Write-time gate for the segment "small index region" layout. When true, a segment emits every
-// column's ordinal index and page zone map as one contiguous run immediately before the short
-// key index and the footer, instead of interleaving each column's indexes after that column's
-// data pages. Both layouts are readable by any binary -- indexes are always located through
-// absolute PagePointers -- so this can be flipped at any time and mixed within a tablet.
+// Write-time gate for the segment "small index region" layout. When true, a segment emits the
+// short key index, then every column's ordinal index, then every column's page zone map, as one
+// contiguous run immediately before the footer, instead of interleaving each column's indexes
+// after that column's data pages. Both layouts are readable by any binary -- indexes are always
+// located through absolute PagePointers -- so this can be flipped at any time and mixed within a
+// tablet, and the order within the region is not part of the format.
+//
+// That order matches how a scan reads them. Ordinal indexes are loaded for every projected
+// column, page zone maps only for predicate columns and only after, so keeping the two grouped
+// and in that sequence lets one buffered stream walk the region forward without ever seeking
+// back. The short key index leads because it is read through its own file rather than that
+// stream, and only when the scan has a key range; putting it last would spend the tail of the
+// file -- the part the footer read pulls into the cache for free -- on bytes most scans skip.
 //
 // The point is cold-read latency on shared-data: the reader must load the ordinal index of
 // every accessed column, and the page zone map of every predicate column, before it can read

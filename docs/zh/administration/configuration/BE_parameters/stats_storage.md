@@ -547,7 +547,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：Segment 写入时，是否把所有列的 ordinal index 和页级 zone map 连同 short key index 一起，放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的索引写在该列数据页之后。查询在读取任何数据页之前都必须先加载这些索引，把它们聚在一起后一次读取即可全部覆盖。这主要降低存算分离集群的冷查询延迟——否则每一处分散的索引读取都要单独访问一次对象存储。该配置仅影响写入侧。所有会写出 segment footer 的写入路径都会产出该区域，纵向 Compaction 和部分列更新重写也包括在内：纵向写入时，每个写完的列的索引写入器会跨列组保留下来，最后一并落盘，因此靠前列组的索引同样落在尾部。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
+- 描述：Segment 写入时，是否把所有列的 ordinal index 和页级 zone map 连同 short key index 一起，放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的索引写在该列数据页之后。查询在读取任何数据页之前都必须先加载这些索引，把它们聚在一起后一次读取即可全部覆盖。区域内部的顺序是：先 short key index，再所有列的 ordinal index，最后所有列的页级 zone map——这正是查询读取它们的顺序，使 `enable_segment_shared_small_index_stream` 启用的共享流能够单向走完整个区域，无需回退重读。区域内部的顺序不属于 segment 格式的一部分，后续可能调整。这主要降低存算分离集群的冷查询延迟——否则每一处分散的索引读取都要单独访问一次对象存储。该配置仅影响写入侧。所有会写出 segment footer 的写入路径都会产出该区域，纵向 Compaction 和部分列更新重写也包括在内：纵向写入时，每个写完的列的索引写入器会跨列组保留下来，最后一并落盘，因此靠前列组的索引同样落在尾部。两种布局都能被任意版本的 BE/CN 双向读取，并可在同一张表中共存，因此可以随时开启或关闭，无需重写数据。
 - 引入版本：v4.2.0
 
 ### enable_size_tiered_compaction_strategy
