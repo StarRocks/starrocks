@@ -1003,26 +1003,54 @@ public class OlapTable extends Table {
     }
 
     /**
-     * Ask every node to drop its cached auto-increment map for this table.
+     * Strict invalidation: tell every registered node, alive or not, to drop its cached
+     * auto-increment map for this table, and report failure unless all of them acknowledged.
      *
-     * <p>Dead nodes are skipped on purpose. {@link AgentBatchTask#run()} silently drops a task whose
-     * target node is gone or not alive, so no BE response ever arrives for it and nobody counts the
-     * latch down - the caller then burns the full latch timeout per table. DROP DATABASE runs this
-     * once per auto-increment table while holding the database WRITE lock, so a single dead node
-     * turns into (table count * timeout) of lock hold time and stalls every other operation on the
-     * database. Skipping is safe: the map is BE-local memory that a restart clears anyway, and table
-     * ids are never reused, so a stale entry on an unreachable node can never be hit again.
+     * <p>For callers that use the result as proof that no stale interval can survive anywhere -
+     * {@code ALTER TABLE ... AUTO_INCREMENT} and RESTORE, both of which move the table's counter and
+     * would otherwise hand out ids a rejoining node has already issued, or ids below the value the
+     * user just set. A node that is not alive must therefore still be waited for: it goes
+     * {@code isAlive == false} after failed heartbeats and comes back on the next successful one
+     * <em>without restarting</em> ({@code ComputeNode.handleHbResponse}), so its in-memory interval
+     * survives. Its task also stays queued in {@link AgentTaskQueue}, which is what lets
+     * {@code ReportHandler} resend it once the node reports again.
      *
-     * <p>{@code getBackendIds(true)} filters on {@code isAlive()} - the same predicate
-     * {@code AgentBatchTask.run()} applies - and not on {@code isAvailable()}: a decommissioning node
-     * is alive, still serves loads, and may already hold a cached map that has to be dropped.
+     * @see #sendDropAutoIncrementMapTaskBestEffort() for the drop path, which must not block
      */
     public boolean sendDropAutoIncrementMapTask() {
-        Set<Long> nodeIds = Sets.newHashSet();
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        nodeIds.addAll(clusterInfo.getBackendIds(true));
-        nodeIds.addAll(clusterInfo.getComputeNodeIds(true));
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(false));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(false));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
 
+    /**
+     * Best-effort invalidation: tell only the nodes that are alive, and do not wait for the rest.
+     *
+     * <p>For DROP TABLE / DROP DATABASE, where the result carries no guarantee and none is needed:
+     * table ids come from {@code getNextId()} and are never reused, so a stale entry left behind on
+     * a node that is not alive can never be hit by a future table.
+     *
+     * <p>Waiting for such a node is not merely useless here, it is harmful.
+     * {@link AgentBatchTask#run()} silently drops a task whose target node is gone or not alive, so
+     * no response ever arrives and nobody counts that latch mark down - the caller burns the full
+     * latch timeout. DROP DATABASE runs this once per auto-increment table while holding the
+     * database WRITE lock, so a single dead node turns into (table count * timeout) of lock hold
+     * time and stalls every other operation on the database.
+     *
+     * <p>The predicate is {@code isAlive()} - the same one {@code AgentBatchTask.run()} applies, so
+     * a node that passes here is a node the dispatch path will really send to - and not
+     * {@code isAvailable()}: a decommissioning node is alive, still serves loads, and still holds a
+     * map worth dropping.
+     */
+    public boolean sendDropAutoIncrementMapTaskBestEffort() {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(true));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(true));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
+
+    private boolean doSendDropAutoIncrementMapTask(Set<Long> nodeIds) {
         AgentBatchTask batchTask = new AgentBatchTask();
 
         for (long nodeId : nodeIds) {
