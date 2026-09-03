@@ -58,6 +58,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.load.CsvSplitFinder;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -578,6 +579,9 @@ public class FileScanNode extends LoadScanNode {
         // Create locations for file group
         createScanRangeLocations(context, fileStatuses);
 
+        // Where records actually begin, for files whose fields may contain the row delimiter.
+        Map<String, List<Long>> recordBoundaries = findRecordBoundaries(context, fileStatuses);
+
         // Add files to locations with less allocated data
         Pair<TScanRangeLocations, Long> smallestLocations = null;
         long curFileOffset = 0;
@@ -588,14 +592,32 @@ public class FileScanNode extends LoadScanNode {
                     context.fileGroup.getColumnsFromPath());
             int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();
 
+            // Null unless this file's records may straddle an arbitrary offset and we know where
+            // they begin. When alignment is needed but unknown, the file is not split at all -
+            // slower than splitting, but never wrong.
+            List<Long> boundaries = recordBoundaries.get(fileStatus.path);
+            boolean maySplit = isFileFormatSupportSplit(formatType) && fileStatus.isSplitable
+                    && (boundaries != null || !requiresRecordAlignedSplits(context.fileGroup, formatType));
+
             smallestLocations = locationsHeap.poll();
             long leftBytes = fileStatus.size - curFileOffset;
             long rangeBytes = 0;
             // The rest of the file belongs to one range
             boolean isEndOfFile = false;
-            if (smallestLocations.second + leftBytes > bytesPerInstance && isFileFormatSupportSplit(formatType)
-                            && fileStatus.isSplitable) {
+            if (smallestLocations.second + leftBytes > bytesPerInstance && maySplit) {
                 rangeBytes = bytesPerInstance - smallestLocations.second;
+                if (boundaries != null) {
+                    // Move the cut forward onto the next record start. curFileOffset is already one,
+                    // by induction from 0, so the range covers whole records at both ends.
+                    long alignedEnd = nextBoundaryAtOrAfter(boundaries, curFileOffset + rangeBytes);
+                    if (alignedEnd <= curFileOffset || alignedEnd >= fileStatus.size) {
+                        rangeBytes = leftBytes;
+                        isEndOfFile = true;
+                        i++;
+                    } else {
+                        rangeBytes = alignedEnd - curFileOffset;
+                    }
+                }
             } else {
                 rangeBytes = leftBytes;
                 isEndOfFile = true;
@@ -605,6 +627,9 @@ public class FileScanNode extends LoadScanNode {
             TBrokerRangeDesc rangeDesc =
                     createBrokerRangeDesc(curFileOffset, fileStatus, formatType, rangeBytes, columnsFromPath,
                             numberOfColumnsFromFile);
+            if (boundaries != null) {
+                rangeDesc.setRecord_aligned(true);
+            }
 
             rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
             rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
@@ -634,6 +659,115 @@ public class FileScanNode extends LoadScanNode {
         }
     }
     
+    /**
+     * Whether a range over this file group may only begin where a record begins.
+     *
+     * <p>With an enclose or an escape character configured, a row delimiter can appear inside a
+     * field, so it no longer marks a record boundary. A range cut at an arbitrary offset then has no
+     * way to find its first record - seeking to the next row delimiter lands inside the field - and
+     * the file is mis-split (issue #65245). Without either character every row delimiter ends a
+     * record and any offset can be recovered locally, which is what the scanner has always assumed.
+     */
+    private boolean requiresRecordAlignedSplits(BrokerFileGroup fileGroup, TFileFormatType format) {
+        if (format != TFileFormatType.FORMAT_CSV_PLAIN) {
+            return false;
+        }
+        return fileGroup.getEnclose() != 0 || fileGroup.getEscape() != 0;
+    }
+
+    /**
+     * Asks a backend where records begin in the files of this group that might be split, keyed by
+     * path. Empty when the group needs no alignment, when no file is big enough to be split, or when
+     * the backend could not tell us - in which case those files are left whole rather than guessed
+     * at.
+     *
+     * <p>Only files larger than one instance's share are asked about. A smaller file is split only
+     * when it happens to land on an already-part-full instance, and reading every small file end to
+     * end to keep that one packing opportunity would cost far more than it saves.
+     */
+    private Map<String, List<Long>> findRecordBoundaries(ParamCreateContext context,
+                                                         List<TBrokerFileStatus> fileStatuses)
+            throws StarRocksException {
+        Map<String, List<Long>> boundaries = Maps.newHashMap();
+
+        List<TBrokerFileStatus> candidates = Lists.newArrayList();
+        for (TBrokerFileStatus fileStatus : fileStatuses) {
+            TFileFormatType formatType = Load.getFormatType(context.fileGroup.getFileFormat(), fileStatus.path);
+            if (requiresRecordAlignedSplits(context.fileGroup, formatType) && fileStatus.isSplitable
+                    && fileStatus.size > bytesPerInstance) {
+                candidates.add(fileStatus);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return boundaries;
+        }
+
+        // A range is aligned for whoever reads it, and the ranges of one file are spread over every
+        // node. A node too old to know the flag would apply the old rules to an aligned range, so
+        // aligning is only safe once all of them are known to understand it.
+        if (!allNodesReadAlignedRanges()) {
+            LOG.info("not every backend can read record aligned ranges, loading {} files whole instead",
+                    candidates.size());
+            return boundaries;
+        }
+
+        try {
+            ComputeNode node = nodes.get(nextBe % nodes.size());
+            TBrokerScanRange scanRange = new TBrokerScanRange();
+            scanRange.setParams(context.params);
+            if (brokerDesc.hasBroker()) {
+                FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr()
+                        .getBroker(brokerDesc.getName(), node.getHost());
+                scanRange.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
+            } else {
+                scanRange.addToBroker_addresses(new TNetworkAddress("", 0));
+            }
+            for (TBrokerFileStatus fileStatus : candidates) {
+                TBrokerRangeDesc rangeDesc = new TBrokerRangeDesc();
+                rangeDesc.setFile_type(TFileType.FILE_BROKER);
+                rangeDesc.setFormat_type(TFileFormatType.FORMAT_CSV_PLAIN);
+                rangeDesc.setPath(fileStatus.path);
+                rangeDesc.setSplittable(true);
+                rangeDesc.setStart_offset(0);
+                rangeDesc.setSize(fileStatus.size);
+                rangeDesc.setFile_size(fileStatus.size);
+                rangeDesc.setNum_of_columns_from_file(0);
+                rangeDesc.setColumns_from_path(Lists.newArrayList());
+                scanRange.addToRanges(rangeDesc);
+            }
+
+            List<List<Long>> offsets = CsvSplitFinder.findSplits(
+                    new TNetworkAddress(node.getHost(), node.getBrpcPort()), scanRange, bytesPerInstance);
+            for (int i = 0; i < candidates.size(); i++) {
+                boundaries.put(candidates.get(i).path, offsets.get(i));
+            }
+        } catch (Exception e) {
+            if (Thread.currentThread().isInterrupted()) {
+                // Being cancelled or shut down is not a discovery failure. Falling back here would
+                // schedule the whole of a large file for a query nobody is waiting for any more.
+                throw new StarRocksException("interrupted while finding csv record boundaries", e);
+            }
+            // Otherwise deliberately broad. Losing the boundaries costs parallelism on these files,
+            // not correctness: without them they are loaded whole. Failing the load here would be
+            // the worse outcome, and if the files really are unreadable the scan itself will say so.
+            LOG.warn("failed to find csv record boundaries, loading {} files without splitting them",
+                    candidates.size(), e);
+            return Maps.newHashMap();
+        }
+        return boundaries;
+    }
+
+    /**
+     * The smallest boundary at or after {@code offset}, or -1 when the offset is past the last one.
+     */
+    private static long nextBoundaryAtOrAfter(List<Long> boundaries, long offset) {
+        int index = Collections.binarySearch(boundaries, offset);
+        if (index < 0) {
+            index = -index - 1;
+        }
+        return index < boundaries.size() ? boundaries.get(index) : -1;
+    }
+
     private boolean isFileFormatSupportSplit(TFileFormatType format) {
         switch (format) {
             case FORMAT_CSV_PLAIN:
@@ -766,6 +900,23 @@ public class FileScanNode extends LoadScanNode {
             return;
         }
 
+        // Reassignment below can hand a range to a node that was never checked when the ranges were
+        // cut. A record aligned range cannot simply be un-aligned to make it safe: its start offset
+        // and end are already record boundaries, so a backend applying the old rules would discard
+        // the record it starts on and read past its end. So the ranges either move to a node that
+        // understands the flag or they do not move at all, and the load task retries.
+        try {
+            if (hasRecordAlignedRanges() && !allNodesReadAlignedRanges()) {
+                LOG.warn("broker load job {} with txn {} cannot move record aligned ranges: not every backend "
+                        + "understands them. Leaving locations alone for the load task to retry", loadJobId, txnId);
+                return;
+            }
+        } catch (StarRocksException e) {
+            LOG.warn("checking backends for record aligned ranges failed.", e);
+            // Just return, retry by LoadTask
+            return;
+        }
+
         Set<Long> aliveBes = nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet());
         nextBe = 0;
         for (TScanRangeLocations locations : locationsList) {
@@ -798,6 +949,31 @@ public class FileScanNode extends LoadScanNode {
                     loadJobId, txnId, scanRangeLocation, locations.getLocations().get(0),
                     address, brokerScanRange.getBroker_addresses().get(0));
         }
+    }
+
+    private boolean hasRecordAlignedRanges() {
+        for (TScanRangeLocations locations : locationsList) {
+            for (TBrokerRangeDesc range : locations.getScan_range().getBroker_scan_range().getRanges()) {
+                if (range.isSetRecord_aligned() && range.record_aligned) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether every node a range could be handed to understands the record aligned flag.
+     *
+     * <p>Throws rather than answering false when the check is interrupted, so that a cancelled load
+     * is not mistaken for a cluster that cannot align.
+     */
+    private boolean allNodesReadAlignedRanges() throws StarRocksException {
+        List<TNetworkAddress> brpcAddresses = Lists.newArrayListWithCapacity(nodes.size());
+        for (ComputeNode node : nodes) {
+            brpcAddresses.add(new TNetworkAddress(node.getHost(), node.getBrpcPort()));
+        }
+        return CsvSplitFinder.allSupport(brpcAddresses);
     }
 
 

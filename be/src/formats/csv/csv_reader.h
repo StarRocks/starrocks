@@ -157,6 +157,15 @@ public:
 
     void set_limit(size_t limit) { _limit = limit; }
 
+    // Declares that the limit falls exactly on a record boundary, so the range ends with the record
+    // that finishes there.
+    //
+    // Without this the reader runs on until it has passed the limit. That is right for a range cut
+    // at an arbitrary offset, because the range that follows discards the partial record it starts
+    // inside, and the two rules meet. For a range whose end is already a record boundary it would
+    // read the next range's first record as well, and the row would be loaded twice.
+    void set_limit_at_record_boundary() { _limit_at_record_boundary = true; }
+
     void split_record(const Record& record, Fields* fields) const;
 
     bool is_row_delimiter(bool expandBuffer);
@@ -193,8 +202,16 @@ private:
     Status _expand_buffer();
     Status _expand_buffer_loosely();
 
+    bool _reached_limit() const {
+        if (_limit == 0) {
+            return false;
+        }
+        return _limit_at_record_boundary ? _parsed_bytes >= _limit : _parsed_bytes > _limit;
+    }
+
     size_t _parsed_bytes = 0;
     size_t _limit = 0;
+    bool _limit_at_record_boundary = false;
 };
 
 } // namespace starrocks

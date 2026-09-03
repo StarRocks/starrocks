@@ -221,6 +221,51 @@ public class CsvSplitFinderTest {
         Assertions.assertTrue(e.getMessage().contains("failed to get csv splits"), e.getMessage());
     }
 
+    /**
+     * A backend that implements the RPC rejects a request naming no files, so a reply of any kind
+     * is the proof being looked for.
+     */
+    @Test
+    public void testAllSupportWhenEveryBackendReplies() throws StarRocksException {
+        PGetCsvSplitsResult rejection = new PGetCsvSplitsResult();
+        rejection.status = new StatusPB();
+        rejection.status.statusCode = TStatusCode.INVALID_ARGUMENT.getValue();
+        rejection.status.errorMsgs = Lists.newArrayList("No file to split. Please check the specified path.");
+        backendReplies(rejection);
+
+        Assertions.assertTrue(CsvSplitFinder.allSupport(
+                Lists.newArrayList(ADDRESS, new TNetworkAddress("127.0.0.2", 8060))));
+    }
+
+    /**
+     * One backend too old to have the RPC is enough. Its ranges would be read by the old rules
+     * however carefully the others align them, so nothing gets aligned.
+     */
+    @Test
+    public void testAllSupportIsFalseWhenOneBackendCannot() throws StarRocksException {
+        new MockUp<BackendServiceClient>() {
+            @Mock
+            public Future<PGetCsvSplitsResult> getCsvSplits(TNetworkAddress address, PGetCsvSplitsRequest request)
+                    throws RpcException {
+                if (address.getPort() == 8061) {
+                    throw new RpcException(address.getHostname(), "unknown method get_csv_splits");
+                }
+                PGetCsvSplitsResult result = new PGetCsvSplitsResult();
+                result.status = new StatusPB();
+                result.status.statusCode = TStatusCode.INVALID_ARGUMENT.getValue();
+                return CompletableFuture.completedFuture(result);
+            }
+        };
+
+        Assertions.assertFalse(CsvSplitFinder.allSupport(
+                Lists.newArrayList(ADDRESS, new TNetworkAddress("127.0.0.2", 8061))));
+    }
+
+    @Test
+    public void testAllSupportOfNoBackendsIsVacuouslyTrue() throws StarRocksException {
+        Assertions.assertTrue(CsvSplitFinder.allSupport(new ArrayList<>()));
+    }
+
     @Test
     public void testInterruptionIsPassedOn() {
         new MockUp<BackendServiceClient>() {

@@ -303,12 +303,15 @@ Status CSVScanner::_init_reader() {
 
         _curr_reader = std::make_unique<ScannerCSVReader>(file, _state, _parse_options);
         _curr_reader->set_counter(_counter);
+        const bool record_aligned = range_desc.__isset.record_aligned && range_desc.record_aligned;
         if (range_desc.size > 0 && range_desc.format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
             // Does not set limit for compressed file.
             _curr_reader->set_limit(range_desc.size);
+            if (record_aligned) {
+                _curr_reader->set_limit_at_record_boundary();
+            }
         }
         if (range_desc.start_offset > 0) {
-            // Skip the first record started from |start_offset|.
             auto status = file->skip(range_desc.start_offset);
             if (status.is_time_out()) {
                 // open this file next time
@@ -316,8 +319,17 @@ Status CSVScanner::_init_reader() {
                 _curr_reader.reset();
                 return status;
             }
-            CSVReader::Record dummy;
-            RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+            if (!record_aligned) {
+                // The range starts at an arbitrary byte, so it opens partway through a record that
+                // belongs to the range before it, and that partial record is discarded here.
+                //
+                // Seeking to the next row delimiter is only right when no delimiter can appear
+                // inside a field. When one can - an enclosed field spanning lines - this lands
+                // mid-record and the range is read wrongly, which is why such files are cut on
+                // boundaries from get_csv_splits and arrive here already aligned.
+                CSVReader::Record dummy;
+                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+            }
         } else {
             // NOTE: if the file is split into multiple ranges, the first range is responsible to increase the counter.
             ++_counter->num_files_read;
