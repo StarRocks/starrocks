@@ -50,6 +50,27 @@ public:
                                          SegmentFileMark segment_file_mark = {},
                                          RewriteVectorIndexOptions vector_index_opts = {},
                                          std::vector<int64_t>* out_vector_index_ids = nullptr);
+    // Rewrite a cross-published partial-update segment into a file holding ONLY the rows |owned|
+    // marks as this tablet's.
+    //
+    // rewrite_partial_update above byte-copies the source's already-written columns and appends the
+    // resolved ones, so its output is rowid-identical to its source -- and therefore still holds every
+    // row the split handed to the siblings. Everything downstream then has to compensate for those
+    // rows: the resolved columns must be widened to segment length so the append has a value per
+    // source row, the segment's delete vector must mask them so reads do not serve them, and the
+    // UNSHARE compaction must rewrite the rowset later to drop them for good.
+    //
+    // This variant decodes every column instead, drops the rows |owned| excludes, and renumbers what
+    // is left, so the output is an ordinary full segment private to this tablet with no foreign rows
+    // in it at all. It costs a full re-encode rather than a copy plus append, which is why only the
+    // cross-published path uses it. |resolved_columns| must already hold this tablet's rows only, in
+    // ascending source order -- which is what the narrowed publish iterator produces.
+    static Status rewrite_partial_update_owned_only(
+            const FileInfo& src, FileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
+            const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
+            uint32_t segment_id, const FooterPointerPB& partial_rowset_footer, SegmentFileMark segment_file_mark = {},
+            RewriteVectorIndexOptions vector_index_opts = {}, std::vector<int64_t>* out_vector_index_ids = nullptr);
+
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
@@ -60,7 +81,7 @@ public:
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
             const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {},
-            std::vector<int64_t>* out_vector_index_ids = nullptr);
+            std::vector<int64_t>* out_vector_index_ids = nullptr, const Filter& owned = Filter{});
 };
 
 } // namespace starrocks

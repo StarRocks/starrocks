@@ -534,31 +534,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                            replace_segments);
             }
 
-            // A rewrite makes the segment private but can retain sibling rows from its shared source.
-            // Mask them here; the parent view must merge unchanged shared segments from both children.
-            //
-            // This has to happen BEFORE the index update below, not after: the SST condition-merge path
-            // builds dv_generated_during_merge_update out of new_deletes and appends it to the builder
-            // right there, and builder->delvec_page() is then read to feed index.ingest_sst(). Adding
-            // these rowids afterwards would hide the sibling rows in the data segment while the
-            // ingested and persisted primary-index SST still carried their keys as live entries
-            // pointing into this child. The combined set only reaches the builder in the final loop.
-            bool masked_unowned_rows = false;
-            if (replace_segments.count(static_cast<int>(local_id)) > 0) {
-                auto unowned_rowids = state.upserts(local_id)->take_unowned_rowids();
-                if (!unowned_rowids.empty()) {
-                    auto& seg_deletes = new_deletes[rowset_id + global_segment_id];
-                    // seg_deletes may already carry the unsort SST writer's per-segment dedup losers,
-                    // seeded above. Today it cannot: that seed rides op_write.seg_delvecs, which is
-                    // emitted parallel to op_write.ssts, and a load that rewrites a segment never
-                    // produces either (see the DCHECK below). Merge rather than assign anyway, so that
-                    // stays a fact about today's gating instead of a correctness assumption.
-                    unowned_rowids.insert(unowned_rowids.end(), seg_deletes.begin(), seg_deletes.end());
-                    seg_deletes = std::move(unowned_rowids);
-                    masked_unowned_rows = true;
-                }
-            }
-
             // PK index update + condition merge.
             TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
             DCHECK(state.upserts(local_id) != nullptr);
@@ -591,17 +566,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             _index_cache.update_object_size(index_entry, index.memory_usage());
             state.release_segment(local_id);
             _update_state_cache.update_object_size(state_entry, state.memory_usage());
-            // A rewrite and op_write SSTs cannot co-occur, so the delete vector this publish just
-            // seeded never has to reach an SST ingest. op_write SSTs come only from a spilling load --
-            // SpillMemTableSink is the sole write-side caller of try_enable_pk_index_eager_build -- and
-            // should_enable_load_spill() requires !is_partial_update() on a primary-key table, while a
-            // rewrite requires rewrite_segments_meta, which only a partial write emits (a missing
-            // auto-increment column makes is_partial_update() true too). If that gating ever changes,
-            // the combined delete vector has to be appended to the builder BEFORE this ingest, the way
-            // the condition-merge path above does it: builder->delvec_page() is read here, and the
-            // final loop is too late, so the ingested SST would otherwise still expose keys the
-            // segment's delete vector hides.
-            DCHECK(!masked_unowned_rows || op_write.ssts_size() == 0);
             if (op_write.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
                 DelvecPagePB delvec_page_pb = builder->delvec_page(rowset_id + global_segment_id);
                 delvec_page_pb.set_version(metadata->version());

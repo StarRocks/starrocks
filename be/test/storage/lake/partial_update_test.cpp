@@ -2264,9 +2264,9 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
     // rows were displaced. All n here would mean the selector never engaged.
     EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
 
-    // The rewrite output is private (no `shared` flag) but its rowset carries the range, so reads clip
-    // it: the siblings' rows are in the file and must not come back. Every key appears exactly once --
-    // the owned ones from the rewrite, the rest still from the baseline rowset.
+    // The rewrite dropped the siblings' rows outright, so the output is private with nothing left to
+    // clip. Every key still appears exactly once -- the owned ones from the rewrite, the rest from the
+    // baseline rowset, which is what the split left holding them.
     ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
                   const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
                   return owned ? (c1 == c0 * 5 && c2 == c0 * 4) : (c1 == c0 * 3 && c2 == c0 * 4);
@@ -2300,13 +2300,21 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_o
     }
     seg_iter->close();
 
-    ASSERT_EQ(static_cast<size_t>(n), rows.size());
+    // This is the contract the owned-only rewrite buys: the file holds this tablet's rows and nothing
+    // else. Before it, the rewrite copied every source row and filled the siblings' unwritten columns
+    // with what "no old row" produces, so the file carried them at a default value and needed a delete
+    // vector, a withheld range and a later UNSHARE rewrite to keep them out of a read.
+    ASSERT_EQ(static_cast<size_t>(kOwnedRows), rows.size()) << "the rewrite must drop the unowned rows";
     for (int key = 0; key < n; key++) {
         const bool owned = key >= kOwnedLower && key < kOwnedUpper;
         auto it = rows.find(key);
+        if (!owned) {
+            EXPECT_EQ(rows.end(), it) << "key " << key << " belongs to a sibling and must not be here";
+            continue;
+        }
         ASSERT_NE(rows.end(), it) << "key " << key << " missing from the rewritten segment";
         EXPECT_EQ(key * 5, it->second.first) << "key " << key;
-        EXPECT_EQ(owned ? key * 4 : 10, it->second.second) << "key " << key;
+        EXPECT_EQ(key * 4, it->second.second) << "key " << key;
     }
 }
 
@@ -2317,7 +2325,8 @@ static void make_sort_key_differ_from_pk(TabletMetadata* metadata) {
     schema_pb->add_sort_key_idxes(1);
 }
 
-// Verify that condition losers and unowned rows share the rewritten segment's delvec.
+// Verify that a condition update's losers are the only thing left in the rewritten segment's delvec:
+// the unowned rows are gone from the file, not masked in it.
 TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_condition_update_masks_unowned_rows) {
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
         GTEST_SKIP() << "column-mode partial update is refused outright on a separate sort key";
@@ -2420,7 +2429,8 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_condition_update_masks
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
     ASSERT_EQ(2, metadata->rowsets_size());
     EXPECT_EQ(condition_winners, metadata->rowsets(0).num_dels());
-    EXPECT_EQ(kUnownedRows + condition_losers, metadata->rowsets(1).num_dels());
+    EXPECT_EQ(condition_losers, metadata->rowsets(1).num_dels())
+            << "only the condition losers belong in the delvec; the unowned rows are not in the file";
 
     ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
                   const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
@@ -2428,7 +2438,7 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_condition_update_masks
                   return c1 == c0 * (owned && condition_wins ? 5 : 3) && c2 == c0 * 4;
               }));
 
-    // The file retains all source rows; only its delvec hides losers and unowned rows.
+    // The file holds this tablet's rows only; its delvec hides just the condition losers among them.
     const auto& rewritten = metadata->rowsets(1);
     ASSERT_EQ(1, rewritten.segment_metas_size());
     EXPECT_FALSE(rewritten.segment_metas(0).shared()) << "the rewrite output is private to this tablet";

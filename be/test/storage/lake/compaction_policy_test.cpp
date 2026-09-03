@@ -926,22 +926,4 @@ TEST_F(OrdinaryCompactionSharedWindowTest, test_does_not_block_on_a_merge_produc
     EXPECT_EQ(2, pick(metadata).size()) << "a merge product's range must not stall ordinary compaction";
 }
 
-// UNSHARE relies on its row-level range filter, which Horizontal/VerticalCompactionTask build only
-// when ORDER BY differs from the primary key. On a sort-key == PK tablet the range already clips reads
-// by itself, so the policy stays constructible but must claim a rowset only through a shared segment:
-// claiming one by its range there would rewrite the siblings' rows into an output carrying neither a
-// range nor a shared segment, which is strictly worse than leaving it alone.
-TEST_F(OrdinaryCompactionSharedWindowTest, test_unshare_claims_by_range_only_with_a_separate_sort_key) {
-    for (bool separate_sort_key : {false, true}) {
-        auto metadata = make_metadata(separate_sort_key, /*shared_segment=*/false);
-        for (auto& rowset : *metadata->mutable_rowsets()) {
-            rowset.mutable_range()->CopyFrom(metadata->range());
-        }
-        ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), metadata,
-                                                              /*force_base_compaction=*/false, /*is_unshare=*/true));
-        ASSIGN_OR_ABORT(auto rowsets, policy->pick_rowsets());
-        EXPECT_EQ(separate_sort_key ? 2u : 0u, rowsets.size()) << "separate_sort_key=" << separate_sort_key;
-    }
-}
-
 } // namespace starrocks::lake

@@ -81,17 +81,6 @@ Status SegmentPKIterator::_load() {
     // durably written the sstable.
     if (_row_selector != nullptr) {
         ASSIGN_OR_RETURN(_owned, _row_selector->select(*_pk_column_chunk));
-        // A rewritten segment needs the physical rowids of every unowned source row for its delvec.
-        const auto physical_offset = _physical_rowid_base.value_or(0) + static_cast<uint32_t>(_current_rows);
-        const size_t unowned = std::count(_owned.begin(), _owned.end(), 0);
-        if (unowned > 0) {
-            _unowned_rowids.reserve(_unowned_rowids.size() + unowned);
-            for (size_t i = 0; i < _owned.size(); i++) {
-                if (_owned[i] == 0) {
-                    _unowned_rowids.push_back(physical_offset + static_cast<uint32_t>(i));
-                }
-            }
-        }
     }
     _current_rows += _pk_column_chunk->num_rows();
     _begin_rowid_offsets.push_back(_current_rows);

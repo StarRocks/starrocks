@@ -575,90 +575,10 @@ static Status append_no_old_row_values(const TabletColumn* tablet_column,
 // would break a publish retry: the state is cached per transaction, and on the next attempt
 // _resolve_conflict_partial_update patches write_columns at iterator-relative offsets, which line up
 // only with the unwidened column.
-static StatusOr<MutableColumnPtr> widen_rewrite_column_to_segment(
-        const Column& column, uint32_t base, size_t num_segment_rows, const TabletColumn* tablet_column,
-        const std::map<std::string, std::string>& column_to_expr_value) {
-    const size_t merged_rows = column.size();
-    if (merged_rows == num_segment_rows) {
-        // Not narrowed: an ordinary publish, or a cross publish whose ownership was decided per row.
-        return MutableColumnPtr{};
-    }
-    RETURN_ERROR_IF_FALSE(base + merged_rows <= num_segment_rows,
-                          fmt::format("rewrite column does not fit the source segment, base:{} rows:{} segment:{}",
-                                      base, merged_rows, num_segment_rows));
-    auto widened = column.clone_empty();
-    RETURN_IF_ERROR(append_no_old_row_values(tablet_column, column_to_expr_value, base, widened.get()));
-    TRY_CATCH_BAD_ALLOC(widened->append(column));
-    RETURN_IF_ERROR(append_no_old_row_values(tablet_column, column_to_expr_value, num_segment_rows - base - merged_rows,
-                                             widened.get()));
-    return widened;
-}
-
-Status RowsetUpdateState::_widen_rewrite_columns_for_cross_publish(const RowsetUpdateStateParams& params,
-                                                                   uint32_t segment_id, const FileInfo& src,
-                                                                   const std::vector<ColumnId>& unmodified_column_ids,
-                                                                   MutableColumns* widened_write_columns,
-                                                                   MutableColumnPtr* unwidened_auto_increment_column) {
-    // Only a resharded tablet can have a narrowed publish iterator: narrowing needs a range on the ROWSET
-    // (convert_txn_log_for_splitting stamps this tablet's onto a cross-published op_write) plus a segment
-    // the split marked shared. No range on the tablet, no narrowing, nothing to widen -- which is every
-    // tablet that was never resharded, so the ordinary publish path stops here.
-    if (!params.metadata->has_range()) {
-        return Status::OK();
-    }
-    const auto& src_seg_meta = params.op_write.rowset().segment_metas(segment_id);
-    size_t num_segment_rows = src_seg_meta.num_rows();
-    if (!src_seg_meta.has_num_rows()) {
-        // A txn log written by an older BE carries only the deprecated per-segment arrays, and the
-        // segment_metas lake_proto_normalizer synthesizes from them have no row count. Read it off the
-        // segment rather than skip the widening: the rewrite would copy every row of this file and append
-        // only this tablet's slice, failing the publish on every retry. A count that IS present and zero
-        // means a genuinely empty segment -- the one a delete-only write leaves behind to reserve its del
-        // file's op_offset -- and there is nothing to widen there.
-        size_t footer_size_hint = 16 * 1024;
-        LakeIOOptions lake_io_opts{.fill_data_cache = false, .buffer_size = -1};
-        ASSIGN_OR_RETURN(auto segment,
-                         params.tablet->tablet_mgr()->load_segment(src, segment_id, &footer_size_hint, lake_io_opts,
-                                                                   false /*fill_meta_cache*/, params.tablet_schema));
-        num_segment_rows = segment->num_rows();
-    }
-    if (num_segment_rows == 0) {
-        return Status::OK();
-    }
-    const uint32_t owned_base = _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0;
-
-    if (has_partial_update_state(params) && !unmodified_column_ids.empty()) {
-        // An empty unmodified_column_ids means rewrite_partial_update takes its copy-only fast path and
-        // never reads these columns -- reachable when a schema change between the partial write and its
-        // publish leaves no unmodified column, in which case the cached state's columns no longer pair
-        // with the recomputed ids either.
-        auto& write_columns = _partial_update_states[segment_id].write_columns;
-        RETURN_ERROR_IF_FALSE(write_columns.size() == unmodified_column_ids.size());
-        for (size_t i = 0; i < write_columns.size(); i++) {
-            ASSIGN_OR_RETURN(auto widened,
-                             widen_rewrite_column_to_segment(*write_columns[i], owned_base, num_segment_rows,
-                                                             &params.tablet_schema->column(unmodified_column_ids[i]),
-                                                             _column_to_expr_value));
-            if (widened != nullptr) {
-                widened_write_columns->emplace_back(std::move(widened));
-            }
-        }
-        // Every column came from the same iterator, so either all of them span the segment or none do.
-        RETURN_ERROR_IF_FALSE(widened_write_columns->empty() || widened_write_columns->size() == write_columns.size());
-    }
-
-    auto& auto_increment_state = _auto_increment_partial_update_states[segment_id];
-    if (has_auto_increment_partial_update_state(params) && auto_increment_state.write_column != nullptr) {
-        ASSIGN_OR_RETURN(auto widened,
-                         widen_rewrite_column_to_segment(*auto_increment_state.write_column, owned_base,
-                                                         num_segment_rows, nullptr, _column_to_expr_value));
-        if (widened != nullptr) {
-            *unwidened_auto_increment_column = std::move(auto_increment_state.write_column);
-            auto_increment_state.write_column = std::move(widened);
-        }
-    }
-    return Status::OK();
-}
+// The publish iterator hands out an empty ownership mask when it has no row selector, which is every
+// publish but a split child's cross publish. Named so the rewrite call site can say "no mask" without
+// materializing one per segment.
+static const Filter kNoRowSelector;
 
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, SegmentFileInfo>* replace_segments,
@@ -734,19 +654,16 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     ASSIGN_OR_RETURN(auto vector_index_opts, resolve_rewrite_vector_index_options(params, dest_path));
     const bool defer_vector_index_build = vector_index_opts.defer_build;
 
-    MutableColumns widened_write_columns;
-    MutableColumnPtr unwidened_auto_increment_column;
-    auto& auto_increment_state = _auto_increment_partial_update_states[segment_id];
-    // Must outlive the rewrite below: it hands the state its unwidened auto-increment column back.
-    DeferOp restore_auto_increment_column([&]() {
-        if (unwidened_auto_increment_column != nullptr) {
-            auto_increment_state.write_column = std::move(unwidened_auto_increment_column);
-        }
-    });
-    RETURN_IF_ERROR(_widen_rewrite_columns_for_cross_publish(params, segment_id, src, unmodified_column_ids,
-                                                             &widened_write_columns, &unwidened_auto_increment_column));
-    MutableColumns* rewrite_write_columns =
-            widened_write_columns.empty() ? &_partial_update_states[segment_id].write_columns : &widened_write_columns;
+    MutableColumns* rewrite_write_columns = &_partial_update_states[segment_id].write_columns;
+
+    // A cross-published segment carries the siblings' rows as well, and the publish iterator was
+    // narrowed to this tablet's, so the columns resolved above cover only those. Hand the mask to the
+    // rewrite and let it drop the rest: the output is then an ordinary private segment with no
+    // foreign rows, which is what keeps them from having to be masked in a delete vector, withheld
+    // by a range at read time, or unshared by a later compaction. Empty mask -- every publish but a
+    // split child's cross publish -- keeps the copy-and-append fast path.
+    const Filter& owned = _upserts[segment_id] != nullptr ? _upserts[segment_id]->standalone_owned() : kNoRowSelector;
+    const bool filter_unowned_rows = !owned.empty();
 
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
@@ -756,7 +673,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids, has_partial_update_state(params) ? rewrite_write_columns : nullptr,
-                params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids));
+                params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids, owned));
         file_info.path = dest_path;
         stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
@@ -765,10 +682,17 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         SegmentFileInfo file_info;
         file_info.path = params.tablet->segment_location(dest_path);
 
-        RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
-                src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, segment_id,
-                partial_rowset_footer, {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
-                &file_info.vector_index_ids));
+        if (filter_unowned_rows) {
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update_owned_only(
+                    src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, owned,
+                    segment_id, partial_rowset_footer, {root_path, std::to_string(rowset_meta.id())},
+                    std::move(vector_index_opts), &file_info.vector_index_ids));
+        } else {
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
+                    src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, segment_id,
+                    partial_rowset_footer, {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
+                    &file_info.vector_index_ids));
+        }
         file_info.path = dest_path;
 
         // Sync indexes on the *updated* columns are not rebuilt by the rewrite (their data is
@@ -790,6 +714,13 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         (*replace_segments)[segment_id] = file_info;
     } else {
         need_rename = false;
+    }
+    if (filter_unowned_rows && need_rename) {
+        // The rewrite dropped the siblings' rows and renumbered from zero, so this iterator's emit
+        // positions are now the new segment's rowids. Everything downstream that names a row in the
+        // file this publish produced -- the index upsert value above all -- must stop adding a base
+        // that pointed into the source.
+        _upserts[segment_id]->renumber_to_emit_order();
     }
     int64_t t_rewrite_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(
