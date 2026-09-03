@@ -953,6 +953,29 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: バイト
 * **データ型**: Int
 
+<<<<<<< HEAD
+=======
+### max_array_length
+
+* **スコープ**: Session
+* **説明**: 配列関数が生成する配列に含まれる要素の最大数です。関数がこの上限を超える配列を生成した場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。この上限は配列を生成するすべての関数を対象としていますが、現時点では [array_agg](sql-functions/array-functions/array_agg.md) のみがチェックします。
+* **デフォルト**: 0
+* **タイプ**: Long
+* **導入バージョン**: v4.2
+
+### max_pipeline_dop
+
+* **スコープ**: Session
+* **説明**: パイプラインエンジンの degree-of-parallelism (DOP) に対するセッションごとの上限。動作:
+  * `enable_pipeline_engine` が有効で `pipeline_dop` が明示的に設定されていない（0 以下ではない）場合にのみ適用されます。`pipeline_dop` が 0 より大きい場合、この変数は無視され `pipeline_dop` が直接使用されます。
+  * `pipeline_dop` が 0 以下（アダプティブ/デフォルトモード）のとき、実際の実行 DOP は min(`max_pipeline_dop`, BackendResourceStat が返すバックエンドのデフォルト DOP) として計算されます。パイプラインの sink に対しては同じロジックで sink のデフォルト DOP が使用されます。
+  * `max_pipeline_dop` が 0 以下の場合、追加の上限は適用されずバックエンドのデフォルト DOP が使用されます。
+  * 目的: コア数が非常に多いマシンでスケジューリングによる負荷増を回避するため、自動計算された並列度に上限をかけること。
+* **デフォルト**: `64`
+* **データ型**: int
+* **導入バージョン**: v3.2.0
+
+>>>>>>> ebd6d67 ([Enhancement] Add max_array_length session variable (#77913))
 ### max_pushdown_conditions_per_column
 
 * **説明**: 列に対してプッシュダウンできる述語の最大数。

@@ -968,6 +968,29 @@ FROM test;
 * 单位：Byte
 * 类型：Int
 
+<<<<<<< HEAD
+=======
+### max_array_length
+
+* **作用域**: Session
+* **描述**: 数组函数生成的数组中最大的元素数量。当某个函数生成的数组超过该限制时，查询会直接失败，而不会返回超大数组。设置为 `0` 或负数表示不限制。该限制适用于所有生成数组的函数，但目前仅 [array_agg](sql-functions/array-functions/array_agg.md) 会校验该限制。
+* **默认值**: 0
+* **数据类型**: Long
+* **引入版本**: v4.2
+
+### max_pipeline_dop
+
+* **范围**: Session
+* **描述**: 每会话的 pipeline 引擎并行度（DOP）上限。行为：
+  * 仅在 `enable_pipeline_engine` 启用且未显式设置 `pipeline_dop`（大于 0）时生效。如果 `pipeline_dop` 大于 0 则忽略此变量并直接使用 `pipeline_dop`。
+  * 当 `pipeline_dop` 小于或等于 0（自适应/默认模式）时，执行的实际 DOP 计算为 min(`max_pipeline_dop`, BackendResourceStat 返回的后端默认 DOP)。对于 pipeline sinks，同样的逻辑使用 sink 的默认 DOP。
+  * 如果 `max_pipeline_dop` 小于或等于 0，则不施加额外上限，使用后端默认 DOP。
+  * 目的：通过对自动计算的并行度设置上限，避免在核数非常大的机器上调度带来的负面开销。
+* **默认值**: `64`
+* **数据类型**: int
+* **引入版本**: v3.2.0
+
+>>>>>>> ebd6d67 ([Enhancement] Add max_array_length session variable (#77913))
 ### max_pushdown_conditions_per_column
 
 * 描述：该变量的具体含义请参阅 [BE 配置项](../administration/configuration/BE_parameters/BE_parameters.md)中 `max_pushdown_conditions_per_column` 的说明。

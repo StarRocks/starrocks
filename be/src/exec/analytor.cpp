@@ -225,8 +225,32 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
+<<<<<<< HEAD
 
             _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
+=======
+            if (fn.name.function_name == "array_agg") {
+                // set order by info
+                std::vector<bool> is_asc_order;
+                std::vector<bool> nulls_first;
+                auto is_distinct = false;
+                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
+                    !fn.aggregate_fn.is_asc_order.empty()) {
+                    is_asc_order = fn.aggregate_fn.is_asc_order;
+                    nulls_first = fn.aggregate_fn.nulls_first;
+                }
+                if (fn.aggregate_fn.__isset.is_distinct) {
+                    is_distinct = fn.aggregate_fn.is_distinct;
+                }
+                _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs,
+                                                                  is_distinct, is_asc_order, nulls_first);
+            } else {
+                _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
+            }
+            if (state->query_options().__isset.max_array_length) {
+                _agg_fn_ctxs[i]->set_max_array_length(state->query_options().max_array_length);
+            }
+>>>>>>> ebd6d67 ([Enhancement] Add max_array_length session variable (#77913))
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -463,7 +487,7 @@ Status Analytor::finish_process(RuntimeState* state) {
     _input_eos = true;
     RETURN_IF_ERROR((this->*_process_impl)(state));
     _is_sink_complete.store(true, std::memory_order_release);
-    return Status::OK();
+    return _check_has_error();
 }
 
 std::string Analytor::debug_string() const {

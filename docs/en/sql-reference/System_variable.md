@@ -963,6 +963,37 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Unit**: Byte
 * **Data type**: Int
 
+<<<<<<< HEAD
+=======
+### max_array_length
+
+* **Scope**: Session
+* **Description**: The maximum number of elements in an array produced by an array function. If a function produces a larger array, the query fails instead of returning an oversized array. `0` or a negative value means no limit. This limit is intended for all functions that build arrays, but only [array_agg](sql-functions/array-functions/array_agg.md) enforces it so far.
+* **Default**: 0
+* **Data type**: Long
+* **Introduced in**: v4.2
+
+### max_parallel_scan_instance_num
+
+* **Scope**: Session
+* **Description**: Session-level integer that caps the number of parallel scan instances the planner will produce for scan operators (applied to OLAP/Lake scan nodes). The value is propagated into the scan node Thrift message (`TOlapScanNode.max_parallel_scan_instance_num`) and is included in query/load runtime profiles. It is declared with `@VariableMgr.VarAttr` and can be read/set via the session variable APIs (`getMaxParallelScanInstanceNum` / `setMaxParallelScanInstanceNum`). Use this to limit scan parallelism per session for resource control or debugging. When left at the default `-1`, the planner/system default (resource- or configuration-derived) parallelism is used.
+* **Default**: `-1`
+* **Data Type**: int
+* **Introduced in**: v3.2.0
+
+### max_pipeline_dop
+
+* **Scope**: Session
+* **Description**: The per-session upper bound for the pipeline engine's degree-of-parallelism (DOP). Behavior:
+  * Applies only when `enable_pipeline_engine` is enabled and `pipeline_dop` is not explicitly set (greater than 0). If `pipeline_dop` greater than 0 this variable is ignored and `pipeline_dop` is used directly.
+  * When `pipeline_dop` less than or equal to 0 (adaptive/default mode), the effective DOP for execution is computed as min(`max_pipeline_dop`, the backend default DOP returned by BackendResourceStat). For pipeline sinks the same logic uses the sink default DOP.
+  * If `max_pipeline_dop` less than or equal to 0 no additional cap is applied and the backend default DOP is used.
+  * Purpose: avoid negative overhead from scheduling on machines with very large core counts by capping automatically computed parallelism.
+* **Default**: `64`
+* **Data Type**: int
+* **Introduced in**: v3.2.0
+
+>>>>>>> ebd6d67 ([Enhancement] Add max_array_length session variable (#77913))
 ### max_pushdown_conditions_per_column
 
 * **Description**: The maximum number of predicates that can be pushed down for a column.
