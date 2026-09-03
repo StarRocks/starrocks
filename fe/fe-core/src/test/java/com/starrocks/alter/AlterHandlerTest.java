@@ -18,9 +18,15 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 /**
@@ -40,6 +46,40 @@ public class AlterHandlerTest {
     public void testGetActiveTxnIdOfTableReturnsEmptyWhenNoJobs() {
         Optional<Long> result = handler.getActiveTxnIdOfTable(123L);
         Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testRunAlterJobV2SafelyContainsOrdinaryExceptionsButPropagatesErrors() {
+        AlterJobV2 bad = mock(AlterJobV2.class);
+        when(bad.getJobId()).thenReturn(1L);
+        when(bad.getJobState()).thenReturn(AlterJobV2.JobState.RUNNING);
+        doThrow(new IllegalStateException("NORMAL")).when(bad).run();
+
+        Assertions.assertDoesNotThrow(() -> handler.runAlterJobV2Safely(bad));
+
+        AlterJobV2 fatal = mock(AlterJobV2.class);
+        doThrow(new AssertionError("fatal")).when(fatal).run();
+
+        Assertions.assertThrows(AssertionError.class, () -> handler.runAlterJobV2Safely(fatal));
+    }
+
+    @Test
+    public void testRunAlterJobV2ContinuesWithSiblingAfterOrdinaryException() {
+        LakeTableAddIndexJob bad = spy(new LakeTableAddIndexJob(
+                1L, 2L, 3L, "bad", 60_000L, new ArrayList<>(), new ArrayList<>()));
+        LakeTableAddIndexJob healthy = spy(new LakeTableAddIndexJob(
+                2L, 2L, 3L, "healthy", 60_000L, new ArrayList<>(), new ArrayList<>()));
+        bad.setJobState(AlterJobV2.JobState.PENDING);
+        healthy.setJobState(AlterJobV2.JobState.PENDING);
+        AtomicInteger healthyRuns = new AtomicInteger();
+        doThrow(new IllegalStateException("NORMAL")).when(bad).run();
+        doAnswer(invocation -> {
+            healthyRuns.incrementAndGet();
+            return null;
+        }).when(healthy).run();
+
+        Assertions.assertDoesNotThrow(() -> handler.runAlterJobV2(List.of(bad, healthy)));
+        Assertions.assertEquals(1, healthyRuns.get());
     }
 
     @Test
@@ -231,4 +271,3 @@ public class AlterHandlerTest {
         return job;
     }
 }
-

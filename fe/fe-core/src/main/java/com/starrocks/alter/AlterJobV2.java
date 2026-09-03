@@ -65,9 +65,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -355,17 +356,25 @@ public abstract class AlterJobV2 implements Writable {
 
     protected boolean publishVersion() {
         if (publishVersionFuture == null) {
-            Callable<Boolean> task = () -> {
-                return lakePublishVersion();
-            };
-            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
+            try {
+                publishVersionFuture = executor.submit(this::lakePublishVersion);
+            } catch (RejectedExecutionException e) {
+                LOG.warn("failed to submit publish task for job: {}: activeCount={}, poolSize={}, maximumPoolSize={}",
+                        jobId, executor.getActiveCount(), executor.getPoolSize(), executor.getMaximumPoolSize(), e);
+                return false;
+            }
             LOG.info("submit publish task for job: {}", jobId);
             return false;
         } else {
             if (publishVersionFuture.isDone()) {
                 try {
                     return publishVersionFuture.get();
-                } catch (InterruptedException | ExecutionException e) {
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                } catch (ExecutionException e) {
+                    LOG.warn("failed to publish version for job: {}", jobId, e.getCause());
                     return false;
                 } finally {
                     publishVersionFuture = null;
