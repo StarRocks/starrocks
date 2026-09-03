@@ -48,7 +48,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
