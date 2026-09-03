@@ -26,6 +26,7 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -192,6 +193,97 @@ TEST_F(MetaFileTest, test_delvec_rw) {
 
     iter2 = version_to_file_map.find(new_version);
     EXPECT_TRUE(iter2 != version_to_file_map.end());
+}
+
+// A delvec page whose bytes fail the recorded crc32c is most plausibly a corrupted
+// block in the local data cache, so get_del_vec drops that cache and reads once
+// more. Simulate exactly that: corrupt the delvec file, then have the cache-drop
+// hook restore the original bytes -- standing in for the retry reading through to
+// an intact remote object -- and the read must then succeed. Without the hook the
+// drop reports NotSupported on this build, the retry is skipped, and the original
+// Corruption surfaces.
+TEST_F(MetaFileTest, test_get_del_vec_crc32c_retries_after_dropping_cache) {
+    const int64_t tablet_id = 10012;
+    const uint32_t segment_id = 5678;
+    const int64_t version = 11;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {1, 3, 5, 7, 90000};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    const std::string expected_delvec = ndv->save();
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_OK(builder.finalize(next_id()));
+
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    auto page_iter = metadata2->delvec_meta().delvecs().find(segment_id);
+    ASSERT_TRUE(page_iter != metadata2->delvec_meta().delvecs().end());
+    const auto& delvec_page = page_iter->second;
+    ASSERT_TRUE(delvec_page.has_crc32c());
+    auto file_iter = metadata2->delvec_meta().version_to_file().find(delvec_page.version());
+    ASSERT_TRUE(file_iter != metadata2->delvec_meta().version_to_file().end());
+    const std::string delvec_path = _tablet_manager->delvec_location(tablet_id, file_iter->second.name());
+
+    // Keep the good bytes, then corrupt one byte inside the page (length-preserving).
+    std::string good_bytes;
+    {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(delvec_path));
+        ASSIGN_OR_ABORT(good_bytes, rf->read_all());
+        ASSERT_GT(good_bytes.size(), delvec_page.offset());
+        auto corrupted = good_bytes;
+        corrupted[delvec_page.offset()] = static_cast<char>(corrupted[delvec_page.offset()] ^ 0xff);
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, delvec_path));
+        ASSERT_OK(wf->append(Slice(corrupted)));
+        ASSERT_OK(wf->close());
+    }
+    // Make sure the reads below hit the file, not a delvec primed into the metacache.
+    _tablet_manager->metacache()->prune();
+
+    bool old_strict = config::enable_strict_delvec_crc_check;
+    config::enable_strict_delvec_crc_check = true;
+    LakeIOOptions lake_io_opts;
+
+    // Without the hook: the drop is NotSupported here, so the original Corruption
+    // must surface.
+    {
+        DelVector read_delvec;
+        auto st = get_del_vec(_tablet_manager.get(), *metadata2, delvec_page, false, lake_io_opts, &read_delvec);
+        ASSERT_TRUE(st.is_corruption()) << st;
+    }
+
+    // With the hook: force the drop to report success and restore the file at the
+    // same moment -- that is what dropping a corrupt cached block achieves in
+    // production -- and the retry must succeed.
+    int drop_calls = 0;
+    const std::string sync_point = "lake::drop_corrupted_delvec_file_cache";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        ++drop_calls;
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, delvec_path));
+        CHECK_OK(wf->append(Slice(good_bytes)));
+        CHECK_OK(wf->close());
+        *(Status*)arg = Status::OK();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    {
+        DelVector read_delvec;
+        auto st = get_del_vec(_tablet_manager.get(), *metadata2, delvec_page, false, lake_io_opts, &read_delvec);
+        ASSERT_OK(st);
+        EXPECT_EQ(expected_delvec, read_delvec.save());
+    }
+    EXPECT_EQ(1, drop_calls);
+    SyncPoint::GetInstance()->ClearCallBack(sync_point);
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::enable_strict_delvec_crc_check = old_strict;
 }
 
 TEST_F(MetaFileTest, test_delvec_read_loop) {

@@ -32,6 +32,154 @@
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
+=======
+uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
+    DCHECK_GE(segment_pos, 0);
+    if (segment_pos < 0) {
+        return 0;
+    }
+    if (segment_pos < rowset_meta.segment_metas_size()) {
+        const auto& segment_meta = rowset_meta.segment_metas(segment_pos);
+        if (segment_meta.has_segment_idx()) {
+            return segment_meta.segment_idx();
+        }
+    }
+    return static_cast<uint32_t>(segment_pos);
+}
+
+uint32_t get_max_segment_idx(const RowsetMetadataPB& rowset_meta) {
+    uint32_t max_idx = 0;
+    for (int i = 0; i < rowset_meta.segment_metas_size(); ++i) {
+        max_idx = std::max(max_idx, get_segment_idx(rowset_meta, i));
+    }
+    return max_idx;
+}
+
+uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta) {
+    if (rowset_meta.segment_metas_size() == 0) {
+        return 1;
+    }
+    return get_max_segment_idx(rowset_meta) + 1;
+}
+
+uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos) {
+    return rowset_meta.id() + get_segment_idx(rowset_meta, segment_pos);
+}
+
+int64_t del_op_offset_or_unset(const TxnLogPB_OpWrite& op_write, int del_id) {
+    // op_write.del_op_offsets is parallel to dels_meta (index by del_id). It is absent (size not
+    // aligned with dels_meta) when no del carries an offset -- the downgrade-safe default -- and an
+    // individual entry may be kUnknownDelOpOffset (spill / concurrent flush). Both cases mean "not
+    // recorded" and map to -1, for which resolve_del_op_offset() falls back to the max segment id.
+    // This is the single bridge from the on-wire uint32 (+ kUnknownDelOpOffset sentinel) representation
+    // to the signed value the rest of the apply/persist path uses.
+    if (op_write.del_op_offsets_size() != op_write.dels_meta_size()) {
+        return -1;
+    }
+    const uint32_t v = op_write.del_op_offsets(del_id);
+    return v == kUnknownDelOpOffset ? -1 : static_cast<int64_t>(v);
+}
+
+uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta) {
+    if (!column_mode && op_offset >= 0) {
+        // op_offset is a local segment position; map it to the segment index used for rssid so it is
+        // consistent with the get_max_segment_idx() fallback (handles segment_idx remapping/bundles).
+        return get_segment_idx(rowset_meta, static_cast<int32_t>(op_offset));
+    }
+    // Fall back to the max segment id (legacy "delete after all upserts") when:
+    //  - column_mode: column-mode partial update applies its deletes after all column upserts /
+    //    synthesized rows, never interleaved, so the persisted offset must match that apply order; or
+    //  - op_offset < 0: not recorded (OpWrite.del_op_offsets absent or holds kUnknownDelOpOffset).
+    return get_max_segment_idx(rowset_meta);
+}
+
+// Shared body of the two verify_del_file_crc32c() overloads: FileMetaPB (txn log `dels_meta`) and
+// DelfileWithRowsetId (persisted `del_files`) carry the same optional crc32c/name pair but are
+// unrelated protobuf types.
+template <typename DelMetaPB>
+static Status do_verify_del_file_crc32c(const DelMetaPB& del_meta, int64_t tablet_id, std::string_view content) {
+    if (!del_meta.has_crc32c() || !config::lake_enable_del_file_crc_check) {
+        return Status::OK();
+    }
+    const uint32_t expect = crc32c::Unmask(del_meta.crc32c());
+    const uint32_t actual = crc32c::Value(content.data(), content.size());
+    if (expect == actual) {
+        return Status::OK();
+    }
+    auto msg = fmt::format("del file crc32c mismatch, tablet: {}, file: {}, size: {}, expect: {}, actual: {}",
+                           tablet_id, del_meta.name(), content.size(), expect, actual);
+    LOG(ERROR) << msg;
+    return Status::Corruption(msg);
+}
+
+Status verify_del_file_crc32c(const FileMetaPB& del_meta, int64_t tablet_id, std::string_view content) {
+    return do_verify_del_file_crc32c(del_meta, tablet_id, content);
+}
+
+Status verify_del_file_crc32c(const DelfileWithRowsetId& del_meta, int64_t tablet_id, std::string_view content) {
+    return do_verify_del_file_crc32c(del_meta, tablet_id, content);
+}
+
+// Drop a del file's local data cache after its checksum failed to verify. Only meaningful in
+// shared-data mode, where the file is backed by remote storage and cached locally; elsewhere there is
+// no cache layer to invalidate and this reports NotSupported so the caller does not retry.
+static Status drop_corrupted_del_file_cache(const std::string& path) {
+    Status drop_status = Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    drop_status = drop_local_cache_data(path);
+#endif
+    // Outside the platform guard on purpose, so tests can drive the retry path on any build.
+    TEST_SYNC_POINT_CALLBACK("lake::drop_corrupted_del_file_cache", &drop_status);
+    return drop_status;
+}
+
+// Same recovery hook for delvec files: drop the local data cache after a page's crc32c
+// failed to verify, so the retry reads through to the remote object.
+static Status drop_corrupted_delvec_file_cache(const std::string& path) {
+    Status drop_status = Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    drop_status = drop_local_cache_data(path);
+#endif
+    // Outside the platform guard on purpose, so tests can drive the retry path on any build.
+    TEST_SYNC_POINT_CALLBACK("lake::drop_corrupted_delvec_file_cache", &drop_status);
+    return drop_status;
+}
+
+template <typename DelMetaPB>
+static StatusOr<std::string> do_read_and_verify_del_file(RandomAccessFile* rf, const DelMetaPB& del_meta,
+                                                         int64_t tablet_id) {
+    ASSIGN_OR_RETURN(auto content, rf->read_all());
+    auto st = do_verify_del_file_crc32c(del_meta, tablet_id, content);
+    if (st.ok()) {
+        return content;
+    }
+    // A del file is immutable once written, so bytes that do not match the recorded checksum are not
+    // the bytes that were written. The likeliest culprit is a corrupted block in the local data cache
+    // rather than in remote storage, so drop the cache and read once more -- the retry then reads
+    // through to the remote object. Segment pages (PageIO::read_and_decompress_page) and
+    // persistent-index sstables (PersistentIndexSstable) recover from cache corruption the same way.
+    auto drop_status = drop_corrupted_del_file_cache(rf->filename());
+    if (!drop_status.ok()) {
+        VLOG(2) << "skip clearing corrupted cache for " << rf->filename() << ": " << drop_status;
+        return st; // report the original corruption, not the drop failure
+    }
+    LOG(INFO) << "cleared corrupted cache for " << rf->filename() << ", re-reading the del file";
+    ASSIGN_OR_RETURN(content, rf->read_all());
+    RETURN_IF_ERROR(do_verify_del_file_crc32c(del_meta, tablet_id, content));
+    return content;
+}
+
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const FileMetaPB& del_meta, int64_t tablet_id) {
+    return do_read_and_verify_del_file(rf, del_meta, tablet_id);
+}
+
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const DelfileWithRowsetId& del_meta,
+                                               int64_t tablet_id) {
+    return do_read_and_verify_del_file(rf, del_meta, tablet_id);
+}
+
+>>>>>>> 5c8c1b2 ([BugFix] Drop a delvec page's local cache and retry when its checksum fails (#78086))
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
@@ -706,6 +854,7 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
             return Status::OK();
         }
 
+<<<<<<< HEAD
         // lookup delvec file name and then read it
         auto iter2 = metadata.delvec_meta().version_to_file().find(iter->second.version());
         if (iter2 == metadata.delvec_meta().version_to_file().end()) {
@@ -715,15 +864,38 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
         }
         const auto& delvec_name = iter2->second.name();
         RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+=======
+    // lookup delvec file name and then read it
+    auto iter = metadata.delvec_meta().version_to_file().find(delvec_page.version());
+    if (iter == metadata.delvec_meta().version_to_file().end()) {
+        LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
+                   << ", version: " << delvec_page.version();
+        return Status::InternalError("Can't find delvec file name");
+    }
+    const auto& delvec_name = iter->second.name();
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
+    const std::string delvec_path =
+            (lake_io_opts.fs && lake_io_opts.location_provider)
+                    ? lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)
+                    : tablet_mgr->delvec_location(metadata.id(), delvec_name);
+    auto read_page = [&]() -> Status {
+        TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+>>>>>>> 5c8c1b2 ([BugFix] Drop a delvec page's local cache and retry when its checksum fails (#78086))
         std::unique_ptr<RandomAccessFile> rf;
         if (lake_io_opts.fs && lake_io_opts.location_provider) {
-            ASSIGN_OR_RETURN(
-                    rf, lake_io_opts.fs->new_random_access_file(
-                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+            ASSIGN_OR_RETURN(rf, lake_io_opts.fs->new_random_access_file(opts, delvec_path));
         } else {
-            ASSIGN_OR_RETURN(rf,
-                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, delvec_path));
         }
+        return rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size());
+    };
+    // Returns Corruption only when strict checking is on; a mismatch is otherwise
+    // tolerated (see the ABA note below) and the page is used as read.
+    auto verify_page = [&]() -> Status {
+        if (!delvec_page.has_crc32c() || delvec_page.crc32c_gen_version() != delvec_page.version()) {
+            return Status::OK();
+        }
+<<<<<<< HEAD
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
         if (iter->second.has_crc32c() && iter->second.crc32c_gen_version() == iter->second.version()) {
             // check crc32c
@@ -751,6 +923,65 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
         }
         TRACE("end load delvec");
         return Status::OK();
+=======
+        uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
+        if (crc32c == crc32c::Unmask(delvec_page.crc32c())) {
+            return Status::OK();
+        }
+        // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
+        // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
+        // while version B does not yet support it.
+        // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
+        // After downgrading to version B, the delete vector is updated, but since version B does not support
+        // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
+        // the CRC32 verification fails.
+        LOG(ERROR) << fmt::format(
+                "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
+                "crc32c {}",
+                metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
+                crc32c::Unmask(delvec_page.crc32c()), crc32c);
+        if (config::enable_strict_delvec_crc_check) {
+            return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                  crc32c::Unmask(delvec_page.crc32c()), crc32c));
+        }
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(read_page());
+    if (auto verify_st = verify_page(); !verify_st.ok()) {
+        // A delvec file is immutable once written, so bytes that do not match the
+        // recorded checksum are not the bytes that were written. The likeliest culprit
+        // is a corrupted block in the local data cache rather than in remote storage,
+        // so drop the cache and read once more -- the retry then reads through to the
+        // remote object. Del files (read_and_verify_del_file), segment pages and
+        // persistent-index sstables recover from cache corruption the same way.
+        auto drop_status = drop_corrupted_delvec_file_cache(delvec_path);
+        if (!drop_status.ok()) {
+            VLOG(2) << "skip clearing corrupted cache for " << delvec_path << ": " << drop_status;
+            return verify_st;
+        }
+        LOG(INFO) << "cleared corrupted cache for " << delvec_path << ", re-reading the delvec page";
+        RETURN_IF_ERROR(read_page());
+        RETURN_IF_ERROR(verify_page());
+    }
+    // parse delvec
+    RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
+    // put in cache
+    if (fill_cache) {
+        auto delvec_cache_ptr = std::make_shared<DelVector>();
+        delvec_cache_ptr->copy_from(*delvec);
+        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
+    }
+    TRACE("end load delvec");
+    return Status::OK();
+}
+
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+                   const LakeIOOptions& lake_io_opts, DelVector* delvec) {
+    // find delvec by segment id
+    auto iter = metadata.delvec_meta().delvecs().find(segment_id);
+    if (iter != metadata.delvec_meta().delvecs().end()) {
+        return get_del_vec(tablet_mgr, metadata, iter->second, fill_cache, lake_io_opts, delvec);
+>>>>>>> 5c8c1b2 ([BugFix] Drop a delvec page's local cache and retry when its checksum fails (#78086))
     }
     VLOG(2) << fmt::format("get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
                            metadata.delvec_meta().ShortDebugString());
