@@ -955,7 +955,12 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             } else {
                 mergeWindowElapsedMs = System.currentTimeMillis() - execStartTime;
             }
-            double progress = (double) Math.min(mergeCommitIntervalMs, mergeWindowElapsedMs) / mergeCommitIntervalMs;
+            // A completed load did run the merge window out. The elapsed time above cannot show that reliably:
+            // the backends start the window while the load fragments are still being deployed, before
+            // execWaitStartTimeMs is taken, and time it on a clock of their own. It can also come out negative,
+            // since both of its ends are read from a wall clock that NTP can step backwards.
+            double progress = taskState == TaskState.FINISHED ? 1.0
+                    : (double) Math.max(0, Math.min(mergeCommitIntervalMs, mergeWindowElapsedMs)) / mergeCommitIntervalMs;
             info.setProgress(String.format("Merge Window %.2f%%", progress * 100));
             return info;
         });
