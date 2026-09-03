@@ -24,23 +24,19 @@ with grp_sk as (select grp, ds_theta_accumulate(id) as s from t1 group by grp)
 select cast(ds_theta_estimate(ds_theta_combine(s)) between 70000 and 80000 as int) from grp_sk;
 
 -- pairwise scalar set ops — estimate composes directly (no state-type plumbing needed)
-with grp_sk as (select grp, ds_theta_accumulate(id) as s from t1 group by grp),
-     pivoted as (
-       select max(case when grp='A' then s end) as a, max(case when grp='B' then s end) as b from grp_sk
-     )
-select cast(ds_theta_estimate(ds_theta_union(a, b)) between 70000 and 80000 as int),
-       cast(ds_theta_estimate(ds_theta_intersect(a, b)) between 22500 and 27500 as int),
-       cast(ds_theta_estimate(ds_theta_a_not_b(a, b)) between 22500 and 27500 as int)
-from pivoted;
+with a as (select ds_theta_accumulate(id) as sk from t1 where grp = 'A'),
+     b as (select ds_theta_accumulate(id) as sk from t1 where grp = 'B')
+select cast(ds_theta_estimate(ds_theta_union(a.sk, b.sk)) between 70000 and 80000 as int),
+       cast(ds_theta_estimate(ds_theta_intersect(a.sk, b.sk)) between 22500 and 27500 as int),
+       cast(ds_theta_estimate(ds_theta_a_not_b(a.sk, b.sk)) between 22500 and 27500 as int)
+from a, b;
 
 -- ds_theta_combine handles raw VARBINARY produced by scalar set ops too
 -- (proves the AggState/raw-varbinary gap is closed)
-with grp_sk as (select grp, ds_theta_accumulate(id) as s from t1 group by grp),
-     pivoted as (
-       select max(case when grp='A' then s end) as a, max(case when grp='B' then s end) as b from grp_sk
-     ),
+with a as (select ds_theta_accumulate(id) as sk from t1 where grp = 'A'),
+     b as (select ds_theta_accumulate(id) as sk from t1 where grp = 'B'),
      unioned as (
-       select ds_theta_union(a, b) as u, ds_theta_intersect(a, b) as i from pivoted
+       select ds_theta_union(a.sk, b.sk) as u, ds_theta_intersect(a.sk, b.sk) as i from a, b
      ),
      stacked as (select u as s from unioned union all select i from unioned)
 select cast(ds_theta_estimate(ds_theta_combine(s)) between 70000 and 80000 as int) from stacked;

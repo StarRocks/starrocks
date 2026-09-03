@@ -25,7 +25,7 @@ DOUBLE ds_theta_intersect_cond_agg(sketch, is_anchor)
 ```
 
 - `sketch`: `VARBINARY` コンパクト theta スケッチ。通常 [`ds_theta_accumulate`](./ds_theta_accumulate.md) または [`ds_theta_combine`](./ds_theta_combine.md) で生成されます。
-- `is_anchor`: `INT` フラグ。`1` はスケッチを anchor グループに、それ以外は window グループにルーティングします。
+- `is_anchor`: `INT` フラグ。0 以外の値はスケッチを anchor グループに、`0` は window グループにルーティングします。
 
 ## 戻り値
 

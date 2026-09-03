@@ -30,8 +30,8 @@ DOUBLE ds_theta_intersect_cond_agg(sketch, is_anchor)
 - `sketch`: `VARBINARY` compact theta sketch, typically produced by
   [`ds_theta_accumulate`](./ds_theta_accumulate.md) or
   [`ds_theta_combine`](./ds_theta_combine.md).
-- `is_anchor`: `INT` flag. `1` routes the sketch to the anchor group;
-  any other value routes it to the window group.
+- `is_anchor`: `INT` flag. Any nonzero value routes the sketch to the anchor
+  group; `0` routes it to the window group.
 
 ## Return value
 

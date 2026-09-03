@@ -25,7 +25,7 @@ DOUBLE ds_theta_intersect_cond_agg(sketch, is_anchor)
 ```
 
 - `sketch`：`VARBINARY` 紧凑 theta 草图，通常由 [`ds_theta_accumulate`](./ds_theta_accumulate.md) 或 [`ds_theta_combine`](./ds_theta_combine.md) 生成。
-- `is_anchor`：`INT` 标志。`1` 表示将草图路由到 anchor 组，其他值路由到 window 组。
+- `is_anchor`：`INT` 标志。任何非零值表示将草图路由到 anchor 组，`0` 路由到 window 组。
 
 ## 返回值
 
