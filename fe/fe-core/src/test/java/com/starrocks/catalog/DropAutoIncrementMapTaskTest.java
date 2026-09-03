@@ -34,7 +34,9 @@ import org.junit.jupiter.api.Test;
  * <p>A node that is not alive never receives the task {@code AgentBatchTask.run()} would have sent
  * it, so nobody counts its latch mark down and the caller waits out the whole timeout. The drop path
  * must not pay that - it runs once per auto-increment table under the database WRITE lock - while
- * ALTER and RESTORE must, because they use the result as proof that no stale interval survives.
+ * ALTER TABLE ... AUTO_INCREMENT must, because it raises the counter only if this reported success.
+ * (RESTORE calls the strict variant too but discards the result, so only the queued task matters to
+ * it; that gap is pre-existing and tracked separately.)
  */
 public class DropAutoIncrementMapTaskTest {
     private static final int SECOND_BACKEND_ID = 10002;
@@ -111,10 +113,10 @@ public class DropAutoIncrementMapTaskTest {
     }
 
     /**
-     * ALTER TABLE ... AUTO_INCREMENT and RESTORE move the table's counter and only proceed when this
-     * returns true, so it must NOT report success while a node that could still hold a reserved
-     * interval was never told. Such a node goes {@code isAlive == false} on failed heartbeats and
-     * comes back on the next successful one without restarting, so its cache outlives the outage.
+     * ALTER TABLE ... AUTO_INCREMENT raises the table's counter only when this returns true, so it
+     * must NOT report success while a node that could still hold a reserved interval was never told.
+     * Such a node goes {@code isAlive == false} on failed heartbeats and comes back on the next
+     * successful one without restarting, so its cache outlives the outage.
      *
      * <p>This is the one case that has to observe a timeout - the refusal only arrives once the
      * latch gives up - so it shortens the wait instead of sitting out the production minute.

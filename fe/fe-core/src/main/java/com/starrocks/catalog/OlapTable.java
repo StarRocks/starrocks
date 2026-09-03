@@ -1014,14 +1014,25 @@ public class OlapTable extends Table {
      * Strict invalidation: tell every registered node, alive or not, to drop its cached
      * auto-increment map for this table, and report failure unless all of them acknowledged.
      *
-     * <p>For callers that use the result as proof that no stale interval can survive anywhere -
-     * {@code ALTER TABLE ... AUTO_INCREMENT} and RESTORE, both of which move the table's counter and
-     * would otherwise hand out ids a rejoining node has already issued, or ids below the value the
-     * user just set. A node that is not alive must therefore still be waited for: it goes
-     * {@code isAlive == false} after failed heartbeats and comes back on the next successful one
-     * <em>without restarting</em> ({@code ComputeNode.handleHbResponse}), so its in-memory interval
-     * survives. Its task also stays queued in {@link AgentTaskQueue}, which is what lets
-     * {@code ReportHandler} resend it once the node reports again.
+     * <p>Both callers move the table's counter, so an interval a node reserved earlier must not
+     * outlive the change - it would hand out ids below the value just set, or ids already issued.
+     * They differ in what they do about it:
+     *
+     * <ul>
+     * <li>{@code ALTER TABLE ... AUTO_INCREMENT} ({@code LocalMetastore.alterTableAutoIncrement})
+     * uses the result as a gate: it raises the counter only if this returned true.</li>
+     * <li>RESTORE ({@code RestoreJob}) calls this and <em>discards</em> the result, so a timeout
+     * here does not stop it from recovering the counter. That gap is pre-existing and tracked
+     * separately; do not read this contract as if RESTORE were guarded.</li>
+     * </ul>
+     *
+     * <p>RESTORE still needs this variant rather than the best-effort one, for a reason that has
+     * nothing to do with the return value: targeting a node that is not alive leaves its task queued
+     * in {@link AgentTaskQueue}, which is what lets {@code ReportHandler} resend it once that node
+     * reports again. The best-effort variant never builds that task, so such a node would never be
+     * told at all. And it does come back: a node goes {@code isAlive == false} after failed
+     * heartbeats and is marked alive again on the next successful one <em>without restarting</em>
+     * ({@code ComputeNode.handleHbResponse}), so its in-memory interval survives the outage.
      *
      * @see #sendDropAutoIncrementMapTaskBestEffort() for the drop path, which must not block
      */
