@@ -1085,36 +1085,34 @@ def _combine_column_alters(context, revision, op: ops.ModifyTableOps):
     """
     adds: List[Column] = []
     drops: List[Column] = []
-    other_ops: List[Any] = []
-    combined_placeholder_seen = False
     new_ops: List[Any] = []
+    combined_pos = -1  # index of the combined-op placeholder in new_ops; -1 until seen
 
     for inner in op.ops:
         if isinstance(inner, ops.AddColumnOp):
             adds.append(inner.column)
-            if not combined_placeholder_seen:
+            if combined_pos == -1:
+                combined_pos = len(new_ops)
                 new_ops.append(None)  # placeholder for the combined op
-                combined_placeholder_seen = True
         elif isinstance(inner, ops.DropColumnOp):
             drops.append(inner.to_column())
-            if not combined_placeholder_seen:
+            if combined_pos == -1:
+                combined_pos = len(new_ops)
                 new_ops.append(None)  # placeholder for the combined op
-                combined_placeholder_seen = True
         else:
-            other_ops.append(inner)
             new_ops.append(inner)
 
     # Nothing to combine (0 or 1 column change): leave the container as-is.
     if len(adds) + len(drops) < 2:
         return op
 
-    combined = StarRocksAlterColumnsOp(
+    # Drop the combined op into the placeholder slot, preserving the position of
+    # any non-column operations relative to the column changes.
+    new_ops[combined_pos] = StarRocksAlterColumnsOp(
         table_name=op.table_name,
         adds=adds,
         drops=drops,
         schema=op.schema,
     )
-    # Substitute the single placeholder with the combined op, preserving the
-    # position of any non-column operations relative to the column changes.
-    op.ops = [combined if entry is None else entry for entry in new_ops]
+    op.ops = new_ops
     return op

@@ -114,10 +114,15 @@ class StarRocksImpl(MySQLImpl):
         # None / 0 means wait indefinitely.
         timeout = opts.get("starrocks_schema_change_timeout", None)
 
+        # Order by JobId (a monotonic, unique FE counter), NOT CreateTime:
+        # CreateTime has second granularity, so several jobs submitted back-to-back
+        # on the same table share a timestamp and CreateTime-ordering returns an
+        # arbitrary (observed: the oldest) tied job. In a single-writer migration
+        # the highest JobId is the statement we just submitted.
         from_clause = f"FROM `{schema}` " if schema else ""
         query = text(
             f"SHOW ALTER TABLE COLUMN {from_clause}"
-            "WHERE TableName = :table_name ORDER BY CreateTime DESC LIMIT 1"
+            "WHERE TableName = :table_name ORDER BY JobId DESC LIMIT 1"
         )
 
         deadline = None if not timeout else time.monotonic() + float(timeout)
@@ -126,7 +131,10 @@ class StarRocksImpl(MySQLImpl):
                 query, {"table_name": table_name}
             ).mappings().first()
 
-            # No job row (e.g. a metadata-only change) => nothing to wait for.
+            # Defensive: no job row at all for this table (never had a column
+            # change), or a result set without a State column on some version.
+            # Note: fast-schema-evolution add/drop DOES create a row here, but it
+            # comes back already FINISHED, so it exits via the FINISHED branch.
             state = (row.get("State") if row else None)
             if state is None:
                 return
