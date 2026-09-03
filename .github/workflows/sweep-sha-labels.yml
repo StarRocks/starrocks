@@ -1,0 +1,48 @@
+name: SWEEP SHA LABELS
+
+# Garbage-collect accumulated `SHA:<commit>` provenance labels.
+#
+# The SR->CD sync executor (ci-tool/lib/run_cherry_pick.sh) creates a repo-level
+# `SHA:<commit>` label per synced commit and never removes them, so they pile up
+# (reached ~38k before the first manual cleanup). This weekly sweep deletes a
+# SHA: label only when BOTH: its createdAt is older than 90 days AND it is not on
+# any OPEN PR — safe because the sync tooling only consumes recent labels
+# (pr_sequence_checker/ai_conflict_fix on open PRs; sync_checker looks back ~7d).
+# A label needed again is re-created by the executor (`gh label create -f`).
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"   # weekly, Sunday 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (report only, do not delete)'
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+concurrency:
+  group: SWEEP-SHA-LABELS
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: SWEEP SHA LABELS
+    runs-on: [self-hosted, sync-normal]
+    if: github.repository == 'CelerData/celerdata-enterprise'
+    steps:
+      - name: sweep
+        run: |
+          # Work in a private copy of the tool cache (never mutate the shared
+          # /var/lib/ci-tool), and pin to origin/main so a stale/diverged/other-branch
+          # cache state cannot silently no-op the weekly sweep.
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool
+          git fetch origin main && git checkout -f -B main refs/remotes/origin/main
+          source lib/init.sh
+          FLAG="--execute"
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then FLAG=""; fi
+          python3 lib/sweep_sha_labels.py --repo ${GITHUB_REPOSITORY} --days 90 ${FLAG}
