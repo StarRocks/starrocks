@@ -17,13 +17,13 @@
 #include <gtest/gtest.h>
 
 #include "base/utility/defer_op.h"
-#include "exec/exec_env.h"
-#include "storage/storage_metrics.h"
+#include "runtime/exec_env.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
 TEST(BackendServiceTest, get_tablets_info_returns_max_compaction_score) {
-    auto* metrics = StorageMetrics::instance();
+    auto* metrics = StarRocksMetrics::instance();
     const auto old_cumulative_score = metrics->tablet_cumulative_max_compaction_score.value();
     const auto old_base_score = metrics->tablet_base_max_compaction_score.value();
     const auto old_update_score = metrics->tablet_update_max_compaction_score.value();
@@ -33,7 +33,7 @@ TEST(BackendServiceTest, get_tablets_info_returns_max_compaction_score) {
         metrics->tablet_update_max_compaction_score.set_value(old_update_score);
     });
 
-    BackendService service(ExecEnv::GetInstance(), nullptr);
+    BackendService service(ExecEnv::GetInstance());
     TGetTabletsInfoRequest request;
 
     metrics->tablet_cumulative_max_compaction_score.set_value(17);
