@@ -794,10 +794,13 @@ struct MergeResolvedEntry {
 };
 
 // One input to the merge: an open sstable plus the read options that project its entries into the
-// index's current id space. Iterators are stateful, so each range task builds its own set.
+// index's current id space. Each range task builds its own iterators from these, and its own file
+// handle per source -- see merge_dedup_range for why the handle cannot be shared.
 struct MergeSource {
     PersistentIndexSstable* sstable = nullptr;
     sstable::ReadOptions options;
+    std::string file_path;
+    std::string encryption_meta;
 };
 
 // The order compaction uses to pick the surviving entry for a key: newer version wins; on a tie the
@@ -821,15 +824,32 @@ bool merge_entry_wins(const MergeResolvedEntry& candidate, const MergeResolvedEn
 Status merge_dedup_range(const std::vector<MergeSource>& sources, const std::unordered_set<uint32_t>& new_rssids,
                          const std::string& begin_key, const std::string& end_key, DeletesMap* deletes,
                          int64_t* out_entries, int64_t* out_dup_groups) {
+    // A file handle per source, per task. RandomAccessFile::read_at_fully is a seek followed by a
+    // read, so two threads sharing one handle interleave into each other's stream position; on a
+    // starlet-backed file that corrupts the cache's own state, not just the bytes read. This is why
+    // PersistentIndexSstable::multi_get opens a fresh handle per call under parallel execution, and
+    // ReadOptions::file exists to route the block reads through it. Declared before the iterators so
+    // it outlives them.
+    std::vector<std::unique_ptr<RandomAccessFile>> files;
     std::vector<sstable::Iterator*> iters;
     DeferOp free_iters([&] {
         for (sstable::Iterator* iter : iters) {
             delete iter;
         }
     });
+    files.reserve(sources.size());
     iters.reserve(sources.size());
     for (const auto& source : sources) {
-        iters.emplace_back(source.sstable->new_iterator(source.options));
+        RandomAccessFileOptions opts;
+        if (!source.encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(opts.encryption_info, KeyCache::instance().unwrap_encryption_meta(source.encryption_meta));
+        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, source.file_path));
+        auto options = source.options;
+        options.file = rf.get();
+        // TwoLevelIterator holds its ReadOptions by value, so only the handle has to outlive it.
+        iters.emplace_back(source.sstable->new_iterator(options));
+        files.emplace_back(std::move(rf));
     }
     if (iters.empty()) {
         return Status::OK();
@@ -999,6 +1019,10 @@ Status LakePersistentIndex::merge_dedup(const TabletMetadataPtr& metadata,
             source.options.shared_version = sstable_pb.shared_version();
             source.options.rssid_offset = sstable_pb.rssid_offset();
             source.options.delvec = sst->delvec();
+            // Taken from the open sstable rather than rebuilt from the tablet id: an sstable shared
+            // with a split sibling lives under the tablet that wrote it, not under this one.
+            source.file_path = sst->filename();
+            source.encryption_meta = sstable_pb.encryption_meta();
             sources.push_back(std::move(source));
         }
     }
@@ -1027,6 +1051,8 @@ Status LakePersistentIndex::merge_dedup(const TabletMetadataPtr& metadata,
         source.options.max_rss_rowid = sstable_pb.max_rss_rowid();
         source.options.shared_rssid = sstable_pb.shared_rssid();
         source.options.shared_version = sstable_pb.shared_version();
+        source.file_path = sstable->filename();
+        source.encryption_meta = sstable_pb.encryption_meta();
         sources.push_back(std::move(source));
         if (new_ssts[i]->size() > new_ssts[probe_idx]->size()) {
             probe_idx = i;
