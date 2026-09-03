@@ -1237,6 +1237,36 @@ TEST_P(CSVScannerTest, test_lone_enclose_outside_a_field_does_not_consume_the_ne
     EXPECT_EQ("d\"e", chunk->get(1)[1].get_slice());
 }
 
+TEST_P(CSVScannerTest, test_get_split_offsets_ignores_enclosed_row_delimiters) {
+    // Issue #65245. csv_file26 holds three records, the middle one carrying a row delimiter inside
+    // an enclosed field at offset 33. A range may only begin at 0, 13 or 66; beginning at 34, which
+    // is where seeking to the next raw row delimiter lands, cuts that record in half.
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_format_type(TFileFormatType::FORMAT_CSV_PLAIN);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file26");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', 0);
+
+    // A split size of 1 keeps every boundary. No boundary is reported at end of file.
+    std::vector<int64_t> offsets;
+    Status st = scanner->get_split_offsets(1, &offsets);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(std::vector<int64_t>({0, 13, 66}), offsets);
+
+    // Thinning drops boundaries that are too close together, and never invents one: 13 goes, 66
+    // stays, and 34 was never a candidate.
+    std::vector<int64_t> thinned;
+    st = scanner->get_split_offsets(40, &thinned);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(std::vector<int64_t>({0, 66}), thinned);
+}
+
 TEST_P(CSVScannerTest, test_column_count_inconsistent) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);

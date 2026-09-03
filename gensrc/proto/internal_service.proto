@@ -652,6 +652,22 @@ message PGetFileSchemaResult {
     repeated PSlotDescriptor schema = 2;
 };
 
+message PGetCsvSplitsRequest {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+};
+
+// Offsets at which records start in one file, ascending, always beginning with 0.
+message PCsvFileSplits {
+    repeated int64 offsets = 1;
+};
+
+message PGetCsvSplitsResult {
+    required StatusPB status = 1;
+    // One entry per file in the request, in the same order.
+    repeated PCsvFileSplits splits = 2;
+};
+
 message PMVMaintenanceTaskRequest {
 };
 
@@ -845,6 +861,7 @@ service PInternalService {
     rpc get_info(PProxyRequest) returns (PProxyResult);
     rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult);
     rpc get_file_schema(PGetFileSchemaRequest) returns (PGetFileSchemaResult);
+    rpc get_csv_splits(PGetCsvSplitsRequest) returns (PGetCsvSplitsResult);
 
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
