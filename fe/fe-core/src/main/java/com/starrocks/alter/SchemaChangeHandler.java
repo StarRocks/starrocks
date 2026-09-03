@@ -82,6 +82,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
@@ -1847,11 +1848,15 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void runAlterJobV2() {
-        for (AlterJobV2 alterJob : alterJobsV2.values()) {
-            if (alterJob.jobState.isFinalState()) {
-                continue;
+        runAlterJobV2(alterJobsV2.values());
+    }
+
+    @VisibleForTesting
+    void runAlterJobV2(Iterable<AlterJobV2> jobs) {
+        for (AlterJobV2 alterJob : jobs) {
+            if (!alterJob.jobState.isFinalState()) {
+                runAlterJobV2Safely(alterJob);
             }
-            alterJob.run();
         }
     }
 
@@ -2159,6 +2164,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public ShowResultSet processLakeTableAlterMeta(AlterClause alterClause, Database db, OlapTable olapTable)
             throws StarRocksException {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
+        }
         AlterJobV2 alterMetaJob = createAlterMetaJob(alterClause, db, olapTable);
         if (alterMetaJob == null) {
             return null;
