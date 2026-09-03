@@ -663,7 +663,7 @@ message PCsvFileSplits {
 };
 
 message PGetCsvSplitsResult {
-    required StatusPB status = 1;
+    optional StatusPB status = 1;
     // One entry per file in the request, in the same order.
     repeated PCsvFileSplits splits = 2;
 };

@@ -1211,6 +1211,10 @@ void PInternalServiceImplBase<T>::_get_csv_splits(google::protobuf::RpcControlle
         }
     }
 
+    if (!t_request.__isset.scan_range || !t_request.__isset.split_size) {
+        st = Status::InvalidArgument("scan_range and split_size are both required");
+        return;
+    }
     const auto& scan_range = t_request.scan_range.broker_scan_range;
     if (scan_range.ranges.empty()) {
         st = Status::InvalidArgument("No file to split. Please check the specified path.");
