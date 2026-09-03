@@ -411,7 +411,7 @@ public:
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
         if (log.has_op_add_index()) {
-            _builder.apply_add_index(log.op_add_index());
+            RETURN_IF_ERROR(_builder.apply_add_index(log.op_add_index()));
         }
         if (log.has_op_drop_index()) {
             _builder.apply_drop_index(log.op_drop_index());
@@ -972,7 +972,7 @@ public:
             // TabletMetadata; construct a transient builder scoped to this log.
             MetaFileBuilder builder(_tablet, _metadata);
             if (log.has_op_add_index()) {
-                builder.apply_add_index(log.op_add_index());
+                RETURN_IF_ERROR(builder.apply_add_index(log.op_add_index()));
             }
             if (log.has_op_drop_index()) {
                 builder.apply_drop_index(log.op_drop_index());

@@ -605,6 +605,27 @@ message TxnLogPB {
         // would keep reusing the cached pre-index schema and build no index.
         optional int64 new_schema_id = 4;
         optional int64 new_schema_version = 5;
+        // The authoritative COLUMN DEFINITIONS this alter must publish, taken
+        // from the schema FE attached to the alter request (TAlterTabletReqV2
+        // .base_tablet_read_schema). Carries no entry for the indexes being
+        // added -- those stay in `new_indexes` above, and apply_add_index
+        // composes the two into the final schema, so the compose logic exists
+        // in exactly one place.
+        //
+        // Required for correctness whenever the tablet metadata schema lags the
+        // FE catalog, which is the normal state under fast schema evolution v2:
+        // ADD COLUMN there only updates the FE catalog, and tablet metadata
+        // catches up on the next write carrying a newer schema_key. Publishing
+        // only new_schema_id/new_schema_version in that state would bind the new
+        // id to schema CONTENT that still lacks the added column, while
+        // update_metadata_schema() short-circuits on a matching id -- so the
+        // tablet would never fetch the real schema again, turning a transient
+        // FE/BE schema gap into a permanent silent one.
+        //
+        // Absent (older BE wrote the log, or an older log is being replayed):
+        // apply_add_index composes onto the tablet metadata schema instead,
+        // i.e. the pre-existing behaviour.
+        optional TabletSchemaPB new_schema = 6;
     }
 
     // Produced by DROP INDEX fast-path schema change (lake-only). Applied

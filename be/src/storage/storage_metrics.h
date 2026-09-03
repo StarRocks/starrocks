@@ -119,6 +119,27 @@ public:
     // and reads of either location count. Replication reads of a source
     // cluster and restore reads of a snapshot are not counted.
     METRIC_DEFINE_INT_COUNTER(lake_tablet_metadata_get_not_found_total, MetricUnit::REQUESTS);
+    // Counts (segment, index) pairs the ADD INDEX fast path could not build
+    // because the indexed column is physically absent from that segment — the
+    // normal outcome for a column added by a metadata-only ALTER, which rewrites
+    // no historical segment. Those segments publish without the index and lose
+    // only its pruning benefit, never correctness.
+    //
+    // The gap closes when a rewrite resolves a schema carrying the index flag.
+    // That always happens on a PRIMARY KEY table, and on any table whose rowsets
+    // are not pinned to a historical schema. A non-PK rowset pinned to an older
+    // historical schema does not close it on its own -- compacting it resolves the
+    // pinned (pre-ADD-COLUMN) schema and pins the output to that same schema, a
+    // fixed point -- and only recovers when compacted alongside a rowset pinned to
+    // the indexed schema, which may take arbitrarily long on a partition that has
+    // stopped receiving writes. See classify_index_for_segment() in
+    // lake/add_index_schema_change.cpp.
+    //
+    // Non-zero means index coverage is incomplete, which is otherwise invisible:
+    // the alter reports FINISHED and queries stay correct, so without this counter
+    // a user who set bloom_filter_columns has no way to tell that part of the data
+    // is not being pruned.
+    METRIC_DEFINE_INT_COUNTER(lake_add_index_segments_skipped_total, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_failed, MetricUnit::REQUESTS);

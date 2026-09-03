@@ -31,6 +31,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -424,7 +425,7 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
     }
 }
 
-void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
+Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     // 1. Merge IDG entries into idg_meta, one per segment_id. New entry goes
     //    to the front of the per-segment `entries` list so readers see the
     //    newest first (mirrors DCG reverse-by-version ordering). Multiple
@@ -452,6 +453,128 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         }
     }
 
+    auto* schema = _tablet_meta->mutable_schema();
+
+    // 1b. Install the authoritative column definitions the alter resolved from FE,
+    //     when the log carries them. This must happen BEFORE the index/flag
+    //     reconciliation below so those steps land on the right column set.
+    //
+    //     Why the content and not just the id: under fast schema evolution v2 a
+    //     metadata-only ADD COLUMN updates only the FE catalog, and tablet
+    //     metadata catches up lazily on the next write naming a newer schema. In
+    //     that window this metadata is missing the added column, so bump_flag()
+    //     below would find nothing to flag and the content would stay short a
+    //     column - while step 2 stamps FE's new schema id onto it anyway. From
+    //     then on update_metadata_schema() short-circuits on the matching id and
+    //     the tablet never fetches the real schema again: a transient FE/BE schema
+    //     gap frozen into a permanent one, with no error surface anywhere.
+    //
+    //     Gated on new_schema_id as well, so content and id always move together.
+    //     Either both come from this alter or neither does; installing content
+    //     under the old id would poison every by-id schema cache instead.
+    const int64_t pre_apply_schema_id = schema->id();
+    if (op.has_new_schema() && op.has_new_schema_id() && op.new_schema_id() > 0) {
+        // Never move backwards. op.new_schema() is the snapshot FE took when it
+        // dispatched the alter; publish happens later, and tablet metadata may
+        // have advanced to a newer schema in between. Installing the older
+        // snapshot would DROP the columns that arrived meanwhile.
+        //
+        // Compare against the version this apply TARGETS, not the snapshot's own
+        // version. FE allocates the target as (catalog schema version + 1), so the
+        // two always differ by one, and comparing the snapshot's would reject every
+        // REPLAY: after the first apply the metadata already carries the target
+        // version, which is newer than the snapshot it came from.
+        const int64_t target_version =
+                op.has_new_schema_version() ? op.new_schema_version() : op.new_schema().schema_version();
+        if (schema->has_schema_version() && target_version < schema->schema_version()) {
+            return Status::InternalError(strings::Substitute(
+                    "apply_add_index: refusing to install schema version $0 over newer version $1. tablet=$2",
+                    target_version, schema->schema_version(), _tablet_meta->id()));
+        }
+        // Install FE's schema, then restore the parts of the tablet schema FE's
+        // converted schema cannot express.
+        //
+        // Why install wholesale rather than just the columns: several fields index
+        // INTO the column list -- sort_key_idxes and num_short_key_columns are
+        // column ordinals. ADD COLUMN does not always append (FE's
+        // checkAndAddColumn inserts at a position for ... AFTER c / FIRST, and puts
+        // a new KEY column right after the last key), so replacing the columns
+        // while keeping the old ordinals would silently misalign the sort key.
+        // Those fields have to move together with the columns.
+        //
+        // Why restore afterwards: convert_t_schema_to_pb_schema() produces a schema
+        // shaped by what FE knows, not a complete TabletSchemaPB.
+        //   - dropped_table_indices: FE never emits it. It is the tombstone a
+        //     metadata-only DROP INDEX leaves so readers do not reinterpret the
+        //     footer payload the drop could not erase. Losing it makes
+        //     ColumnReader::has_original_bloom_filter_index() accept a footer
+        //     holding an NGRAM bloom as if it were a plain one, pruning away
+        //     matching rows. This is the one that silently corrupts results.
+        //   - table_indices: FE emits no entry for a PLAIN bloom filter, which
+        //     lives in the table-level bloom_filter_columns property rather than as
+        //     an FE Index object (LakeTableAddIndexJob.applyCatalogMutation). A
+        //     wholesale copy would drop entries an earlier fast-path ADD INDEX
+        //     appended. Keep the old list; step 2 appends this alter's own.
+        //   - next_column_unique_id: a monotonic allocation high-water mark, which
+        //     FE recomputes from its CURRENT column set -- so on a table that has
+        //     dropped columns FE's value can be lower than ids already handed out.
+        //     Taken as max() rather than restored outright: FE's is the higher one
+        //     right after an ADD COLUMN, and letting the mark move backwards risks
+        //     handing the same unique id to two different columns.
+        //   - num_rows_per_row_block: FE fills this from a BE config default, not
+        //     from the value the table was created with.
+        //   - bf_fpp: FE only sets it once the table has bloom-filter columns, so
+        //     the very first BF add would otherwise reset a configured fpp.
+        //
+        // Per-column index flags merge one-way (set, never cleared): they are what
+        // SegmentWriter gates index construction on, so a flag bumped by an earlier
+        // fast-path ADD INDEX whose FE-side catalog mutation has not landed must
+        // survive. An extra flag only costs work; a missing one loses the index.
+        //
+        // MetaFileTest.test_apply_add_index_preserves_be_only_schema_fields pins
+        // this, including a guard on TabletSchemaPB's field count so a new field
+        // forces a decision here rather than being silently inherited from FE.
+        TabletSchemaPB preserved;
+        preserved.mutable_dropped_table_indices()->CopyFrom(schema->dropped_table_indices());
+        preserved.mutable_table_indices()->CopyFrom(schema->table_indices());
+        const bool had_next_uid = schema->has_next_column_unique_id();
+        const uint32_t old_next_uid = schema->next_column_unique_id();
+        const bool had_rows_per_block = schema->has_num_rows_per_row_block();
+        const int32_t old_rows_per_block = schema->num_rows_per_row_block();
+        const bool had_bf_fpp = schema->has_bf_fpp();
+        const double old_bf_fpp = schema->bf_fpp();
+        std::unordered_map<int32_t, std::pair<bool, bool>> prior_index_flags;
+        for (const auto& col : schema->column()) {
+            prior_index_flags.emplace(col.unique_id(), std::make_pair(col.has_bitmap_index(), col.is_bf_column()));
+        }
+
+        schema->CopyFrom(op.new_schema());
+
+        schema->mutable_dropped_table_indices()->CopyFrom(preserved.dropped_table_indices());
+        schema->mutable_table_indices()->CopyFrom(preserved.table_indices());
+        if (had_next_uid) {
+            schema->set_next_column_unique_id(std::max(old_next_uid, schema->next_column_unique_id()));
+        }
+        if (had_rows_per_block) {
+            schema->set_num_rows_per_row_block(old_rows_per_block);
+        }
+        if (had_bf_fpp && !op.new_schema().has_bf_fpp()) {
+            schema->set_bf_fpp(old_bf_fpp);
+        }
+        for (auto& col : *schema->mutable_column()) {
+            auto it = prior_index_flags.find(col.unique_id());
+            if (it == prior_index_flags.end()) {
+                continue;
+            }
+            if (it->second.first) {
+                col.set_has_bitmap_index(true);
+            }
+            if (it->second.second) {
+                col.set_is_bf_column(true);
+            }
+        }
+    }
+
     // 2. Reconcile table_indices: add any new index not already present.
     //    FE typically has pushed the new schema already, so this is a
     //    defensive idempotent step. We do not overwrite existing
@@ -462,7 +585,6 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    names within a table). Non-compatible types (BITMAP/NGRAMBF/
     //    BLOOM_FILTER) share the sentinel id=-1, so id-only dedup would
     //    silently skip every additional index after the first.
-    auto* schema = _tablet_meta->mutable_schema();
     auto present_key = [](const TabletIndexPB& ix) -> std::string {
         if (ix.has_index_id() && ix.index_id() >= 0) {
             return "id:" + std::to_string(ix.index_id());
@@ -514,7 +636,11 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    A new id forces every cache to miss and pick up this indexed schema.
     if (op.has_new_schema_id() && op.new_schema_id() > 0) {
         const int64_t new_schema_id = op.new_schema_id();
-        const int64_t old_schema_id = schema->id();
+        // The id tablet metadata carried before this apply. NOT schema->id():
+        // installing op.new_schema() above overwrites it with FE's catalog id,
+        // and the rowset_to_schema repointing below must match the pins that
+        // reference the pre-apply id.
+        const int64_t old_schema_id = pre_apply_schema_id;
         schema->set_id(new_schema_id);
         if (op.has_new_schema_version()) {
             schema->set_schema_version(static_cast<int32_t>(op.new_schema_version()));
@@ -563,6 +689,7 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
             }
         }
     }
+    return Status::OK();
 }
 
 void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
