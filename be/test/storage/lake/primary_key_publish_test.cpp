@@ -15,13 +15,16 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <map>
 #include <random>
+#include <set>
 
 #include "base/debug/trace.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
@@ -50,6 +53,8 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/persistent_index_memtable.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -61,6 +66,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
+#include "storage_primitive/primary_key_encoder.h"
 #include "testutil/chunk_assert.h"
 
 namespace starrocks::lake {
@@ -3132,6 +3138,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 52);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
+    // Version 2 remains current in the cache despite having no persisted SST. The first low-threshold delete
+    // flushes that ordinary memtable together with the cached upsert, followed by 50 later ordinary SSTs.
     EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 51);
     EXPECT_TRUE(compaction_score(_tablet_mgr.get(), new_tablet_metadata) > 10);
     // 3. compaction without sst

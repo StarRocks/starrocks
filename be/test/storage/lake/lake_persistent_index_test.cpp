@@ -17,7 +17,13 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
 
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
@@ -27,12 +33,17 @@
 #include "column/raw_data_visitor.h"
 #include "column/runtime_type_traits.h"
 #include "column/serde/column_array_serde.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
+#include "platform/key_cache.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/rowset.h"
@@ -44,12 +55,46 @@
 #include "storage/sstable/format.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/options.h"
+#include "storage/sstable/table.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/storage_metrics.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "test_util.h"
 #include "types/datum.h"
 
 namespace starrocks::lake {
+
+class KeyValueMergerTestIterator final : public sstable::Iterator {
+public:
+    KeyValueMergerTestIterator(std::string key, int64_t version, IndexValue value, uint64_t max_rss_rowid,
+                               DelVectorPtr delvec = nullptr)
+            : _key(std::move(key)), _max_rss_rowid(max_rss_rowid), _delvec(std::move(delvec)) {
+        IndexValuesWithVerPB value_pb;
+        auto* entry = value_pb.add_values();
+        entry->set_version(version);
+        entry->set_rssid(value.get_rssid());
+        entry->set_rowid(value.get_rowid());
+        _value = value_pb.SerializeAsString();
+    }
+
+    bool Valid() const override { return true; }
+    void SeekToFirst() override {}
+    void SeekToLast() override {}
+    void Seek(const Slice& /*target*/) override {}
+    void Next() override {}
+    void Prev() override {}
+    Slice key() const override { return Slice(_key); }
+    Slice value() const override { return Slice(_value); }
+    Status status() const override { return Status::OK(); }
+    uint64_t max_rss_rowid() const override { return _max_rss_rowid; }
+    DelVectorPtr delvec() const override { return _delvec; }
+
+private:
+    std::string _key;
+    std::string _value;
+    uint64_t _max_rss_rowid;
+    DelVectorPtr _delvec;
+};
 
 class LakePersistentIndexTest : public TestBase {
 public:
@@ -205,7 +250,11 @@ protected:
         rs->set_num_rows(writer->num_rows());
         rs->set_data_size(writer->data_size());
         for (const auto& f : writer->segments()) {
-            rs->add_segment_metas()->set_filename(f.path);
+            auto* segment = rs->add_segment_metas();
+            segment->set_filename(f.path);
+            if (!f.encryption_meta.empty()) {
+                segment->set_encryption_meta(f.encryption_meta);
+            }
         }
         writer->close();
 
@@ -258,7 +307,151 @@ protected:
         ASSERT_OK(wf->append(Slice(reinterpret_cast<const char*>(buffer.data()), used)));
         ASSERT_OK(wf->close());
     }
+
+    void ensure_kek_in_key_cache() {
+        if (KeyCache::instance().get_key("0000000000000000") != nullptr) {
+            return;
+        }
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_key = EncryptionKey::create_from_pb(pb).value();
+        auto kek = root_key->generate_key().value();
+        kek->set_id(2);
+        KeyCache::instance().add_key(root_key);
+        KeyCache::instance().add_key(kek);
+    }
+
+    PersistentIndexSstablePB* append_all_key_sstable(
+            TabletMetadata* metadata, const std::vector<std::tuple<std::string, int64_t, IndexValue>>& entries,
+            uint64_t max_rss_rowid) {
+        KeyValueMerger merger("", 0, /*merge_base_level=*/false, _tablet_mgr.get(), metadata->id(),
+                              /*enable_multiple_output_files=*/false);
+        for (const auto& [key, version, value] : entries) {
+            KeyValueMergerTestIterator iter(key, version, value, max_rss_rowid);
+            EXPECT_OK(merger.merge(&iter));
+        }
+        auto outputs = merger.finish();
+        EXPECT_OK(outputs.status());
+        if (!outputs.ok() || outputs->size() != 1) return nullptr;
+
+        const auto& output = outputs->front();
+        auto* sstable = metadata->mutable_sstable_meta()->add_sstables();
+        sstable->set_filename(output.filename);
+        sstable->set_filesize(output.filesize);
+        sstable->set_encryption_meta(output.encryption_meta);
+        sstable->set_max_rss_rowid(max_rss_rowid);
+        sstable->mutable_range()->set_start_key(output.start_key);
+        sstable->mutable_range()->set_end_key(output.end_key);
+        sstable->mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
+        return sstable;
+    }
+
+    StatusOr<std::vector<std::pair<std::string, IndexValueWithVer>>> read_persistent_index_sstable(
+            int64_t tablet_id, const PersistentIndexSstablePB& sstable) {
+        std::vector<std::pair<std::string, IndexValueWithVer>> entries;
+        RandomAccessFileOptions options;
+        if (!sstable.encryption_meta().empty()) {
+            ASSIGN_OR_ABORT(options.encryption_info,
+                            KeyCache::instance().unwrap_encryption_meta(sstable.encryption_meta()));
+        }
+        ASSIGN_OR_ABORT(auto file,
+                        fs::new_random_access_file(options, _tablet_mgr->sst_location(tablet_id, sstable.filename())));
+        sstable::Options table_options;
+        std::unique_ptr<sstable::Table> table;
+        RETURN_IF_ERROR(sstable::Table::Open(table_options, file.get(), sstable.filesize(), table));
+        sstable::ReadOptions read_options;
+        std::unique_ptr<sstable::Iterator> iterator(table->NewIterator(read_options));
+        for (iterator->SeekToFirst(); iterator->Valid(); iterator->Next()) {
+            IndexValuesWithVerPB values;
+            if (!values.ParseFromArray(iterator->value().data, iterator->value().size) || values.values_size() != 1) {
+                return Status::Corruption("invalid generic compaction test SST value");
+            }
+            const auto& value = values.values(0);
+            entries.emplace_back(
+                    iterator->key().to_string(),
+                    IndexValueWithVer{value.version(),
+                                      IndexValue((static_cast<uint64_t>(value.rssid()) << 32) | value.rowid())});
+        }
+        RETURN_IF_ERROR(iterator->status());
+        return entries;
+    }
 };
+
+TEST_F(LakePersistentIndexTest, test_tombstone_survives_cumulative_then_base_compaction_absorbs_it) {
+    const double old_ratio = config::lake_pk_index_cumulative_base_compaction_ratio;
+    const int32_t old_min_versions = config::lake_pk_index_sst_min_compaction_versions;
+    DeferOp restore_compaction_config([&]() {
+        config::lake_pk_index_cumulative_base_compaction_ratio = old_ratio;
+        config::lake_pk_index_sst_min_compaction_versions = old_min_versions;
+    });
+    config::lake_pk_index_sst_min_compaction_versions = 2;
+
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->set_version(10);
+    constexpr uint64_t old_live_value = (static_cast<uint64_t>(3) << 32) | 7;
+    ASSERT_NE(nullptr, append_all_key_sstable(metadata.get(), {{"gone", 10, IndexValue(old_live_value)}}, 100));
+    const std::string old_base_filename = metadata->sstable_meta().sstables(0).filename();
+    ASSERT_NE(nullptr, append_all_key_sstable(metadata.get(), {{"gone", 20, IndexValue(NullIndexValue)}}, 200));
+    ASSERT_NE(nullptr, append_all_key_sstable(metadata.get(), {{"gone", 30, IndexValue(NullIndexValue)}}, 300));
+
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    Slice gone("gone");
+    IndexValue value;
+    ASSERT_OK(index->get(1, &gone, &value));
+    ASSERT_EQ(NullIndexValue, value.get_value());
+
+    // The old live base remains below a cumulative compaction, so its output
+    // must retain the tombstone that prevents resurrection.
+    config::lake_pk_index_cumulative_base_compaction_ratio = 100.0;
+    TxnLogPB cumulative_log;
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), metadata, &cumulative_log));
+    ASSERT_EQ(2, cumulative_log.op_compaction().input_sstables_size());
+    for (const auto& input : cumulative_log.op_compaction().input_sstables()) {
+        EXPECT_NE(old_base_filename, input.filename());
+    }
+    ASSERT_TRUE(cumulative_log.op_compaction().has_output_sstable());
+    ASSIGN_OR_ABORT(auto cumulative_entries,
+                    read_persistent_index_sstable(metadata->id(), cumulative_log.op_compaction().output_sstable()));
+    ASSERT_EQ(1, cumulative_entries.size());
+    EXPECT_EQ(NullIndexValue, cumulative_entries[0].second.second.get_value());
+    ASSERT_OK(index->apply_opcompaction(metadata, cumulative_log.op_compaction()));
+    auto cumulative_metadata = std::make_shared<TabletMetadata>(*metadata);
+    cumulative_metadata->set_version(11);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder cumulative_builder(tablet, cumulative_metadata);
+    ASSERT_OK(index->commit(&cumulative_builder));
+    ASSERT_EQ(2, cumulative_metadata->sstable_meta().sstables_size());
+    EXPECT_EQ(old_base_filename, cumulative_metadata->sstable_meta().sstables(0).filename());
+
+    auto cumulative_reopened = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(cumulative_reopened->init(cumulative_metadata));
+    ASSERT_OK(cumulative_reopened->get(1, &gone, &value));
+    EXPECT_EQ(NullIndexValue, value.get_value());
+
+    // A complete base compaction owns the old live input too, so it may absorb
+    // both the live value and its tombstone without publishing another SST.
+    config::lake_pk_index_cumulative_base_compaction_ratio = 0.0;
+    TxnLogPB base_log;
+    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), cumulative_metadata, &base_log));
+    ASSERT_EQ(2, base_log.op_compaction().input_sstables_size());
+    EXPECT_FALSE(base_log.op_compaction().has_output_sstable());
+    EXPECT_TRUE(base_log.op_compaction().output_sstables().empty());
+    ASSERT_OK(cumulative_reopened->apply_opcompaction(cumulative_metadata, base_log.op_compaction()));
+    auto final_metadata = std::make_shared<TabletMetadata>(*cumulative_metadata);
+    final_metadata->set_version(12);
+    MetaFileBuilder base_builder(tablet, final_metadata);
+    ASSERT_OK(cumulative_reopened->commit(&base_builder));
+    EXPECT_TRUE(final_metadata->sstable_meta().sstables().empty());
+
+    auto final_reopened = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(final_reopened->init(final_metadata));
+    ASSERT_OK(final_reopened->get(1, &gone, &value));
+    EXPECT_EQ(NullIndexValue, value.get_value());
+}
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
@@ -752,11 +945,6 @@ static void corrupt_index_block_type_byte(const std::string& path) {
     ASSERT_OK(wf->close());
 }
 
-// Same corruption scenario as above, but hit while OPENING an input sstable in the
-// prepare phase (Table::Open reads the index block) instead of while merging. The
-// error escapes through prepare_merging_iterator before the merging iterator or the
-// caller's cleanup handler exists, so the prepare phase itself must drop the local
-// cache of every picked input.
 TEST_F(LakePersistentIndexTest, test_major_compaction_open_corruption_drops_cache) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
@@ -915,14 +1103,9 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_value_parse_corruption_dro
     ASSERT_EQ(txn_log->op_compaction().input_sstables_size(), drop_cnt);
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
+
 #endif // USE_STAROS && !BUILD_FORMAT_LIB
 
-// Regression test for: publish failing with
-//   "metadata is null when loading delvec from file"
-// when apply_opcompaction opens a compaction output sstable that carries an
-// embedded delvec (as preserved by the parallel-compaction passthrough/move
-// path). apply_opcompaction must pass the tablet metadata so the delvec can be
-// loaded -- exactly like LakePersistentIndex::init() does.
 TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delvec) {
     auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10; // force a flush so the upsert produces an on-disk sstable
