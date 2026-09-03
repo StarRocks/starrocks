@@ -1948,6 +1948,22 @@ Used to specify the preaggregation mode for the first phase of GROUP BY. If the 
 
 Used to display the time zone of the current system. Cannot be changed.
 
+### tablet_write_local_first (v4.2 and later)
+
+* **Description**: Only applies in shared-data mode, and only while `tablet_write_parallelism` spreads a tablet over several compute nodes. When `true`, a load keeps each sink instance's rows on the compute node that instance runs on, as long as that node is one of the tablet's writers and its channel is not backpressured, which removes the network hop those rows would otherwise take. Rows fall back to the spread across the other nodes while the local channel is full, so a load whose sink runs on a single instance (for example a Stream Load) still fans out instead of collapsing onto one machine. When `false`, rows are always spread round-robin across the tablet's nodes.
+* **Default**: true
+* **Type**: Boolean
+* **Scope**: Session
+* **Introduced in**: v4.2
+
+### tablet_write_parallelism (v4.2 and later)
+
+* **Description**: Only applies in shared-data mode. The number of compute nodes that may write a **single** tablet in parallel within one load transaction. `1` (the default) keeps a tablet written only by the compute node it is assigned to, so a partition that still has one tablet pins its whole load to one machine. A value greater than `1` lets a load spread that tablet's rows over that many nodes; `-1` means every alive compute node in the warehouse, which is what `tablet_write_local_first` needs to keep every sink instance's rows on its own machine. Only takes effect for a `DUPLICATE KEY` cloud-native table with `file_bundling` enabled, and only while a partition has fewer tablets than the warehouse has alive compute nodes — once bucket-level parallelism can fill the cluster, the setting stops applying by itself.
+* **Default**: 1
+* **Type**: Int
+* **Scope**: Session
+* **Introduced in**: v4.2
+
 ### time_zone
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
