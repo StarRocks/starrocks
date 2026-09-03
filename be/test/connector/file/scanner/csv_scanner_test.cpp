@@ -1186,6 +1186,32 @@ TEST_P(CSVScannerTest, test_enclose_fanatics) {
     EXPECT_EQ(-999, chunk->get(0)[7].get_int32());
 }
 
+TEST_P(CSVScannerTest, test_escaped_ordinary_character_inside_enclosed_field) {
+    // Issue #43613. An escape before an ordinary character used to drop the parser out of the
+    // enclosed field, after which the field's own separators and newlines were read as structure
+    // and the row was cut into the wrong columns. Only escapes before an enclose, an escape or a
+    // delimiter kept the field open.
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file24");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(3, chunk->num_columns());
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ("reported \"NO\" symptoms,.brabdominal cramping", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("ok", chunk->get(0)[2].get_slice());
+}
+
 TEST_P(CSVScannerTest, test_column_count_inconsistent) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
