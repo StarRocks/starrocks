@@ -59,6 +59,41 @@ jobs:
             echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
 
+      # Mirror StarRocks' Mergify "assign PRs with the pr author" rule. CelerData is a
+      # PRIVATE repo with no Mergify app (its @Mergifyio commands are reimplemented in
+      # ci-comment-tools.yml), so a plain .mergify.yml is inert here — self-assign must be
+      # done via Actions. Scope:
+      #   - backport PRs (mergify/bp/*) are already handled by `backport assign` above;
+      #   - sync PRs never reach this job (see the job `if`), and their assignee is set by
+      #     the sync executor (get_pr_info.py: reverse -> real source author);
+      #   - so this only self-assigns normal direct PRs, skipping bot/service authors.
+      #
+      # Runs on EVERY event (opened/reopened/edited/synchronize), NOT opened-only: the
+      # workflow-level cancel-in-progress (lines 15-17) can cancel the opened run before
+      # this step, and an opened-only guard would then permanently drop the assignment when
+      # the replacement run is a synchronize/edited. Running on all events makes it
+      # eventually-consistent (the final run once pushes settle assigns), and the
+      # "no assignees yet" guard keeps it idempotent — no spam, and it won't fight a
+      # maintainer who reassigned the PR to someone else.
+      - name: assign author
+        if: ${{ !startsWith(github.head_ref, 'mergify/bp/') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          if [[ "${AUTHOR}" =~ (\[bot\]$|^andyziye$) ]]; then
+            echo "author ${AUTHOR} is a bot/service account; skip self-assign."
+            exit 0
+          fi
+          count=$(gh pr view ${PR_NUMBER} -R ${REPO} --json assignees -q '.assignees | length' || echo 0)
+          if [[ "${count}" -eq 0 ]]; then
+            gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee "${AUTHOR}" || true
+          else
+            echo "PR already has ${count} assignee(s); skip self-assign."
+          fi
+
   title-check:
     runs-on: [self-hosted, light]
     needs: sync-checker
