@@ -158,6 +158,9 @@ public class CsvSplitFinder {
             throw new StarRocksException("failed to get csv splits: " + e.getMessage());
         }
 
+        if (result.status == null) {
+            throw new StarRocksException("failed to get csv splits, the backend returned no status");
+        }
         if (TStatusCode.findByValue(result.status.statusCode) != TStatusCode.OK) {
             throw new StarRocksException("failed to get csv splits, error: " + result.status.errorMsgs);
         }
