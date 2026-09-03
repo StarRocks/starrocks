@@ -115,6 +115,11 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON" AND 
     # the executable's copy is absent from its .dynsym and cannot satisfy the
     # shim at dlopen time. fmt is stateless, so a second copy is harmless.
     target_link_libraries(starrocks_paimon PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS} paimon fmt)
+    # The paimon plugin libraries register themselves through load-time
+    # constructors and export nothing the shim references, so an as-needed
+    # link silently drops their DT_NEEDED entries and paimon ends up with no
+    # parquet/orc/avro format at runtime. Force every listed library to stay.
+    target_link_options(starrocks_paimon PRIVATE "LINKER:--no-as-needed")
     # $ORIGIN: resolve libpaimon.so and its plugins from the shim's own
     # directory; CMAKE_SKIP_RPATH is ON, so set the rpath by hand.
     target_link_options(starrocks_paimon PRIVATE "LINKER:-rpath,$ORIGIN")
