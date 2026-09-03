@@ -925,6 +925,7 @@ public class SplitTabletJob extends TabletReshardJob {
                         physicalPartition.pinQueryableIndex(
                                 newIndex.getMetaId(), reshardingIndex.getMaterializedIndexId());
                     }
+                    newIndex.setTakeoverVersion(commitVersion);
                     physicalPartition.addMaterializedIndex(newIndex,
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
