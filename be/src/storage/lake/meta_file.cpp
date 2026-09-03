@@ -23,6 +23,8 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
+#include "storage/rowset/page_io.h"
+#include "testutil/sync_point.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
 #include "util/defer_op.h"
@@ -31,6 +33,18 @@
 #include "util/trace.h"
 
 namespace starrocks::lake {
+
+// Recovery hook for delvec files: drop the local data cache after a page's crc32c
+// failed to verify, so the retry reads through to the remote object.
+static Status drop_corrupted_delvec_file_cache(const std::string& path) {
+    Status drop_status = Status::NotSupported("clear corrupted cache is only supported in shared-data mode");
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    drop_status = drop_local_cache_data(path);
+#endif
+    // Outside the platform guard on purpose, so tests can drive the retry path on any build.
+    TEST_SYNC_POINT_CALLBACK("lake::drop_corrupted_delvec_file_cache", &drop_status);
+    return drop_status;
+}
 
 static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
     DelvecCacheKeyPB cache_key_pb;
@@ -696,10 +710,11 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
     auto iter = metadata.delvec_meta().delvecs().find(segment_id);
     if (iter != metadata.delvec_meta().delvecs().end()) {
         VLOG(2) << fmt::format("get_del_vec {} segid {}", metadata.delvec_meta().ShortDebugString(), segment_id);
+        const DelvecPagePB& delvec_page = iter->second;
         std::string buf;
-        raw::stl_string_resize_uninitialized(&buf, iter->second.size());
+        raw::stl_string_resize_uninitialized(&buf, delvec_page.size());
         // find in cache
-        std::string cache_key = delvec_cache_key(metadata.id(), iter->second);
+        std::string cache_key = delvec_cache_key(metadata.id(), delvec_page);
         auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
         if (cached_delvec != nullptr) {
             delvec->copy_from(*cached_delvec);
@@ -707,42 +722,67 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, ui
         }
 
         // lookup delvec file name and then read it
-        auto iter2 = metadata.delvec_meta().version_to_file().find(iter->second.version());
+        auto iter2 = metadata.delvec_meta().version_to_file().find(delvec_page.version());
         if (iter2 == metadata.delvec_meta().version_to_file().end()) {
             LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
-                       << ", version: " << iter->second.version();
+                       << ", version: " << delvec_page.version();
             return Status::InternalError("Can't find delvec file name");
         }
         const auto& delvec_name = iter2->second.name();
         RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-        std::unique_ptr<RandomAccessFile> rf;
-        if (lake_io_opts.fs && lake_io_opts.location_provider) {
-            ASSIGN_OR_RETURN(
-                    rf, lake_io_opts.fs->new_random_access_file(
-                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
-        } else {
-            ASSIGN_OR_RETURN(rf,
-                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
-        }
-        RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
-        if (iter->second.has_crc32c() && iter->second.crc32c_gen_version() == iter->second.version()) {
-            // check crc32c
-            uint32_t crc32c = crc32c::Value(buf.data(), iter->second.size());
-            if (crc32c != crc32c::Unmask(iter->second.crc32c())) {
-                LOG(ERROR) << fmt::format(
-                        "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, "
-                        "actual "
-                        "crc32c {}",
-                        metadata.id(), delvec_name, iter->second.offset(), iter->second.size(),
-                        crc32c::Unmask(iter->second.crc32c()), crc32c);
-                if (config::enable_strict_delvec_crc_check) {
-                    return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
-                                                          crc32c::Unmask(iter->second.crc32c()), crc32c));
-                }
+        const std::string delvec_path =
+                (lake_io_opts.fs && lake_io_opts.location_provider)
+                        ? lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)
+                        : tablet_mgr->delvec_location(metadata.id(), delvec_name);
+        auto read_page = [&]() -> Status {
+            std::unique_ptr<RandomAccessFile> rf;
+            if (lake_io_opts.fs && lake_io_opts.location_provider) {
+                ASSIGN_OR_RETURN(rf, lake_io_opts.fs->new_random_access_file(opts, delvec_path));
+            } else {
+                ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, delvec_path));
             }
+            return rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size());
+        };
+        // Returns Corruption only when strict checking is on; a mismatch is otherwise
+        // tolerated and the page is used as read.
+        auto verify_page = [&]() -> Status {
+            if (!delvec_page.has_crc32c() || delvec_page.crc32c_gen_version() != delvec_page.version()) {
+                return Status::OK();
+            }
+            uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
+            if (crc32c == crc32c::Unmask(delvec_page.crc32c())) {
+                return Status::OK();
+            }
+            LOG(ERROR) << fmt::format(
+                    "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
+                    "crc32c {}",
+                    metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
+                    crc32c::Unmask(delvec_page.crc32c()), crc32c);
+            if (config::enable_strict_delvec_crc_check) {
+                return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                      crc32c::Unmask(delvec_page.crc32c()), crc32c));
+            }
+            return Status::OK();
+        };
+        RETURN_IF_ERROR(read_page());
+        if (auto verify_st = verify_page(); !verify_st.ok()) {
+            // A delvec file is immutable once written, so bytes that do not match the
+            // recorded checksum are not the bytes that were written. The likeliest culprit
+            // is a corrupted block in the local data cache rather than in remote storage,
+            // so drop the cache and read once more -- the retry then reads through to the
+            // remote object. Segment pages (PageIO::read_and_decompress_page) and
+            // persistent-index sstables recover from cache corruption the same way.
+            auto drop_status = drop_corrupted_delvec_file_cache(delvec_path);
+            if (!drop_status.ok()) {
+                VLOG(2) << "skip clearing corrupted cache for " << delvec_path << ": " << drop_status;
+                return verify_st;
+            }
+            LOG(INFO) << "cleared corrupted cache for " << delvec_path << ", re-reading the delvec page";
+            RETURN_IF_ERROR(read_page());
+            RETURN_IF_ERROR(verify_page());
         }
         // parse delvec
-        RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
+        RETURN_IF_ERROR(delvec->load(delvec_page.version(), buf.data(), delvec_page.size()));
         // put in cache
         if (fill_cache) {
             auto delvec_cache_ptr = std::make_shared<DelVector>();
