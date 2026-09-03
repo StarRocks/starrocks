@@ -1,0 +1,95 @@
+-- name: test_flat_json_reserved_subcolumn_names
+create table ta (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num" = "1", "flat_json.enable" = "true");
+-- result:
+-- !result
+insert into ta values
+  (1, parse_json('{"nulls":7,"p":1}')),
+  (2, parse_json('{"nulls":7,"p":2}')),
+  (3, parse_json('{"nulls":7,"p":3}')),
+  (4, parse_json('{"nulls":7,"p":4}')),
+  (5, parse_json('{"nulls":7,"p":5}')),
+  (6, parse_json('{"nulls":7,"p":6}')),
+  (7, parse_json('{"nulls":7,"p":7}')),
+  (8, parse_json('{"nulls":7,"p":8}')),
+  (9, parse_json('{"nulls":7,"p":9}')),
+  (10, parse_json('{"nulls":7,"p":10}'));
+-- result:
+-- !result
+create table tb (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num" = "1", "flat_json.enable" = "true");
+-- result:
+-- !result
+insert into tb values
+  (1, parse_json('{"p":1}')),
+  (2, parse_json('{"p":2}')),
+  (3, parse_json('{"p":3}')),
+  (4, parse_json('{"p":4}')),
+  (5, parse_json('{"p":5}')),
+  (6, parse_json('{"p":6}')),
+  (7, parse_json('{"p":7}')),
+  (8, parse_json('{"p":8}')),
+  (9, parse_json('{"p":9}')),
+  (10, parse_json('{"p":10,"remain":555}'));
+-- result:
+-- !result
+select flat_json_meta(j) from ta[_META_];
+-- result:
+["nulls(TINYINT), nulls(BIGINT), p(BIGINT)"]
+-- !result
+select flat_json_meta(j) from tb[_META_];
+-- result:
+["nulls(TINYINT), p(BIGINT), remain(JSON)"]
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, cast(j->'$.nulls' as bigint) from ta order by k limit 3;
+-- result:
+1	7
+2	7
+3	7
+-- !result
+select k, cast(j->'$.remain' as string) from tb order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+9	None
+10	555
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, cast(j->'$.nulls' as bigint) from ta order by k limit 3;
+-- result:
+1	7
+2	7
+3	7
+-- !result
+select k, cast(j->'$.remain' as string) from tb order by k;
+-- result:
+1	None
+2	None
+3	None
+4	None
+5	None
+6	None
+7	None
+8	None
+9	None
+10	555
+-- !result
+select k, cast(j->'$.p' as bigint) from ta order by k limit 3;
+-- result:
+1	1
+2	2
+3	3
+-- !result

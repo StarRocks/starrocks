@@ -1,0 +1,58 @@
+-- name: test_flat_json_reserved_subcolumn_names
+-- FlatJsonColumnWriter::_init_flat_writers keeps two internal sub-columns in the same list as the user
+-- paths: "nulls" first when the column is nullable, "remain" last when a remain column exists. A user
+-- JSON key is allowed to be called either of those, and then it collides with them -- flat_json_meta
+-- below shows two sub-columns named nulls for the first table. Two of the three readers already window
+-- the sub-reader list by position to skip the internal ones; Segment::_new_extended_column_iterator
+-- matched by name and did not, so reading such a key through the v2 rewrite's extended column returned
+-- the null flags (0) for $.nulls, and the whole remain object for $.remain -- {} on the rows where the
+-- key is absent, so json_exists and IS NULL were wrong too. Reading the same key with the rewrite off
+-- always answered correctly, because that reader windows by position, and that is what this asserts:
+-- the two channels must agree.
+create table ta (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num" = "1", "flat_json.enable" = "true");
+insert into ta values
+  (1, parse_json('{"nulls":7,"p":1}')),
+  (2, parse_json('{"nulls":7,"p":2}')),
+  (3, parse_json('{"nulls":7,"p":3}')),
+  (4, parse_json('{"nulls":7,"p":4}')),
+  (5, parse_json('{"nulls":7,"p":5}')),
+  (6, parse_json('{"nulls":7,"p":6}')),
+  (7, parse_json('{"nulls":7,"p":7}')),
+  (8, parse_json('{"nulls":7,"p":8}')),
+  (9, parse_json('{"nulls":7,"p":9}')),
+  (10, parse_json('{"nulls":7,"p":10}'));
+-- The user key "remain" is in one row out of ten, too sparse to be extracted, so it lands inside the
+-- internal remain column -- which is the shape that used to return the internal object. A key dense
+-- enough to become a sub-column of its own sorts before the internal remain and was matched correctly
+-- by accident, which is why this defect only shows up for some data distributions.
+create table tb (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num" = "1", "flat_json.enable" = "true");
+insert into tb values
+  (1, parse_json('{"p":1}')),
+  (2, parse_json('{"p":2}')),
+  (3, parse_json('{"p":3}')),
+  (4, parse_json('{"p":4}')),
+  (5, parse_json('{"p":5}')),
+  (6, parse_json('{"p":6}')),
+  (7, parse_json('{"p":7}')),
+  (8, parse_json('{"p":8}')),
+  (9, parse_json('{"p":9}')),
+  (10, parse_json('{"p":10,"remain":555}'));
+-- The collision itself: two sub-columns named nulls in ta, and tb's user remain hidden in the internal one.
+select flat_json_meta(j) from ta[_META_];
+select flat_json_meta(j) from tb[_META_];
+-- The reader that windows by position has always been right; it is the reference.
+set cbo_json_v2_rewrite = false;
+select k, cast(j->'$.nulls' as bigint) from ta order by k limit 3;
+select k, cast(j->'$.remain' as string) from tb order by k;
+-- The extended column path must now agree with it. The cast is what makes the v2 rewrite produce an
+-- extended column at all; without it the expression stays on the JSON column and never reaches the
+-- reader this fixes.
+set cbo_json_v2_rewrite = true;
+select k, cast(j->'$.nulls' as bigint) from ta order by k limit 3;
+select k, cast(j->'$.remain' as string) from tb order by k;
+-- A key that is neither of the reserved names is unaffected, on both channels.
+select k, cast(j->'$.p' as bigint) from ta order by k limit 3;

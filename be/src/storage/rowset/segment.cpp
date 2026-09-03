@@ -722,9 +722,14 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     // Check if it's a sub-column of FlatJSON
     // case 1: it's not a FlatJSON
     // case 2: it's a FlatJSON, but it's not a flatten column in the FlatJSON
+    // Only the user paths are matched by name here. The internal "nulls" and "remain" sub-columns
+    // share this list, and a user JSON key may legitimately be called "nulls" or "remain" -- matching
+    // those by name reads the null flags, or the whole remain object, in place of the user's value.
     auto sub_readers = _column_readers[source_id]->sub_readers();
+    auto [user_sub_begin, user_sub_end] = _column_readers[source_id]->user_sub_reader_range();
     if (sub_readers) {
-        for (auto& sub_reader : *sub_readers) {
+        for (size_t i = user_sub_begin; i < user_sub_end; ++i) {
+            auto& sub_reader = (*sub_readers)[i];
             if (field_name == sub_reader->name()) {
                 auto source_iter = std::make_unique<ScalarColumnIterator>(sub_reader.get());
                 LogicalType reader_type = sub_reader.get()->column_type();
@@ -762,8 +767,8 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     bool has_flatten_descendant = false;
     if (sub_readers) {
         const std::string prefix = std::string(field_name) + ".";
-        for (auto& sub_reader : *sub_readers) {
-            if (std::string_view(sub_reader->name()).starts_with(prefix)) {
+        for (size_t i = user_sub_begin; i < user_sub_end; ++i) {
+            if (std::string_view((*sub_readers)[i]->name()).starts_with(prefix)) {
                 has_flatten_descendant = true;
                 break;
             }

@@ -223,6 +223,18 @@ public:
 
     const std::vector<std::unique_ptr<ColumnReader>>* sub_readers() const { return _sub_readers.get(); }
 
+    // The flat JSON writer keeps two internal sub-columns in the same list as the user paths:
+    // "nulls" first when the column is nullable, "remain" last when a remain column exists, see
+    // FlatJsonColumnWriter::_init_flat_writers. They are addressed by position, never by name -- a
+    // user JSON key is allowed to be called "nulls" or "remain". This is the [begin, end) range of
+    // sub-readers that carry user paths.
+    std::pair<size_t, size_t> user_sub_reader_range() const {
+        const size_t num_sub_readers = _sub_readers == nullptr ? 0 : _sub_readers->size();
+        const size_t begin = (is_nullable() && num_sub_readers > 0) ? 1 : 0;
+        const size_t end = (_has_remain && num_sub_readers > begin) ? num_sub_readers - 1 : num_sub_readers;
+        return {begin, end};
+    }
+
     bool is_flat_json() const { return _is_flat_json; }
     bool has_remain_json() const { return _has_remain; }
 

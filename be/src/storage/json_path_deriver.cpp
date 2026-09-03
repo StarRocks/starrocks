@@ -180,8 +180,7 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
         DCHECK(!reader->sub_readers()->empty());
         _total_rows += reader->num_rows();
 
-        int start = reader->is_nullable() ? 1 : 0;
-        int end = reader->has_remain_json() ? reader->sub_readers()->size() - 1 : reader->sub_readers()->size();
+        auto [start, end] = reader->user_sub_reader_range();
         _has_remain |= reader->has_remain_json();
         for (size_t i = start; i < end; i++) {
             const auto& sub = (*reader->sub_readers())[i];

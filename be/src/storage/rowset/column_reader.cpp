@@ -1211,8 +1211,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
     std::vector<LogicalType> source_types;
     std::unique_ptr<ColumnIterator> null_iter;
     std::vector<std::unique_ptr<ColumnIterator>> all_iters;
-    size_t start = is_nullable() ? 1 : 0;
-    size_t end = _has_remain ? _sub_readers->size() - 1 : _sub_readers->size();
+    auto [start, end] = user_sub_reader_range();
     if (is_nullable()) {
         ASSIGN_OR_RETURN(null_iter, (*_sub_readers)[0]->new_iterator());
     }
