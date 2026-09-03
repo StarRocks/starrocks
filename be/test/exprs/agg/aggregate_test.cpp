@@ -2824,6 +2824,212 @@ TEST_F(AggregateTest, test_array_agg_distinct) {
     ASSERT_EQ(6, result_data_column.size());
 }
 
+TEST_F(AggregateTest, test_array_agg_max_array_length) {
+    const AggregateFunction* agg_function = get_aggregate_function("array_agg", TYPE_VARCHAR, TYPE_ARRAY, true);
+
+    auto data_column = BinaryColumn::create();
+    auto null_column = NullColumn::create();
+    // 4 non-null values plus 2 nulls, so the group holds 6 elements only if nulls are counted.
+    for (int i = 0; i < 6; i++) {
+        std::string val("starrocks");
+        val.append(std::to_string(i));
+        data_column->append(val);
+        null_column->append(i >= 4 ? 1 : 0);
+    }
+    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    const Column* row_column = column.get();
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, agg_function);
+        agg_function->update_batch_single_state(fn_ctx, column->size(), &row_column, state->state());
+        auto elem = BinaryColumn::create();
+        auto offsets = UInt32Column::create(0);
+        auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+        agg_function->finalize_to_column(fn_ctx, state->state(), result_column->as_mutable_raw_ptr());
+    };
+
+    // unlimited by default
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_FALSE(local_ctx->has_error());
+    }
+    // a group whose size is exactly the limit is still accepted
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(6);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_FALSE(local_ctx->has_error());
+    }
+    // nulls count towards the limit, so the 4 non-null values alone do not keep the group under it
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(5);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_TRUE(local_ctx->has_error());
+        ASSERT_NE(std::string(local_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
+}
+
+TEST_F(AggregateTest, test_array_agg_max_array_length_distinct) {
+    const AggregateFunction* agg_function = get_aggregate_function("array_agg_distinct", TYPE_INT, TYPE_ARRAY, true);
+
+    auto data_column = Int32Column::create();
+    auto null_column = NullColumn::create();
+    // 4 distinct values plus 2 nulls that collapse into one element, so DISTINCT yields 5 elements.
+    for (int i = 0; i < 6; i++) {
+        data_column->append(i % 4);
+        null_column->append(i >= 4 ? 1 : 0);
+    }
+    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    const Column* row_column = column.get();
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, agg_function);
+        agg_function->update_batch_single_state(fn_ctx, column->size(), &row_column, state->state());
+        auto elem = Int32Column::create();
+        auto offsets = UInt32Column::create(0);
+        auto result_column = ArrayColumn::create(ColumnHelper::cast_to_nullable_column(elem), offsets);
+        agg_function->finalize_to_column(fn_ctx, state->state(), result_column->as_mutable_raw_ptr());
+    };
+
+    // duplicates removed by array_agg_distinct do not count towards the limit
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(5);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_FALSE(local_ctx->has_error());
+    }
+    {
+        std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context());
+        local_ctx->set_max_array_length(4);
+        aggregate_and_finalize(local_ctx.get());
+        ASSERT_TRUE(local_ctx->has_error());
+        ASSERT_NE(std::string(local_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
+}
+
+TEST_F(AggregateTest, test_array_aggV2_max_array_length) {
+    auto build_context = [](RuntimeState* runtime_state, ssize_t max_size) {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> fn_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+        fn_ctx->set_is_asc_order(std::vector<bool>{false});
+        fn_ctx->set_nulls_first(std::vector<bool>{true});
+        fn_ctx->set_runtime_state(runtime_state);
+        fn_ctx->set_max_array_length(max_size);
+        return fn_ctx;
+    };
+
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
+
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    char_column->append_datum("bcd");
+    char_column->append_datum(Datum());
+    char_column->append_datum("esfg");
+    char_column->append_datum("cdrdfe");
+
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+    int_column->append_datum(9);
+    int_column->append_datum(Datum());
+    int_column->append_datum(7);
+    int_column->append_datum(6);
+
+    std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
+
+    TypeDescriptor type_array_char;
+    type_array_char.type = LogicalType::TYPE_ARRAY;
+    type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, array_agg_func);
+        array_agg_func->update_batch_single_state(fn_ctx, int_column->size(), raw_columns.data(), state->state());
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
+        array_agg_func->finalize_to_column(fn_ctx, state->state(), res_array_col.get());
+    };
+
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 4);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_FALSE(fn_ctx->has_error());
+    }
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 3);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_TRUE(fn_ctx->has_error());
+        ASSERT_NE(std::string(fn_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
+}
+
+TEST_F(AggregateTest, test_array_aggV2_max_array_length_distinct) {
+    auto build_context = [](RuntimeState* runtime_state, ssize_t max_size) {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        std::unique_ptr<FunctionContext> fn_ctx(
+                FunctionContext::create_test_context(std::move(arg_types), return_type));
+        fn_ctx->set_is_asc_order(std::vector<bool>{true});
+        fn_ctx->set_nulls_first(std::vector<bool>{true});
+        fn_ctx->set_is_distinct(true);
+        fn_ctx->set_runtime_state(runtime_state);
+        fn_ctx->set_max_array_length(max_size);
+        return fn_ctx;
+    };
+
+    const AggregateFunction* array_agg_func = get_aggregate_function("array_agg2", TYPE_BIGINT, TYPE_ARRAY, false);
+
+    auto char_type = TypeDescriptor::create_varchar_type(30);
+    MutableColumnPtr char_column = ColumnHelper::create_column(char_type, true);
+    // 6 input rows, 2 distinct values after DISTINCT.
+    char_column->append_datum("a");
+    char_column->append_datum("a");
+    char_column->append_datum("b");
+    char_column->append_datum("a");
+    char_column->append_datum("b");
+    char_column->append_datum("b");
+
+    auto int_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+    MutableColumnPtr int_column = ColumnHelper::create_column(int_type, true);
+    int_column->append_datum(1);
+    int_column->append_datum(2);
+    int_column->append_datum(3);
+    int_column->append_datum(4);
+    int_column->append_datum(5);
+    int_column->append_datum(6);
+
+    std::vector<const Column*> raw_columns{char_column.get(), int_column.get()};
+
+    TypeDescriptor type_array_char;
+    type_array_char.type = LogicalType::TYPE_ARRAY;
+    type_array_char.children.emplace_back(LogicalType::TYPE_VARCHAR);
+
+    auto aggregate_and_finalize = [&](FunctionContext* fn_ctx) {
+        auto state = ManagedAggrState::create(fn_ctx, array_agg_func);
+        array_agg_func->update_batch_single_state(fn_ctx, int_column->size(), raw_columns.data(), state->state());
+        MutableColumnPtr res_array_col = ColumnHelper::create_column(type_array_char, false);
+        array_agg_func->finalize_to_column(fn_ctx, state->state(), res_array_col.get());
+    };
+
+    std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
+    // Pre-dedup size is 6, but DISTINCT yields 2 elements, so a limit of 2 must pass.
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 2);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_FALSE(fn_ctx->has_error());
+    }
+    {
+        auto fn_ctx = build_context(runtime_state.get(), 1);
+        aggregate_and_finalize(fn_ctx.get());
+        ASSERT_TRUE(fn_ctx->has_error());
+        ASSERT_NE(std::string(fn_ctx->error_msg()).find("max_array_length"), std::string::npos);
+    }
+}
+
 TEST_F(AggregateTest, test_array_agg_nullable) {
     const AggregateFunction* func = get_aggregate_function("array_agg", TYPE_INT, TYPE_ARRAY, true);
     auto state = ManagedAggrState::create(ctx, func);
