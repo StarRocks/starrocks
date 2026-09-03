@@ -27,7 +27,7 @@
 namespace starrocks {
 class TxnLogPB;
 class TxnLogPB_OpCompaction;
-class ParallelPublishContext;
+class ParallelUpsertContext;
 
 namespace sstable {
 class Iterator;
@@ -66,7 +66,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, IOStat* stat = nullptr,
-                  ParallelPublishContext* ctx = nullptr) override;
+                  ParallelUpsertContext* ctx = nullptr) override;
 
     // batch erase
     // |n|: size of key/value array
