@@ -122,7 +122,7 @@ CONF_mInt64(starlet_fslib_s3_max_single_part_size, "104857600");
 
 CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
 
-CONF_mInt64(starlet_fslib_gs_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_gcs_max_single_part_size, "104857600");
 
 CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
 

@@ -1519,7 +1519,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 // still reports the rejected number.
 CONF_mInt64(starlet_fslib_s3_max_single_part_size, "104857600");
 CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
-CONF_mInt64(starlet_fslib_gs_max_single_part_size, "104857600");
+CONF_mInt64(starlet_fslib_gcs_max_single_part_size, "104857600");
 CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
 CONF_mInt64(starlet_fslib_azure_storage_min_upload_part_size, "5242880");
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
