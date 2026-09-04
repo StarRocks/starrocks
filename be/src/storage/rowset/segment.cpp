@@ -321,6 +321,17 @@ struct SegmentZoneMapPruner {
         const ColumnId column_id = col_pred->column_id();
         const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
                                                                : parent->_tablet_schema->column(column_id);
+        // An extended column is synthesized by the JSON path rewrite and owns no zone map: its unique id is
+        // minted by counting up from the frontend's next_uniq_id, so it names no column on disk. Looking it
+        // up among the real column readers is never right, and on a row-store table the ids collide -- the
+        // backend's private `__row` column holds the very id handed to the first extended column of a scan.
+        // The subfield predicate was then answered against `__row`'s zone map, whose min/max span the
+        // encoded rows, so the whole segment was pruned away and the scan returned EndOfFile before an
+        // iterator was ever built. new_column_iterator_or_default() dispatches on is_extended() for the same
+        // reason; this is the second decision the synthetic id has to be kept out of.
+        if (tablet_column.is_extended()) {
+            return false;
+        }
         const auto column_unique_id = tablet_column.unique_id();
 
         if (const auto it = parent->_column_readers.find(column_unique_id); it == parent->_column_readers.end()) {

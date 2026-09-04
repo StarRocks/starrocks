@@ -49,6 +49,30 @@ select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
 -- result:
 1
 -- !result
+select count(*) as cnt_n from t where get_json_int(j, '$.n') = 42;
+-- result:
+1
+-- !result
+select count(*) as cnt_s from t where get_json_string(j, '$.s') = 'hello';
+-- result:
+1
+-- !result
+select count(*) as cnt_cast from t where cast(j -> '$.n' as int) = 42;
+-- result:
+1
+-- !result
+select count(*) as cnt_v1_miss from t where v1 = 99999;
+-- result:
+0
+-- !result
+select count(*) as cnt_n_v1 from t where get_json_int(j, '$.n') = 42 and v1 = 10;
+-- result:
+1
+-- !result
+select count(*) as cnt_or from t where get_json_int(j, '$.n') = 42 or get_json_string(j, '$.s') = 'zzz';
+-- result:
+1
+-- !result
 select k, v1, v2, j from t;
 -- result:
 1	10	20	{"b": false, "b2": true, "n": 42, "s": "hello"}
@@ -91,6 +115,18 @@ select get_json_int(j, '$.n') as n from t_plain;
 -- result:
 42
 -- !result
+select count(*) as cnt_n from t_plain where get_json_int(j, '$.n') = 42;
+-- result:
+1
+-- !result
+select count(*) as cnt_s from t_plain where get_json_string(j, '$.s') = 'hello';
+-- result:
+1
+-- !result
+select count(*) as cnt_n_v1 from t_plain where get_json_int(j, '$.n') = 42 and v1 = 10;
+-- result:
+1
+-- !result
 select k, v1, v2, j from t_plain;
 -- result:
 1	10	20	{"b": false, "b2": true, "n": 42, "s": "hello"}
@@ -122,7 +158,53 @@ select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
 -- result:
 1
 -- !result
+select count(*) as cnt_n from t where get_json_int(j, '$.n') = 42;
+-- result:
+1
+-- !result
+select count(*) as cnt_s from t where get_json_string(j, '$.s') = 'hello';
+-- result:
+1
+-- !result
+select count(*) as cnt_n_v1 from t where get_json_int(j, '$.n') = 42 and v1 = 10;
+-- result:
+1
+-- !result
 select k, v1, v2, j from t;
 -- result:
 1	10	20	{"b": false, "b2": true, "n": 42, "s": "hello"}
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+create table t_alter (k int not null, v1 int, j json)
+primary key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1", "storage_type" = "column_with_row");
+-- result:
+-- !result
+insert into t_alter values (1, 10, parse_json('{"n":42,"s":"hello"}'));
+-- result:
+-- !result
+alter table t_alter add column c1 int;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into t_alter values (2, 20, parse_json('{"n":43,"s":"world"}'), 7);
+-- result:
+-- !result
+select k, get_json_int(j, '$.n') as n, get_json_string(j, '$.s') as s from t_alter order by k;
+-- result:
+1	42	hello
+2	43	world
+-- !result
+select count(*) as cnt_alter_n from t_alter where get_json_int(j, '$.n') = 42;
+-- result:
+1
+-- !result
+select count(*) as cnt_alter_s from t_alter where get_json_string(j, '$.s') = 'world';
+-- result:
+1
 -- !result

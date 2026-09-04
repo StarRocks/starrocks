@@ -16,12 +16,13 @@
 --
 -- Only the first extended column of a statement was wrong, which is the fingerprint of an id collision.
 --
--- Not covered here: a comparison predicate over a VARCHAR or numeric subfield of a row-store table still
--- answers with zero rows under the v2 rewrite (a boolean one, asserted below, is fixed by this change).
--- That is a separate defect further up the scan: the storage layer now hands the predicate the right
--- value -- the same iterator the projections below read correctly -- and the row is dropped above it,
--- where the row-store table's extra column shifts the scan node's slot-to-column mapping. It reads zero
--- both before and after this change, so it is tracked on its own rather than pinned down here.
+-- The synthetic id reached a second decision as well. SegmentZoneMapPruner looked it up among the column
+-- readers before asking whether the column is synthetic, so a subfield predicate was answered against
+-- `__row`'s zone map -- min/max spanning encoded rows -- which never overlaps a real value. The pruner
+-- reported the whole segment as filtered and the scan returned EndOfFile, so the row disappeared before an
+-- iterator existed: the projections below read the right value while a predicate over the same path
+-- answered zero. A boolean predicate happens not to reach the pruner, which is why only the numeric and
+-- string ones below caught it.
 ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
 create table t (k int not null, v1 int, v2 int, j json)
 primary key(k) distributed by hash(k) buckets 1
@@ -49,6 +50,25 @@ select hex(get_json_string(j, '$.zzz')) as zzzhex from t;
 select get_json_int(j, '$.n') as n from t;
 -- A predicate reads through the same iterator, so it silently dropped the row too.
 select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
+-- Numeric and string subfields go through the zone map pruner and were discarded there, one segment at a
+-- time, with the projection of the very same path still answering correctly.
+select count(*) as cnt_n from t where get_json_int(j, '$.n') = 42;
+select count(*) as cnt_s from t where get_json_string(j, '$.s') = 'hello';
+-- Control on the predicate shape: behind a cast the scan keeps `CAST(j.n AS INT) = 42` as an expression
+-- instead of pushing a column predicate down, so this form never reached the pruner and answered
+-- correctly before this change as well. It records which shapes the pruner is asked about.
+select count(*) as cnt_cast from t where cast(j -> '$.n' as int) = 42;
+-- Regression: a predicate over a real column must still be pruned by the very same segment zone map --
+-- only the synthetic id is kept out of it. `v1` is 10, so this reads zero either way; the profile of this
+-- statement reports SegmentZoneMapFilterRows = 1 with the fix in place.
+select count(*) as cnt_v1_miss from t where v1 = 99999;
+-- Adding a predicate on a real column changes nothing: `v1` is not extended, so the scan still mints
+-- exactly one synthetic id and that one still collides.
+select count(*) as cnt_n_v1 from t where get_json_int(j, '$.n') = 42 and v1 = 10;
+-- Two JSON subfields in one predicate answered correctly even before the fix, which is the collision's
+-- fingerprint again: an OR node prunes only when every child prunes, and the second extended column is
+-- given an id that collides with nothing.
+select count(*) as cnt_or from t where get_json_int(j, '$.n') = 42 or get_json_string(j, '$.s') = 'zzz';
 -- Regression: the real columns of the very same table must be untouched.
 select k, v1, v2, j from t;
 select k, v1, v2 from t where k = 1;
@@ -64,6 +84,9 @@ select get_json_bool(j, '$.b') as b, get_json_bool(j, '$.b2') as b2 from t_plain
 select get_json_string(j, '$.s') as s, length(get_json_string(j, '$.s')) as slen from t_plain;
 select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) as zzzlen from t_plain;
 select get_json_int(j, '$.n') as n from t_plain;
+select count(*) as cnt_n from t_plain where get_json_int(j, '$.n') = 42;
+select count(*) as cnt_s from t_plain where get_json_string(j, '$.s') = 'hello';
+select count(*) as cnt_n_v1 from t_plain where get_json_int(j, '$.n') = 42 and v1 = 10;
 select k, v1, v2, j from t_plain;
 -- Control: with the rewrite off nothing goes through an extended column at all, and every answer above
 -- must come back unchanged.
@@ -74,4 +97,21 @@ select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) a
 select hex(get_json_string(j, '$.zzz')) as zzzhex from t;
 select get_json_int(j, '$.n') as n from t;
 select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
+select count(*) as cnt_n from t where get_json_int(j, '$.n') = 42;
+select count(*) as cnt_s from t where get_json_string(j, '$.s') = 'hello';
+select count(*) as cnt_n_v1 from t where get_json_int(j, '$.n') = 42 and v1 = 10;
 select k, v1, v2, j from t;
+set cbo_json_v2_rewrite = true;
+-- The collision survives a schema change rather than being scrambled by one: the frontend's max column
+-- unique id and the id the backend gives `__row` move up together, so an altered table lands on exactly
+-- the same overlap and the predicate has to keep answering.
+create table t_alter (k int not null, v1 int, j json)
+primary key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1", "storage_type" = "column_with_row");
+insert into t_alter values (1, 10, parse_json('{"n":42,"s":"hello"}'));
+alter table t_alter add column c1 int;
+function: wait_alter_table_finish()
+insert into t_alter values (2, 20, parse_json('{"n":43,"s":"world"}'), 7);
+select k, get_json_int(j, '$.n') as n, get_json_string(j, '$.s') as s from t_alter order by k;
+select count(*) as cnt_alter_n from t_alter where get_json_int(j, '$.n') = 42;
+select count(*) as cnt_alter_s from t_alter where get_json_string(j, '$.s') = 'world';
