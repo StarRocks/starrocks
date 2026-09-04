@@ -118,6 +118,7 @@ set(DATA_SINK_TABLET_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     tablet/multi_olap_table_sink_test.cpp
     tablet/range_router_test.cpp
+    tablet/tablet_sink_global_dict_words_test.cpp
     tablet/tablet_sink_index_channel_test.cpp
     tablet/tablet_sink_sender_range_test.cpp
     tablet/olap_table_sink_test.cpp
