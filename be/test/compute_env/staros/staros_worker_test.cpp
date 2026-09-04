@@ -18,6 +18,7 @@
 #include <aws/core/Aws.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <gflags/gflags.h>
 #include <grpcpp/grpcpp.h>
 #include <gtest/gtest.h>
 #include <manager.grpc.pb.h>
@@ -26,19 +27,29 @@
 #include <algorithm>
 #include <condition_variable>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "common/config_metrics_fwd.h"
+#include "common/config_staros_worker_fwd.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "compute_env/staros/staros_worker_runtime.h"
+
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 
 namespace starrocks {
 
@@ -472,6 +483,94 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     ASSERT_FALSE(got.ok());
     EXPECT_EQ(before_total + 1, metrics->staros_shard_info_fallback_total.value());
     EXPECT_EQ(before_failed + 1, metrics->staros_shard_info_fallback_failed_total.value());
+}
+
+namespace {
+
+struct UploadThresholdMapping {
+    const char* be_config;
+    const char* starlet_flag;
+};
+
+const UploadThresholdMapping kUploadThresholdMappings[] = {
+        {"starlet_fslib_s3_max_single_part_size", "fslib_s3_max_single_part_size"},
+        {"starlet_fslib_s3_min_upload_part_size", "fslib_s3_min_upload_part_size"},
+        {"starlet_fslib_gs_max_single_part_size", "fslib_gs_max_single_part_size"},
+        {"starlet_fslib_azure_storage_max_single_part_size", "fslib_azure_storage_max_single_part_size"},
+        {"starlet_fslib_azure_storage_min_upload_part_size", "fslib_azure_storage_min_upload_part_size"},
+};
+
+} // namespace
+
+// The BE config default must equal the starlet gflag's registered default, so that merging this
+// feature changes no behavior. Both sides read declared defaults, never mutable current values.
+TEST_F(StarOSWorkerTest, upload_threshold_config_defaults_match_starlet) {
+    auto configs = config::list_configs();
+    for (const auto& mapping : kUploadThresholdMappings) {
+        auto it = std::find_if(configs.begin(), configs.end(),
+                               [&](const config::ConfigInfo& info) { return info.name == mapping.be_config; });
+        ASSERT_NE(configs.end(), it) << "missing BE config " << mapping.be_config;
+
+        gflags::CommandLineFlagInfo flag_info;
+        ASSERT_TRUE(gflags::GetCommandLineFlagInfo(mapping.starlet_flag, &flag_info))
+                << "missing starlet gflag " << mapping.starlet_flag;
+
+        EXPECT_EQ(flag_info.default_value, it->defval)
+                << mapping.be_config << " default drifted from " << mapping.starlet_flag;
+    }
+
+    // Direct typed references: a wrong DECLARE_ type or a misspelled flag name fails to build.
+    // Binding to `const int64_t*` is the whole check; no current value is read.
+    [[maybe_unused]] const int64_t* const typed_flags[] = {
+            &FLAGS_fslib_s3_max_single_part_size, &FLAGS_fslib_s3_min_upload_part_size,
+            &FLAGS_fslib_gs_max_single_part_size, &FLAGS_fslib_azure_storage_max_single_part_size,
+            &FLAGS_fslib_azure_storage_min_upload_part_size};
+    static_assert(std::size(kUploadThresholdMappings) == std::size(typed_flags),
+                  "every mapped config needs a typed flag reference above");
+}
+
+// Distinct values per flag, so deleting one assignment or swapping two fails.
+TEST_F(StarOSWorkerTest, upload_threshold_configs_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_max_single_part_size, 11L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_min_upload_part_size, 12L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_gs_max_single_part_size, 13L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_max_single_part_size, 14L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_min_upload_part_size, 15L << 20);
+
+    apply_starlet_upload_threshold_configs();
+
+    EXPECT_EQ(11L << 20, FLAGS_fslib_s3_max_single_part_size);
+    EXPECT_EQ(12L << 20, FLAGS_fslib_s3_min_upload_part_size);
+    EXPECT_EQ(13L << 20, FLAGS_fslib_gs_max_single_part_size);
+    EXPECT_EQ(14L << 20, FLAGS_fslib_azure_storage_max_single_part_size);
+    EXPECT_EQ(15L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
+}
+
+// A non-positive config value must not be applied; whatever was already effective stays.
+// Covers all five mappings, with a distinct sentinel prior value per flag, so a crossed pair fails.
+TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup) {
+    gflags::FlagSaver flag_saver;
+    FLAGS_fslib_s3_max_single_part_size = 7L << 20;
+    FLAGS_fslib_s3_min_upload_part_size = 8L << 20;
+    FLAGS_fslib_gs_max_single_part_size = 9L << 20;
+    FLAGS_fslib_azure_storage_max_single_part_size = 10L << 20;
+    FLAGS_fslib_azure_storage_min_upload_part_size = 11L << 20;
+
+    {
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_max_single_part_size, 0);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_min_upload_part_size, -1);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_gs_max_single_part_size, 0);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_max_single_part_size, -1);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_min_upload_part_size, 0);
+        apply_starlet_upload_threshold_configs();
+    }
+
+    EXPECT_EQ(7L << 20, FLAGS_fslib_s3_max_single_part_size);
+    EXPECT_EQ(8L << 20, FLAGS_fslib_s3_min_upload_part_size);
+    EXPECT_EQ(9L << 20, FLAGS_fslib_gs_max_single_part_size);
+    EXPECT_EQ(10L << 20, FLAGS_fslib_azure_storage_max_single_part_size);
+    EXPECT_EQ(11L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
 }
 
 } // namespace starrocks

@@ -101,6 +101,33 @@ CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 
+// Object-store upload thresholds, forwarded to the starlet gflags of the same name without the
+// `starlet_` prefix. For each backend, an object larger than `*_max_single_part_size` is uploaded
+// with a multipart upload instead of a single request, and `*_min_upload_part_size` is the
+// multipart part size. GCS has no part-size knob: above its threshold starlet switches to a
+// streaming upload. Defaults equal starlet's own gflag defaults, so leaving these alone changes
+// nothing.
+//
+// Memory: starlet buffers in memory up to `*_max_single_part_size` before switching to multipart,
+// then up to `*_min_upload_part_size` between part flushes, so the per-output-stream high-water
+// mark is roughly the larger of the two, multiplied by the number of concurrent output streams on
+// the node. Raising either value raises memory usage.
+//
+// Values must be greater than 0. A dynamic update to a non-positive value is rejected and nothing
+// changes. At startup a non-positive value is not applied and a warning is logged, leaving the
+// previously effective value in force: a valid value here overrides a `--fslib_*` gflag passed on
+// the BE command line, but a rejected one leaves that command-line value active while this config
+// still reports the rejected number.
+CONF_mInt64(starlet_fslib_s3_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
+
+CONF_mInt64(starlet_fslib_gs_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_azure_storage_min_upload_part_size, "5242880");
+
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
