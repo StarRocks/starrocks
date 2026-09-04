@@ -37,6 +37,8 @@ description: "materialized_view_refresh_jobs はマテリアライズドビュ�
 | ERROR_CODE                         | 失敗した task run のエラーコード。失敗した task run がない場合は `NULL`。 |
 | ERROR_MESSAGE                      | 失敗した task run のエラーメッセージ。失敗した task run がない場合は `NULL`。 |
 | EXECUTED_REFRESH_MODE | この refresh job が実際に使用したモードです（`INCREMENTAL` または `PCT`）。マテリアライズドビューの `REFRESH_MODE` が `AUTO` の場合、増分維持では表現できない基テーブルの変更があったために、その job だけ `PCT` に切り替わることがあります。この列を `REFRESH_MODE` と比較すれば、その job がフォールバックしたかどうかが分かります。複数段に分かれて実行された job では最後に使用したモードを、失敗した job では失敗時に使用していたモードを示します。モードを選択する前に終わった job（リフレッシュ不要でスキップされた job、選択前に失敗した job）、および記録のない過去の job では NULL。 |
+| REFRESH_MODE_REASON | この job が増分リフレッシュではなく `EXECUTED_REFRESH_MODE` で実行された理由です。モードの決定が行われなかった場合は空です。値:`NON_APPEND_ONLY_CHANGE`(append-only ではないベーステーブルの変更。パーティションの削除、truncate、上書き、外部テーブルの削除、行レベルの削除など)、`BASELINE_UNREACHABLE`(記録されたベースラインがテーブルの head の祖先ではなくなった。スナップショットの期限切れ、またはテーブルのロールバックや置き換え)、`BASELINE_MISSING`(差分を読む基準がそもそもない。初回リフレッシュ、またはメタデータ修復の後)、`CHANGE_CAPTURE_DISABLED`(ウィンドウ内のいずれかのバージョンが、そのベーステーブルで変更キャプチャが無効な間に発行された)、`FORCE_REFRESH`(強制リフレッシュ)、`UNKNOWN`(上記のいずれにも分類されないフォールバック。原因は FE のログにあります。フォールバック自体が成功した場合 `ERROR_MESSAGE` は空のままです)。 |
+| REFRESH_MODE_REASON_TABLE | モードの決定を引き起こしたベーステーブルです（`catalog.database.table` 形式）。単一のベーステーブルに起因しない場合は空です。`FORCE_REFRESH` はテーブルではなくリクエストに由来し、BE が変更の読み取り中に報告する理由はテーブルではなく tablet を指します。 |
 
 :::note
 このビューは永続的なストレージを持ちません。その行はクエリ時に `task_runs` から導出されるため、記録の保持期間は `task_runs` の履歴設定に従います。各ジョブはクエリ時にその `task_runs` の行から集約されるため、ジョブのすべての task run が `task_runs` の履歴ウィンドウ内に残っている間のみ、そのジョブは完全に表現されます。このウィンドウより古いジョブは表示されず、保持境界をまたぐジョブは部分的にしか集約されない場合があります（例えば、その `SUBMIT_TIME` や `IMV_SOURCE_*` の範囲が、保持されている task run のみを反映することがあります）。

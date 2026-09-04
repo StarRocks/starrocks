@@ -191,7 +191,7 @@ public class ShowMaterializedViewStatusTest {
 
         List<String> resultSet = viewStatus.toResultSet();
 
-        Assertions.assertEquals(39, resultSet.size());
+        Assertions.assertEquals(41, resultSet.size());
         Assertions.assertEquals("", resultSet.get(3)); // refresh type
         Assertions.assertEquals("false", resultSet.get(4)); // is active
         Assertions.assertEquals("", resultSet.get(5)); // inactive reason

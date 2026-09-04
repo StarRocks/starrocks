@@ -86,6 +86,8 @@ public class ShowMaterializedViewStatus {
     private String effectiveRefreshMode;
     private String effectiveRefreshModeReason;
     private String lastExecutedRefreshMode;
+    private String lastRefreshModeReason;
+    private String lastRefreshModeReasonTable;
     private String warehouse;
     private String refreshMode;
     private String refreshTrigger;
@@ -367,6 +369,10 @@ public class ShowMaterializedViewStatus {
             status.setLastFreshnessConfirmedAt(refreshScheme.getLastFreshnessConfirmedAt());
             status.setLastExecutedRefreshMode(refreshScheme.getLastExecutedRefreshMode() == null
                     ? null : refreshScheme.getLastExecutedRefreshMode().name());
+            // Same source as the mode above: a row that pairs them must not mix two different runs.
+            status.setLastRefreshModeReason(refreshScheme.getLastRefreshModeReason() == null
+                    ? null : refreshScheme.getLastRefreshModeReason().name());
+            status.setLastRefreshModeReasonTable(refreshScheme.getLastRefreshModeReasonTable());
         }
         status.setBaseTableRefreshVersionTimes(mv.getBaseTableRefreshVersionTimesJson());
         boolean syncRefresh = refreshScheme != null
@@ -420,6 +426,8 @@ public class ShowMaterializedViewStatus {
         status.setEffectiveRefreshMode(null);
         status.setEffectiveRefreshModeReason(null);
         status.setLastExecutedRefreshMode(null);
+        status.setLastRefreshModeReason(null);
+        status.setLastRefreshModeReasonTable(null);
         status.setRefreshTrigger("NONE");
         status.setRefreshPolicy("NONE");
         status.setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
@@ -560,6 +568,14 @@ public class ShowMaterializedViewStatus {
 
     public void setEffectiveRefreshModeReason(String effectiveRefreshModeReason) {
         this.effectiveRefreshModeReason = effectiveRefreshModeReason;
+    }
+
+    public void setLastRefreshModeReason(String lastRefreshModeReason) {
+        this.lastRefreshModeReason = lastRefreshModeReason;
+    }
+
+    public void setLastRefreshModeReasonTable(String lastRefreshModeReasonTable) {
+        this.lastRefreshModeReasonTable = lastRefreshModeReasonTable;
     }
 
     public String getLastExecutedRefreshMode() {
@@ -849,6 +865,8 @@ public class ShowMaterializedViewStatus {
         status.setEffective_refresh_mode(Strings.nullToEmpty(effectiveRefreshMode));
         status.setEffective_refresh_mode_reason(Strings.nullToEmpty(effectiveRefreshModeReason));
         status.setLast_executed_refresh_mode(Strings.nullToEmpty(lastExecutedRefreshMode));
+        status.setLast_refresh_mode_reason(Strings.nullToEmpty(lastRefreshModeReason));
+        status.setLast_refresh_mode_reason_table(Strings.nullToEmpty(lastRefreshModeReasonTable));
 
         return status;
     }
@@ -935,6 +953,8 @@ public class ShowMaterializedViewStatus {
         addField(resultRow, Strings.nullToEmpty(effectiveRefreshMode));
         addField(resultRow, Strings.nullToEmpty(effectiveRefreshModeReason));
         addField(resultRow, Strings.nullToEmpty(lastExecutedRefreshMode));
+        addField(resultRow, Strings.nullToEmpty(lastRefreshModeReason));
+        addField(resultRow, Strings.nullToEmpty(lastRefreshModeReasonTable));
 
         return resultRow;
     }

@@ -48,7 +48,7 @@ public class CdcErrorUtilsTest {
     @Test
     public void testFindValidEnvelopeAfterRejectedCandidate() {
         CdcErrorUtils.Parsed afterUnknown = CdcErrorUtils.find(
-                "CDC-ERROR-2 (CHANGE_NOT_TRACKABLE): unknown code\n"
+                "CDC-ERROR-99 (CHANGE_NOT_TRACKABLE): unknown code\n"
                         + "query failed: CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): valid detail after unknown")
                 .orElseThrow();
         assertEquals(TCdcErrorCode.CHANGE_NOT_TRACKABLE, afterUnknown.getCode());
@@ -80,11 +80,46 @@ public class CdcErrorUtilsTest {
         assertFalse(CdcErrorUtils.isChangeNotTrackable(null));
     }
 
+    /** The literals are copied from changes_connector.cpp; a reword there must fail here. */
+    @Test
+    public void testIsRowDeleteRejection() {
+        assertTrue(CdcErrorUtils.isRowDeleteRejection(
+                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for DUP_KEYS does not support delete"));
+        assertTrue(CdcErrorUtils.isRowDeleteRejection(
+                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for AGG_KEYS does not support delete"));
+
+        assertFalse(CdcErrorUtils.isRowDeleteRejection("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CHANGES ancestor "
+                + "chain on tablet 42 cannot reach base version 7 from version 9"));
+        assertFalse(CdcErrorUtils.isRowDeleteRejection("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CHANGES window on "
+                + "tablet 42 spans version 3 which was not recorded (change data capture was not enabled at "
+                + "that version)"));
+        assertFalse(CdcErrorUtils.isRowDeleteRejection("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CHANGES window on "
+                + "tablet 42 spans version 3 whose changes were not captured: degraded by recover"));
+
+        // The phrase outside a CDC envelope is not the backend's rejection.
+        assertFalse(CdcErrorUtils.isRowDeleteRejection("this table does not support delete"));
+        assertFalse(CdcErrorUtils.isRowDeleteRejection(null));
+    }
+
+    /** Same contract as isRowDeleteRejection: the literal comes from changes_connector.cpp. */
+    @Test
+    public void testIsCaptureDisabledRejection() {
+        assertTrue(CdcErrorUtils.isCaptureDisabledRejection("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CHANGES "
+                + "window on tablet 42 spans version 3 which was not recorded (change data capture was not "
+                + "enabled at that version)"));
+
+        assertFalse(CdcErrorUtils.isCaptureDisabledRejection("CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CHANGES "
+                + "window on tablet 42 spans version 3 whose changes were not captured: degraded by recover"));
+        assertFalse(CdcErrorUtils.isCaptureDisabledRejection(
+                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for DUP_KEYS does not support delete"));
+        assertFalse(CdcErrorUtils.isCaptureDisabledRejection(null));
+    }
+
     @Test
     public void testRejectMalformedOrInconsistentEnvelope() {
         List<String> invalid = List.of(
                 "CDC-ERROR-0 (UNKNOWN): detail",
-                "CDC-ERROR-2 (CHANGE_NOT_TRACKABLE): detail",
+                "CDC-ERROR-99 (CHANGE_NOT_TRACKABLE): detail",
                 "CDC-ERROR-1 (CHANGES_NOT_TRACKABLE): detail",
                 "CDC-ERROR-1(CHANGE_NOT_TRACKABLE): detail",
                 "CDC-ERROR-1 CHANGE_NOT_TRACKABLE: detail",

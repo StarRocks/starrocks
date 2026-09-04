@@ -896,6 +896,8 @@ public class ShowResultMetaFactory implements AstVisitorEPack<ShowResultSetMetaD
                 .column("effective_refresh_mode", TypeFactory.createVarcharType(16))
                 .column("effective_refresh_mode_reason", TypeFactory.createVarcharType(1024))
                 .column("last_executed_refresh_mode", TypeFactory.createVarcharType(16))
+                .column("last_refresh_mode_reason", TypeFactory.createVarcharType(32))
+                .column("last_refresh_mode_reason_table", TypeFactory.createVarcharType(256))
                 .build();
     }
 

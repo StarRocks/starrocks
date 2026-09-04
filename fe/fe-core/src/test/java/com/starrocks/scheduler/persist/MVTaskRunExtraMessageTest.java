@@ -18,6 +18,7 @@ package com.starrocks.scheduler.persist;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -144,5 +145,19 @@ public class MVTaskRunExtraMessageTest {
         Assertions.assertTrue(json.contains(
                 "\"imvSourceTimestampRange\":{\"iceberg.db.tbl\":" +
                         "{\"start\":\"1717999999000\",\"end\":\"1718000000000\"}}"), json);
+    }
+
+    /** The per-attempt clear needs both fields emptied, or the table still names the previous attempt's. */
+    @Test
+    public void testSetRefreshModeReasonWithNullClearsBothFields() {
+        MVTaskRunExtraMessage message = new MVTaskRunExtraMessage();
+        message.setRefreshModeReason(
+                MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE, "default_catalog.db.base");
+        Assertions.assertEquals("NON_APPEND_ONLY_CHANGE", message.getRefreshModeReason());
+        Assertions.assertEquals("default_catalog.db.base", message.getRefreshModeReasonTable());
+
+        message.setRefreshModeReason(null, null);
+        Assertions.assertEquals("", message.getRefreshModeReason());
+        Assertions.assertEquals("", message.getRefreshModeReasonTable());
     }
 }

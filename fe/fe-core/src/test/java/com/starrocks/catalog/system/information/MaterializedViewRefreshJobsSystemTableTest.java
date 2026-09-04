@@ -29,6 +29,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -75,7 +76,9 @@ public class MaterializedViewRefreshJobsSystemTableTest {
             "FAILED_QUERY_ID",
             "ERROR_CODE",
             "ERROR_MESSAGE",
-            "EXECUTED_REFRESH_MODE");
+            "EXECUTED_REFRESH_MODE",
+            "REFRESH_MODE_REASON",
+            "REFRESH_MODE_REASON_TABLE");
 
     @Test
     public void testColumnContractMatchesThriftOrder() {
@@ -83,7 +86,7 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         List<String> actual = table.getBaseSchema().stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
-        Assertions.assertEquals(24, actual.size());
+        Assertions.assertEquals(26, actual.size());
         Assertions.assertEquals(EXPECTED_COLUMNS, actual);
         Assertions.assertEquals(Table.TableType.SCHEMA, table.getType());
     }
@@ -94,7 +97,7 @@ public class MaterializedViewRefreshJobsSystemTableTest {
         Table table = db.getTable(MaterializedViewRefreshJobsSystemTable.NAME);
         Assertions.assertNotNull(table);
         Assertions.assertEquals(Table.TableType.SCHEMA, table.getType());
-        Assertions.assertEquals(24, table.getBaseSchema().size());
+        Assertions.assertEquals(26, table.getBaseSchema().size());
     }
 
     @Test
@@ -388,6 +391,46 @@ public class MaterializedViewRefreshJobsSystemTableTest {
                     throws AccessDeniedException {
             }
         };
+    }
+
+    @Test
+    public void theRunThatChoseTheModeSuppliesTheReason() {
+        TaskRunStatus lead = newRun("job-x", "q1", "t", Constants.TaskRunState.SUCCESS, 1000L);
+        lead.getMvTaskRunExtraMessage()
+                .setRefreshModeReason(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE, "default_catalog.db1.base");
+        // A later batch of the same job records nothing, so it must not blank out the lead run's reason.
+        TaskRunStatus later = newRun("job-x", "q2", "t", Constants.TaskRunState.SUCCESS, 2000L);
+
+        MVTaskRunExtraMessage chosen = MaterializedViewRefreshJobsSystemTable
+                .lastRunWithModeReason(Lists.newArrayList(lead, later));
+        Assertions.assertNotNull(chosen);
+        Assertions.assertEquals("NON_APPEND_ONLY_CHANGE", chosen.getRefreshModeReason());
+        Assertions.assertEquals("default_catalog.db1.base", chosen.getRefreshModeReasonTable());
+    }
+
+    /**
+     * Measured on a cluster: dropping a base partition leaves the refresh with nothing to do, so the run
+     * that recorded the reason ends SKIPPED. lastExecutedRefreshMode passes that run over, so a reason
+     * taken from it would sit beside an empty mode.
+     */
+    @Test
+    public void aRunThatExecutedNothingSuppliesNoReason() {
+        TaskRunStatus skipped = newRun("job-z", "q1", "t", Constants.TaskRunState.SKIPPED, 1000L);
+        skipped.getMvTaskRunExtraMessage().setRefreshMode("PCT");
+        skipped.getMvTaskRunExtraMessage()
+                .setRefreshModeReason(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE,
+                        "default_catalog.db1.base");
+
+        List<TaskRunStatus> batch = Lists.newArrayList(skipped);
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable.lastExecutedRefreshMode(batch));
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable.lastRunWithModeReason(batch));
+    }
+
+    @Test
+    public void aJobThatNeverDegradedSuppliesNoReason() {
+        TaskRunStatus run = newRun("job-y", "q1", "t", Constants.TaskRunState.SUCCESS, 1000L);
+        Assertions.assertNull(MaterializedViewRefreshJobsSystemTable
+                .lastRunWithModeReason(Lists.newArrayList(run)));
     }
 
     private static TaskRunStatus newRun(String startTaskRunId, String queryId, String taskName,

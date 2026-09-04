@@ -442,6 +442,8 @@ struct TMaterializedViewStatus {
     40: optional string effective_refresh_mode
     41: optional string effective_refresh_mode_reason
     42: optional string last_executed_refresh_mode
+    43: optional string last_refresh_mode_reason
+    44: optional string last_refresh_mode_reason_table
 }
 
 struct TListPipesParams {
@@ -537,6 +539,8 @@ struct TMaterializedViewRefreshJobInfo {
     22: optional string error_code
     23: optional string error_message
     24: optional string executed_refresh_mode
+    25: optional string refresh_mode_reason
+    26: optional string refresh_mode_reason_table
 }
 
 struct TListMaterializedViewRefreshJobsResult {

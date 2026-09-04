@@ -18,6 +18,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Encapsulate error message and exceptions for materialized view
@@ -129,8 +130,20 @@ public class MaterializedViewExceptions {
      * that one is already caught while the plan is built and never reaches execution.
      */
     public static boolean isChangeNotTrackableFailure(Throwable e) {
+        return anyCause(e, CdcErrorUtils::isChangeNotTrackable);
+    }
+
+    public static boolean isRowDeleteRejectionFailure(Throwable e) {
+        return anyCause(e, CdcErrorUtils::isRowDeleteRejection);
+    }
+
+    public static boolean isCaptureDisabledRejectionFailure(Throwable e) {
+        return anyCause(e, CdcErrorUtils::isCaptureDisabledRejection);
+    }
+
+    private static boolean anyCause(Throwable e, Predicate<String> match) {
         for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
-            if (CdcErrorUtils.isChangeNotTrackable(t.getMessage())) {
+            if (match.test(t.getMessage())) {
                 return true;
             }
         }

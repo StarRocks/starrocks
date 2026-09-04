@@ -18,6 +18,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -76,6 +77,13 @@ public class MVTaskRunExtraMessage implements Writable {
     // the refresh mode of this task run
     @SerializedName("refreshMode")
     public String refreshMode = "";
+
+    @SerializedName("refreshModeReason")
+    private String refreshModeReason = "";
+
+    // Empty when no single base table drove the decision -- a forced or partial refresh, say.
+    @SerializedName("refreshModeReasonTable")
+    private String refreshModeReasonTable = "";
 
     // For pinned PCT batches: base-table identifier -> frozen Iceberg snapshot id.
     // Serialized into information_schema.task_runs.EXTRA_MESSAGE for post-mortem debugging.
@@ -210,6 +218,19 @@ public class MVTaskRunExtraMessage implements Writable {
 
     public String getRefreshMode() {
         return refreshMode;
+    }
+
+    public String getRefreshModeReason() {
+        return refreshModeReason;
+    }
+
+    public String getRefreshModeReasonTable() {
+        return refreshModeReasonTable;
+    }
+
+    public void setRefreshModeReason(MaterializedView.RefreshModeReason reason, String baseTableName) {
+        this.refreshModeReason = reason == null ? "" : reason.name();
+        this.refreshModeReasonTable = baseTableName == null ? "" : baseTableName;
     }
 
     public int getAdaptivePartitionRefreshNumber() {

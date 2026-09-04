@@ -37,9 +37,10 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 -- result:
 PCT
 -- !result
-SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ad';
+SELECT IS_ACTIVE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE != '' AS has_table
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ad';
 -- result:
-true
+true	NON_APPEND_ONLY_CHANGE	1
 -- !result
 INSERT INTO ad_base VALUES ('2026-08-03',3,7);
 -- result:
@@ -186,14 +187,29 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 -- result:
 PCT
 -- !result
+-- The first refresh has no baseline to read a delta from, so it reports a different reason than
+-- the delete below: the value describes one run, it does not stick to the view.
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
+-- result:
+PCT	BASELINE_MISSING
+-- !result
 DELETE FROM de_base WHERE k = 1;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
-SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
 -- result:
-true	PCT
+true	PCT	NON_APPEND_ONLY_CHANGE	
+-- !result
+-- The view-level columns above are served by the frontend; the job-level pair goes through the
+-- backend scanner, so query both or half the plumbing stays untested.
+SELECT EXECUTED_REFRESH_MODE, REFRESH_MODE_REASON, REFRESH_MODE_REASON_TABLE
+FROM information_schema.materialized_view_refresh_jobs
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_de' ORDER BY SUBMIT_TIME DESC LIMIT 1;
+-- result:
+PCT	NON_APPEND_ONLY_CHANGE	
 -- !result
 SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
 -- result:
@@ -339,10 +355,10 @@ DELETE FROM ag_base WHERE k = 1;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
-SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ag';
 -- result:
-true	PCT
+true	PCT	NON_APPEND_ONLY_CHANGE	
 -- !result
 SELECT k, v FROM mv_ag ORDER BY k;
 -- result:
@@ -455,10 +471,10 @@ DELETE FROM nc_base WHERE k = 1;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_nc WITH SYNC MODE;
-SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_nc';
 -- result:
-true	PCT
+true	PCT	
 -- !result
 SELECT k, v FROM mv_nc ORDER BY k;
 -- result:
@@ -519,4 +535,139 @@ SELECT dt, k, v FROM pd_base ORDER BY dt, k;
 -- result:
 2026-08-02	2	1
 2026-08-03	3	7
+-- !result
+-- name: test_ivm_auto_force_strategy_reports_force_refresh @cloud
+CREATE TABLE fr_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fr_base VALUES ('2026-03-01',1,10),('2026-03-02',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fr
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_strategy' = 'force')
+AS SELECT dt, k, v FROM fr_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fr WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fr';
+-- result:
+PCT	FORCE_REFRESH	
+-- !result
+SELECT dt, k, v FROM mv_fr ORDER BY dt, k;
+-- result:
+2026-03-01	1	10
+2026-03-02	2	20
+-- !result
+-- name: test_ivm_auto_fallback_batches_keep_the_lead_runs_reason @cloud
+CREATE TABLE bl_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO bl_base VALUES ('2026-04-01',1,10),('2026-04-02',2,20),('2026-04-03',3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_bl
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH ASYNC
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '1')
+AS SELECT dt, k, v FROM bl_base;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bl';
+function: wait_mv_refresh_count("${db[0]}", "mv_bl", 3)
+-- result:
+None
+-- !result
+SELECT count(*) > 1 AS batched FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+-- result:
+1
+-- !result
+SELECT count(*) AS runs_with_reason FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshModeReason') != '';
+-- result:
+1
+-- !result
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE != '' AS has_table
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bl';
+-- result:
+PCT	BASELINE_MISSING	1
+-- !result
+SELECT EXECUTED_REFRESH_MODE, REFRESH_MODE_REASON
+FROM information_schema.materialized_view_refresh_jobs
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_bl' ORDER BY SUBMIT_TIME DESC LIMIT 1;
+-- result:
+PCT	BASELINE_MISSING
+-- !result
+SELECT dt, k, v FROM mv_bl ORDER BY dt, k;
+-- result:
+2026-04-01	1	10
+2026-04-02	2	20
+2026-04-03	3	30
+-- !result
+-- name: test_ivm_auto_capture_disabled_window_falls_back @cloud
+CREATE TABLE cd_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO cd_base VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_cd
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM cd_base;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_cd WITH SYNC MODE;
+ALTER TABLE cd_base SET ('enable_change_data_capture' = 'false');
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO cd_base VALUES (3,30);
+-- result:
+-- !result
+ALTER TABLE cd_base SET ('enable_change_data_capture' = 'true');
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO cd_base VALUES (4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_cd WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cd';
+-- result:
+PCT	CHANGE_CAPTURE_DISABLED	
+-- !result
+SELECT k, v FROM mv_cd ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+-- !result
+SELECT k, v FROM cd_base ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
 -- !result

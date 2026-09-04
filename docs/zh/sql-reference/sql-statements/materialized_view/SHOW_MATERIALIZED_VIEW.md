@@ -83,6 +83,8 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | effective_refresh_mode | 该物化视图实际建成的刷新模式。有效值与 `refresh_mode` 相同:`PCT`、`INCREMENTAL`、`AUTO`。它通常与 `refresh_mode` 一致,只有一种情况例外 —— `refresh_mode` 为 `AUTO`,但定义无法增量维护,`CREATE` 于是建成了 `PCT` 物化视图,此列即为 `PCT`。该判定在建表时一次完成且永不改变:只能通过重建物化视图重新尝试增量。同步物化视图为空。 |
 | effective_refresh_mode_reason | `effective_refresh_mode` 与 `refresh_mode` 不同的原因 —— 即该定义无法增量维护的具体说明。建表时记录,之后不再更新。两个模式列一致时为空。 |
 | last_executed_refresh_mode | 最近一次刷新实际使用的刷新模式。有效值:`PCT`、`INCREMENTAL`。当 `refresh_mode` 与 `effective_refresh_mode` 都为 `AUTO` 时,此列为 `PCT` 表示只有那一次刷新发生了回退,后续刷新仍可回到增量;而若 `effective_refresh_mode` 为 `PCT`,则表示该物化视图从不尝试增量。因基表无变化而被跳过的刷新不会改变此列的值。首次刷新之前,以及同步物化视图,为空。 |
+| last_refresh_mode_reason | 最近一次刷新为什么以 `last_executed_refresh_mode` 的方式执行,而没有走增量刷新。未发生模式降级时为空。取值:`NON_APPEND_ONLY_CHANGE`(基表发生了非 append-only 变更,例如删除分区、清空分区、覆盖写入、外表删除或行级删除)、`BASELINE_UNREACHABLE`(记录的基线已不是表当前 head 的祖先 —— 快照过期，或表被回滚、被替换)、`BASELINE_MISSING`(根本没有可读取增量的基线:首次刷新,或元数据修复之后)、`CHANGE_CAPTURE_DISABLED`(窗口内某个版本是在该基表关闭变更捕获期间产生的)、`FORCE_REFRESH`(强制刷新)、`UNKNOWN`(以上都无法归类的回退;原因在 FE 日志里,不在 `ERROR_MESSAGE` —— 回退本身成功时该字段为空)。 |
+| last_refresh_mode_reason_table | 导致该模式决策的基表,格式为 `catalog.database.table`。没有单一基表导致时为空:`FORCE_REFRESH` 源自请求本身而非某张表,由 BE 在读取变更时报出的原因定位到的是 tablet 而非表。 |
 
 ## 示例
 

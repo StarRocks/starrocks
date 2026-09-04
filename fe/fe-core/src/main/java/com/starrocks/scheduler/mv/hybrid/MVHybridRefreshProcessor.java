@@ -35,6 +35,7 @@ import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 
 import java.util.Map;
+import java.util.Optional;
 
 public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
     private final MVPCTRefreshProcessor pctProcessor;
@@ -54,25 +55,24 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
 
     @Override
     public ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) throws Exception {
-        if (isIVMRefreshEnabled(mvRefreshParams)) {
-            // if ivm refresh is enabled, try ivm first
+        if (!isPctOnly(mvRefreshParams)) {
             return switchToIVMRefresh(taskRunContext);
-        } else {
-            return switchToPCTRefresh(taskRunContext);
         }
+        // A partial request carries no reason: the analyzer rejects an explicit one, so the only run that
+        // reaches here partial is a later batch of a pct job, which inherits the lead run's decision.
+        if (mvRefreshParams.isNonTentativeForce() && isBatchLeadRun()) {
+            recordRefreshModeReason(MaterializedView.RefreshModeReason.FORCE_REFRESH, null);
+        }
+        return switchToPCTRefresh(taskRunContext);
     }
 
-    private boolean isIVMRefreshEnabled(MVRefreshParams mvRefreshParams) {
-        // if this is not a complete refresh and is a partial refresh, use pct refresh instead.
-        if (!mvRefreshParams.isCompleteRefresh()) {
-            return false;
-        }
-        // if force refresh is requested, bypass IVM and use PCT directly, which correctly handles
-        // force semantics (clears visibleVersionMap, drops partitions, forces full re-materialization).
-        if (mvRefreshParams.isNonTentativeForce()) {
-            return false;
-        }
-        return true;
+    /**
+     * Whether only pct can serve this request. Force semantics -- clearing visibleVersionMap, dropping
+     * partitions, re-materializing in full -- are pct's, and a named partition range is not a delta.
+     */
+    @VisibleForTesting
+    static boolean isPctOnly(MVRefreshParams mvRefreshParams) {
+        return !mvRefreshParams.isCompleteRefresh() || mvRefreshParams.isNonTentativeForce();
     }
 
     private ProcessExecPlan switchToIVMRefresh(TaskRunContext taskRunContext) throws Exception {
@@ -88,6 +88,7 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         } catch (Exception e) {
             logger.warn("Failed to do ivm refresh for mv: {}, try pct refresh. error: {}",
                     mv.getName(), e);
+            recordRefreshModeReasonIfAbsent(MaterializedView.RefreshModeReason.UNKNOWN);
             return switchToPCTRefresh(taskRunContext);
         }
     }
@@ -137,11 +138,15 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         try {
             return getCurrentProcessor().execProcessExecPlan(taskRunContext, processExecPlan, executor);
         } catch (Exception e) {
-            if (!canFallBackOnExecutionFailure(runRefreshMode, mv.getCurrentRefreshMode(), e)) {
+            Optional<MaterializedView.RefreshModeReason> reason =
+                    fallbackReasonOnExecutionFailure(runRefreshMode, mv.getCurrentRefreshMode(), e);
+            if (reason.isEmpty()) {
                 throw e;
             }
-            logger.warn("Incremental refresh for mv {} was rejected by the backend as non-trackable, " +
-                    "falling back to pct for this run", mv.getName(), e);
+            logger.warn("Incremental refresh for mv {} was rejected by the backend ({}), falling back to pct " +
+                    "for this run", mv.getName(), reason.get(), e);
+            // The backend reports a tablet, not a table, so no single base table is attributable.
+            recordRefreshModeReason(reason.get(), null);
             try {
                 ProcessExecPlan pctPlan = switchToPCTRefresh(taskRunContext);
                 if (pctPlan.state() == Constants.TaskRunState.SKIPPED) {
@@ -158,18 +163,31 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
     }
 
     /**
-     * A duplicate-key or aggregate base table rejects a row delete only once the backend reads the changes, past
-     * the plan-time fallback. Only an AUTO view may recover here: an INCREMENTAL one also reaches this processor
-     * when a base table needs its TVR baseline rebuilt, and switching that run to pct would silently give it the
-     * approximate semantics it declined.
+     * Some rejections only surface once the backend reads the changes, past the plan-time fallback: a row
+     * delete on a duplicate-key or aggregate base table, a base version no longer reachable, a version
+     * whose changes were never captured. Only an AUTO view may recover from them here -- an INCREMENTAL one
+     * also reaches this processor when a base table needs its TVR baseline rebuilt, and switching that run
+     * to pct would silently give it the approximate semantics it declined.
      */
     @VisibleForTesting
-    static boolean canFallBackOnExecutionFailure(MaterializedView.RefreshMode runRefreshMode,
-                                                 MaterializedView.RefreshMode settledMode,
-                                                 Throwable e) {
-        return runRefreshMode.isIncremental()
-                && settledMode == MaterializedView.RefreshMode.AUTO
-                && MaterializedViewExceptions.isChangeNotTrackableFailure(e);
+    static Optional<MaterializedView.RefreshModeReason> fallbackReasonOnExecutionFailure(
+            MaterializedView.RefreshMode runRefreshMode,
+            MaterializedView.RefreshMode settledMode,
+            Throwable e) {
+        if (!runRefreshMode.isIncremental() || settledMode != MaterializedView.RefreshMode.AUTO
+                || !MaterializedViewExceptions.isChangeNotTrackableFailure(e)) {
+            return Optional.empty();
+        }
+        // One error code covers four conditions. Two of them an operator caused and can act on; the
+        // rest -- a base version the ancestor chain cannot reach, a capture that recorded a failure --
+        // mean an invariant broke, and naming them would send the operator after a setting to change.
+        if (MaterializedViewExceptions.isRowDeleteRejectionFailure(e)) {
+            return Optional.of(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE);
+        }
+        if (MaterializedViewExceptions.isCaptureDisabledRejectionFailure(e)) {
+            return Optional.of(MaterializedView.RefreshModeReason.CHANGE_CAPTURE_DISABLED);
+        }
+        return Optional.of(MaterializedView.RefreshModeReason.UNKNOWN);
     }
 
     @Override

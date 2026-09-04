@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.scheduler.mv;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
@@ -30,6 +31,7 @@ import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -173,10 +175,23 @@ public class MVVersionManager {
     }
 
     // The single place a refresh scheme reaches the edit log, so the executed mode is stamped on every
-    // write; a run that executed nothing passes null and leaves the mode of the run that did.
+    // write; a run that executed nothing passes null and leaves the mode of the run that did. The reason
+    // moves with the mode: read together they must describe one run, not two.
     private void persistRefreshScheme(MaterializedView.MvRefreshScheme copiedScheme) {
         if (runRefreshMode != null) {
             copiedScheme.setLastExecutedRefreshMode(runRefreshMode);
+            // Only the run that led the batch chose a mode. A later batch of the same job records no
+            // reason, so writing its empty one would erase what the lead run persisted -- and a pct
+            // fallback can run dozens of batches, every one of them reaching here.
+            TaskRunStatus status = mvTaskRunContext.getStatus();
+            if (status != null
+                    && MVRefreshProcessor.isBatchLeadRun(status.getStartTaskRunId(), status.getTaskRunId())) {
+                MVTaskRunExtraMessage extra = status.getMvTaskRunExtraMessage();
+                copiedScheme.setLastRefreshModeReason(
+                        extra == null || Strings.isNullOrEmpty(extra.getRefreshModeReason())
+                                ? null : MaterializedView.RefreshModeReason.valueOf(extra.getRefreshModeReason()),
+                        extra == null ? null : extra.getRefreshModeReasonTable());
+            }
         }
         ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                 new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);

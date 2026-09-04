@@ -47,6 +47,10 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
     private Long lastRefreshTime;
     @SerializedName(value = "lastExecutedRefreshMode")
     private MaterializedView.RefreshMode lastExecutedRefreshMode;
+    @SerializedName(value = "lastRefreshModeReason")
+    private MaterializedView.RefreshModeReason lastRefreshModeReason;
+    @SerializedName(value = "lastRefreshModeReasonTable")
+    private String lastRefreshModeReasonTable;
 
     public ChangeMaterializedViewRefreshSchemeLog(MaterializedView materializedView) {
         this(materializedView, materializedView.getRefreshScheme());
@@ -61,6 +65,8 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
         this.lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();
         this.lastRefreshTime = refreshScheme.getLastRefreshTime();
         this.lastExecutedRefreshMode = refreshScheme.getLastExecutedRefreshMode();
+        this.lastRefreshModeReason = refreshScheme.getLastRefreshModeReason();
+        this.lastRefreshModeReasonTable = refreshScheme.getLastRefreshModeReasonTable();
     }
 
     public ChangeMaterializedViewRefreshSchemeLog() {
@@ -92,6 +98,14 @@ public class ChangeMaterializedViewRefreshSchemeLog implements Writable {
 
     public MaterializedView.RefreshMode getLastExecutedRefreshMode() {
         return lastExecutedRefreshMode;
+    }
+
+    public MaterializedView.RefreshModeReason getLastRefreshModeReason() {
+        return lastRefreshModeReason;
+    }
+
+    public String getLastRefreshModeReasonTable() {
+        return lastRefreshModeReasonTable;
     }
 
     public static ChangeMaterializedViewRefreshSchemeLog read(DataInput in) throws IOException {

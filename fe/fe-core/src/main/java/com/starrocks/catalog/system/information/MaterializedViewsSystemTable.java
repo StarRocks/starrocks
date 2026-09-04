@@ -121,6 +121,8 @@ public class MaterializedViewsSystemTable extends SystemTable {
                         .column("EFFECTIVE_REFRESH_MODE", TypeFactory.createVarcharType(16))
                         .column("EFFECTIVE_REFRESH_MODE_REASON", TypeFactory.createVarcharType(1024))
                         .column("LAST_EXECUTED_REFRESH_MODE", TypeFactory.createVarcharType(16))
+                        .column("LAST_REFRESH_MODE_REASON", TypeFactory.createVarcharType(32))
+                        .column("LAST_REFRESH_MODE_REASON_TABLE", TypeFactory.createVarcharType(256))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 

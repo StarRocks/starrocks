@@ -37,6 +37,8 @@ description: "materialized_view_refresh_jobs 提供物化视图刷新的作业�
 | ERROR_CODE                         | 失败 task run 的错误代码。如果没有 task run 失败，则为 `NULL`。 |
 | ERROR_MESSAGE                      | 失败 task run 的错误消息。如果没有 task run 失败，则为 `NULL`。 |
 | EXECUTED_REFRESH_MODE | 该刷新任务实际使用的刷新模式:`INCREMENTAL` 或 `PCT`。当物化视图的 `REFRESH_MODE` 为 `AUTO` 时,某次任务可能因为基表发生了增量维护无法表达的变更而改用 `PCT`;把此列与 `REFRESH_MODE` 对比,就能看出这次任务是否发生了回退。分成多步完成的任务,此列给出它最终结束时所用的模式;失败的任务给出它失败时正在使用的模式。任务从未选定模式时为 NULL —— 即因无需刷新而被跳过,或在选定之前就失败 —— 历史任务未记录时同样为 NULL。 |
+| REFRESH_MODE_REASON | 该刷新任务为什么以 `EXECUTED_REFRESH_MODE` 的方式执行,而没有走增量刷新。未发生模式降级时为空。取值:`NON_APPEND_ONLY_CHANGE`(基表发生了非 append-only 变更,例如删除分区、清空分区、覆盖写入、外表删除或行级删除)、`BASELINE_UNREACHABLE`(记录的基线已不是表当前 head 的祖先 —— 快照过期，或表被回滚、被替换)、`BASELINE_MISSING`(根本没有可读取增量的基线:首次刷新,或元数据修复之后)、`CHANGE_CAPTURE_DISABLED`(窗口内某个版本是在该基表关闭变更捕获期间产生的)、`FORCE_REFRESH`(强制刷新)、`UNKNOWN`(以上都无法归类的回退;原因在 FE 日志里,不在 `ERROR_MESSAGE` —— 回退本身成功时该字段为空)。 |
+| REFRESH_MODE_REASON_TABLE | 导致该模式决策的基表,格式为 `catalog.database.table`。没有单一基表导致时为空:`FORCE_REFRESH` 源自请求本身而非某张表,由 BE 在读取变更时报出的原因定位到的是 tablet 而非表。 |
 
 :::note
 该视图没有持久化存储。其数据行在查询时由 `task_runs` 派生而来，因此记录的保留时长遵循 `task_runs` 历史记录的设置。由于每个作业都是在查询时由其 `task_runs` 数据行汇总而来，因此只有当一个作业的所有 task run 仍处于 `task_runs` 历史记录窗口内时，该作业才会被完整呈现；早于该窗口的作业不会显示，而跨越保留边界的作业可能只被部分汇总（例如，其 `SUBMIT_TIME` 或 `IMV_SOURCE_*` 范围可能仅反映被保留的 task run）。

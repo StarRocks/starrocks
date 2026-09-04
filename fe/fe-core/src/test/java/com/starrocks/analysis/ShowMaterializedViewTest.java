@@ -144,7 +144,11 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.effective_refresh_mode_reason " +
                         "AS effective_refresh_mode_reason, " +
                         "information_schema.materialized_views.last_executed_refresh_mode " +
-                        "AS last_executed_refresh_mode" +
+                        "AS last_executed_refresh_mode, " +
+                        "information_schema.materialized_views.last_refresh_mode_reason " +
+                        "AS last_refresh_mode_reason, " +
+                        "information_schema.materialized_views.last_refresh_mode_reason_table " +
+                        "AS last_refresh_mode_reason_table" +
                         " FROM " +
                         "information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND " +
@@ -210,6 +214,11 @@ public class ShowMaterializedViewTest {
     private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {
         Table schemaMVTable = MaterializedViewsSystemTable.create();
         Assertions.assertEquals(schemaMVTable.getBaseSchema().size(), new ShowResultMetaFactory().getMetadata(stmt).getColumnCount());
+
+        // A row has to be as wide as the metadata says: declaring a column in ShowResultMetaFactory
+        // without emitting it in toResultSet() shifts every value after it.
+        Assertions.assertEquals(new ShowResultMetaFactory().getMetadata(stmt).getColumnCount(),
+                new ShowMaterializedViewStatus(1L, "db", "mv").toResultSet().size());
 
         List<Column> schemaCols = schemaMVTable.getFullSchema();
         for (int i = 0; i < schemaCols.size(); i++) {

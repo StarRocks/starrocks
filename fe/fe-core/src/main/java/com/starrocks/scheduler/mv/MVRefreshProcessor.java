@@ -829,6 +829,51 @@ public abstract class MVRefreshProcessor {
         return tables;
     }
 
+    /**
+     * True for the run that leads a batch. A later batch of the same job inherits the lead run's mode
+     * decision rather than making its own, so it must not overwrite the reason that decision recorded.
+     */
+    protected boolean isBatchLeadRun() {
+        TaskRunStatus status = mvContext.getStatus();
+        return status == null || isBatchLeadRun(status.getStartTaskRunId(), status.getTaskRunId());
+    }
+
+    @VisibleForTesting
+    static boolean isBatchLeadRun(String startTaskRunId, String taskRunId) {
+        return startTaskRunId == null || startTaskRunId.equals(taskRunId);
+    }
+
+    /**
+     * Record why this run is not refreshing incrementally. Call it where the cause is known: the
+     * exception that carries it upward is formatted for humans and cannot be classified back.
+     */
+    protected void recordRefreshModeReason(MaterializedView.RefreshModeReason reason, String baseTableName) {
+        updateTaskRunStatus(status ->
+                status.getMvTaskRunExtraMessage().setRefreshModeReason(reason, baseTableName));
+    }
+
+    /**
+     * Drop any reason an earlier attempt of this task run left behind. Retries reuse one TaskRunStatus, so
+     * an attempt that falls back and then fails would otherwise leave its reason on a later attempt that
+     * succeeds incrementally -- a row pairing INCREMENTAL with a reason for not being incremental.
+     */
+    public void clearRefreshModeReason() {
+        updateTaskRunStatus(status -> status.getMvTaskRunExtraMessage().setRefreshModeReason(null, null));
+    }
+
+    /**
+     * Record a reason only if no more specific one was recorded for this run. The fallback catches any
+     * exception, so without this backstop a path nobody annotated degrades and reports no reason at all.
+     */
+    protected void recordRefreshModeReasonIfAbsent(MaterializedView.RefreshModeReason reason) {
+        updateTaskRunStatus(status -> {
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            if (Strings.isNullOrEmpty(extraMessage.getRefreshModeReason())) {
+                extraMessage.setRefreshModeReason(reason, null);
+            }
+        });
+    }
+
     public void updatePCTMVToRefreshInfoIntoTaskRun(PCellSortedSet finalMvToRefreshedPartitions,
                                                     PCellSetMapping finalRefTablePartitionNames) {
         updateTaskRunStatus(status -> {

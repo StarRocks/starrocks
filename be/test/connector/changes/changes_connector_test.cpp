@@ -1841,6 +1841,9 @@ TEST_F(ChangesConnectorTest, test_degradation_read) {
         ASSERT_OK(ds->open(_runtime_state.get()));
         Status st = drain_until_error(ds.get());
         expect_change_not_trackable(st, "changes degraded by recover");
+        // This and the capture-off rejection share one error code; the frontend tells them apart by the
+        // other one's wording. Mention capture being enabled here and this starts reporting as that.
+        EXPECT_NE(std::string::npos, std::string(st.message()).find("whose changes were not captured"));
         ds->close(_runtime_state.get());
     }
 

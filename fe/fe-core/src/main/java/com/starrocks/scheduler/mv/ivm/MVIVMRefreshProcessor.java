@@ -278,6 +278,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (maxTvrDelta.start().isEmpty() && mv.getCurrentRefreshMode().isIncrementalOrAuto()) {
             // No TVR baseline. The hybrid processor catches this and falls back to PCT to
             // rebuild the baseline; on the pure IVM path it propagates as a hard failure.
+            recordRefreshModeReason(MaterializedView.RefreshModeReason.BASELINE_MISSING,
+                    baseTableInfo.getReadableString());
             throw new SemanticException("No checkpoint found for base table: %s.%s during IVM planning",
                     baseTableInfo.getDbName(), baseTableInfo.getTableName());
         }
@@ -290,6 +292,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
         } catch (StarRocksConnectorException e) {
             if (isAncestryBrokenError(e)) {
+                recordRefreshModeReason(MaterializedView.RefreshModeReason.BASELINE_UNREACHABLE,
+                        baseTableInfo.getReadableString());
                 throw new SemanticException(formatNonAppendOnlyBreakingError(
                         String.format("snapshot ancestry broken for base table %s.%s (%s)",
                                 baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
@@ -300,6 +304,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
                     baseTableInfo.getDbName());
+            recordRefreshModeReason(MaterializedView.RefreshModeReason.UNKNOWN,
+                    baseTableInfo.getReadableString());
             throw new SemanticException(formatNonAppendOnlyBreakingError(
                     String.format("no tvr delta traits found for base table %s.%s",
                             baseTableInfo.getDbName(), baseTableInfo.getTableName())));
@@ -310,6 +316,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
             logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}",
                     lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
+            recordRefreshModeReason(MaterializedView.RefreshModeReason.UNKNOWN,
+                    baseTableInfo.getReadableString());
             throw new SemanticException(formatNonAppendOnlyBreakingError(
                     String.format("tvr delta lineage inconsistent for base table %s.%s "
                                     + "(last delta snapshot %s != max delta snapshot %s)",
@@ -319,6 +327,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             if (!deltaTrait.isAppendOnly()) {
                 if (refreshMode.isIncremental()) {
+                    recordRefreshModeReason(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE,
+                            baseTableInfo.getReadableString());
                     throw new SemanticException(formatNonAppendOnlyBreakingError(
                             String.format("non-append-only change on base table %s.%s (delta: %s)",
                                     baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait)));

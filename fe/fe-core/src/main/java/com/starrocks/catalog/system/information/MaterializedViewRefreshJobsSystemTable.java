@@ -89,6 +89,8 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
                         .column("ERROR_CODE", TypeFactory.createVarcharType(20))
                         .column("ERROR_MESSAGE", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EXECUTED_REFRESH_MODE", TypeFactory.createVarcharType(16))
+                        .column("REFRESH_MODE_REASON", TypeFactory.createVarcharType(32))
+                        .column("REFRESH_MODE_REASON_TABLE", TypeFactory.createVarcharType(256))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEW_REFRESH_JOBS);
     }
 
@@ -174,6 +176,11 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
             String executedRefreshMode = lastExecutedRefreshMode(batch);
             if (executedRefreshMode != null) {
                 info.setExecuted_refresh_mode(executedRefreshMode);
+            }
+            MVTaskRunExtraMessage reasonRun = lastRunWithModeReason(batch);
+            if (reasonRun != null) {
+                info.setRefresh_mode_reason(reasonRun.getRefreshModeReason());
+                info.setRefresh_mode_reason_table(reasonRun.getRefreshModeReasonTable());
             }
             info.setTask_id(String.valueOf(anyRun.getTaskId()));
             if (anyRun.getWarehouseName() != null) {
@@ -267,6 +274,27 @@ public class MaterializedViewRefreshJobsSystemTable extends SystemTable {
             MVTaskRunExtraMessage extra = run.getMvTaskRunExtraMessage();
             if (extra != null && isExecutedMode(extra.getRefreshMode())) {
                 return extra.getRefreshMode();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A later batch inherits the lead run's mode decision and records no reason of its own, so the last run
+     * carrying one is the run that chose. Skips the runs lastExecutedRefreshMode skips: a job whose only
+     * reason came from a run that executed nothing would report a reason beside an empty mode, and the two
+     * columns are read as a pair.
+     */
+    @VisibleForTesting
+    static MVTaskRunExtraMessage lastRunWithModeReason(List<TaskRunStatus> batch) {
+        for (int i = batch.size() - 1; i >= 0; i--) {
+            TaskRunStatus run = batch.get(i);
+            if (!executedARefresh(run.getState())) {
+                continue;
+            }
+            MVTaskRunExtraMessage extra = run.getMvTaskRunExtraMessage();
+            if (extra != null && !Strings.isNullOrEmpty(extra.getRefreshModeReason())) {
+                return extra;
             }
         }
         return null;

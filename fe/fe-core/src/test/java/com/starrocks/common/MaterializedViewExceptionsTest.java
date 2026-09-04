@@ -63,32 +63,33 @@ public class MaterializedViewExceptionsTest {
     public void testIsChangeNotTrackableFailure() {
         assertTrue(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException(
                 "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for DUP_KEYS does not support delete")));
-        assertTrue(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException(
-                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for AGG_KEYS does not support delete")));
         assertTrue(MaterializedViewExceptions.isChangeNotTrackableFailure(
-                new RuntimeException("refresh failed",
-                        new IllegalStateException(
-                                "query failed: CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): history missing"))));
+                new RuntimeException("refresh failed", new IllegalStateException(
+                        "query failed: CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): history missing"))));
 
         // The deliberate difference from isIncrementalBreakingFailure.
         assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException(
                 "INCREMENTAL materialized views " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER)));
 
         assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(
-                new RuntimeException("CDC-ERROR-2 (CHANGE_NOT_TRACKABLE): unknown code")));
+                new RuntimeException("CDC-ERROR-99 (CHANGE_NOT_TRACKABLE): unknown code")));
         assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(
                 new RuntimeException("get database write lock timeout")));
         assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException()));
         assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(null));
     }
 
-    /**
-     * A column ALTER on an IVM MV knocks its stored schema out of position-alignment with the
-     * rewritten maintenance query; IvmSchemaCompat reports that through these two reasons. The
-     * mismatch is deterministic -- it never heals -- so it must classify as breaking and inactivate
-     * the MV, rather than leaving is_active true with only a FAILED run. Both the pure-IVM path and
-     * the hybrid fallback-to-PCT path surface the same message.
-     */
+    @Test
+    public void testIsRowDeleteRejectionFailure() {
+        assertTrue(MaterializedViewExceptions.isRowDeleteRejectionFailure(
+                new RuntimeException("refresh failed", new IllegalStateException(
+                        "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for AGG_KEYS does not support delete"))));
+        assertFalse(MaterializedViewExceptions.isRowDeleteRejectionFailure(new RuntimeException(
+                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CHANGES ancestor chain on tablet 42 cannot reach base "
+                        + "version 7 from version 9")));
+        assertFalse(MaterializedViewExceptions.isRowDeleteRejectionFailure(null));
+    }
+
     @Test
     public void testSchemaMismatchIsBreaking() {
         assertTrue(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException(

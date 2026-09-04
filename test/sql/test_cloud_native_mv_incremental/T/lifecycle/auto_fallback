@@ -27,7 +27,8 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 ALTER TABLE ad_base DROP PARTITION p20260801;
 [UC]REFRESH MATERIALIZED VIEW mv_ad WITH SYNC MODE;
 SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
-SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ad';
+SELECT IS_ACTIVE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE != '' AS has_table
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ad';
 -- and the next append-only change is incremental again
 INSERT INTO ad_base VALUES ('2026-08-03',3,7);
 [UC]REFRESH MATERIALIZED VIEW mv_ad WITH SYNC MODE;
@@ -97,10 +98,19 @@ AS SELECT k, v FROM de_base;
 [UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
 [UC]REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
 SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- The first refresh has no baseline to read a delta from, so it reports a different reason than
+-- the delete below: the value describes one run, it does not stick to the view.
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
 DELETE FROM de_base WHERE k = 1;
 REFRESH MATERIALIZED VIEW mv_de WITH SYNC MODE;
-SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_de';
+-- The view-level columns above are served by the frontend; the job-level pair goes through the
+-- backend scanner, so query both or half the plumbing stays untested.
+SELECT EXECUTED_REFRESH_MODE, REFRESH_MODE_REASON, REFRESH_MODE_REASON_TABLE
+FROM information_schema.materialized_view_refresh_jobs
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_de' ORDER BY SUBMIT_TIME DESC LIMIT 1;
 -- The run recovers rather than failing first, so the job leaves no FAILED task run behind.
 SELECT count(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE = 'FAILED';
 -- The point of falling back: the whole partition is recomputed, so the deleted row is gone.
@@ -185,7 +195,7 @@ AS SELECT k, SUM(v) AS v FROM ag_base GROUP BY k;
 REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
 DELETE FROM ag_base WHERE k = 1;
 REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
-SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ag';
 SELECT k, v FROM mv_ag ORDER BY k;
 SELECT k, SUM(v) FROM ag_base GROUP BY k ORDER BY k;
@@ -237,9 +247,9 @@ SELECT k, v FROM mv_pk ORDER BY k;
 SELECT k, v FROM pk_base ORDER BY k;
 
 -- name: test_ivm_auto_pk_row_delete_without_cdc_falls_back @cloud
--- A PRIMARY KEY base table without change data capture cannot emit the delete either, and the backend
--- refuses the scan for that reason instead of the key type. AUTO treats it the same as the duplicate-key
--- case -- the reason the view cannot be maintained incrementally does not change what to do about it.
+-- A PRIMARY KEY base table that never had change data capture cannot be maintained incrementally at all,
+-- so CREATE settles the view as pct and no refresh ever decides a mode. The reason column stays empty
+-- because there was no per-run decision to explain -- EFFECTIVE_REFRESH_MODE_REASON carries that one.
 CREATE TABLE nc_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
 DISTRIBUTED BY HASH(k) BUCKETS 1
 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'false');
@@ -252,7 +262,7 @@ AS SELECT k, v FROM nc_base;
 [UC]REFRESH MATERIALIZED VIEW mv_nc WITH SYNC MODE;
 DELETE FROM nc_base WHERE k = 1;
 [UC]REFRESH MATERIALIZED VIEW mv_nc WITH SYNC MODE;
-SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON
 FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_nc';
 SELECT k, v FROM mv_nc ORDER BY k;
 SELECT k, v FROM nc_base ORDER BY k;
@@ -282,3 +292,80 @@ SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.t
 SELECT dt, k, v FROM mv_pd ORDER BY dt, k;
 SELECT dt, k, v FROM pd_base ORDER BY dt, k;
 
+-- name: test_ivm_auto_force_strategy_reports_force_refresh @cloud
+-- A force strategy re-materializes rather than reading a delta, so the run is pct by request rather than
+-- by anything the base table did. The REFRESH ... FORCE keyword cannot reach this: the analyzer rejects it
+-- on an AUTO view, leaving the property and the config as the only ways in.
+CREATE TABLE fr_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO fr_base VALUES ('2026-03-01',1,10),('2026-03-02',2,20);
+CREATE MATERIALIZED VIEW mv_fr
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_strategy' = 'force')
+AS SELECT dt, k, v FROM fr_base;
+REFRESH MATERIALIZED VIEW mv_fr WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fr';
+SELECT dt, k, v FROM mv_fr ORDER BY dt, k;
+
+-- name: test_ivm_auto_fallback_batches_keep_the_lead_runs_reason @cloud
+-- partition_refresh_number=1 splits the bootstrap into one task run per partition. Only the run that
+-- chose the mode records a reason; the followers record none. Without that guard every follower would
+-- persist an empty reason over the lead run's, and the job-level roll-up would report a degraded job
+-- with no cause. Batching needs an async refresh -- a sync one runs every partition in one task run.
+CREATE TABLE bl_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO bl_base VALUES ('2026-04-01',1,10),('2026-04-02',2,20),('2026-04-03',3,30);
+CREATE MATERIALIZED VIEW mv_bl
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH ASYNC
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '1')
+AS SELECT dt, k, v FROM bl_base;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bl';
+-- One task run per partition, so waiting for one leaves the rest racing the assertions below. The wait
+-- doubles as the split assertion: it times out loudly if a change stops the job batching.
+function: wait_mv_refresh_count("${db[0]}", "mv_bl", 3)
+SELECT count(*) > 1 AS batched FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+-- The assertion with teeth: a broken guard makes this the batch size, not one. The two columns below
+-- would still read correctly in that case, as long as the lead run happened to be scanned last.
+SELECT count(*) AS runs_with_reason FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshModeReason') != '';
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE != '' AS has_table
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bl';
+SELECT EXECUTED_REFRESH_MODE, REFRESH_MODE_REASON
+FROM information_schema.materialized_view_refresh_jobs
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_bl' ORDER BY SUBMIT_TIME DESC LIMIT 1;
+SELECT dt, k, v FROM mv_bl ORDER BY dt, k;
+
+-- name: test_ivm_auto_capture_disabled_window_falls_back @cloud
+-- Turning capture off is only visible to a refresh whose window reaches back across the versions
+-- published while it was off. Turn it off and leave it off and the definition stops deriving as an IVM
+-- query at all, which is a planning failure rather than this. Each ALTER SET is an async alter-meta job.
+CREATE TABLE cd_base (k INT NOT NULL, v BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO cd_base VALUES (1,10),(2,20);
+CREATE MATERIALIZED VIEW mv_cd
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT k, v FROM cd_base;
+REFRESH MATERIALIZED VIEW mv_cd WITH SYNC MODE;
+ALTER TABLE cd_base SET ('enable_change_data_capture' = 'false');
+function: wait_alter_table_finish()
+INSERT INTO cd_base VALUES (3,30);
+ALTER TABLE cd_base SET ('enable_change_data_capture' = 'true');
+function: wait_alter_table_finish()
+INSERT INTO cd_base VALUES (4,40);
+REFRESH MATERIALIZED VIEW mv_cd WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON, LAST_REFRESH_MODE_REASON_TABLE
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_cd';
+SELECT k, v FROM mv_cd ORDER BY k;
+SELECT k, v FROM cd_base ORDER BY k;

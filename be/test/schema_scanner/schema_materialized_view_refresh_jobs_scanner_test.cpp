@@ -69,7 +69,7 @@ TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_scanner_initialization
     init_scanner(scanner);
 
     auto slot_descs = scanner.get_slot_descs();
-    EXPECT_EQ(24, slot_descs.size());
+    EXPECT_EQ(26, slot_descs.size());
 
     EXPECT_EQ("JOB_ID", slot_descs[0]->col_name());
     EXPECT_EQ("MATERIALIZED_VIEW_ID", slot_descs[1]->col_name());
@@ -95,6 +95,8 @@ TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_scanner_initialization
     EXPECT_EQ("ERROR_CODE", slot_descs[21]->col_name());
     EXPECT_EQ("ERROR_MESSAGE", slot_descs[22]->col_name());
     EXPECT_EQ("EXECUTED_REFRESH_MODE", slot_descs[23]->col_name());
+    EXPECT_EQ("REFRESH_MODE_REASON", slot_descs[24]->col_name());
+    EXPECT_EQ("REFRESH_MODE_REASON_TABLE", slot_descs[25]->col_name());
 }
 
 TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_uninitialized_scanner) {
@@ -162,6 +164,8 @@ TEST_F(SchemaMaterializedViewRefreshJobsScannerTest, test_single_job_all_fields)
     info.__set_error_code("0");
     info.__set_error_message("");
     info.__set_executed_refresh_mode("INCREMENTAL");
+    info.__set_refresh_mode_reason("SNAPSHOT_EXPIRED");
+    info.__set_refresh_mode_reason_table("default_catalog.db.jobs_src");
 
     scanner._jobs_result.jobs = {info};
     scanner._jobs_index = 0;

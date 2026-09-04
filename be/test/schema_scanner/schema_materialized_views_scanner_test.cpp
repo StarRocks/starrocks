@@ -59,7 +59,7 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
 
     // Test that scanner has the correct number of columns
     auto slot_descs = scanner.get_slot_descs();
-    EXPECT_EQ(39, slot_descs.size());
+    EXPECT_EQ(41, slot_descs.size());
 
     // Test column names and types
     EXPECT_EQ("MATERIALIZED_VIEW_ID", slot_descs[0]->col_name());
@@ -101,6 +101,8 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_scanner_initialization) {
     EXPECT_EQ("EFFECTIVE_REFRESH_MODE", slot_descs[36]->col_name());
     EXPECT_EQ("EFFECTIVE_REFRESH_MODE_REASON", slot_descs[37]->col_name());
     EXPECT_EQ("LAST_EXECUTED_REFRESH_MODE", slot_descs[38]->col_name());
+    EXPECT_EQ("LAST_REFRESH_MODE_REASON", slot_descs[39]->col_name());
+    EXPECT_EQ("LAST_REFRESH_MODE_REASON_TABLE", slot_descs[40]->col_name());
 }
 
 TEST_F(SchemaMaterializedViewsScannerTest, test_uninitialized_scanner) {
@@ -215,6 +217,8 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     mv.__set_effective_refresh_mode("PCT");
     mv.__set_effective_refresh_mode_reason("rejected_for_test");
     mv.__set_last_executed_refresh_mode("PCT");
+    mv.__set_last_refresh_mode_reason("ROW_DELETE");
+    mv.__set_last_refresh_mode_reason_table("default_catalog.db.reason_src");
 
     scanner._mv_results.materialized_views = {mv};
 
@@ -226,35 +230,37 @@ TEST_F(SchemaMaterializedViewsScannerTest, test_single_materialized_view) {
     EXPECT_EQ(1, chunk->num_rows());
 
     auto row = chunk->debug_row(0);
-    EXPECT_TRUE(row.find("1001") != std::string::npos);                     // MATERIALIZED_VIEW_ID
-    EXPECT_TRUE(row.find("test_db") != std::string::npos);                  // TABLE_SCHEMA
-    EXPECT_TRUE(row.find("test_mv") != std::string::npos);                  // TABLE_NAME
-    EXPECT_TRUE(row.find("ASYNC") != std::string::npos);                    // REFRESH_TYPE
-    EXPECT_TRUE(row.find("true") != std::string::npos);                     // IS_ACTIVE
-    EXPECT_TRUE(row.find("RANGE") != std::string::npos);                    // PARTITION_TYPE
-    EXPECT_TRUE(row.find("2001") != std::string::npos);                     // TASK_ID
-    EXPECT_TRUE(row.find("test_task") != std::string::npos);                // TASK_NAME
-    EXPECT_TRUE(row.find("2025-01-01 10:00:00") != std::string::npos);      // LAST_REFRESH_START_TIME
-    EXPECT_TRUE(row.find("2025-01-01 10:05:00") != std::string::npos);      // LAST_REFRESH_FINISHED_TIME
-    EXPECT_TRUE(row.find("300.5") != std::string::npos);                    // LAST_REFRESH_DURATION
-    EXPECT_TRUE(row.find("SUCCESS") != std::string::npos);                  // LAST_REFRESH_STATE
-    EXPECT_TRUE(row.find("false") != std::string::npos);                    // LAST_REFRESH_FORCE_REFRESH
-    EXPECT_TRUE(row.find("p20250101") != std::string::npos);                // partition info
-    EXPECT_TRUE(row.find("1000") != std::string::npos);                     // TABLE_ROWS
-    EXPECT_TRUE(row.find("SELECT * FROM base_table") != std::string::npos); // MATERIALIZED_VIEW_DEFINITION
-    EXPECT_TRUE(row.find("ENABLED") != std::string::npos);                  // QUERY_REWRITE_STATUS
-    EXPECT_TRUE(row.find("admin") != std::string::npos);                    // CREATOR
-    EXPECT_TRUE(row.find("2025-01-01 10:04:30") != std::string::npos);      // LAST_REFRESH_PROCESS_TIME
-    EXPECT_TRUE(row.find("job_001") != std::string::npos);                  // LAST_REFRESH_JOB_ID
-    EXPECT_TRUE(row.find("2025-01-01 10:05:00") != std::string::npos);      // LAST_REFRESH_TIME
-    EXPECT_TRUE(row.find("wh_test_001") != std::string::npos);              // WAREHOUSE
-    EXPECT_TRUE(row.find("INCREMENTAL") != std::string::npos);              // REFRESH_MODE
-    EXPECT_TRUE(row.find("ON_BASE_TABLE_CHANGE") != std::string::npos);     // REFRESH_TRIGGER
-    EXPECT_TRUE(row.find("MANUAL") != std::string::npos);                   // REFRESH_POLICY
-    EXPECT_TRUE(row.find("rg_test_001") != std::string::npos);              // RESOURCE_GROUP
-    EXPECT_TRUE(row.find("UNSUPPORTED_DEFINITION") != std::string::npos);   // QUERY_REWRITE_STATUS_REASON
-    EXPECT_TRUE(row.find("2025-01-01 10:06:07") != std::string::npos);      // LAST_FRESHNESS_CONFIRMED_AT
-    EXPECT_TRUE(row.find("default_catalog.db.ext_t") != std::string::npos); // BASE_TABLE_REFRESH_VERSION_TIMES
+    EXPECT_TRUE(row.find("1001") != std::string::npos);                          // MATERIALIZED_VIEW_ID
+    EXPECT_TRUE(row.find("test_db") != std::string::npos);                       // TABLE_SCHEMA
+    EXPECT_TRUE(row.find("test_mv") != std::string::npos);                       // TABLE_NAME
+    EXPECT_TRUE(row.find("ASYNC") != std::string::npos);                         // REFRESH_TYPE
+    EXPECT_TRUE(row.find("true") != std::string::npos);                          // IS_ACTIVE
+    EXPECT_TRUE(row.find("RANGE") != std::string::npos);                         // PARTITION_TYPE
+    EXPECT_TRUE(row.find("2001") != std::string::npos);                          // TASK_ID
+    EXPECT_TRUE(row.find("test_task") != std::string::npos);                     // TASK_NAME
+    EXPECT_TRUE(row.find("2025-01-01 10:00:00") != std::string::npos);           // LAST_REFRESH_START_TIME
+    EXPECT_TRUE(row.find("2025-01-01 10:05:00") != std::string::npos);           // LAST_REFRESH_FINISHED_TIME
+    EXPECT_TRUE(row.find("300.5") != std::string::npos);                         // LAST_REFRESH_DURATION
+    EXPECT_TRUE(row.find("SUCCESS") != std::string::npos);                       // LAST_REFRESH_STATE
+    EXPECT_TRUE(row.find("false") != std::string::npos);                         // LAST_REFRESH_FORCE_REFRESH
+    EXPECT_TRUE(row.find("p20250101") != std::string::npos);                     // partition info
+    EXPECT_TRUE(row.find("1000") != std::string::npos);                          // TABLE_ROWS
+    EXPECT_TRUE(row.find("SELECT * FROM base_table") != std::string::npos);      // MATERIALIZED_VIEW_DEFINITION
+    EXPECT_TRUE(row.find("ENABLED") != std::string::npos);                       // QUERY_REWRITE_STATUS
+    EXPECT_TRUE(row.find("admin") != std::string::npos);                         // CREATOR
+    EXPECT_TRUE(row.find("2025-01-01 10:04:30") != std::string::npos);           // LAST_REFRESH_PROCESS_TIME
+    EXPECT_TRUE(row.find("job_001") != std::string::npos);                       // LAST_REFRESH_JOB_ID
+    EXPECT_TRUE(row.find("2025-01-01 10:05:00") != std::string::npos);           // LAST_REFRESH_TIME
+    EXPECT_TRUE(row.find("wh_test_001") != std::string::npos);                   // WAREHOUSE
+    EXPECT_TRUE(row.find("ROW_DELETE") != std::string::npos);                    // LAST_REFRESH_MODE_REASON
+    EXPECT_TRUE(row.find("default_catalog.db.reason_src") != std::string::npos); // ..._REASON_TABLE
+    EXPECT_TRUE(row.find("INCREMENTAL") != std::string::npos);                   // REFRESH_MODE
+    EXPECT_TRUE(row.find("ON_BASE_TABLE_CHANGE") != std::string::npos);          // REFRESH_TRIGGER
+    EXPECT_TRUE(row.find("MANUAL") != std::string::npos);                        // REFRESH_POLICY
+    EXPECT_TRUE(row.find("rg_test_001") != std::string::npos);                   // RESOURCE_GROUP
+    EXPECT_TRUE(row.find("UNSUPPORTED_DEFINITION") != std::string::npos);        // QUERY_REWRITE_STATUS_REASON
+    EXPECT_TRUE(row.find("2025-01-01 10:06:07") != std::string::npos);           // LAST_FRESHNESS_CONFIRMED_AT
+    EXPECT_TRUE(row.find("default_catalog.db.ext_t") != std::string::npos);      // BASE_TABLE_REFRESH_VERSION_TIMES
 
     // Adjacent varchars: a substring probe over the row cannot spot a mis-numbered case label.
     EXPECT_EQ("PCT", chunk->get_column_by_slot_id(EFFECTIVE_REFRESH_MODE)->get(0).get_slice().to_string());

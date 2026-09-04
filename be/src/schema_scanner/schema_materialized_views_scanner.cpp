@@ -65,6 +65,8 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"EFFECTIVE_REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"EFFECTIVE_REFRESH_MODE_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"LAST_EXECUTED_REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_MODE_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"LAST_REFRESH_MODE_REASON_TABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -571,6 +573,28 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             // LAST_EXECUTED_REFRESH_MODE
             if (info.__isset.last_executed_refresh_mode) {
                 const std::string* str = &info.last_executed_refresh_mode;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 40: {
+            // LAST_REFRESH_MODE_REASON
+            if (info.__isset.last_refresh_mode_reason) {
+                const std::string* str = &info.last_refresh_mode_reason;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 41: {
+            // LAST_REFRESH_MODE_REASON_TABLE
+            if (info.__isset.last_refresh_mode_reason_table) {
+                const std::string* str = &info.last_refresh_mode_reason_table;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {

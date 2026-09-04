@@ -100,7 +100,9 @@ public final class ShowStmtToSelectStmtConverter {
             "base_table_refresh_version_times",
             "effective_refresh_mode",
             "effective_refresh_mode_reason",
-            "last_executed_refresh_mode"
+            "last_executed_refresh_mode",
+            "last_refresh_mode_reason",
+            "last_refresh_mode_reason_table"
     );
 
     private static final Map<String, String> MATERIALIZED_VIEW_ALIAS_MAP = ImmutableMap.of(

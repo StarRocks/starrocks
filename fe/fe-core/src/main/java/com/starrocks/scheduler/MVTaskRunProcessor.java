@@ -346,6 +346,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                                                    MVRefreshExecutor executor) throws Exception {
         Stopwatch watch = Stopwatch.createStarted();
         mvTaskRunContext.getRefreshRuntimeState().reset();
+        mvRefreshProcessor.clearRefreshModeReason();
         try {
             final MVRefreshProcessor.ProcessExecPlan processExecPlan = mvRefreshProcessor.getProcessExecPlan(taskRunContext);
             if (processExecPlan.state() == Constants.TaskRunState.SKIPPED) {

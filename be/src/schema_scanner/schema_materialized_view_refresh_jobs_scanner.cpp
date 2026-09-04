@@ -47,6 +47,8 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewRefreshJobsScanner::_s_tbls_colu
         {"ERROR_CODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"EXECUTED_REFRESH_MODE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_MODE_REASON", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"REFRESH_MODE_REASON_TABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
 };
 
 SchemaMaterializedViewRefreshJobsScanner::SchemaMaterializedViewRefreshJobsScanner()
@@ -355,6 +357,28 @@ Status SchemaMaterializedViewRefreshJobsScanner::fill_chunk(ChunkPtr* chunk) {
             // EXECUTED_REFRESH_MODE
             if (info.__isset.executed_refresh_mode) {
                 const std::string* str = &info.executed_refresh_mode;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 25: {
+            // REFRESH_MODE_REASON
+            if (info.__isset.refresh_mode_reason) {
+                const std::string* str = &info.refresh_mode_reason;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            } else {
+                fill_data_column_with_null(column);
+            }
+            break;
+        }
+        case 26: {
+            // REFRESH_MODE_REASON_TABLE
+            if (info.__isset.refresh_mode_reason_table) {
+                const std::string* str = &info.refresh_mode_reason_table;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             } else {

@@ -83,6 +83,8 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 | effective_refresh_mode | このマテリアライズドビューが実際に構築されたリフレッシュモードです。有効値は `refresh_mode` と同じ（`PCT`、`INCREMENTAL`、`AUTO`）。通常は `refresh_mode` と一致し、例外は 1 つだけです。`refresh_mode` が `AUTO` でも定義を増分で維持できない場合、`CREATE` は `PCT` のマテリアライズドビューを作成し、この列は `PCT` になります。この判定は作成時に一度だけ行われ、その後変わりません。増分を再度試すにはマテリアライズドビューを作り直すしかありません。同期マテリアライズドビューでは空。 |
 | effective_refresh_mode_reason | `effective_refresh_mode` が `refresh_mode` と異なる理由、つまりこの定義を増分で維持できない理由の説明です。マテリアライズドビューの作成時に記録され、その後は更新されません。2 つのモード列が一致する場合は空。 |
 | last_executed_refresh_mode | 直近のリフレッシュが実際に使用したリフレッシュモードです（有効値: `PCT`、`INCREMENTAL`）。`refresh_mode` と `effective_refresh_mode` がどちらも `AUTO` のとき、この列が `PCT` であれば、そのリフレッシュだけがフォールバックしたことを意味し、以降のリフレッシュは増分に戻れます。一方 `effective_refresh_mode` が `PCT` の場合は、そのマテリアライズドビューが増分をまったく試みないことを意味します。変更がなくスキップされたリフレッシュは、この列の値を変えません。最初のリフレッシュより前、および同期マテリアライズドビューでは空。 |
+| last_refresh_mode_reason | 直近のリフレッシュ が増分リフレッシュではなく `last_executed_refresh_mode` で実行された理由です。モードの決定が行われなかった場合は空です。値:`NON_APPEND_ONLY_CHANGE`(append-only ではないベーステーブルの変更。パーティションの削除、truncate、上書き、外部テーブルの削除、行レベルの削除など)、`BASELINE_UNREACHABLE`(記録されたベースラインがテーブルの head の祖先ではなくなった。スナップショットの期限切れ、またはテーブルのロールバックや置き換え)、`BASELINE_MISSING`(差分を読む基準がそもそもない。初回リフレッシュ、またはメタデータ修復の後)、`CHANGE_CAPTURE_DISABLED`(ウィンドウ内のいずれかのバージョンが、そのベーステーブルで変更キャプチャが無効な間に発行された)、`FORCE_REFRESH`(強制リフレッシュ)、`UNKNOWN`(上記のいずれにも分類されないフォールバック。原因は FE のログにあります。フォールバック自体が成功した場合 `ERROR_MESSAGE` は空のままです)。 |
+| last_refresh_mode_reason_table | モードの決定を引き起こしたベーステーブルです（`catalog.database.table` 形式）。単一のベーステーブルに起因しない場合は空です。`FORCE_REFRESH` はテーブルではなくリクエストに由来し、BE が変更の読み取り中に報告する理由はテーブルではなく tablet を指します。 |
 
 ## 例
 

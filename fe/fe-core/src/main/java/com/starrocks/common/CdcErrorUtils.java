@@ -21,6 +21,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class CdcErrorUtils {
+    private static final String ROW_DELETE_DETAIL = "does not support delete";
+    private static final String CAPTURE_DISABLED_DETAIL = "change data capture was not enabled";
+
     private static final Pattern HEADER = Pattern.compile(
             "CDC-ERROR-([1-9][0-9]*) \\(([A-Z][A-Z0-9_]*)\\): ");
 
@@ -56,6 +59,27 @@ public final class CdcErrorUtils {
         return find(message)
                 .map(parsed -> parsed.getCode() == TCdcErrorCode.CHANGE_NOT_TRACKABLE)
                 .orElse(false);
+    }
+
+    /**
+     * Whether the rejection is the delete one, out of everything CHANGE_NOT_TRACKABLE covers. The backend
+     * formats this detail in changes_connector.cpp; reword it there and this stops matching, which
+     * CdcErrorUtilsTest pins.
+     */
+    public static boolean isRowDeleteRejection(String message) {
+        return hasDetail(message, ROW_DELETE_DETAIL);
+    }
+
+    /**
+     * Whether the rejection is a version published while change data capture was off -- the one condition
+     * under CHANGE_NOT_TRACKABLE an operator caused and can undo, as opposed to a broken invariant.
+     */
+    public static boolean isCaptureDisabledRejection(String message) {
+        return hasDetail(message, CAPTURE_DISABLED_DETAIL);
+    }
+
+    private static boolean hasDetail(String message, String detail) {
+        return find(message).map(parsed -> parsed.getMessage().contains(detail)).orElse(false);
     }
 
     public static final class Parsed {

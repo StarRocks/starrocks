@@ -429,6 +429,8 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         partitionInfo.setReplicationNum(1, (short) 3);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         refreshScheme.setLastExecutedRefreshMode(MaterializedView.RefreshMode.PCT);
+        refreshScheme.setLastRefreshModeReason(
+                MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE, "default_catalog.db.base");
         MaterializedView materializedView = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
                 partitionInfo, distributionInfo, refreshScheme);
         ChangeMaterializedViewRefreshSchemeLog changeLog =
@@ -443,6 +445,10 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         // Nothing else records which mode a run used, so a leader that logs it and a follower that
         // replays it are the only path by which the column stays right across a restart.
         Assertions.assertEquals(MaterializedView.RefreshMode.PCT, readChangeLog.getLastExecutedRefreshMode());
+        // The reason rides the same log entry as the mode, so replay cannot split the pair.
+        Assertions.assertEquals(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE,
+                readChangeLog.getLastRefreshModeReason());
+        Assertions.assertEquals("default_catalog.db.base", readChangeLog.getLastRefreshModeReasonTable());
 
         new Expectations() {
             {
@@ -463,5 +469,9 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
                 .replayChangeMaterializedViewRefreshScheme(changeLog);
         Assertions.assertEquals(MaterializedView.RefreshMode.PCT,
                 materializedView.getRefreshScheme().getLastExecutedRefreshMode());
+        Assertions.assertEquals(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE,
+                materializedView.getRefreshScheme().getLastRefreshModeReason());
+        Assertions.assertEquals("default_catalog.db.base",
+                materializedView.getRefreshScheme().getLastRefreshModeReasonTable());
     }
 }
