@@ -454,7 +454,16 @@ Status encode_json_to_variant_value(const vpack::Slice& slice,
                 append_primitive_number<int64_t>(out, VariantType::INT64, static_cast<int64_t>(value));
                 return Status::OK();
             }
-            append_primitive_number<double>(out, VariantType::DOUBLE, static_cast<double>(value));
+            // A uint64 past INT64_MAX does not fit an INT64, and a double does not hold it either: the
+            // mantissa is 53 bits, so the value is rounded here and two different uint64 values can
+            // become the same VARIANT. DECIMAL16 with scale 0 holds the whole range exactly and is
+            // what the Variant spec asks for at this many significant digits. This is the encoding the
+            // TYPE_LARGEINT case below already writes, and the widening that flat JSON and the JSON
+            // column converter already apply to the same vpack UInt.
+            uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL16) << VariantValue::kValueHeaderBitShift;
+            out->push_back(static_cast<char>(header));
+            out->push_back(0); // scale
+            append_int128_le(*out, static_cast<int128_t>(value));
             return Status::OK();
         }
         if (slice.isDouble()) {
