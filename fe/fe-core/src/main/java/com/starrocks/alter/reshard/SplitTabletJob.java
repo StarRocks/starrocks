@@ -346,7 +346,7 @@ public class SplitTabletJob extends TabletReshardJob {
         ignoredTransactionIds.addAll(GlobalStateMgr.getCurrentState().getCompactionMgr()
                 .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet()));
         try {
-            if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinished(
+            if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinishedForReshard(
                     endTransactionId, dbId, List.of(tableId), ignoredTransactionIds)) {
                 return;
             }

@@ -283,6 +283,23 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public TransactionState activateTransactionTable(long transactionId, long tableId)
+            throws TransactionNotFoundException {
+        writeLock();
+        try {
+            TransactionState transactionState = unprotectedGetTransactionState(transactionId);
+            if (transactionState == null || !transactionState.isRunning()) {
+                throw new TransactionNotFoundException(transactionId);
+            }
+            if (!transactionState.getTableIdList().contains(tableId)) {
+                transactionState.addTableIdList(tableId);
+            }
+            return transactionState;
+        } finally {
+            writeUnlock();
+        }
+    }
+
     private void checkLabel(String label, TUniqueId requestId)
             throws LabelAlreadyUsedException, DuplicatedRequestException {
         /*
