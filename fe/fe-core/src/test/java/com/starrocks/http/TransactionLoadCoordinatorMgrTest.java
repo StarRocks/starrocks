@@ -144,6 +144,30 @@ public class TransactionLoadCoordinatorMgrTest {
         }
     }
 
+
+    @Test
+    public void testAllocateReallocatesWhenCachedNodeUnavailable() throws Exception {
+        // A shutting-down BE reports SHUTDOWN in its heartbeat, so FE marks it not alive and
+        // isAvailable() turns false. allocate() must drop the stale cache entry and pick another
+        // node instead of routing the BEGIN back to the shutting-down coordinator.
+        Backend backend2 = new Backend(5678, "otherhost", 8040);
+        backend2.setBePort(9300);
+        backend2.setAlive(false);
+        backend2.setHttpPort(9301);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
+
+        TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
+
+        // Cached alive node is returned as-is.
+        cache.put("label_alive", 1234L);
+        assertEquals(1234L, cache.allocate("label_alive", "default_warehouse").getId());
+
+        // Cached unavailable node is dropped and a new node is allocated.
+        cache.put("label_unavailable", 5678L);
+        assertEquals(1234L, cache.allocate("label_unavailable", "default_warehouse").getId());
+        // The stale entry has been replaced by the new allocation.
+        assertEquals(1234L, cache.allocate("label_unavailable", "default_warehouse").getId());
+    }
     @Test
     public void multiThreadWriteTransactionLoadCoordinatorMgrTest() throws Exception {
         TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();

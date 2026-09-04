@@ -43,14 +43,19 @@ bool process_exit_in_progress();
 //  - false: process is not in quick exit
 bool process_quick_exit_in_progress();
 
-// set the flag of FE leader awareness of the shutdown
+// Mark that the heartbeat ack advanced: the FE processed a heartbeat response this BE sent
+// after shutdown began (it reports SHUTDOWN), so the node is marked SHUTDOWN/not-alive globally.
 void set_frontend_aware_of_exit();
 
 // whether the FE leader is aware of the shutdown
 // returns:
-//  - true: at least one response is marked as shutdown to FE's heartbeat request
-//  - false: no response is marked as shutdown to FE's heartbeat request
+//  - true: the heartbeat ack advanced at least once during shutdown
+//  - false: the ack has not advanced yet
 bool is_frontend_aware_of_exit();
+
+// Tracks the FE's last-seen heartbeat time (the shutdown ack). Returns true when the ack value
+// advances; the first observed value anchors the baseline and returns false.
+bool advance_heartbeat_ack(int64_t ack);
 
 // clear the flag of frontend awareness of the shutdown.
 void clear_frontend_aware_of_exit();
@@ -77,7 +82,6 @@ size_t request_admissions_inflight();
 void force_reject_exec_plan_fragment();
 
 void set_process_is_crashing();
-
 bool is_process_crashing();
 
 } // namespace starrocks

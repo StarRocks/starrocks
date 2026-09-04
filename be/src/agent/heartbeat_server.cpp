@@ -91,6 +91,23 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                    << " BE/CN:" << config::enable_transparent_data_encryption;
     }
 
+    // FE-awareness rules during shutdown, driven by the ack the FE carries in the next heartbeat
+    // request (TMasterInfo.last_heartbeat_time_ms = the FE's LastHeartbeat time for this BE):
+    // - No ack field at all: legacy FE. Keep the old optimistic behavior (assume the response
+    //   reaches the FE when constructed) so mixed-version upgrades keep the default behavior.
+    // - Ack value advanced: the FE processed a heartbeat response this BE sent after shutdown
+    //   began (it reports SHUTDOWN), so the node is marked SHUTDOWN/not-alive globally; open
+    //   the delay window (and BEGIN redirect).
+    // - Ack present but not advanced (latest response lost or not processed): stay unaware; the
+    //   fallback deadline will reject instead of redirecting.
+    if (process_exit_in_progress()) {
+        if (!master_info.__isset.last_heartbeat_time_ms) {
+            set_frontend_aware_of_exit();
+        } else if (advance_heartbeat_ack(master_info.last_heartbeat_time_ms)) {
+            set_frontend_aware_of_exit();
+        }
+    }
+
     StatusOr<CmpResult> res;
     // reject master's heartbeat when exit
     if (process_exit_in_progress() || is_process_crashing()) {
@@ -155,10 +172,6 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
             reboot_time = static_cast<int64_t>(currTime);
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
-    }
-    if (process_exit_in_progress()) {
-        // Just assume this response can reach the frontend side.
-        set_frontend_aware_of_exit();
     }
 }
 

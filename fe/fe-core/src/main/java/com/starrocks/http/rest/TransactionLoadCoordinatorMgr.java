@@ -132,7 +132,13 @@ public class TransactionLoadCoordinatorMgr {
         // are routed to the same BE where the transaction context exists
         Long existingNodeId = cache.getIfPresent(label);
         if (existingNodeId != null) {
-            return getNodeFromId(existingNodeId);
+            ComputeNode node = getNodeFromId(existingNodeId);
+            if (node.isAvailable()) {
+                return node;
+            }
+            // The cached coordinator is unavailable (e.g. shutting down); drop the stale entry
+            // and allocate another node.
+            cache.invalidate(label);
         }
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();

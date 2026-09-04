@@ -34,7 +34,11 @@ std::atomic<bool> k_starrocks_exit;
 // but also waiting for all threads to exit gracefully.
 std::atomic<bool> k_starrocks_quick_exit;
 
-// First FE shutdown-ack timestamp; starts the admission delay.
+// Largest heartbeat time seen from the FE during shutdown (the shutdown ack baseline/progress).
+std::atomic<int64_t> k_starrocks_last_seen_ack_ms = 0;
+
+// Monotonic timestamp of the first heartbeat ack observed after shutdown began; 0 means the
+// FE has not yet confirmed the shutdown, so the delay window (reject_delay_ms) is not open.
 std::atomic<int64_t> k_starrocks_fe_aware_shutdown_ms = 0;
 
 // First shutdown timestamp; anchors the fallback deadline.
@@ -93,7 +97,9 @@ bool process_quick_exit_in_progress() {
 }
 
 void set_frontend_aware_of_exit() {
-    // Keep the first heartbeat timestamp; repeats must not extend the window.
+    // Called when the heartbeat ack advances: the FE processed a heartbeat response this BE sent
+    // after shutdown began (it reports SHUTDOWN), so the node is marked SHUTDOWN/not-alive
+    // globally.
     int64_t now = MonotonicMillis();
     int64_t expected = 0;
     k_starrocks_fe_aware_shutdown_ms.compare_exchange_strong(expected, now);
@@ -101,10 +107,36 @@ void set_frontend_aware_of_exit() {
 
 void clear_frontend_aware_of_exit() {
     k_starrocks_fe_aware_shutdown_ms.store(0);
+    k_starrocks_last_seen_ack_ms.store(0);
 }
 
 bool is_frontend_aware_of_exit() {
     return k_starrocks_fe_aware_shutdown_ms.load(std::memory_order_relaxed) != 0;
+}
+
+// Tracks the FE's last-seen heartbeat time (the shutdown ack, echoed in every heartbeat
+// request). Returns true when the value advances, meaning the FE processed a heartbeat
+// response this BE sent after shutdown began. The first observed value is the baseline: it
+// corresponds to a pre-shutdown response and must not open awareness by itself.
+bool advance_heartbeat_ack(int64_t ack) {
+    int64_t prev = k_starrocks_last_seen_ack_ms.load(std::memory_order_relaxed);
+    if (prev == 0) {
+        // Anchor the baseline with CAS so concurrent anchors cannot regress the stored value; an
+        // ack of 0 (nothing processed yet) also lands here and is a no-op until the value moves.
+        if (k_starrocks_last_seen_ack_ms.compare_exchange_strong(prev, ack, std::memory_order_relaxed,
+                                                                 std::memory_order_relaxed)) {
+            return false;
+        }
+        // Lost the anchor race: fall through and re-evaluate against the stored value.
+    }
+    // Only an advance over the last-seen value counts, and the last-seen value must follow.
+    while (ack > prev) {
+        if (k_starrocks_last_seen_ack_ms.compare_exchange_weak(prev, ack, std::memory_order_relaxed,
+                                                               std::memory_order_relaxed)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool should_accept_new_request() {

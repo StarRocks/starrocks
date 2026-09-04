@@ -26,6 +26,7 @@
 #include <utility>
 
 #include "base/metrics.h"
+#include "base/network/network_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
@@ -36,6 +37,7 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load/http_load_params.h"
 #include "compute_env/load/stream_context_mgr.h"
@@ -51,6 +53,7 @@
 #include "http/download_action.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
@@ -62,10 +65,12 @@ extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view)
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<int64_t> k_starrocks_exit_start_ms;
 extern std::atomic<int64_t> k_starrocks_fe_aware_shutdown_ms;
-
 namespace {
+
 static std::string k_response_str;
+static HttpStatus k_response_status = HttpStatus::OK;
 static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+    k_response_status = status;
     k_response_str = content;
 }
 
@@ -253,9 +258,117 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_accepts_until_shutdown_delay) 
     ASSERT_STREQ("OK", doc["Status"].GetString());
 }
 
-TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_after_shutdown_delay) {
+TEST_F(TransactionStreamLoadActionTest, txn_begin_redirects_after_shutdown_delay) {
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    k_response_str.clear();
     k_starrocks_exit.store(true);
     k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest b(_evhttp_req);
+    b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    b._headers.emplace(HTTP_LABEL_KEY, "123");
+    b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&b);
+
+    // Redirected (307) to the FE leader: no JSON body, a Location header instead.
+    ASSERT_EQ(k_response_status, HttpStatus::TEMPORARY_REDIRECT);
+    ASSERT_TRUE(k_response_str.empty());
+    auto* location = evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION);
+    ASSERT_NE(location, nullptr);
+    ASSERT_NE(std::strstr(location, "http://127.0.0.1:8030"), nullptr);
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_retries_idempotent_after_shutdown_delay) {
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "123");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+    ASSERT_TRUE(doc.HasMember("TxnId"));
+    auto first_txn_id = doc["TxnId"].GetUint64();
+
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "123");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    // A BEGIN retry for an already-begun label is idempotent and must be served by this BE
+    // even after the cutoff instead of being redirected: it creates nothing.
+    rapidjson::Document retry_doc;
+    retry_doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", retry_doc["Status"].GetString());
+    ASSERT_EQ(first_txn_id, retry_doc["TxnId"].GetUint64());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_retry_rejects_mismatched_auth_after_shutdown_delay) {
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "123");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+
+    // A retry with different credentials is not the transaction owner: serving it the
+    // original txn id would leak it, so refuse even though the BE has no user store.
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDp3cm9uZw==");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "123");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    rapidjson::Document retry_doc;
+    retry_doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("NOT_AUTHORIZED", retry_doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_after_fallback_without_heartbeat) {
+    // The fallback deadline can close admission before the FE has observed the shutdown heartbeat.
+    // A redirect would let the unaware FE pick this BE again, so reply ServiceUnavailable instead.
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    k_response_str.clear();
+    k_starrocks_exit.store(true);
+    k_starrocks_exit_start_ms.store(MonotonicMillis() - config::graceful_exit_reject_fallback_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
+    ASSERT_FALSE(is_frontend_aware_of_exit());
 
     TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
     HttpRequest b(_evhttp_req);
@@ -268,34 +381,7 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_after_shutdown_delay) 
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("SERVICE_UNAVAILABLE", doc["Status"].GetString());
-}
-
-TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_existing_context_after_shutdown_delay) {
-    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
-    HttpRequest begin(_evhttp_req);
-    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-    begin._headers.emplace(HTTP_LABEL_KEY, "123");
-    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
-    txn_action.handle(&begin);
-
-    rapidjson::Document doc;
-    doc.Parse(k_response_str.c_str());
-    ASSERT_STREQ("OK", doc["Status"].GetString());
-
-    k_response_str.clear();
-    k_starrocks_exit.store(true);
-    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
-
-    HttpRequest retry(_evhttp_req);
-    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDp3cm9uZw==");
-    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-    retry._headers.emplace(HTTP_LABEL_KEY, "123");
-    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
-    txn_action.handle(&retry);
-
-    doc.Parse(k_response_str.c_str());
-    ASSERT_STREQ("SERVICE_UNAVAILABLE", doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
 }
 
 TEST_F(TransactionStreamLoadActionTest, txn_commit_fail) {
