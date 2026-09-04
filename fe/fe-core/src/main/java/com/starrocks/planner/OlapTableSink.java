@@ -283,13 +283,12 @@ public class OlapTableSink extends DataSink {
             return NO_SHARD_WRITE;
         }
         // Rows of one tablet are spread over the writing nodes with no order between them, so a load
-        // whose result depends on the arrival order of rows sharing a key cannot use this path: an
-        // aggregate table's REPLACE, and a primary-key table's upsert-then-delete of the same key,
-        // both do. DUPLICATE KEY has no such semantics -- its rowset is the union of the segments --
-        // which is why the feature is restricted to it.
-        if (dstTable.getKeysType() != KeysType.DUP_KEYS) {
-            return NO_SHARD_WRITE;
-        }
+        // whose result depends on the arrival order of rows sharing a key gets an undefined winner:
+        // an aggregate table's REPLACE, and a primary-key table's upsert-then-delete of the same key,
+        // both do. That is a documented precondition the session opts into by raising
+        // tablet_write_parallelism -- the system cannot see whether the data repeats a key -- and it
+        // is not gated on here. DUPLICATE KEY has no such semantics at all: its rowset is the union
+        // of the segments, so the fold is exact regardless.
         // Bundled data files are what make the fold safe to widen across nodes: each node opens its
         // OWN bundle file (uuid-named, so no collision) and every SegmentMetadataPB carries its own
         // filename plus bundle_file_offset, so concatenating segments from several bundles resolves

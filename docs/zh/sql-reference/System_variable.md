@@ -1693,7 +1693,7 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 ### tablet_write_parallelism (v4.2 及以后)
 
-* **描述**：仅在存算分离模式下生效。单个导入事务中可以并行写入**同一个** tablet 的计算节点数量。默认值 `1` 表示一个 tablet 只由分配给它的那个计算节点写入，因此只有一个 tablet 的分区会把整个导入压在一台机器上。大于 `1` 的值允许导入把该 tablet 的数据分散到这么多个节点上；`-1` 表示 Warehouse 中所有存活的计算节点，这也是 `tablet_write_local_first` 把每个 sink 实例的数据留在本机所需要的设置。该变量仅对开启了 `file_bundling` 的 `DUPLICATE KEY` 存算分离表生效，并且只在分区的 tablet 数量少于 Warehouse 中存活计算节点数量时生效——一旦分桶级别的并行度已经可以占满集群，该设置就会自动不再适用。
+* **描述**：仅在存算分离模式下生效。单个导入事务中可以并行写入**同一个** tablet 的计算节点数量。默认值 `1` 表示一个 tablet 只由分配给它的那个计算节点写入，因此只有一个 tablet 的分区会把整个导入压在一台机器上。大于 `1` 的值允许导入把该 tablet 的数据分散到这么多个节点上；`-1` 表示 Warehouse 中所有存活的计算节点，这也是 `tablet_write_local_first` 把每个 sink 实例的数据留在本机所需要的设置。该变量仅对开启了 `file_bundling` 的存算分离表生效，并且只在分区的 tablet 数量少于 Warehouse 中存活计算节点数量时生效——一旦分桶级别的并行度已经可以占满集群，该设置就会自动不再适用。
 * **默认值**：1
 * **类型**：Int
 * **粒度**：Session

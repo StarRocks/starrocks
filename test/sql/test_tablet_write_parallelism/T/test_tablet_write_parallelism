@@ -49,10 +49,11 @@ truncate table t_shard;
 insert into t_shard select generate_series, cast(generate_series % 7 as int), concat('v', generate_series), generate_series * 3 from table(generate_series(1, 20000));
 select count(*), sum(k1), sum(v2) from t_shard;
 
--- Shapes the feature refuses. Each must load correctly on the single-node path rather than fail:
--- a table without file bundling (no combined txn log to fold into, and a rowset that would mix
--- bundled and unbundled segments), and a primary-key table (rows sharing a key have no order left
--- once they are spread, which upsert-then-delete inside one transaction depends on).
+-- A table without file bundling is refused (no combined txn log to fold into, and a rowset that
+-- would mix bundled and unbundled segments); it must load correctly on the single-node path rather
+-- than fail. A primary-key table is NOT refused: spreading a tablet's rows leaves no order between
+-- rows sharing a key, which is a precondition the session opts into rather than something the
+-- system can check. Ordering BETWEEN transactions is unaffected -- the second load below asserts it.
 set tablet_write_parallelism = 3;
 create table t_no_bundle (k1 bigint, k2 int, v1 string)
     duplicate key(k1, k2)
