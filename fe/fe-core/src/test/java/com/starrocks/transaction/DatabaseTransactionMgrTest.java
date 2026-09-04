@@ -735,6 +735,64 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testPerTableCountToleratesConcurrentTableAttach() throws Exception {
+        int savedDb = Config.max_running_txn_num_per_db;
+        int savedTable = Config.max_running_txn_num_per_table;
+        try {
+            Config.max_running_txn_num_per_db = 1000;
+            Config.max_running_txn_num_per_table = 1000;
+            DatabaseTransactionMgr mgr = new DatabaseTransactionMgr(0, masterGlobalStateMgr);
+            long hotTable = 900L;
+            // One running txn whose table list keeps growing while the per-table count scans it. The list is
+            // appended to from the statement path without the DatabaseTransactionMgr lock, so an unguarded
+            // read here can see a new size against the old backing array and throw. Nothing about this test
+            // depends on the resulting count, only that neither side ever fails.
+            addRunningTxn(mgr, 6001L, "p2_attach_race", TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                    Lists.newArrayList(hotTable));
+            TransactionState txnState = mgr.getTransactionState(6001L);
+
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            CountDownLatch start = new CountDownLatch(1);
+            AtomicBoolean stop = new AtomicBoolean(false);
+
+            Thread appender = new Thread(() -> {
+                try {
+                    start.await();
+                    for (long tableId = 1000L; tableId < 6000L && !stop.get(); tableId++) {
+                        txnState.addTableIdIfAbsent(tableId);
+                    }
+                } catch (Throwable t) {
+                    failure.compareAndSet(null, t);
+                }
+            });
+            Thread counter = new Thread(() -> {
+                try {
+                    start.await();
+                    for (int i = 0; i < 5000 && !stop.get(); i++) {
+                        mgr.getRunningTxnNumOfTable(hotTable);
+                    }
+                } catch (Throwable t) {
+                    failure.compareAndSet(null, t);
+                }
+            });
+
+            appender.start();
+            counter.start();
+            start.countDown();
+            appender.join(30_000L);
+            counter.join(30_000L);
+            stop.set(true);
+
+            assertNull(failure.get(), "concurrent table attach must not break the per-table count");
+            // The table that was there from the start is still counted, so the scan stayed correct throughout.
+            assertEquals(1, mgr.getRunningTxnNumOfTable(hotTable));
+        } finally {
+            Config.max_running_txn_num_per_table = savedTable;
+            Config.max_running_txn_num_per_db = savedDb;
+        }
+    }
+
+    @Test
     public void testCheckRunningTxnExceedLimitPerTable() {
         int savedDb = Config.max_running_txn_num_per_db;
         int savedTable = Config.max_running_txn_num_per_table;

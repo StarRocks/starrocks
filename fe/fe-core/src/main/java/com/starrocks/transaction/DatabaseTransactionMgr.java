@@ -294,9 +294,7 @@ public class DatabaseTransactionMgr {
             if (transactionState == null || !transactionState.isRunning()) {
                 throw new TransactionNotFoundException(transactionId);
             }
-            if (!transactionState.getTableIdList().contains(tableId)) {
-                transactionState.addTableIdList(tableId);
-            }
+            transactionState.addTableIdIfAbsent(tableId);
             return transactionState;
         } finally {
             writeUnlock();
@@ -805,16 +803,21 @@ public class DatabaseTransactionMgr {
     // running set) rather than a maintained counter, so there is no side tally to drift out of sync: the
     // result needs no bookkeeping across replay or leader failover, and does not depend on when a table is
     // attached to a transaction. Callers must hold the transaction lock, which serializes this scan against
-    // structural changes to the running set. The count is a best-effort snapshot: an explicit BEGIN...COMMIT
-    // transaction appends to its own tableIdList without this lock, so a table it is still attaching may be
-    // momentarily under-counted; the under-count only biases toward admitting. (Should the append be seen
-    // mid-resize, the scan may instead fail this one begin, which is safe to retry.) The scan
-    // is bounded by the number of running transactions (itself bounded by Config.max_running_txn_num_per_db)
-    // and only runs when the per-table cap is enabled.
+    // structural changes to the running set.
+    //
+    // Membership goes through containsTableId rather than reading the list directly. A transaction's table
+    // list is appended to from the statement execution path without this lock, so reading it here unguarded
+    // would race a resize and could index past the backing array, failing an unrelated begin. containsTableId
+    // shares the transaction's monitor with the appenders, so each test is consistent.
+    //
+    // The total is still a snapshot rather than an instant: a table can attach between two iterations of this
+    // loop. That is deliberate for a self protection bound. A momentary under-count only biases toward
+    // admitting, and the next admission sees the true figure. The scan is bounded by the number of running
+    // transactions (itself bounded by Config.max_running_txn_num_per_db) and only runs when the cap is on.
     protected int getRunningTxnNumOfTable(long tableId) {
         int count = 0;
         for (TransactionState txnState : idToRunningTransactionState.values()) {
-            if (countsTowardPerTableLimit(txnState) && txnState.getTableIdList().contains(tableId)) {
+            if (countsTowardPerTableLimit(txnState) && txnState.containsTableId(tableId)) {
                 count++;
             }
         }

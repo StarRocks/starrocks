@@ -496,9 +496,7 @@ public class TransactionStmtExecutor {
             if (txnState == null) {
                 throw ErrorReportException.report(ERR_TXN_NOT_EXIST, transactionId);
             }
-            if (!txnState.getTableIdList().contains(targetTable.getId())) {
-                txnState.getTableIdList().add(targetTable.getId());
-            }
+            txnState.addTableIdIfAbsent(targetTable.getId());
 
             String label = txnState.getLabel();
             if (execPlan.getScanNodes().stream()
