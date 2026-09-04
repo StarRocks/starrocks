@@ -417,12 +417,9 @@ CONF_Int32(data_page_size, "65536");
 // located through absolute PagePointers -- so this can be flipped at any time and mixed within a
 // tablet, and the order within the region is not part of the format.
 //
-// That order matches how a scan reads them. Ordinal indexes are loaded for every projected
-// column, page zone maps only for predicate columns and only after, so keeping the two grouped
-// and in that sequence lets one buffered stream walk the region forward without ever seeking
-// back. The short key index leads because it is read through its own file rather than that
-// stream, and only when the scan has a key range; putting it last would spend the tail of the
-// file -- the part the footer read pulls into the cache for free -- on bytes most scans skip.
+// The order follows the normal scan path: short key first, then ordinal indexes, then page zone
+// maps. It is an implementation detail rather than a format requirement; readers continue to
+// locate every index through its absolute PagePointer.
 //
 // The point is cold-read latency on shared-data: the reader must load the ordinal index of
 // every accessed column, and the page zone map of every predicate column, before it can read
@@ -436,23 +433,14 @@ CONF_Int32(data_page_size, "65536");
 // indexes still land at the tail rather than under a later group's data pages.
 CONF_mBool(enable_segment_tail_index_region, "false");
 
-// Read-time gate for serving a segment's small index reads from one shared buffered stream.
-// The region makes those indexes contiguous, but each column still opens its own file, so a
-// cold scan spends one remote read per column on bytes that now sit next to each other.
-// Pointing every column's small index reads at a single stream collapses that: the first
-// read's buffer fill covers the region, and the rest are memcpy. This works with or without a
-// block cache in front of the file.
-//
-// Requires the tail index region. With the indexes scattered per column, consecutive reads land
-// outside the buffer window, so sharing a stream would pay a discard and a refill each time and
-// buy nothing -- which is why this is gated on the region existing, not on
-// enable_segment_tail_index_region.
-CONF_mBool(enable_segment_shared_small_index_stream, "true");
+// Read-time gate for warming the contiguous tail index region once per Segment. The following
+// per-column ordinal-index and page-zone-map reads then hit the shared Data Cache instead of
+// issuing one remote request per column. Segments written in the legacy layout are unaffected.
+CONF_mBool(enable_segment_tail_index_prefetch, "true");
 
-// Upper bound on the shared small index stream's buffer. The buffer is sized to the region so
-// that one fill covers it; a region larger than this gets a buffer of this size instead, which
-// degrades to a few reads for the whole region rather than one per column.
-CONF_mInt64(segment_shared_small_index_stream_max_buffer_bytes, "4194304");
+// Upper bound on a tail index region prefetch. Oversized regions fall back to ordinary per-column
+// reads, avoiding remote-read amplification for very wide tables and narrow projections.
+CONF_mInt64(segment_tail_index_prefetch_max_bytes, "4194304");
 
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value

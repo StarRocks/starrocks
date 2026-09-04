@@ -36,6 +36,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "base/concurrency/once.h"
@@ -245,10 +246,15 @@ public:
     // the brute-force distance-computation fallback.
     bool skip_vector_index() const { return _skip_vector_index; }
 
-    // Size of the small index region, zero when the segment predates the layout. Non-zero means
-    // every column's ordinal index and page zone map are contiguous here, which is what lets one
-    // buffered stream serve all of them.
-    uint64_t small_index_region_size() const { return _small_index_region_size; }
+    // Warm the block cache with this segment's small index region, at most once per Segment
+    // object. This is called after segment-level pruning, immediately before the first column
+    // iterator loads its indexes.
+    void prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache);
+
+    // Whether the footer read already brought the whole small index region into the final cache
+    // block. The block size is passed in to keep this a pure, directly testable function.
+    static bool small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
+                                                          uint64_t block_size);
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
@@ -378,9 +384,11 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
-    // Size of the small index region, from the footer; zero means the segment was written in
-    // the legacy interleaved layout.
+    // Byte range of the small index region, from the footer; zero size means the segment was
+    // written in the legacy interleaved layout.
+    uint64_t _small_index_region_offset = 0;
     uint64_t _small_index_region_size = 0;
+    std::once_flag _small_index_prefetch_once;
     // Presence + page pointer for the optional full sort key index page (footer field 11). Set at
     // open(); the page itself is loaded lazily by ensure_full_sort_key_index_usable().
     bool _has_full_sort_key_index_page = false;

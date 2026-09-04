@@ -496,13 +496,13 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to verify the correctness of generated rowsets. When enabled, the correctness of the generated rowsets will be checked after Compaction and Schema Change.
 - Introduced in: -
 
-### enable_segment_shared_small_index_stream
+### enable_segment_tail_index_prefetch
 
 - Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether every column's small index reads in a segment -- its ordinal index and page zone map -- share a single buffered stream, so that the tail index region (see `enable_segment_tail_index_region`) is fetched once for the segment instead of once per column. The region makes those indexes contiguous, but each column otherwise opens its own file, so a cold scan still spends one request per column on bytes that now sit next to each other. Sharing one stream turns the first column's read into the only remote one and serves the rest from its buffer, whether or not the query uses the data cache. Has no effect on segments written without a tail index region, where the indexes are too far apart for one buffer to span. Data pages and the large optional indexes (bloom filter, bitmap, inverted, vector) are unaffected and keep reading through their own column's file.
+- Description: Whether to prefetch a segment's tail index region (see `enable_segment_tail_index_region`) into Data Cache before loading its per-column ordinal indexes and page zone maps. The prefetch runs at most once per Segment object, even when tablet parallelism creates several iterators for that segment. It is skipped when Data Cache filling is disabled, the region exceeds `segment_tail_index_prefetch_max_bytes`, or the footer read already covered the region. A failed or skipped prefetch falls back to the existing per-column reads. Data pages and large optional indexes (bloom filter, bitmap, inverted, and vector) are unaffected.
 - Introduced in: v4.2.0
 
 ### enable_segment_tail_index_region
@@ -511,7 +511,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether the segment writer places the ordinal index and the page zone map of every column, together with the short key index, in one contiguous region immediately before the segment footer, instead of writing each column's indexes directly after that column's own data pages. A query must load these indexes before it can read any data page, so gathering them lets a single read cover all of them. Within the region the short key index comes first, then every column's ordinal index, then every column's page zone map, which is the order a query reads them in: this lets the shared stream enabled by `enable_segment_shared_small_index_stream` walk the region forward once instead of seeking back. The order inside the region is not part of the segment format and may change. This mainly reduces cold-query latency in shared-data clusters, where each scattered index read otherwise costs a separate request to object storage. Only the write side is gated by this config. Every write path that finalizes a segment footer produces the region, vertical compaction and partial-update rewrites included: a vertical writer holds each finished column's index writer across column groups and flushes them together at the end, so an early group's indexes still land at the tail. Both layouts are readable by any BE or CN version in either direction and can coexist in the same table, so this can be turned on or off at any time without rewriting data.
+- Description: Whether the segment writer places the ordinal index and page zone map of every column, together with the short key index, in one contiguous region immediately before the segment footer, instead of writing each column's indexes after that column's data pages. The region stores the short key index first, followed by all ordinal indexes and then all page zone maps. This order matches the normal scan path but is not part of the segment format. With `enable_segment_tail_index_prefetch`, the reader can warm the range once before loading per-column indexes. This mainly reduces cold-query latency in shared-data clusters, where scattered index reads otherwise require separate object-storage requests. The setting affects writes only. Horizontal writes, vertical compaction, and partial-update rewrites all produce the region. Both layouts remain readable and can coexist in one table, so the setting can be changed without rewriting existing data.
 - Introduced in: v4.2.0
 
 ### enable_size_tiered_compaction_strategy
@@ -1108,13 +1108,13 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of threads used for replication. `0` indicates setting the thread number to four times the BE CPU core count.
 - Introduced in: v3.3.5
 
-### segment_shared_small_index_stream_max_buffer_bytes
+### segment_tail_index_prefetch_max_bytes
 
 - Default: 4194304
 - Type: Int64
 - Unit: Bytes
 - Is mutable: Yes
-- Description: Maximum buffer size for the shared small index stream enabled by `enable_segment_shared_small_index_stream`. The buffer is normally sized to the segment's tail index region so that one fill covers it; a region larger than this gets a buffer of this size instead, so it is read in a few requests rather than one per column.
+- Description: Maximum size of a tail index region that `enable_segment_tail_index_prefetch` warms as one range. Regions above this limit use the existing per-column reads, which bounds extra I/O for very wide tables and narrow projections.
 - Introduced in: v4.2.0
 
 ### size_tiered_level_multiple

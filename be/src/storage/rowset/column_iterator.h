@@ -64,14 +64,6 @@ class RandomAccessFile;
 struct ColumnIteratorOptions {
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
-    // Stream for this column's small index reads -- ordinal index and page zone map -- when they
-    // should not go through `read_file`. Null means they share `read_file` as they always have.
-    // SegmentIterator points every column at one shared stream once the segment carries a tail
-    // index region: the region is contiguous, so the first column's buffer fill covers the rest
-    // and the others are served from memory. Only the small indexes belong here; data pages would
-    // evict the very buffer this exists to keep, and the large optional indexes are not in the
-    // region.
-    io::SeekableInputStream* index_read_file = nullptr;
     bool is_io_coalesce = false;
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
@@ -87,9 +79,6 @@ struct ColumnIteratorOptions {
         CHECK_NOTNULL(read_file);
         CHECK_NOTNULL(stats);
     }
-
-    // The stream a small index read should use.
-    io::SeekableInputStream* index_file() const { return index_read_file != nullptr ? index_read_file : read_file; }
 
     // used to indicate that if this column is nullable, this flag can help ColumnIterator do
     // some optimization.

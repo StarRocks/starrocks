@@ -79,6 +79,22 @@ bvar::Window<bvar::Adder<int>> g_open_segments_minute("starrocks", "open_segment
 // NOLINTNEXTLINE
 bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segments_io_minute", &g_open_segments_io,
                                                          60);
+bvar::Adder<int64_t> g_small_index_prefetch;       // NOLINT
+bvar::Adder<int64_t> g_small_index_prefetch_bytes; // NOLINT
+// How many small index regions were prefetched, and how many bytes that cost, in the last 60 seconds
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_minute("starrocks", "segment_small_index_prefetch_minute",
+                                                                 &g_small_index_prefetch, 60);
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_bytes_minute("starrocks",
+                                                                       "segment_small_index_prefetch_bytes_minute",
+                                                                       &g_small_index_prefetch_bytes, 60);
+bvar::Adder<int64_t> g_small_index_prefetch_covered; // NOLINT
+// How many prefetches were skipped because the footer read had already brought the region in
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_covered_minute("starrocks",
+                                                                         "segment_small_index_prefetch_covered_minute",
+                                                                         &g_small_index_prefetch_covered, 60);
 
 namespace starrocks {
 
@@ -281,9 +297,9 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
-    // Zero for a segment written in the legacy interleaved layout. A non-zero size is what tells
-    // the SegmentIterator that one buffered stream can serve every column's small index reads,
-    // and how wide to make its buffer.
+    // Record the range but do not warm it here. Segment::open runs before pruning, while the
+    // iterator setup below only runs for segments that are actually going to load column indexes.
+    _small_index_region_offset = footer.small_index_region_offset();
     _small_index_region_size = footer.small_index_region_size();
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -396,6 +412,60 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
         }
     }
     return Status::OK();
+}
+
+bool Segment::small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
+                                                        uint64_t block_size) {
+    if (block_size == 0 || file_size == 0) {
+        return false;
+    }
+    const uint64_t last_block_start = ((file_size - 1) / block_size) * block_size;
+    return region_offset >= last_block_start;
+}
+
+void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache) {
+    if (_small_index_region_size == 0 || !config::enable_segment_tail_index_prefetch || !fill_data_cache) {
+        return;
+    }
+
+    const int64_t max_prefetch_bytes = config::segment_tail_index_prefetch_max_bytes;
+    if (max_prefetch_bytes <= 0 || _small_index_region_size > static_cast<uint64_t>(max_prefetch_bytes)) {
+        // Large regions fall back to the normal per-column index reads. This bounds both remote
+        // read amplification and the amount of unrelated index data fetched by a narrow query.
+        VLOG(2) << "skip small index region prefetch of " << _small_index_region_size << " bytes (over cap) for "
+                << read_file->filename();
+        return;
+    }
+
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // The footer read fetches the file's final cache block. Avoid a redundant touch when that
+    // block already contains the complete tail index region.
+    uint64_t file_size = 0;
+    if (_segment_file_info.size.has_value() && *_segment_file_info.size > 0) {
+        file_size = static_cast<uint64_t>(*_segment_file_info.size);
+    } else if (auto size_or = read_file->get_size(); size_or.ok() && *size_or > 0) {
+        file_size = static_cast<uint64_t>(*size_or);
+    }
+    if (file_size > 0 &&
+        small_index_region_covered_by_footer_read(_small_index_region_offset, file_size,
+                                                  static_cast<uint64_t>(config::starlet_star_cache_block_size_bytes))) {
+        g_small_index_prefetch_covered << 1;
+        VLOG(2) << "skip small index region prefetch of " << _small_index_region_size
+                << " bytes (already covered by the footer read) for " << read_file->filename();
+        return;
+    }
+#endif
+
+    std::call_once(_small_index_prefetch_once, [&] {
+        if (Status st = read_file->touch_cache(_small_index_region_offset, _small_index_region_size); !st.ok()) {
+            // Prefetch is best effort. Column index reads still use their normal files and remain
+            // the correctness path if warming fails.
+            VLOG(2) << "small index region prefetch failed for " << read_file->filename() << ": " << st;
+            return;
+        }
+        g_small_index_prefetch << 1;
+        g_small_index_prefetch_bytes << static_cast<int64_t>(_small_index_region_size);
+    });
 }
 
 Status Segment::load_index(const LakeIOOptions& lake_io_opts) {

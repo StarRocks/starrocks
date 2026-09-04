@@ -425,13 +425,13 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
 - 導入バージョン: -
 
-### enable_segment_shared_small_index_stream
+### enable_segment_tail_index_prefetch
 
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: segment 内の各列の小さいインデックスの読み取り（ordinal index とページ単位の zone map）が 1 つのバッファ付きストリームを共有するかどうか。共有すると、末尾インデックス領域（`enable_segment_tail_index_region` を参照）は列ごとではなく segment ごとに 1 回だけ取得されます。この領域によってインデックスは連続して配置されますが、各列はそれぞれ独自にファイルを開くため、コールドクエリは隣接して並んだバイトに対して依然として列ごとに 1 回ずつリクエストを発行します。1 つのストリームを共有すると、リモートへのアクセスは最初の列の読み取りだけになり、残りはそのバッファから返されます。これは Data Cache を使うかどうかに関係なく有効です。末尾インデックス領域を持たない segment には影響しません（インデックスが離れすぎており、1 つのバッファでは覆えないため）。データページと大きい任意インデックス（bloom filter、bitmap、inverted、vector）は影響を受けず、引き続き各列自身のファイルから読み取られます。
+- 説明: 各列の ordinal index とページ単位の zone map を読み込む前に、segment の末尾インデックス領域（`enable_segment_tail_index_region` を参照）を Data Cache にプリフェッチするかどうか。同じ segment に対しては、tablet 内並列処理で複数の iterator が作成されても 1 回だけ実行されます。Data Cache への書き込みが無効な場合、領域が `segment_tail_index_prefetch_max_bytes` を超える場合、または footer の読み取りですでに領域全体がキャッシュされている場合はスキップされます。失敗またはスキップした場合は従来の列単位の読み取りに戻ります。データページと bloom filter、bitmap、inverted、vector などの大きなインデックスには影響しません。
 - 導入バージョン: v4.2.0
 
 ### enable_segment_tail_index_region
@@ -440,7 +440,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
-- 説明: segment の書き込み時に、各列の ordinal index とページ単位の zone map を short key index とともに、segment footer の直前の 1 つの連続領域に配置するかどうか（従来は各列のインデックスをその列のデータページの直後に書き込みます）。クエリはデータページを読む前にこれらのインデックスを読み込む必要があるため、まとめて配置することで 1 回の読み取りですべてを取得できます。領域内の順序は、先頭が short key index、次に全列の ordinal index、最後に全列のページ単位 zone map です。これはクエリがそれらを読む順序と一致しており、`enable_segment_shared_small_index_stream` が有効にする共有ストリームが領域を前方へ一度走査するだけで済み、戻って読み直す必要がなくなります。領域内の順序は segment フォーマットの一部ではなく、変更される可能性があります。これは主に共有データクラスタのコールドクエリのレイテンシを下げます。従来は分散した各インデックス読み取りがそれぞれオブジェクトストレージへのリクエストを必要としていました。本設定は書き込み側のみを制御します。segment footer を書き出すすべての書き込み経路がこの領域を生成し、垂直 Compaction と部分列更新の書き換えも含まれます。垂直書き込みでは、書き終えた各列のインデックスライタが列グループをまたいで保持され、最後にまとめて書き出されるため、先行する列グループのインデックスも末尾に配置されます。どちらのレイアウトも任意のバージョンの BE / CN が双方向に読み取れ、同一テーブル内に混在できるため、データを書き換えずにいつでも有効化・無効化できます。
+- 説明: segment の書き込み時に、各列の ordinal index とページ単位の zone map を short key index とともに segment footer 直前の連続領域へ配置するかどうか。領域内では short key index、全列の ordinal index、全列のページ単位 zone map の順に格納します。この順序は通常の読み取り順に合わせたものですが、segment フォーマットの規約ではありません。`enable_segment_tail_index_prefetch` を有効にすると、列ごとのインデックス読み込み前にこの連続範囲をまとめてキャッシュできます。主な目的は、共有データクラスタのコールドクエリで発生するオブジェクトストレージへの分散したリクエストを減らすことです。本設定は書き込みだけに影響し、水平書き込み、垂直 Compaction、部分列更新の書き換えはいずれもこの領域を生成します。新旧のレイアウトは同じテーブル内で共存でき、既存データの書き換えは不要です。
 - 導入バージョン: v4.2.0
 
 ### enable_size_tiered_compaction_strategy
@@ -965,13 +965,13 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: レプリケーションに使用される最大スレッド数。`0` は、スレッド数を BE CPU コア数の 4 倍に設定することを示します。
 - 導入バージョン: v3.3.5
 
-### segment_shared_small_index_stream_max_buffer_bytes
+### segment_tail_index_prefetch_max_bytes
 
 - デフォルト: 4194304
 - タイプ: Int64
 - 単位: Bytes
 - 変更可能: はい
-- 説明: `enable_segment_shared_small_index_stream` が有効にする共有小インデックスストリームのバッファサイズの上限。バッファは通常 segment の末尾インデックス領域に合わせて確保され、1 回の充填で領域全体を覆います。この上限より大きい領域では、代わりにこの上限がバッファサイズとなり、列ごとに 1 回ではなく数回のリクエストで読み取られます。
+- 説明: `enable_segment_tail_index_prefetch` が一度にキャッシュする末尾インデックス領域の最大サイズ。この上限を超える領域は従来どおり列単位で読み取り、列数の多いテーブルや少数列だけを読むクエリで余分な I/O が増えるのを防ぎます。
 - 導入バージョン: v4.2.0
 
 ### size_tiered_level_multiple

@@ -24,6 +24,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <thread>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -33,7 +35,6 @@
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "storage/chunk_helper.h"
-#include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
@@ -49,6 +50,7 @@ namespace {
 // ordinal index degenerates to `is_root_data_page` -- no index page is written at all -- and every
 // layout assertion below would pass vacuously.
 constexpr size_t kNumRows = 100000;
+constexpr int64_t kLargeFileSize = 64L * 1024 * 1024;
 
 struct WriteResult {
     SegmentFooterPB footer;
@@ -103,6 +105,35 @@ uint64_t span_of(const std::vector<uint64_t>& offsets) {
     return *max_it - *min_it;
 }
 
+struct TouchState {
+    std::atomic<int> calls{0};
+    bool fail = false;
+};
+
+// A separate instance stands in for each iterator's file handle. All instances share only the
+// counter, making the test fail if the once guard ever moves back from Segment to an iterator.
+class CountingTouchStream final : public io::SeekableInputStream {
+public:
+    explicit CountingTouchStream(std::shared_ptr<TouchState> state) : _state(std::move(state)) {}
+
+    StatusOr<int64_t> read(void* /*data*/, int64_t /*count*/) override { return 0; }
+    Status seek(int64_t position) override {
+        _position = position;
+        return Status::OK();
+    }
+    StatusOr<int64_t> position() override { return _position; }
+    StatusOr<int64_t> get_size() override { return kLargeFileSize; }
+
+    Status touch_cache(int64_t /*offset*/, size_t /*length*/) override {
+        ++_state->calls;
+        return _state->fail ? Status::IOError("injected touch failure") : Status::OK();
+    }
+
+private:
+    std::shared_ptr<TouchState> _state;
+    int64_t _position = 0;
+};
+
 } // namespace
 
 class SegmentTailIndexRegionTest : public ::testing::Test {
@@ -111,12 +142,14 @@ protected:
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
         _saved_region = config::enable_segment_tail_index_region;
-        _saved_shared_stream = config::enable_segment_shared_small_index_stream;
+        _saved_prefetch = config::enable_segment_tail_index_prefetch;
+        _saved_prefetch_max_bytes = config::segment_tail_index_prefetch_max_bytes;
     }
 
     void TearDown() override {
         config::enable_segment_tail_index_region = _saved_region;
-        config::enable_segment_shared_small_index_stream = _saved_shared_stream;
+        config::enable_segment_tail_index_prefetch = _saved_prefetch;
+        config::segment_tail_index_prefetch_max_bytes = _saved_prefetch_max_bytes;
     }
 
     static std::shared_ptr<TabletSchema> make_schema() {
@@ -219,7 +252,8 @@ protected:
     const std::string kSegmentDir = "/segment_tail_index_region_test";
     std::shared_ptr<MemoryFileSystem> _fs;
     bool _saved_region = false;
-    bool _saved_shared_stream = false;
+    bool _saved_prefetch = false;
+    int64_t _saved_prefetch_max_bytes = 0;
 };
 
 // With the region on, every small index sits between the last data page and the footer, and the
@@ -352,11 +386,9 @@ TEST_F(SegmentTailIndexRegionTest, VerticalAndHorizontalRegionsAgree) {
 // The region is laid out short key index, then every ordinal index, then every page zone map --
 // the order a scan reads them in. _init_column_iterators() loads the ordinal index of every
 // projected column, and only afterwards does _get_row_ranges_by_zone_map() load the zone map of
-// every predicate column, so grouping them this way lets the shared small index stream walk the
-// region forward once instead of seeking back and refilling its buffer. The short key index leads
-// because it is read through the Segment's own file, not that stream, and only when the scan
-// carries a key range -- so it should not occupy the tail of the file, which the footer read
-// brings into the cache for free.
+// every predicate column. Grouping by access order keeps future range-based reads sequential.
+// The short key index leads because it is used only when the scan carries a key range, so it
+// should not displace the indexes every scan needs from the file tail.
 TEST_F(SegmentTailIndexRegionTest, RegionIsOrderedByIndexKind) {
     auto tablet_schema = make_schema();
     config::enable_segment_tail_index_region = true;
@@ -383,34 +415,104 @@ TEST_F(SegmentTailIndexRegionTest, RegionIsOrderedByIndexKind) {
     }
 }
 
-// Small index reads are routed to a shared stream only when one was supplied; everything else
-// keeps reading through the column's own file, as it always has.
-TEST_F(SegmentTailIndexRegionTest, IndexFileFallsBackToTheColumnFile) {
-    // Distinct non-null addresses are enough: index_file() only chooses between them.
-    auto* column_file = reinterpret_cast<io::SeekableInputStream*>(0x1000);
-    auto* shared_file = reinterpret_cast<io::SeekableInputStream*>(0x2000);
+TEST_F(SegmentTailIndexRegionTest, FooterReadCoversASmallRegion) {
+    constexpr uint64_t kBlock = 1024 * 1024;
 
-    ColumnIteratorOptions opts;
-    opts.read_file = column_file;
-    EXPECT_EQ(column_file, opts.index_file());
-
-    opts.index_read_file = shared_file;
-    EXPECT_EQ(shared_file, opts.index_file());
-    EXPECT_EQ(column_file, opts.read_file) << "data pages must not follow the small indexes";
+    EXPECT_TRUE(
+            Segment::small_index_region_covered_by_footer_read(40 * 1024 * 1024 - 74 * 1024, 40 * 1024 * 1024, kBlock));
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(40 * 1024 * 1024 - 1800 * 1024, 40 * 1024 * 1024,
+                                                                    kBlock));
+    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(kBlock, 2 * kBlock, kBlock));
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(kBlock - 1, 2 * kBlock, kBlock));
+    EXPECT_TRUE(Segment::small_index_region_covered_by_footer_read(0, 4096, kBlock));
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 4096, 0));
+    EXPECT_FALSE(Segment::small_index_region_covered_by_footer_read(0, 0, kBlock));
 }
 
-// Serving every column's small indexes from one buffered stream must not change what is read.
-// Both layouts, both settings: the shared stream is an IO consolidation, not a format.
-TEST_F(SegmentTailIndexRegionTest, SharedSmallIndexStreamReadsTheSameRows) {
+TEST_F(SegmentTailIndexRegionTest, PrefetchRunsOnceAcrossConcurrentIterators) {
+    auto tablet_schema = make_schema();
+    config::enable_segment_tail_index_region = true;
+    config::enable_segment_tail_index_prefetch = true;
+    config::segment_tail_index_prefetch_max_bytes = 4 * 1024 * 1024;
+
+    const std::string file_name = kSegmentDir + "/concurrent_prefetch";
+    auto result = write_horizontal(file_name, tablet_schema);
+    ASSERT_LT(result.footer.small_index_region_size(),
+              static_cast<uint64_t>(config::segment_tail_index_prefetch_max_bytes));
+
+    FileInfo file_info{.path = file_name, .size = kLargeFileSize};
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, file_info, 0, tablet_schema));
+    auto state = std::make_shared<TouchState>();
+
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 16; ++i) {
+        threads.emplace_back([segment, state] {
+            auto stream = std::make_shared<CountingTouchStream>(state);
+            RandomAccessFile file(stream, "concurrent-prefetch");
+            segment->prefetch_small_index_region_once(&file, true);
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    EXPECT_EQ(1, state->calls.load());
+}
+
+TEST_F(SegmentTailIndexRegionTest, PrefetchFailureIsNonFatalAndNotRetried) {
+    auto tablet_schema = make_schema();
+    config::enable_segment_tail_index_region = true;
+    config::enable_segment_tail_index_prefetch = true;
+    config::segment_tail_index_prefetch_max_bytes = 4 * 1024 * 1024;
+
+    const std::string file_name = kSegmentDir + "/failed_prefetch";
+    (void)write_horizontal(file_name, tablet_schema);
+    FileInfo file_info{.path = file_name, .size = kLargeFileSize};
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, file_info, 0, tablet_schema));
+
+    auto state = std::make_shared<TouchState>();
+    state->fail = true;
+    auto stream = std::make_shared<CountingTouchStream>(state);
+    RandomAccessFile file(stream, "failed-prefetch");
+    segment->prefetch_small_index_region_once(&file, true);
+    segment->prefetch_small_index_region_once(&file, true);
+    EXPECT_EQ(1, state->calls.load());
+
+    // The normal column reads remain the correctness path after a best-effort warm failure.
+    verify_all_rows(file_name, tablet_schema);
+}
+
+TEST_F(SegmentTailIndexRegionTest, OversizedRegionFallsBackToColumnReads) {
+    auto tablet_schema = make_schema();
+    config::enable_segment_tail_index_region = true;
+    config::enable_segment_tail_index_prefetch = true;
+
+    const std::string file_name = kSegmentDir + "/oversized_prefetch";
+    auto result = write_horizontal(file_name, tablet_schema);
+    ASSERT_GT(result.footer.small_index_region_size(), 0);
+    config::segment_tail_index_prefetch_max_bytes = static_cast<int64_t>(result.footer.small_index_region_size() - 1);
+
+    FileInfo file_info{.path = file_name, .size = kLargeFileSize};
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, file_info, 0, tablet_schema));
+    auto state = std::make_shared<TouchState>();
+    auto stream = std::make_shared<CountingTouchStream>(state);
+    RandomAccessFile file(stream, "oversized-prefetch");
+    segment->prefetch_small_index_region_once(&file, true);
+    EXPECT_EQ(0, state->calls.load());
+
+    verify_all_rows(file_name, tablet_schema);
+}
+
+// Both layouts remain readable with the read-time prefetch gate on or off.
+TEST_F(SegmentTailIndexRegionTest, PrefetchDoesNotChangeReadResults) {
     auto tablet_schema = make_schema();
 
     for (bool region : {true, false}) {
         config::enable_segment_tail_index_region = region;
-        const std::string base = kSegmentDir + (region ? "/shared_region_on" : "/shared_region_off");
+        const std::string base = kSegmentDir + (region ? "/prefetch_region_on" : "/prefetch_region_off");
 
-        for (bool shared : {true, false}) {
-            config::enable_segment_shared_small_index_stream = shared;
-            const std::string file_name = base + (shared ? "_shared" : "_percolumn");
+        for (bool prefetch : {true, false}) {
+            config::enable_segment_tail_index_prefetch = prefetch;
+            const std::string file_name = base + (prefetch ? "_prefetch" : "_normal");
             (void)write_horizontal(file_name, tablet_schema);
             verify_all_rows(file_name, tablet_schema);
         }
