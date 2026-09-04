@@ -73,6 +73,11 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
+    // One stream is opened per (segment, column), so the buffer has to match how much of a column
+    // lives in one segment; see CompactionUtils::get_read_buffer_size.
+    const int64_t read_buffer_size = CompactionUtils::get_read_buffer_size(
+            input_bytes, _context->stats->read_segment_count, _tablet_schema->num_columns(),
+            config::lake_compaction_stream_buffer_size_bytes);
     reader_params.use_page_cache = false;
     // `fill_metadata_cache` is named explicitly: assigning the whole struct replaces the
     // TabletReaderParams default (`{.fill_data_cache = true, .fill_metadata_cache = true}`) with
@@ -81,8 +86,9 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // calculate_chunk_size() has already opened the same segments, so caching them is worth it even
     // when the column data below is not.
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                  .fill_metadata_cache = true};
+                                  .buffer_size = read_buffer_size,
+                                  .fill_metadata_cache = true,
+                                  .hold_segments = config::lake_compaction_hold_input_segments};
     reader_params.column_access_paths = &_column_access_paths;
 
     // Apply range filter for range-split parallel compaction. TabletReader requires
@@ -284,6 +290,16 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     int64_t total_num_rows = 0;
     int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
+    // Sized from rowset metadata alone, so it is known before any segment is opened.
+    int64_t est_input_bytes = 0;
+    int64_t est_segments = 0;
+    for (auto& rowset : _input_rowsets) {
+        est_input_bytes += rowset->data_size_after_deletion();
+        est_segments += rowset->num_segments();
+    }
+    const int64_t read_buffer_size =
+            CompactionUtils::get_read_buffer_size(est_input_bytes, est_segments, _tablet_schema->num_columns(),
+                                                  config::lake_compaction_stream_buffer_size_bytes);
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
@@ -292,8 +308,9 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         // reuses these Segment objects instead of re-reading every footer from remote storage
         // (TabletManager::load_segment always probes the metacache but only inserts when asked).
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = true};
+                                   .buffer_size = read_buffer_size,
+                                   .fill_metadata_cache = true,
+                                   .hold_segments = config::lake_compaction_hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by

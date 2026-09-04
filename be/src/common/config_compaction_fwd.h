@@ -252,4 +252,65 @@ CONF_mBool(enable_lake_compaction_range_split, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 
+// Merge iterator prefills every child once before the merge can start. That prefill is
+// serial, so a task with S inputs pays S round trips before producing a single row. When
+// enabled, the prefill reads all children in parallel and then commits them in the original
+// order, which keeps the merge order and the error semantics identical to the serial path.
+// Only the reads are parallel; heap/state updates stay serial.
+CONF_mBool(enable_compaction_parallel_merge_init, "false");
+
+// Per-merge-iterator in-flight prefill read limit. Before the IO/decode split, prefill reads
+// carried the decode too, and 16 was the measured knee for one task (1/4/16/64 threads read
+// 754/302/157/181s). With the split the pool waits on IO only, so the limit is pure IO depth:
+// 64 in-flight measured 2.4x faster on an inadequate cache (264s -> 109s) with zero regression
+// on warm and cold caches.
+CONF_Int32(compaction_parallel_merge_init_threads, "64");
+
+// How many bytes one merge may hold in prefetched read buffers, across all of its inputs, when
+// its prefill runs as prefetch (IO on the pool, decode on the merge thread). Inputs past the
+// budget fall back to full reads on the pool instead of holding their scans; 0 disables the
+// IO/decode split entirely.
+CONF_mInt64(compaction_parallel_merge_prefetch_bytes, "268435456");
+
+// The shared pool's thread count. Larger than the per-task limit so concurrent compactions do
+// not dilute each other down to pool_size / tasks (4 concurrent tasks measured 777s at pool 16
+// vs 141-248s at pool 256 with the per-task cap); idle threads are reclaimed after 10s, so an
+// idle BE pays nothing for the headroom. The threads mostly wait on IO under the IO/decode
+// split, so the count buys concurrency, not CPU.
+CONF_Int32(compaction_parallel_merge_init_pool_threads, "256");
+
+// Number of chunk slots kept per merge input. With one slot the merge holds the only chunk and
+// refilling it is a blocking read, so the merge stalls for a full round trip every time an input
+// runs dry. With more slots a background reader keeps the free ones filled while the merge
+// consumes the held one, and that round trip overlaps the merge instead of stopping it. Costs one
+// extra chunk per input per added slot. Only takes effect when the merge prefill pool is
+// available; 1 keeps the original behavior.
+CONF_mInt32(compaction_merge_child_buffers, "1");
+
+// Compaction holds the loaded Segment objects of its input rowsets for the whole task instead of
+// relying on the metadata cache to keep them. Vertical compaction reads the same rowsets once per
+// column group; when the metadata cache cannot hold them all (small limit, or crowded out by many
+// tablets), every pass reloads and reparses every segment. That rebuild is CPU-bound, proportional
+// to the column count, and measured 14-17x slower on a 1000-column table -- and under concurrent
+// load it ballooned task memory until the task could not finish at all. Holding the segments costs
+// the same memory the metadata cache would have used for them, scoped to the task lifetime.
+CONF_mBool(lake_compaction_hold_input_segments, "true");
+
+// Let a vertical compaction switch to direct object-storage reads (bypassing the data cache) when
+// the cache demonstrably cannot hold its working set. The decision is made after the second column
+// group: the first pass warms the cache, so remote bytes on the second pass mean the cache did not
+// retain the working set -- warm or adequate caches read ~zero remote bytes there and never
+// trigger the switch. Direct reads also merge each segment's column regions into few large reads
+// (see LakeIOOptions::coalesce_across_columns).
+CONF_mBool(enable_lake_compaction_data_cache_bypass, "true");
+
+// Remote bytes the second column-group pass must reach before the bypass engages -- an absolute
+// floor so tiny tables and measurement noise never trigger the switch.
+CONF_mInt64(lake_compaction_data_cache_bypass_threshold_mb, "32");
+
+// The second pass's remote share of all read bytes (remote / (remote + local)) must also reach
+// this ratio. Guards the borderline case where the cache still serves most reads but the absolute
+// miss bytes happen to exceed the floor -- switching there would forfeit a mostly-working cache.
+CONF_mDouble(lake_compaction_data_cache_bypass_min_miss_ratio, "0.5");
+
 } // namespace starrocks::config

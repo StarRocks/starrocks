@@ -86,6 +86,87 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+### enable_compaction_parallel_merge_init
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the merge iterator of a compaction task prefills its inputs in parallel. A merge must read one chunk from every input before it can produce a row; by default those first reads happen one after another, so a task with many inputs pays one read round trip per input before any output. When enabled, the first reads are issued in parallel and committed in the original order, which keeps the merge result identical to the serial path. Recommended for shared-data clusters whose compaction reads reach object storage.
+- Introduced in: v4.2
+
+### compaction_parallel_merge_init_threads
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum number of in-flight prefill reads a single compaction merge may issue at a time. Reads are executed by the shared prefill thread pool (see compaction_parallel_merge_init_pool_threads). Takes effect only when enable_compaction_parallel_merge_init is enabled.
+- Introduced in: v4.2
+
+### compaction_parallel_merge_init_pool_threads
+
+- Default: 256
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The thread count of the shared pool that runs parallel merge prefill reads for all concurrent compaction tasks on the node. It is sized above the per-task in-flight limit so that concurrent tasks do not dilute each other; idle threads are reclaimed after 10 seconds, so an idle node pays nothing for the headroom.
+- Introduced in: v4.2
+
+### compaction_merge_child_buffers
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of chunk slots kept per merge input during compaction. With one slot, refilling an exhausted input blocks the merge for a full read round trip. With more slots, a background reader keeps the free slots filled, so the round trip overlaps the merge instead of stalling it. Costs one extra chunk of memory per input per added slot. Takes effect only when enable_compaction_parallel_merge_init is enabled; 1 keeps the original behavior.
+- Introduced in: v4.2
+
+### compaction_parallel_merge_prefetch_bytes
+
+- Default: 268435456
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The total bytes one compaction merge may hold in prefetched read buffers across all of its inputs. Within this budget the prefill performs pure IO on the shared pool while decoding stays on the compaction task's own thread, which keeps the task's CPU usage bounded to its own worker. Inputs whose scans exceed the remaining budget fall back to full reads on the pool. Setting this to 0 disables the IO/decode split entirely.
+- Introduced in: v4.2
+
+### enable_lake_compaction_data_cache_bypass
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a vertical compaction in a shared-data cluster may switch to direct object-storage reads when the data cache demonstrably cannot hold its working set. The decision is measured on the task's second column-group pass: the first pass warms the cache, so remote reads on the second pass mean the cache did not retain the working set. Warm or adequately sized caches read almost zero remote bytes there and never trigger the switch. Direct reads also merge each segment's column regions into few large requests. Requires enable_compaction_parallel_merge_init.
+- Introduced in: v4.2
+
+### lake_compaction_data_cache_bypass_threshold_mb
+
+- Default: 32
+- Type: Int
+- Unit: MB
+- Is mutable: Yes
+- Description: The minimum remote bytes the second column-group pass must read before the data cache bypass may engage. An absolute floor so that small tables and measurement noise never trigger the switch.
+- Introduced in: v4.2
+
+### lake_compaction_data_cache_bypass_min_miss_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The minimum remote share of all bytes read (remote / (remote + local)) on the second column-group pass before the data cache bypass may engage. This keeps compaction on a cache that still serves most of its reads, even when the absolute remote bytes exceed lake_compaction_data_cache_bypass_threshold_mb.
+- Introduced in: v4.2
+
+### lake_compaction_hold_input_segments
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a compaction task in a shared-data cluster holds the loaded segment objects (and, for Primary Key tables, the delete vectors) of its input rowsets for the whole task instead of relying on the shared metadata cache to keep them. Vertical compaction reads the same inputs once per column group; when the metadata cache cannot keep them, every pass reloads and re-parses every input segment, which is CPU-bound and proportional to the table's column count. Holding pins the same memory the cache would have used, scoped to the task lifetime.
+- Introduced in: v4.2
+
 ### lake_enable_del_file_crc_check
 
 - Default: true

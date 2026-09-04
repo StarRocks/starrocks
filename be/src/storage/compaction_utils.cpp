@@ -14,7 +14,10 @@
 
 #include "storage/compaction_utils.h"
 
+#include <algorithm>
+
 #include "common/config_compaction_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
@@ -91,6 +94,18 @@ uint32_t CompactionUtils::get_segment_max_rows(int64_t max_segment_file_size, in
         max_segment_rows = INT32_MAX;
     }
     return max_segment_rows;
+}
+
+int64_t CompactionUtils::get_read_buffer_size(int64_t input_size, int64_t segment_count, int64_t num_columns,
+                                              int64_t max_buffer_size) {
+    // A data page is the smallest unit the column reader asks for. At or below that size the
+    // buffered stream stops buffering, so keep at least two pages.
+    const int64_t min_buffer_size = 2L * std::max(1, config::data_page_size);
+    if (segment_count <= 0 || num_columns <= 0 || input_size <= 0) {
+        return std::clamp<int64_t>(max_buffer_size, min_buffer_size, max_buffer_size);
+    }
+    const int64_t bytes_per_segment_column = input_size / segment_count / num_columns;
+    return std::clamp<int64_t>(bytes_per_segment_column, min_buffer_size, std::max(min_buffer_size, max_buffer_size));
 }
 
 void CompactionUtils::split_column_into_groups(size_t num_columns, const std::vector<ColumnId>& sort_key_idxes,

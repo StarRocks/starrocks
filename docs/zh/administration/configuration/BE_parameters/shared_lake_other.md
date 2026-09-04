@@ -83,6 +83,87 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+### enable_compaction_parallel_merge_init
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否让 Compaction 任务的归并迭代器并行预填其输入。归并在产出第一行之前，必须先从每个输入各读取一个 Chunk；默认情况下这些首次读取逐个串行执行，因此输入较多的任务在产出任何数据之前，需要为每个输入各付出一次读取往返。开启后，这些首次读取并行发出并按原有顺序提交，归并结果与串行路径完全一致。建议在 Compaction 读取需要访问对象存储的存算分离集群中开启。
+- 引入版本：v4.2
+
+### compaction_parallel_merge_init_threads
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：单个 Compaction 归并同一时刻允许在途的预填读取的最大数量。读取由共享的预填线程池执行（参见 `compaction_parallel_merge_init_pool_threads`）。仅在开启 `enable_compaction_parallel_merge_init` 时生效。
+- 引入版本：v4.2
+
+### compaction_parallel_merge_init_pool_threads
+
+- 默认值：256
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：节点上为所有并发 Compaction 任务执行并行归并预填读取的共享线程池的线程数。该值高于单任务的在途读取上限，以避免并发任务之间相互稀释；空闲线程会在 10 秒后回收，因此空闲节点不会为这部分余量付出任何开销。
+- 引入版本：v4.2
+
+### compaction_merge_child_buffers
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Compaction 期间每个归并输入保留的 Chunk 槽位数量。只有一个槽位时，某个输入耗尽后的重新填充会让归并阻塞整整一次读取往返。槽位更多时，后台读取会持续填满空闲槽位，使读取往返与归并过程重叠而不再造成停顿。每增加一个槽位，每个输入多占用一个 Chunk 的内存。仅在开启 `enable_compaction_parallel_merge_init` 时生效；取 `1` 时保持原有行为。
+- 引入版本：v4.2
+
+### compaction_parallel_merge_prefetch_bytes
+
+- 默认值：268435456
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：单个 Compaction 归并在其所有输入上可持有的预取读取缓冲区总字节数。在该预算内，预填在共享线程池上只执行纯 IO，解码仍在 Compaction 任务自己的线程上完成，从而将任务的 CPU 占用限制在其自身的工作线程内。扫描量超出剩余预算的输入会回退为在线程池上执行完整读取。设置为 `0` 将完全关闭 IO 与解码的拆分。
+- 引入版本：v4.2
+
+### enable_lake_compaction_data_cache_bypass
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，当 Data Cache 被证实无法容纳 Compaction 工作集时，是否允许 Vertical Compaction 切换为直接读取对象存储。该判断基于任务第二个 Column Group 阶段的实测数据：第一个 Column Group 阶段会预热缓存，因此第二个阶段仍出现远程读取，即说明缓存没能留住工作集。缓存已预热或容量充足时，该阶段的远程读取字节几乎为零，不会触发切换。直读同时会将每个 Segment 的列数据区域合并为少量大请求。需要开启 `enable_compaction_parallel_merge_init`。
+- 引入版本：v4.2
+
+### lake_compaction_data_cache_bypass_threshold_mb
+
+- 默认值：32
+- 类型：Int
+- 单位：MB
+- 是否动态：是
+- 描述：允许触发 Data Cache 绕行前，第二个 Column Group 阶段必须达到的最小远程读取字节数。作为绝对下限，保证小表和测量噪声不会触发切换。
+- 引入版本：v4.2
+
+### lake_compaction_data_cache_bypass_min_miss_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：允许触发 Data Cache 绕行前，第二个 Column Group 阶段远程读取字节占全部读取字节的最小比例（remote / (remote + local)）。该条件保证即使远程读取的绝对字节数超过 `lake_compaction_data_cache_bypass_threshold_mb`，只要缓存仍能服务大部分读取，Compaction 就继续使用缓存。
+- 引入版本：v4.2
+
+### lake_compaction_hold_input_segments
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，Compaction 任务是否在整个任务期间持有其输入 Rowset 已加载的 Segment 对象（对主键表还包括 Delete Vector），而不是依赖共享元数据缓存来保留它们。Vertical Compaction 每处理一个 Column Group 都要把同一批输入读取一遍；当元数据缓存无法留住它们时，每一遍都要重新加载并重新解析所有输入 Segment，该开销属于 CPU 密集型且与表的列数成正比。持有所占用的内存与缓存本应占用的相同，其作用域限定在任务生命周期内。
+- 引入版本：v4.2
+
 ### lake_enable_del_file_crc_check
 
 - 默认值：true

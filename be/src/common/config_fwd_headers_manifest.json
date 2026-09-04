@@ -754,7 +754,16 @@
         "enable_light_pk_compaction_publish",
         "enable_lake_compaction_use_partial_segments",
         "enable_lake_compaction_range_split",
-        "lake_compaction_chunk_size"
+        "lake_compaction_chunk_size",
+        "enable_compaction_parallel_merge_init",
+        "compaction_parallel_merge_init_threads",
+        "compaction_parallel_merge_init_pool_threads",
+        "compaction_parallel_merge_prefetch_bytes",
+        "compaction_merge_child_buffers",
+        "lake_compaction_hold_input_segments",
+        "enable_lake_compaction_data_cache_bypass",
+        "lake_compaction_data_cache_bypass_threshold_mb",
+        "lake_compaction_data_cache_bypass_min_miss_ratio"
       ]
     },
     {

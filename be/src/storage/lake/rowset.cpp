@@ -308,6 +308,17 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
+    // With hold_segments, feed the held segments through the prepared-segments path so the
+    // per-pass segment loading in do_read() is skipped as well; segments() memoizes, so the
+    // first caller pays the load once. The prepared path indexes segments by metadata position,
+    // which only matches the loaded order in the regular full-rowset mode -- partial compaction
+    // and segment-range reads keep the original loading path.
+    if (options.lake_io_opts.hold_segments && !partial_segments_compaction() && _segment_range_end == 0) {
+        ASSIGN_OR_RETURN(auto held, segments(options.lake_io_opts));
+        if (held.size() == static_cast<size_t>(num_segments())) {
+            return do_read(schema, options, ReadContext{.prepared_segments = &held});
+        }
+    }
     return do_read(schema, options, ReadContext{});
 }
 
@@ -820,6 +831,12 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts) {
+    if (lake_io_opts.hold_segments) {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (!_held_segments.empty()) {
+            return _held_segments;
+        }
+    }
     std::vector<LoadedSegment> loaded;
     SegmentReadOptions seg_options;
     seg_options.lake_io_opts = lake_io_opts;
@@ -828,6 +845,12 @@ StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_
     segments.reserve(loaded.size());
     for (auto& ls : loaded) {
         segments.emplace_back(std::move(ls.segment));
+    }
+    if (lake_io_opts.hold_segments) {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        if (_held_segments.empty()) {
+            _held_segments = segments;
+        }
     }
     return segments;
 }

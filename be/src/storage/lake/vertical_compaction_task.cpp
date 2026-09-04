@@ -133,6 +133,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
                 RETURN_IF_ERROR(selection_buffer->flip_to_read());
             }
         }
+        const int64_t remote_bytes_before = _context->stats->io_bytes_read_remote;
+        const int64_t local_bytes_before = _context->stats->io_bytes_read_local_disk;
         int64_t column_group_ns = 0;
         {
             SCOPED_RAW_TIMER(&column_group_ns);
@@ -144,6 +146,34 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
             _context->stats->vertical_key_group_ns += column_group_ns;
         } else {
             _context->stats->vertical_value_group_ns += column_group_ns;
+        }
+        // Decide direct reads after the second pass: the first pass warms the data cache, so remote
+        // bytes on the second pass mean the cache did not retain the working set and every later
+        // pass would re-read it remotely through cache-block churn. Warm or adequate caches read
+        // ~zero remote bytes here and never switch.
+        // Direct reads only pay off when the per-pass merged reads are issued concurrently: measured
+        // serially they are slightly slower than cache-block churn (3710s vs 3136s on the
+        // 1000-column shape), so the switch additionally requires the parallel merge prefill.
+        if (i == 1 && !_bypass_data_cache && config::enable_lake_compaction_data_cache_bypass &&
+            config::enable_compaction_parallel_merge_init && column_group_size > 2) {
+            const int64_t pass_remote = _context->stats->io_bytes_read_remote - remote_bytes_before;
+            const int64_t pass_local = _context->stats->io_bytes_read_local_disk - local_bytes_before;
+            const int64_t pass_remote_mb = pass_remote / (1024 * 1024);
+            // Two gates: an absolute floor (tiny tables and noise never switch) and a miss ratio
+            // (a cache that still serves most reads is kept even when the absolute miss bytes are
+            // large -- switching there would forfeit a mostly-working cache).
+            const double miss_ratio =
+                    (pass_remote + pass_local) > 0
+                            ? static_cast<double>(pass_remote) / static_cast<double>(pass_remote + pass_local)
+                            : 0.0;
+            if (pass_remote_mb >= config::lake_compaction_data_cache_bypass_threshold_mb &&
+                miss_ratio >= config::lake_compaction_data_cache_bypass_min_miss_ratio) {
+                _bypass_data_cache = true;
+                LOG(INFO) << "Vertical compaction switching to direct object-storage reads, tablet: " << _tablet.id()
+                          << ", txn: " << _txn_id << ", second-pass remote MB: " << pass_remote_mb
+                          << ", miss ratio: " << miss_ratio
+                          << ", remaining column groups: " << (column_group_size - i - 1);
+            }
         }
     }
 
@@ -217,8 +247,9 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = true};
+                                   .buffer_size = read_buffer_size(),
+                                   .fill_metadata_cache = true,
+                                   .hold_segments = config::lake_compaction_hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             // A null placeholder slot means a segment produced no reader (e.g. a lost segment dropped by
@@ -282,8 +313,20 @@ Status VerticalCompactionTask::compact_column_group(
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
-    reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+    // In bypass mode the pass reads object storage directly: no cache fill (the cache demonstrably
+    // cannot retain the working set), no cache lookup, and all of a segment's column regions merged
+    // into few large reads instead of per-column cache-block churn. With the parallel prefill the
+    // same per-segment stream is also used in cache mode (reading through the cache, still filling
+    // it): the prefill pulls the registered ranges into the stream's own buffers, which is what
+    // lets the pool run pure IO and the merge thread decode without ever waiting on a read -- a
+    // cache-warming prefill instead would leave the decode exposed to eviction between warm and
+    // read.
+    reader_params.lake_io_opts = {
+            .fill_data_cache = !_bypass_data_cache && config::lake_enable_vertical_compaction_fill_data_cache,
+            .skip_disk_cache = _bypass_data_cache,
+            .buffer_size = read_buffer_size(),
+            .hold_segments = config::lake_compaction_hold_input_segments,
+            .coalesce_across_columns = _bypass_data_cache || config::enable_compaction_parallel_merge_init};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and
@@ -451,6 +494,14 @@ Status VerticalCompactionTask::compact_column_group(
         }
     }
     return Status::OK();
+}
+
+int64_t VerticalCompactionTask::read_buffer_size() const {
+    // read_segment_count is the actual segment count; _total_input_segs collapses a
+    // non-overlapping rowset to 1 and would under-count the streams that get opened.
+    return CompactionUtils::get_read_buffer_size(_total_data_size, _context->stats->read_segment_count,
+                                                 _tablet_schema->num_columns(),
+                                                 config::lake_compaction_stream_buffer_size_bytes);
 }
 
 void VerticalCompactionTask::move_pk_columns_into_key_group(std::vector<std::vector<uint32_t>>* column_groups) const {

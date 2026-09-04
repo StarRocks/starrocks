@@ -207,6 +207,8 @@ public:
     void close() override;
     Status reset_for_reuse(const SegmentReadOptions& options);
 
+    StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override;
+
     // Public entry point used by the segment_seek_range_to_rowid_range() /
     // segment_seek_ranges_to_rowid_ranges() free functions. The caller
     // must ensure the segment's short-key index has already been loaded; this
@@ -611,6 +613,11 @@ private:
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     std::vector<int> _io_coalesce_column_index;
+    // Cross-column coalescing (LakeIOOptions::coalesce_across_columns): every coalesce-enabled
+    // column of this segment shares this one stream, and their IO ranges are registered in a single
+    // batch so adjacent column regions merge into few large reads. Owned here; _column_files stays
+    // empty for those columns.
+    std::unique_ptr<SharedBufferedInputStream> _cross_column_stream;
     ColumnDecoders _column_decoders;
     BitmapIndexEvaluator _bitmap_index_evaluator;
     // delete predicates
@@ -1168,8 +1175,28 @@ Status SegmentIterator::_init_scan_range_and_context() {
     }
     _range_iter = _scan_range.new_iterator();
 
-    for (auto column_index : _io_coalesce_column_index) {
-        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+    if (_cross_column_stream != nullptr) {
+        // Cross-column mode: collect every coalesce column's ranges and register them in one batch
+        // on the shared stream -- set_io_ranges sorts and merges ranges whose gap is within
+        // io_coalesce_read_max_distance_size, so adjacent column regions become one read.
+        std::vector<SharedBufferedInputStream::IORange> all_ranges;
+        for (auto column_index : _io_coalesce_column_index) {
+            auto vec_or = _column_iterators[column_index]->get_io_range_vec(_scan_range, nullptr);
+            if (vec_or.status().is_not_supported()) {
+                // Unregistered regions fall back to direct reads on the shared stream, so a column
+                // that cannot enumerate its ranges stays correct -- it just does not coalesce.
+                continue;
+            }
+            RETURN_IF_ERROR(vec_or.status());
+            for (auto e : *vec_or) {
+                all_ranges.emplace_back(e.first, e.second);
+            }
+        }
+        RETURN_IF_ERROR(_cross_column_stream->set_io_ranges(all_ranges));
+    } else {
+        for (auto column_index : _io_coalesce_column_index) {
+            RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        }
     }
     return Status::OK();
 }
@@ -2058,8 +2085,42 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
-        if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
-            _segment->lake_tablet_manager() != nullptr) {
+        // Scalar columns only: registering a column on the segment-wide stream leads to a
+        // get_io_range_vec(range, nullptr) call at range-registration time, and the ARRAY/MAP
+        // iterators (also reached inside STRUCT/JSON/VARIANT) dereference that dst -- the scalar
+        // iterator is the one that ignores it. A semi-typed column stays on its plain file and
+        // reads exactly as before; its segment simply reports itself not prefetch-coverable.
+        if (_opts.lake_io_opts.coalesce_across_columns && !is_semi_type(col.type()) &&
+            !_segment->is_default_column(col) && _segment->lake_tablet_manager() != nullptr) {
+            // One stream for the whole segment; ranges of all coalesce columns are registered
+            // together after every column iterator exists, so regions from different columns can
+            // merge into one read.
+            if (_cross_column_stream == nullptr) {
+                // Prefer the size already carried in the segment metadata: get_size() on a remote
+                // stream is a remote stat round trip, and this runs once per (segment, column
+                // group) -- ~100k times in a wide-table compaction.
+                int64_t file_size;
+                if (_segment->file_info().size.has_value()) {
+                    file_size = _segment->file_info().size.value();
+                } else {
+                    ASSIGN_OR_RETURN(file_size, rfile->get_size());
+                }
+                _cross_column_stream =
+                        std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
+                auto options = SharedBufferedInputStream::CoalesceOptions{
+                        .max_dist_size = config::io_coalesce_read_max_distance_size,
+                        .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+                _cross_column_stream->set_coalesce_options(options);
+            }
+            iter_opts.read_file = _cross_column_stream.get();
+            // is_io_coalesce deliberately stays false: its only consumers are the EOF-time
+            // release() calls in ScalarColumnIterator, and those would clear the WHOLE shared
+            // stream the moment the first column of the segment finishes -- throwing away the
+            // other columns' still-unread (possibly prefetched) buffers. The stream's lifetime is
+            // owned by this iterator and ends at close().
+            _io_coalesce_column_index.emplace_back(cid);
+        } else if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
+                   _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());
             auto shared_buffered_input_stream =
                     std::make_unique<SharedBufferedInputStream>(rfile->stream(), _segment->file_name(), file_size);
@@ -2885,6 +2946,38 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
     _cur_rowid = range.end();
     _opts.stats->raw_rows_read += read_num;
     return Status::OK();
+}
+
+StatusOr<bool> SegmentIterator::prefetch(std::atomic<int64_t>* budget) {
+    if (!_inited) {
+        RETURN_IF_ERROR(_init());
+        _inited = true;
+    }
+    // Only bytes held in the iterator's own shared buffers count as resident: they cannot be
+    // evicted between now and the decode, unlike bytes merely warmed into the local data cache.
+    // Every coalesce-enabled column's ranges live either on the segment-wide stream or on a
+    // per-column stream in _column_files; a column left on a plain file (a DCG overlay, or
+    // coalescing off) keeps its IO on the decoding thread, and reporting false for it keeps that
+    // child on the pre-split full-read path instead of stalling the merge thread.
+    bool covered = true;
+    if (_cross_column_stream != nullptr) {
+        ASSIGN_OR_RETURN(bool all, _cross_column_stream->prefetch_registered(budget));
+        covered &= all;
+    } else if (_io_coalesce_column_index.empty()) {
+        covered = false;
+    }
+    auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
+    for (auto& [cid, file] : _column_files) {
+        if (auto* sbs = dynamic_cast<SharedBufferedInputStream*>(file.get())) {
+            ASSIGN_OR_RETURN(bool all, sbs->prefetch_registered(budget));
+            covered &= all;
+        } else if (cid < tablet_schema->num_columns() && _segment->is_default_column(tablet_schema->column(cid))) {
+            // A column the segment does not carry reads nothing -- its file handle is never used.
+        } else {
+            covered = false;
+        }
+    }
+    return covered;
 }
 
 Status SegmentIterator::do_get_next(Chunk* chunk) {
@@ -5005,6 +5098,14 @@ void SegmentIterator::close() {
             _update_stats(rfile.get());
             rfile.reset();
         }
+    }
+    // The segment-wide stream is not in _column_files, but its reads are most of the segment's IO
+    // whenever it exists -- and the data-cache bypass decision reads the remote/local byte stats
+    // this collection feeds, so skipping it would blind that decision (and the task profile) to
+    // every read the stream carried.
+    if (_cross_column_stream != nullptr) {
+        _update_stats(_cross_column_stream.get());
+        _cross_column_stream.reset();
     }
 
     STLClearObject(&_selection);

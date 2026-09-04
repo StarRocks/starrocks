@@ -333,6 +333,12 @@ private:
     // Default is 0, meaning all segments are used.
     int32_t _segment_range_start = 0;
     int32_t _segment_range_end = 0;
+    // Guards _held_segments: the column-group pass loop is single-threaded, but range-split
+    // parallel compaction may share one Rowset instance across subtasks.
+    std::mutex _held_segments_mutex;
+    // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
+    // Rowset instance, which for compaction is the whole task.
+    std::vector<SegmentPtr> _held_segments;
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {

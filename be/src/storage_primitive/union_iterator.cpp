@@ -41,6 +41,17 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
+    // Only the child the next read lands on: prefetching every child at once would make the whole
+    // union resident, while the union consumes (and closes) one child at a time. Later children
+    // read cold when reached; false reports that partial coverage.
+    StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override {
+        if (_cur_idx >= _children.size()) {
+            return true;
+        }
+        ASSIGN_OR_RETURN(bool covered, _children[_cur_idx]->prefetch(budget));
+        return covered && _cur_idx + 1 == _children.size();
+    }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         for (auto& child : _children) {
