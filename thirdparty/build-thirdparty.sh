@@ -799,8 +799,40 @@ build_leveldb() {
 }
 
 # brpc
+BRPC_INSTALL_REVISION="$BRPC_STARROCKS_REVISION"
+BRPC_INSTALL_MARK="${TP_INSTALL_DIR}/.brpc-install-revision"
+
+brpc_install_is_current() {
+    [ -f "$BRPC_INSTALL_MARK" ] &&
+    [ "$(cat "$BRPC_INSTALL_MARK")" == "$BRPC_INSTALL_REVISION" ] &&
+    [ -f "$TP_INSTALL_DIR/lib/libbrpc.a" ] &&
+    [ -f "$TP_INCLUDE_DIR/brpc/server.h" ]
+}
+
+clear_brpc_install() {
+    if [ -z "${TP_INSTALL_DIR:-}" ] || [ "$TP_INSTALL_DIR" == "/" ] ||
+       [ "${TP_INCLUDE_DIR:-}" != "$TP_INSTALL_DIR/include" ]; then
+        echo "Refusing to clear bRPC install from an unsafe path"
+        return 1
+    fi
+
+    rm -rf "$TP_INCLUDE_DIR/brpc" "$TP_INCLUDE_DIR/bthread" "$TP_INCLUDE_DIR/butil" \
+           "$TP_INCLUDE_DIR/bvar" "$TP_INCLUDE_DIR/json2pb" "$TP_INCLUDE_DIR/mcpack2pb" \
+           "$TP_INSTALL_DIR/lib/cmake/brpc" "$TP_INSTALL_DIR/lib64/cmake/brpc"
+    rm -f "$TP_INCLUDE_DIR/idl_options.proto" "$TP_INCLUDE_DIR/idl_options.pb.h" \
+          "$TP_INSTALL_DIR/bin/protoc-gen-mcpack" "$TP_INSTALL_DIR/lib/pkgconfig/brpc.pc" \
+          "$TP_INSTALL_DIR/lib64/pkgconfig/brpc.pc" "$TP_INSTALL_DIR/lib/libbrpc.a" \
+          "$TP_INSTALL_DIR/lib64/libbrpc.a" "$TP_INSTALL_DIR"/lib/libbrpc.so* \
+          "$TP_INSTALL_DIR"/lib64/libbrpc.so* \
+          "$BRPC_INSTALL_MARK"
+}
+
 build_brpc() {
     check_if_source_exist $BRPC_SOURCE
+
+    if [ "${CLEAN:-0}" -eq 1 ] || ! brpc_install_is_current; then
+        clear_brpc_install
+    fi
 
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     CMAKE_GENERATOR="Unix Makefiles"
@@ -812,6 +844,11 @@ build_brpc() {
         mkdir -p $TP_INSTALL_DIR/lib64
         cp $TP_SOURCE_DIR/$BRPC_SOURCE/output/lib/libbrpc.a $TP_INSTALL_DIR/lib64/
     fi
+    if [ ! -f "$TP_INSTALL_DIR/lib/libbrpc.a" ] || [ ! -f "$TP_INCLUDE_DIR/brpc/server.h" ]; then
+        echo "bRPC installation is incomplete"
+        return 1
+    fi
+    printf '%s\n' "$BRPC_INSTALL_REVISION" > "$BRPC_INSTALL_MARK"
 }
 
 # rocksdb

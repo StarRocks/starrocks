@@ -88,6 +88,12 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 // Max unwritten bytes in each socket, if the limit is reached, Socket.Write fails with EOVERCROWDED.
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 
+// Minimum heap size at which brpc TimerThread sweeps unscheduled tasks. Must be greater than 0.
+CONF_Int32(brpc_timer_heap_sweep_min_size, "4096");
+
+// Maximum TimerThread sleep interval in milliseconds. Must be non-negative; 0 disables periodic wakeups.
+CONF_Int32(brpc_timer_max_wakeup_interval_ms, "0");
+
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.
 // This may cause process memory usage to rise.

@@ -132,6 +132,35 @@ starrocks_reset_stale_darwin_cmake_cache() {
     done <<< "${cached_tool_paths}"
 }
 
+starrocks_expected_brpc_install_revision() {
+    local vars_file="${STARROCKS_HOME}/thirdparty/vars.sh"
+    local brpc_declarations=""
+
+    [[ -r "${vars_file}" ]] || return 1
+    brpc_declarations="$(
+        sed -n -E '/^BRPC_(SOURCE|STARROCKS_PATCH_REVISION|STARROCKS_REVISION)=/p' "${vars_file}"
+    )" || return 1
+    (
+        # Source only the related declarations. Sourcing all of vars.sh would
+        # also run host CPU detection and mutate unrelated build settings.
+        . /dev/stdin <<< "${brpc_declarations}"
+        [[ -n "${BRPC_STARROCKS_REVISION:-}" ]] || exit 1
+        printf '%s\n' "${BRPC_STARROCKS_REVISION}"
+    )
+}
+
+starrocks_brpc_install_is_current() {
+    local tp_installed="${STARROCKS_THIRDPARTY}/installed"
+    local revision_mark="${tp_installed}/.brpc-install-revision"
+    local expected_revision=""
+
+    expected_revision="$(starrocks_expected_brpc_install_revision)" || return 1
+    [[ -f "${revision_mark}" ]] &&
+        [[ "$(cat "${revision_mark}")" == "${expected_revision}" ]] &&
+        [[ -f "${tp_installed}/include/brpc/server.h" ]] &&
+        [[ -f "${tp_installed}/lib/libbrpc.a" || -f "${tp_installed}/lib64/libbrpc.a" ]]
+}
+
 starrocks_validate_darwin_thirdparty() {
     local tp_root="${STARROCKS_THIRDPARTY}"
     local tp_installed="${tp_root}/installed"
@@ -176,6 +205,10 @@ starrocks_validate_darwin_thirdparty() {
             exit 1
         fi
     done
+    if ! starrocks_brpc_install_is_current; then
+        echo "Error: bundled bRPC is stale; run ${STARROCKS_THIRDPARTY}/build-thirdparty.sh --clean."
+        exit 1
+    fi
 
     # gRPC is built from source as a static archive (libgrpc.a / libgrpc++.a)
     # and consumed via ${tp_installed}/lib/cmake/grpc/gRPCConfig.cmake, matching

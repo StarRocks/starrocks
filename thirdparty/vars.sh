@@ -196,10 +196,12 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz"
-BRPC_NAME=brpc-1.9.0.tar.gz
-BRPC_SOURCE=brpc-1.9.0
-BRPC_MD5SUM="a2b626d96a5b017f2a6701ffa594530c"
+BRPC_DOWNLOAD="https://github.com/apache/brpc/archive/refs/tags/1.17.0.tar.gz"
+BRPC_NAME=brpc-1.17.0.tar.gz
+BRPC_SOURCE=brpc-1.17.0
+BRPC_MD5SUM="ee7813601503f3509a4e69d527bac007"
+BRPC_STARROCKS_PATCH_REVISION=3
+BRPC_STARROCKS_REVISION="${BRPC_SOURCE}-starrocks-${BRPC_STARROCKS_PATCH_REVISION}"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"

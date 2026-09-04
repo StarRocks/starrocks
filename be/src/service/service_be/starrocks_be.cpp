@@ -19,6 +19,7 @@
 #endif
 
 #include <algorithm>
+#include <cstdint>
 #include <utility>
 
 #include "agent/agent_server.h"
@@ -76,6 +77,14 @@ DECLARE_int64(socket_max_unwritten_bytes);
 DECLARE_bool(socket_keepalive);
 
 } // namespace brpc
+
+namespace bthread {
+
+// Defined by apache/brpc#3384 in the bundled bRPC timer implementation.
+DECLARE_uint32(brpc_timer_heap_sweep_min_size);
+DECLARE_uint32(brpc_timer_max_wakeup_interval_ms);
+
+} // namespace bthread
 
 namespace starrocks {
 
@@ -157,6 +166,16 @@ extern void shutdown_tracer();
 
 void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     std::string process_name = as_cn ? "CN" : "BE";
+
+    if (config::brpc_timer_heap_sweep_min_size <= 0) {
+        LOG(FATAL) << "brpc_timer_heap_sweep_min_size must be greater than 0";
+    }
+    if (config::brpc_timer_max_wakeup_interval_ms < 0) {
+        LOG(FATAL) << "brpc_timer_max_wakeup_interval_ms must be greater than or equal to 0";
+    }
+    // Set these process-wide gflags before Daemon or PlatformEnv can start a TimerThread.
+    bthread::FLAGS_brpc_timer_heap_sweep_min_size = static_cast<uint32_t>(config::brpc_timer_heap_sweep_min_size);
+    bthread::FLAGS_brpc_timer_max_wakeup_interval_ms = static_cast<uint32_t>(config::brpc_timer_max_wakeup_interval_ms);
 
     int start_step = 1;
     // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.

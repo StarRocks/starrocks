@@ -64,10 +64,10 @@ let
       md5 = "c2274f0c7af8470ad514637c35bcee7d";
       sha256 = "0ipyyv6sjsns62czjpq9774kiy2l6cmg96jjh78ndfh50hfxis7r";
     };
-    "brpc-1.9.0.tar.gz" = {
-      url = "https://github.com/apache/brpc/archive/refs/tags/1.9.0.tar.gz";
-      md5 = "a2b626d96a5b017f2a6701ffa594530c";
-      sha256 = "0x7azbn9064xbjzb67a2zyvhf078z5lny49ld0ly2wv746h6v1c5";
+    "brpc-1.17.0.tar.gz" = {
+      url = "https://github.com/apache/brpc/archive/refs/tags/1.17.0.tar.gz";
+      md5 = "ee7813601503f3509a4e69d527bac007";
+      sha256 = "0kr1adhvmp1jl7ml31zh44jikch46wvrfwva79cj870c0dbryjyf";
     };
     "bzip2-1.0.8.tar.gz" = {
       url = "https://fossies.org/linux/misc/bzip2-1.0.8.tar.gz";
@@ -474,7 +474,7 @@ let
       "re2-2022-12-01.tar.gz"
       "boost_1_80_0.tar.gz"
       "leveldb-1.20.tar.gz"
-      "brpc-1.9.0.tar.gz"
+      "brpc-1.17.0.tar.gz"
       "rocksdb-6.22.1.zip"
       "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
@@ -545,7 +545,7 @@ let
       "re2-2022-12-01.tar.gz"
       "boost_1_80_0.tar.gz"
       "leveldb-1.20.tar.gz"
-      "brpc-1.9.0.tar.gz"
+      "brpc-1.17.0.tar.gz"
       "rocksdb-6.22.1.zip"
       "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"
@@ -614,7 +614,7 @@ let
       "re2-2022-12-01.tar.gz"
       "boost_1_86_0.tar.gz"
       "leveldb-1.20.tar.gz"
-      "brpc-1.9.0.tar.gz"
+      "brpc-1.17.0.tar.gz"
       "rocksdb-6.22.1.zip"
       "krb5-1.21.3.tar.gz"
       "cyrus-sasl-2.1.28.tar.gz"

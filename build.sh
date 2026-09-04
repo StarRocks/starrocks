@@ -416,6 +416,12 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
     BUILD_JAVA_EXT=OFF
 fi
 
+if ! starrocks_is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; } &&
+   ! starrocks_brpc_install_is_current; then
+    echo "Bundled bRPC needs to be rebuilt ..."
+    ${STARROCKS_THIRDPARTY}/build-thirdparty.sh --clean brpc
+fi
+
 if starrocks_is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
     starrocks_validate_darwin_thirdparty
 fi

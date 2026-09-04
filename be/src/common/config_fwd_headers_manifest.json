@@ -590,6 +590,8 @@
         "ssl_private_key_path",
         "brpc_max_body_size",
         "brpc_socket_max_unwritten_bytes",
+        "brpc_timer_heap_sweep_min_size",
+        "brpc_timer_max_wakeup_interval_ms",
         "brpc_socket_keepalive"
       ]
     },
