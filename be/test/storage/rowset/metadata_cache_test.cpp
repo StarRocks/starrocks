@@ -288,6 +288,12 @@ TEST_F(MetadataCacheTest, update_charge_on_last_reader_release) {
         keys.push_back(i);
     }
 
+    const int32_t old_metadata_cache_memory_limit_percent = config::metadata_cache_memory_limit_percent;
+    config::metadata_cache_memory_limit_percent = 30;
+    DeferOp restore_config([old_metadata_cache_memory_limit_percent] {
+        config::metadata_cache_memory_limit_percent = old_metadata_cache_memory_limit_percent;
+    });
+
     auto metadata_cache = std::make_unique<MetadataCache>(kMetadataCacheCapacity);
     auto tablet = create_tablet(1003, 10006);
     auto rowset = create_rowset(tablet, keys);
@@ -296,6 +302,15 @@ TEST_F(MetadataCacheTest, update_charge_on_last_reader_release) {
 
     const size_t initial_rowset_size = rowset->segment_memory_usage();
     const size_t initial_cache_usage = metadata_cache->get_memory_usage();
+
+    // Segment::open() marks a share-nothing segment dirty. Verify that the
+    // dirty bit is consumed exactly once, then restore it for the Rowset-level
+    // last-reader test below.
+    ASSERT_FALSE(rowset->segments().empty());
+    auto& segment = rowset->segments().front();
+    ASSERT_TRUE(segment->consume_lazy_mem_update());
+    ASSERT_FALSE(segment->consume_lazy_mem_update());
+    segment->update_cache_size();
 
     int update_charge_calls = 0;
     size_t captured_charge = 0;
@@ -310,8 +325,8 @@ TEST_F(MetadataCacheTest, update_charge_on_last_reader_release) {
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    // Consume the initial dirty flag set by Segment::open(). This intentionally pays for one
-    // redundant refresh per Rowset load in exchange for keeping update_cache_size() uniform.
+    // Consume the dirty flag restored above. This intentionally pays for one redundant refresh
+    // per Rowset load in exchange for keeping update_cache_size() uniform.
     rowset->acquire();
     rowset->release();
     ASSERT_EQ(1, update_charge_calls);
@@ -343,6 +358,28 @@ TEST_F(MetadataCacheTest, update_charge_on_last_reader_release) {
     rowset->release();
     ASSERT_EQ(2, update_charge_calls);
     ASSERT_EQ(updated_cache_usage, metadata_cache->get_memory_usage());
+
+    // A charge refresh after the entry has been removed is a no-op.
+    metadata_cache->evict_rowset(rowset.get());
+    const size_t usage_after_evict = metadata_cache->get_memory_usage();
+    metadata_cache->update_rowset_charge(rowset.get(), loaded_rowset_size);
+    ASSERT_EQ(usage_after_evict, metadata_cache->get_memory_usage());
+}
+
+TEST_F(MetadataCacheTest, last_reader_release_closes_unloading_rowset) {
+    const std::vector<int64_t> keys{1, 2, 3};
+    auto tablet = create_tablet(1006, 10009);
+    auto rowset = create_rowset(tablet, keys);
+    ASSERT_TRUE(rowset->load().ok());
+    ASSERT_GT(rowset->segment_memory_usage(), 0);
+
+    rowset->acquire();
+    rowset->close();
+    // close() moves a referenced rowset to ROWSET_UNLOADING without clearing
+    // its segments. The last reader release performs the deferred close.
+    ASSERT_GT(rowset->segment_memory_usage(), 0);
+    rowset->release();
+    ASSERT_EQ(0, rowset->segment_memory_usage());
 }
 
 TEST_F(MetadataCacheTest, skip_charge_calculation_for_ineligible_rowsets) {
