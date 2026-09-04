@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <cstdint>
+
 #include "gutil/macros.h"
 #include "platform/http/http_handler.h"
 
@@ -24,16 +27,50 @@ class HttpRequest;
 
 namespace starrocks::lake {
 
+class TabletManager;
+
+/**
+ * Returns one exact TabletMetadataPB from this compute node's in-memory metadata cache.
+ *
+ * The tablet id comes from the request path and the metadata version comes from the `version` query parameter. A
+ * cache miss does not fall back to StarOS, object storage, the FE, or another compute node. To inspect metadata stored
+ * in object storage, download the object with the AWS CLI and parse it with meta_tool.
+ *
+ * Example request:
+ *   GET /api/cloudnative/dump_tablet_metadata/12345?version=2
+ *
+ * Abbreviated success response (other TabletMetadataPB fields are omitted):
+ * {
+ *   "status": "OK",
+ *   "message": "",
+ *   "metadata": {
+ *     "id": 12345,
+ *     "version": 2,
+ *     "schema": {"id": 10001},
+ *     "rowsets": [{"id": 1, "num_rows": 10, "data_size": 1024}]
+ *   }
+ * }
+ *
+ * Encryption metadata is redacted before serialization. Per-request memory, JSON response size, and concurrency are
+ * bounded by the lake_dump_tablet_metadata_* configurations. Access requires the OPERATE privilege.
+ */
 class DumpTabletMetadataAction : public HttpHandler {
 public:
-    explicit DumpTabletMetadataAction(ExecEnv*) {}
+    explicit DumpTabletMetadataAction(ExecEnv*, TabletManager* tablet_manager = nullptr)
+            : _tablet_manager(tablet_manager) {}
     ~DumpTabletMetadataAction() override = default;
 
     DISALLOW_COPY_AND_MOVE(DumpTabletMetadataAction);
 
+    int on_header(HttpRequest* req) override;
     void handle(HttpRequest* req) override;
+    void free_handler_ctx(void* handler_ctx) override;
 
     RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
+
+private:
+    TabletManager* _tablet_manager;
+    std::atomic<int32_t> _active_requests{0};
 };
 
 } // namespace starrocks::lake
