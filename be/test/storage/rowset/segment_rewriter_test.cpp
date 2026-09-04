@@ -62,6 +62,112 @@ protected:
     std::shared_ptr<FileSystem> _fs;
 };
 
+// Direct coverage for the owned-only rewrite, pinning the two things it is easy to get wrong and
+// that an end-to-end publish test reports only as a hang or a wrong row count.
+//
+// |owned| and the resolved columns are indexed by the rows the publish ITERATOR EMITTED, not by the
+// source segment: a rowid-narrowed read starts partway in, which |emitted_rowid_base| carries, and
+// the resolved columns have one entry per emitted row -- owned or not -- because the partial-update
+// state resolves an old value for every row it reads and ownership only decides what enters the
+// index. So the mask must be applied to BOTH halves, and source rows outside the emitted run belong
+// to no one here and go too.
+TEST_F(SegmentRewriterTest, rewrite_owned_only_drops_the_unowned_rows) {
+    std::shared_ptr<TabletSchema> partial_tablet_schema =
+            TabletSchemaHelper::create_tablet_schema({create_int_key_pb(1), create_int_value_pb(4)});
+    std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
+            {create_int_key_pb(1), create_int_value_pb(3), create_int_value_pb(4)});
+    // Written by the load: k (id 0) and the value at id 2. Resolved from the old rows: id 1.
+    const std::vector<uint32_t> resolved_column_ids{1};
+
+    constexpr int kSegmentRows = 40;
+    constexpr uint32_t kEmittedBase = 8; // the iterator started partway into the file
+    constexpr int kEmittedRows = 24;     // ... and stopped before its end
+
+    SegmentWriterOptions opts;
+    opts.num_rows_per_block = 10;
+    std::string src_name = kSegmentDir + "/owned_only_src";
+    ASSIGN_OR_ABORT(
+            auto wfile,
+            _fs->new_writable_file(WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE}, src_name));
+    SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema, opts);
+    ASSERT_OK(writer.init());
+    auto partial_schema = ChunkHelper::convert_schema(partial_tablet_schema);
+    auto partial_chunk = ChunkFactory::new_chunk(partial_schema, kSegmentRows);
+    for (int i = 0; i < kSegmentRows; ++i) {
+        partial_chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        partial_chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i * 10)));
+    }
+    ASSERT_OK(writer.append_chunk(*partial_chunk));
+    uint64_t file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+
+    FooterPointerPB partial_rowset_footer;
+    partial_rowset_footer.set_position(footer_position);
+    partial_rowset_footer.set_size(file_size - footer_position);
+    FileInfo src_file_info{.path = src_name};
+
+    // Own every third row of the emitted run, so ownership is scattered rather than a prefix -- the
+    // shape a segment ordered by a separate sort key actually produces.
+    Filter owned(kEmittedRows, 0);
+    std::vector<int> expected_keys;
+    for (int i = 0; i < kEmittedRows; ++i) {
+        if (i % 3 == 0) {
+            owned[i] = 1;
+            expected_keys.push_back(static_cast<int>(kEmittedBase) + i);
+        }
+    }
+    ASSERT_FALSE(expected_keys.empty());
+
+    // One resolved value per EMITTED row, keyed off the source row it came from, so a mis-indexed
+    // filter pairs a surviving key with another row's value and the check below catches it.
+    MutableColumns resolved_columns(resolved_column_ids.size());
+    for (size_t c = 0; c < resolved_column_ids.size(); ++c) {
+        auto tablet_column = tablet_schema->column(resolved_column_ids[c]);
+        auto column = ChunkFactory::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+        resolved_columns[c] = column->clone_empty();
+        for (int i = 0; i < kEmittedRows; ++i) {
+            resolved_columns[c]->append_datum(Datum(static_cast<int32_t>((kEmittedBase + i) * 100)));
+        }
+    }
+
+    std::string dst_name = kSegmentDir + "/owned_only_dst";
+    FileInfo dst_file_info{.path = dst_name};
+    ASSERT_OK(SegmentRewriter::rewrite_partial_update_owned_only(src_file_info, &dst_file_info, tablet_schema,
+                                                                 resolved_column_ids, resolved_columns, owned,
+                                                                 kEmittedBase, 0, partial_rowset_footer));
+
+    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{.path = dst_name}, 0, tablet_schema));
+    ASSERT_EQ(expected_keys.size(), segment->num_rows()) << "the output must hold the owned rows and nothing else";
+
+    SegmentReadOptions seg_options;
+    seg_options.fs = _fs;
+    OlapReaderStatistics stats;
+    seg_options.stats = &stats;
+    auto schema = ChunkHelper::convert_schema(tablet_schema);
+    ASSIGN_OR_ABORT(auto seg_iterator, segment->new_iterator(schema, seg_options));
+    auto chunk = ChunkFactory::new_chunk(schema, kSegmentRows);
+    std::vector<int> got_keys;
+    while (true) {
+        chunk->reset();
+        auto st = seg_iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            const int k = chunk->get(i)[0].get_int32();
+            got_keys.push_back(k);
+            // Written column carried through, resolved column paired with the SAME source row.
+            EXPECT_EQ(k * 10, chunk->get(i)[2].get_int32()) << "key " << k;
+            EXPECT_EQ(k * 100, chunk->get(i)[1].get_int32()) << "key " << k;
+        }
+    }
+    seg_iterator->close();
+    EXPECT_EQ(expected_keys, got_keys) << "rows must come out renumbered from zero in owned order";
+}
+
 TEST_F(SegmentRewriterTest, rewrite_test) {
     std::shared_ptr<TabletSchema> partial_tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(4)});
