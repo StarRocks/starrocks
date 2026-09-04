@@ -198,7 +198,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         return Status::InternalError(msg);
     }
     _block_cache->update_memory_usage();
-    st = index.prepare(EditVersion(new_version, 0));
+    st = index.prepare(new_version);
     if (!st.ok()) {
         // If prepare failed, release lock guard and remove index entry
         guard.reset(nullptr);

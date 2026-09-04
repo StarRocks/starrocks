@@ -419,8 +419,7 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     // writes, and this is also what fixes the order of an upsert against the deletes around it.
     std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
     size_t num_found;
-    RETURN_IF_ERROR(
-            _memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _publish_version));
 
     // Resolving what those keys previously mapped to is the expensive remote-IO half, and it is
     // read-only, so it is the part that can be deferred.
@@ -499,7 +498,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // memtable (not safe for concurrent writes) and preserves the in-transaction upsert/delete order.
     // `not_founds` collects the keys the active memtable could not resolve; their previous rss_rowid
     // still has to be read back from the inactive memtables and sstables to build the delete vector.
-    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), del_rssid));
+    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _publish_version, del_rssid));
 
     // The reverse lookup above is the expensive remote-IO part of a delete publish. For a large delete
     // it dominates, so parallelise it across disjoint key-index subsets when worthwhile, mirroring
@@ -634,7 +633,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
-    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
@@ -642,7 +641,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
 Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
                                     const std::vector<uint32_t>& replace_indexes) {
     std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
-    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
