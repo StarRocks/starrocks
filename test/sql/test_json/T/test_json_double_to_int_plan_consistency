@@ -1,0 +1,115 @@
+-- name: test_json_double_to_int_plan_consistency
+-- CAST(<json double> AS <narrow integer>) did not agree with an ordinary
+-- CAST(<double> AS <narrow integer>) over the same value. get_number_from_vpjson() guarded the
+-- conversion with `v < -2^(N-1) || v > static_cast<double>(max) || v >= 2^(N-1)`, and the middle
+-- test rejected a double above the target's maximum but below 2^(N-1) -- 127.5 for TINYINT -- which
+-- the ordinary cast answers with 127. It is now guarded by the interval a double represents exactly,
+-- [-2^(N-1), 2^(N-1)), which is what check_signed_number_overflow<double, T>() in
+-- base/types/numeric_types.h accepts, so the two cannot disagree any more.
+--
+-- The divergence was reachable from one query: sub-field pruning decides whether the document is
+-- cast by get_number_from_vpjson() or read as a typed sub-field and narrowed by an ordinary cast,
+-- so `cast(j->'$.v' as tinyint)` over 127.5 was 127 by default and NULL with
+-- cbo_prune_json_subfield off.
+--
+-- What moves: at TINYINT, SMALLINT and INT a double above the maximum but below 2^(N-1) turns from
+-- NULL into the truncated maximum. BIGINT and LARGEINT do not move at all -- static_cast<double>
+-- rounds their maximum up to 2^(N-1), so the removed test never decided anything at those widths.
+create table vals_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
+-- Only a value the JSON parser keeps as a vpack double reaches the guard: an integral literal such
+-- as 128.0 is folded to a vpack integer and takes the isInt() branch instead. That is why 2^(N-1)
+-- is pinned at the three narrow widths by the doubles either side of it rather than by itself, and
+-- why 0.0 and -0.0 arrive as integers. Rows 1-7 are TINYINT's neighbourhood, 8-12 SMALLINT's,
+-- 13-17 INT's, 18-22 BIGINT's and 23-27 LARGEINT's; 28 is out of range everywhere and 29-34 pin
+-- truncation. The document column is printed below so the vpack form each literal took is on the
+-- record.
+insert into vals_${uuid0} values
+  (1, parse_json('{"v":126.5}')),
+  (2, parse_json('{"v":127.5}')),
+  (3, parse_json('{"v":127.99999999999999}')),
+  (4, parse_json('{"v":128.00000000000003}')),
+  (5, parse_json('{"v":128.5}')),
+  (6, parse_json('{"v":-127.5}')),
+  (7, parse_json('{"v":-128.5}')),
+  (8, parse_json('{"v":32766.5}')),
+  (9, parse_json('{"v":32767.5}')),
+  (10, parse_json('{"v":32767.999999999996}')),
+  (11, parse_json('{"v":32768.00000000001}')),
+  (12, parse_json('{"v":-32768.5}')),
+  (13, parse_json('{"v":2147483646.5}')),
+  (14, parse_json('{"v":2147483647.5}')),
+  (15, parse_json('{"v":2147483647.9999998}')),
+  (16, parse_json('{"v":2147483648.5}')),
+  (17, parse_json('{"v":-2147483648.5}')),
+  (18, parse_json('{"v":9223372036854774784.0}')),
+  (19, parse_json('{"v":9223372036854775807.5}')),
+  (20, parse_json('{"v":9223372036854777856.0}')),
+  (21, parse_json('{"v":-9223372036854775808.0}')),
+  (22, parse_json('{"v":-9223372036854777856.0}')),
+  (23, parse_json('{"v":1.7014118346046921e38}')),
+  (24, parse_json('{"v":1.7014118346046923e38}')),
+  (25, parse_json('{"v":1.7014118346046927e38}')),
+  (26, parse_json('{"v":-1.7014118346046923e38}')),
+  (27, parse_json('{"v":-1.7014118346046927e38}')),
+  (28, parse_json('{"v":1e100}')),
+  (29, parse_json('{"v":1.5}')),
+  (30, parse_json('{"v":-1.5}')),
+  (31, parse_json('{"v":0.5}')),
+  (32, parse_json('{"v":-0.5}')),
+  (33, parse_json('{"v":0.0}')),
+  (34, parse_json('{"v":-0.0}'));
+create table flat_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+insert into flat_${uuid0} select * from vals_${uuid0};
+select flat_json_meta(j) from flat_${uuid0}[_META_];
+select k, j from vals_${uuid0} order by k;
+-- (1) and (2): with sub-field pruning off every cell goes through get_number_from_vpjson(), on a
+-- plain JSON column and on a flat one. These two are what the change moves, and they have to end
+-- up equal to matrix (5).
+set cbo_prune_json_subfield = false;
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from vals_${uuid0} order by k;
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from flat_${uuid0} order by k;
+-- (3) and (4): pruning back on, which is the default. These do not reach the guard at the narrow
+-- widths at all -- the FE types the pruned sub-field BIGINT (`cast([j.v, BIGINT] as TINYINT)` in
+-- the plan) so the double is truncated to a BIGINT first and then narrowed by an integer cast.
+-- That is a wider accept interval than either the guard or CAST(double AS TINYINT) has: -128.5
+-- comes back as -128 here and NULL in (1), (2) and (5). Routing a narrow cast through BIGINT is a
+-- separate, pre-existing divergence that this change does not touch; it is recorded here so it is
+-- not mistaken for the one being fixed.
+set cbo_prune_json_subfield = true;
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from vals_${uuid0} order by k;
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from flat_${uuid0} order by k;
+-- (5) the reference: an ordinary CAST(double AS <integer>) over the same values, which no plan
+-- can change. Matrices (1) and (2) have to reproduce this one exactly.
+select k,
+       cast(cast(j->'$.v' as double) as tinyint) as t, cast(cast(j->'$.v' as double) as smallint) as s,
+       cast(cast(j->'$.v' as double) as int) as i, cast(cast(j->'$.v' as double) as bigint) as b,
+       cast(cast(j->'$.v' as double) as largeint) as l
+  from vals_${uuid0} order by k;
+-- Truncation towards zero, and the sign of a zero, are the existing semantics and stay.
+set cbo_prune_json_subfield = false;
+select k, cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as double) as d
+  from vals_${uuid0} where k in (29, 30, 31, 32, 33, 34) order by k;
+-- get_json_int() reaches the same guard without a CAST in the query. It reads at BIGINT, the
+-- width where nothing moves, so these rows are the record that it did not move.
+select k, get_json_int(j, '$.v') as v from vals_${uuid0} where k in (2, 3, 4, 19, 24) order by k;
+set cbo_prune_json_subfield = true;
+drop table flat_${uuid0};
+drop table vals_${uuid0};

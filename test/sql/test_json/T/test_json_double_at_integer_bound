@@ -7,7 +7,11 @@
 -- exactly 2^127 reached static_cast<int128_t>, which is undefined for a value the type cannot hold
 -- and produced the type minimum. Powers of two are exact in a double, so the guard now rejects
 -- everything at or above 2^(N-1) as well. TINYINT, SMALLINT and INT hold their maximum exactly, so
--- their guard was already right and does not move, which the second table pins down.
+-- at those widths that bound sits above the one already there and decides nothing on its own. What
+-- did move them is the removal of the `v > static_cast<double>(max)` test, which rejected a fraction
+-- just above their maximum that an ordinary CAST(double AS <integer>) truncates; the second table
+-- records the answers after both changes, and test_json_double_to_int_plan_consistency is the case
+-- that fixed it.
 create table t1_${uuid0} (k int, j json) duplicate key(k)
   distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
 -- Every value here is a JSON double except k=11, a vpack integer that stands for the branch this
@@ -49,9 +53,11 @@ create table t2_${uuid0} (k int, j json) duplicate key(k)
   distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
 -- With the pruning on a narrow cast is routed through BIGINT and never reaches the narrow guards, so
 -- with it still off this is the only statement in the case that exercises them. 127, 32767 and
--- 2147483647 are all below 2^53 and a double holds them exactly, so these guards were already right
--- and none of these answers may move: a fraction just above the maximum is rejected, as it was
--- before, while the same value one width up is accepted and truncated.
+-- 2147483647 are all below 2^53 and a double holds them exactly, so the 2^(N-1) bound above does not
+-- move them. The removal of `v > static_cast<double>(max)` does: a fraction just above the maximum
+-- is now truncated, the way an ordinary CAST(double AS <integer>) already did it, so 127.5 answers
+-- TINYINT with 127 and 32767.5 answers SMALLINT with 32767. 2^(N-1) itself is still rejected, and so
+-- is a fraction below -2^(N-1) such as -128.5.
 insert into t2_${uuid0} values
   (1, parse_json('{"v":127.0}')),
   (2, parse_json('{"v":127.5}')),

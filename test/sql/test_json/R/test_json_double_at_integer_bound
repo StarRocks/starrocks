@@ -141,16 +141,16 @@ select k, cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
   from t2_${uuid0} order by k;
 -- result:
 1	127	127	127	127
-2	None	127	127	127
+2	127	127	127	127
 3	None	128	128	128
 4	-128	-128	-128	-128
 5	None	-128	-128	-128
 6	None	32767	32767	32767
-7	None	None	32767	32767
+7	None	32767	32767	32767
 8	None	None	32768	32768
 9	None	-32768	-32768	-32768
 10	None	None	2147483647	2147483647
-11	None	None	None	2147483647
+11	None	None	2147483647	2147483647
 12	None	None	None	2147483648
 13	None	None	-2147483648	-2147483648
 -- !result

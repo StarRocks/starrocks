@@ -1,0 +1,331 @@
+-- name: test_json_double_to_int_plan_consistency
+create table vals_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into vals_${uuid0} values
+  (1, parse_json('{"v":126.5}')),
+  (2, parse_json('{"v":127.5}')),
+  (3, parse_json('{"v":127.99999999999999}')),
+  (4, parse_json('{"v":128.00000000000003}')),
+  (5, parse_json('{"v":128.5}')),
+  (6, parse_json('{"v":-127.5}')),
+  (7, parse_json('{"v":-128.5}')),
+  (8, parse_json('{"v":32766.5}')),
+  (9, parse_json('{"v":32767.5}')),
+  (10, parse_json('{"v":32767.999999999996}')),
+  (11, parse_json('{"v":32768.00000000001}')),
+  (12, parse_json('{"v":-32768.5}')),
+  (13, parse_json('{"v":2147483646.5}')),
+  (14, parse_json('{"v":2147483647.5}')),
+  (15, parse_json('{"v":2147483647.9999998}')),
+  (16, parse_json('{"v":2147483648.5}')),
+  (17, parse_json('{"v":-2147483648.5}')),
+  (18, parse_json('{"v":9223372036854774784.0}')),
+  (19, parse_json('{"v":9223372036854775807.5}')),
+  (20, parse_json('{"v":9223372036854777856.0}')),
+  (21, parse_json('{"v":-9223372036854775808.0}')),
+  (22, parse_json('{"v":-9223372036854777856.0}')),
+  (23, parse_json('{"v":1.7014118346046921e38}')),
+  (24, parse_json('{"v":1.7014118346046923e38}')),
+  (25, parse_json('{"v":1.7014118346046927e38}')),
+  (26, parse_json('{"v":-1.7014118346046923e38}')),
+  (27, parse_json('{"v":-1.7014118346046927e38}')),
+  (28, parse_json('{"v":1e100}')),
+  (29, parse_json('{"v":1.5}')),
+  (30, parse_json('{"v":-1.5}')),
+  (31, parse_json('{"v":0.5}')),
+  (32, parse_json('{"v":-0.5}')),
+  (33, parse_json('{"v":0.0}')),
+  (34, parse_json('{"v":-0.0}'));
+-- result:
+-- !result
+create table flat_${uuid0} (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+insert into flat_${uuid0} select * from vals_${uuid0};
+-- result:
+-- !result
+select flat_json_meta(j) from flat_${uuid0}[_META_];
+-- result:
+["nulls(TINYINT), v(DOUBLE)"]
+-- !result
+select k, j from vals_${uuid0} order by k;
+-- result:
+1	{"v": 126.5}
+2	{"v": 127.5}
+3	{"v": 127.99999999999999}
+4	{"v": 128.00000000000003}
+5	{"v": 128.5}
+6	{"v": -127.5}
+7	{"v": -128.5}
+8	{"v": 32766.5}
+9	{"v": 32767.5}
+10	{"v": 3.2767999999999996e+4}
+11	{"v": 3.276800000000001e+4}
+12	{"v": -32768.5}
+13	{"v": 2147483646.5}
+14	{"v": 2147483647.5}
+15	{"v": 2.1474836479999998e+9}
+16	{"v": 2147483648.5}
+17	{"v": -2147483648.5}
+18	{"v": 9223372036854775000}
+19	{"v": 9223372036854776000}
+20	{"v": 9223372036854778000}
+21	{"v": -9223372036854776000}
+22	{"v": -9223372036854778000}
+23	{"v": 1.7014118346046921e+38}
+24	{"v": 1.7014118346046923e+38}
+25	{"v": 1.7014118346046927e+38}
+26	{"v": -1.7014118346046923e+38}
+27	{"v": -1.7014118346046927e+38}
+28	{"v": 1e+100}
+29	{"v": 1.5}
+30	{"v": -1.5}
+31	{"v": 0.5}
+32	{"v": -0.5}
+33	{"v": 0}
+34	{"v": -0}
+-- !result
+set cbo_prune_json_subfield = false;
+-- result:
+-- !result
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from vals_${uuid0} order by k;
+-- result:
+1	126	126	126	126	126
+2	127	127	127	127	127
+3	127	127	127	127	127
+4	None	128	128	128	128
+5	None	128	128	128	128
+6	-127	-127	-127	-127	-127
+7	None	-128	-128	-128	-128
+8	None	32766	32766	32766	32766
+9	None	32767	32767	32767	32767
+10	None	32767	32767	32767	32767
+11	None	None	32768	32768	32768
+12	None	None	-32768	-32768	-32768
+13	None	None	2147483646	2147483646	2147483646
+14	None	None	2147483647	2147483647	2147483647
+15	None	None	2147483647	2147483647	2147483647
+16	None	None	None	2147483648	2147483648
+17	None	None	None	-2147483648	-2147483648
+18	None	None	None	9223372036854774784	9223372036854774784
+19	None	None	None	None	9223372036854775808
+20	None	None	None	None	9223372036854777856
+21	None	None	None	-9223372036854775808	-9223372036854775808
+22	None	None	None	None	-9223372036854777856
+23	None	None	None	None	170141183460469212842221372237303250944
+24	None	None	None	None	None
+25	None	None	None	None	None
+26	None	None	None	None	-170141183460469231731687303715884105728
+27	None	None	None	None	None
+28	None	None	None	None	None
+29	1	1	1	1	1
+30	-1	-1	-1	-1	-1
+31	0	0	0	0	0
+32	0	0	0	0	0
+33	0	0	0	0	0
+34	0	0	0	0	0
+-- !result
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from flat_${uuid0} order by k;
+-- result:
+1	126	126	126	126	126
+2	127	127	127	127	127
+3	127	127	127	127	127
+4	None	128	128	128	128
+5	None	128	128	128	128
+6	-127	-127	-127	-127	-127
+7	None	-128	-128	-128	-128
+8	None	32766	32766	32766	32766
+9	None	32767	32767	32767	32767
+10	None	32767	32767	32767	32767
+11	None	None	32768	32768	32768
+12	None	None	-32768	-32768	-32768
+13	None	None	2147483646	2147483646	2147483646
+14	None	None	2147483647	2147483647	2147483647
+15	None	None	2147483647	2147483647	2147483647
+16	None	None	None	2147483648	2147483648
+17	None	None	None	-2147483648	-2147483648
+18	None	None	None	9223372036854774784	9223372036854774784
+19	None	None	None	None	9223372036854775808
+20	None	None	None	None	9223372036854777856
+21	None	None	None	-9223372036854775808	-9223372036854775808
+22	None	None	None	None	-9223372036854777856
+23	None	None	None	None	170141183460469212842221372237303250944
+24	None	None	None	None	None
+25	None	None	None	None	None
+26	None	None	None	None	-170141183460469231731687303715884105728
+27	None	None	None	None	None
+28	None	None	None	None	None
+29	1	1	1	1	1
+30	-1	-1	-1	-1	-1
+31	0	0	0	0	0
+32	0	0	0	0	0
+33	0	0	0	0	0
+34	0	0	0	0	0
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from vals_${uuid0} order by k;
+-- result:
+1	126	126	126	126	126
+2	127	127	127	127	127
+3	127	127	127	127	127
+4	None	128	128	128	128
+5	None	128	128	128	128
+6	-127	-127	-127	-127	-127
+7	-128	-128	-128	-128	-128
+8	None	32766	32766	32766	32766
+9	None	32767	32767	32767	32767
+10	None	32767	32767	32767	32767
+11	None	None	32768	32768	32768
+12	None	-32768	-32768	-32768	-32768
+13	None	None	2147483646	2147483646	2147483646
+14	None	None	2147483647	2147483647	2147483647
+15	None	None	2147483647	2147483647	2147483647
+16	None	None	None	2147483648	2147483648
+17	None	None	-2147483648	-2147483648	-2147483648
+18	None	None	None	9223372036854774784	9223372036854774784
+19	None	None	None	None	9223372036854775808
+20	None	None	None	None	9223372036854777856
+21	None	None	None	-9223372036854775808	-9223372036854775808
+22	None	None	None	None	-9223372036854777856
+23	None	None	None	None	170141183460469212842221372237303250944
+24	None	None	None	None	None
+25	None	None	None	None	None
+26	None	None	None	None	-170141183460469231731687303715884105728
+27	None	None	None	None	None
+28	None	None	None	None	None
+29	1	1	1	1	1
+30	-1	-1	-1	-1	-1
+31	0	0	0	0	0
+32	0	0	0	0	0
+33	0	0	0	0	0
+34	0	0	0	0	0
+-- !result
+select k,
+       cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as smallint) as s,
+       cast(j->'$.v' as int) as i, cast(j->'$.v' as bigint) as b,
+       cast(j->'$.v' as largeint) as l
+  from flat_${uuid0} order by k;
+-- result:
+1	126	126	126	126	126
+2	127	127	127	127	127
+3	127	127	127	127	127
+4	None	128	128	128	128
+5	None	128	128	128	128
+6	-127	-127	-127	-127	-127
+7	-128	-128	-128	-128	-128
+8	None	32766	32766	32766	32766
+9	None	32767	32767	32767	32767
+10	None	32767	32767	32767	32767
+11	None	None	32768	32768	32768
+12	None	-32768	-32768	-32768	-32768
+13	None	None	2147483646	2147483646	2147483646
+14	None	None	2147483647	2147483647	2147483647
+15	None	None	2147483647	2147483647	2147483647
+16	None	None	None	2147483648	2147483648
+17	None	None	-2147483648	-2147483648	-2147483648
+18	None	None	None	9223372036854774784	9223372036854774784
+19	None	None	None	None	9223372036854775808
+20	None	None	None	None	9223372036854777856
+21	None	None	None	-9223372036854775808	-9223372036854775808
+22	None	None	None	None	-9223372036854777856
+23	None	None	None	None	170141183460469212842221372237303250944
+24	None	None	None	None	None
+25	None	None	None	None	None
+26	None	None	None	None	-170141183460469231731687303715884105728
+27	None	None	None	None	None
+28	None	None	None	None	None
+29	1	1	1	1	1
+30	-1	-1	-1	-1	-1
+31	0	0	0	0	0
+32	0	0	0	0	0
+33	0	0	0	0	0
+34	0	0	0	0	0
+-- !result
+select k,
+       cast(cast(j->'$.v' as double) as tinyint) as t, cast(cast(j->'$.v' as double) as smallint) as s,
+       cast(cast(j->'$.v' as double) as int) as i, cast(cast(j->'$.v' as double) as bigint) as b,
+       cast(cast(j->'$.v' as double) as largeint) as l
+  from vals_${uuid0} order by k;
+-- result:
+1	126	126	126	126	126
+2	127	127	127	127	127
+3	127	127	127	127	127
+4	None	128	128	128	128
+5	None	128	128	128	128
+6	-127	-127	-127	-127	-127
+7	None	-128	-128	-128	-128
+8	None	32766	32766	32766	32766
+9	None	32767	32767	32767	32767
+10	None	32767	32767	32767	32767
+11	None	None	32768	32768	32768
+12	None	None	-32768	-32768	-32768
+13	None	None	2147483646	2147483646	2147483646
+14	None	None	2147483647	2147483647	2147483647
+15	None	None	2147483647	2147483647	2147483647
+16	None	None	None	2147483648	2147483648
+17	None	None	None	-2147483648	-2147483648
+18	None	None	None	9223372036854774784	9223372036854774784
+19	None	None	None	None	9223372036854775808
+20	None	None	None	None	9223372036854777856
+21	None	None	None	-9223372036854775808	-9223372036854775808
+22	None	None	None	None	-9223372036854777856
+23	None	None	None	None	170141183460469212842221372237303250944
+24	None	None	None	None	None
+25	None	None	None	None	None
+26	None	None	None	None	-170141183460469231731687303715884105728
+27	None	None	None	None	None
+28	None	None	None	None	None
+29	1	1	1	1	1
+30	-1	-1	-1	-1	-1
+31	0	0	0	0	0
+32	0	0	0	0	0
+33	0	0	0	0	0
+34	0	0	0	0	0
+-- !result
+set cbo_prune_json_subfield = false;
+-- result:
+-- !result
+select k, cast(j->'$.v' as tinyint) as t, cast(j->'$.v' as double) as d
+  from vals_${uuid0} where k in (29, 30, 31, 32, 33, 34) order by k;
+-- result:
+29	1	1.5
+30	-1	-1.5
+31	0	0.5
+32	0	-0.5
+33	0	0.0
+34	0	-0.0
+-- !result
+select k, get_json_int(j, '$.v') as v from vals_${uuid0} where k in (2, 3, 4, 19, 24) order by k;
+-- result:
+2	127
+3	127
+4	128
+19	None
+24	None
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+drop table flat_${uuid0};
+-- result:
+-- !result
+drop table vals_${uuid0};
+-- result:
+-- !result

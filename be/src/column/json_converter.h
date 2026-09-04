@@ -47,18 +47,21 @@ static StatusOr<RunTimeCppType<ResultType>> get_number_from_vpjson(const vpack::
             return static_cast<RunTimeCppType<ResultType>>(v);
         } else if (slice.isDouble()) {
             auto v = slice.getDouble();
-            // The bounds have to be compared in real arithmetic, and static_cast<double>(max) does
-            // not carry one: a double has a 53-bit mantissa, so INT64_MAX rounds up to 2^63 and
-            // INT128_MAX rounds up to 2^127. `v > static_cast<double>(max)` therefore admitted the
-            // rounded-up bound itself, and the conversion below is undefined for a value the type
-            // cannot hold. Powers of two are exact in a double, so reject 2^(N-1) and above as well:
-            // no double lies between max and 2^(N-1) at those two widths, and at the narrower ones
-            // 2^(N-1) is already above max, so the added bound never decides anything there.
-            // static_cast<double>(min) is -2^(N-1) and stays exact at every width.
+            // Accept the interval a double represents exactly, which is also the interval an
+            // ordinary CAST(double AS <integer>) accepts: check_signed_number_overflow() in
+            // base/types/numeric_types.h tests `v >= -2^(N-1) && v < 2^(N-1)`, for the same reason.
+            // -2^(N-1) and 2^(N-1) are powers of two and exact at every width, while
+            // static_cast<double>(max) is not: a double has a 53-bit mantissa, so INT64_MAX rounds
+            // up to 2^63 and INT128_MAX to 2^127. Testing `v > static_cast<double>(max)` on top of
+            // the exact bounds decided nothing at 64 and 128 bits, where the rounded bound is
+            // 2^(N-1) itself, and at the three narrower widths it rejected a double the type does
+            // hold once truncated -- 127.5 for TINYINT -- which an ordinary cast answers with 127.
+            // Every value in the interval truncates towards zero to something the type holds, so the
+            // conversion below is defined: below 2^(N-1) an integral value is at most 2^(N-1)-1.
             constexpr double lower_bound = static_cast<double>(min);
             constexpr double upper_bound_exclusive = -lower_bound;
             // v != v is a NaN, which compares false against every bound.
-            if (v < lower_bound || v > static_cast<double>(max) || v >= upper_bound_exclusive || v != v) {
+            if (v != v || v < lower_bound || v >= upper_bound_exclusive) {
                 return Status::JsonFormatError("cast number overflow");
             }
             return static_cast<RunTimeCppType<ResultType>>(v);
