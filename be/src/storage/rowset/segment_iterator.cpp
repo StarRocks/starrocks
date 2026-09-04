@@ -3542,8 +3542,7 @@ void SegmentIterator::_compute_brute_force_distances(const Column* vector_column
     // append_or_update_column tolerates the scan loop re-emitting the distance column onto a reused
     // chunk (see the ANN path in _do_get_next).
     chunk->append_or_update_column(_brute_force_distance_column(vector_column),
-                                   _make_field(_vector_index_ctx->vector_column_id),
-                                   _vector_index_ctx->vector_slot_id);
+                                   _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
 }
 
 // Exact distance rescan over a candidate bitmap. Reached only when the HNSW filtered search returned
