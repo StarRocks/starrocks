@@ -83,6 +83,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+### lake_dump_tablet_metadata_per_request_memory_limit_bytes
+
+- 默认值：268435456
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：CN 同步处理单个 `/api/cloudnative/dump_tablet_metadata` 请求时的受跟踪内存预算。该预算使用标准 MemTracker 统计粒度，并非精确到字节的硬上限。该限制覆盖元数据检查、敏感字段脱敏和 JSON 序列化，但不包含 CN 元数据缓存中已存在的元数据，也不包含异步 HTTP 输出缓冲区。每个请求使用其被接纳时读取到的配置值。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
+
+- 默认值：33554432
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：单个 `/api/cloudnative/dump_tablet_metadata` 请求完整 JSON 响应的最大字节数。响应交给 HTTP 输出缓冲区之前会检查该限制。每个请求使用其被接纳时读取到的配置值。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_dump_tablet_metadata_max_concurrency
+
+- 默认值：1
+- 类型：Int
+- 单位：请求
+- 是否动态：是
+- 描述：单个 CN 上可同时接纳的 `/api/cloudnative/dump_tablet_metadata` 请求数上限。请求在其 HTTP request 被释放之前一直占用一个并发名额。调大配置会立即影响新请求；调小配置不会取消已接纳的请求，在活跃请求数降到新上限以下之前会拒绝新请求。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
 ### lake_enable_del_file_crc_check
 
 - 默认值：true

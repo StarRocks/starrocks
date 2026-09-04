@@ -913,6 +913,9 @@
         "lake_tablet_stat_slow_log_ms",
         "lake_metadata_fetch_thread_count",
         "lake_metadata_cache_limit",
+        "lake_dump_tablet_metadata_per_request_memory_limit_bytes",
+        "lake_dump_tablet_metadata_per_request_json_size_limit_bytes",
+        "lake_dump_tablet_metadata_max_concurrency",
         "lake_cache_select_in_physical_way",
         "lake_service_max_concurrency",
         "lake_enable_orphan_delvec_cleanup_on_compaction"
