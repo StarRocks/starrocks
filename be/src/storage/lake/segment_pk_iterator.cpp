@@ -131,6 +131,32 @@ void SegmentPKIterator::next() {
     }
 }
 
+Status SegmentPKIterator::collapse_to_owned_rows() {
+    if (_owned.empty()) {
+        // No selector, so there is nothing to collapse and nothing was filtered out either.
+        return Status::OK();
+    }
+    // Only the non-lazy single-chunk shape can be collapsed: the mask and the encoded column have to
+    // describe the same rows, which they do only while the whole segment is materialized. A rewrite
+    // always runs in that mode -- should_enable_lazy_load() disables lazy load whenever a partial
+    // update is involved -- so refuse rather than renumber half a segment.
+    if (_lazy_load || _standalone_pk_column == nullptr || _pk_column_chunk == nullptr) {
+        return Status::InternalError("cannot collapse a lazily loaded primary key column to its owned rows");
+    }
+    if (_pk_column_chunk->num_rows() != _owned.size() || _standalone_pk_column->size() != _owned.size()) {
+        return Status::InternalError("the ownership mask does not describe the loaded chunk");
+    }
+    const size_t kept = _pk_column_chunk->filter(_owned);
+    (void)_standalone_pk_column->filter(_owned);
+    RETURN_ERROR_IF_FALSE(_standalone_pk_column->size() == kept, "chunk and encoded column disagree after filtering");
+    _owned.clear();
+    _physical_rowid_base = 0;
+    _current_rows = kept;
+    _begin_rowid_offsets.assign({0, kept});
+    _memory_usage = _pk_column_chunk->memory_usage() + _standalone_pk_column->memory_usage();
+    return Status::OK();
+}
+
 SegmentPKChunkRef SegmentPKIterator::current() {
     SegmentPKChunkRef ref;
     const size_t logical_rowid_offset = _begin_rowid_offsets[_current_pk_column_idx];
