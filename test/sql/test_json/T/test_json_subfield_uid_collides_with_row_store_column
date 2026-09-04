@@ -1,0 +1,77 @@
+-- name: test_json_subfield_uid_collides_with_row_store_column @no_arrow_flight_sql
+-- A row-store table (`storage_type = column_with_row`) carries a backend-private `__row` column that the
+-- frontend never sees: the backend appends it while creating the tablet and numbers it right after the
+-- user columns, so its unique id is exactly the frontend's max column unique id + 1. The v2 JSON rewrite
+-- mints one synthetic "extended" column per JSON subfield and numbers those from the next_uniq_id the
+-- frontend sends, which is that same max column unique id. The FIRST extended column of every scan is
+-- therefore handed the id `__row` already owns.
+--
+-- Segment::new_column_iterator_or_default() looked that id up among the real column readers before asking
+-- whether the column is a synthetic one, so the subfield was served by `__row`'s reader:
+--   * a boolean/numeric target went through CastColumnIterator(VARCHAR -> ...) with exceptions disabled and
+--     came back NULL, silently, inside predicates too;
+--   * a VARCHAR target needs no cast at all, so the raw row-store blob -- the encoded whole row, carrying
+--     the values of the OTHER columns of that row -- was returned to the client. That is a cross-column
+--     data leak, and it was handed back even for a path the document does not contain.
+--
+-- Only the first extended column of a statement was wrong, which is the fingerprint of an id collision.
+--
+-- Not covered here: a comparison predicate over a VARCHAR or numeric subfield of a row-store table still
+-- answers with zero rows under the v2 rewrite (a boolean one, asserted below, is fixed by this change).
+-- That is a separate defect further up the scan: the storage layer now hands the predicate the right
+-- value -- the same iterator the projections below read correctly -- and the row is dropped above it,
+-- where the row-store table's extra column shifts the scan node's slot-to-column mapping. It reads zero
+-- both before and after this change, so it is tracked on its own rather than pinned down here.
+ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
+create table t (k int not null, v1 int, v2 int, j json)
+primary key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1", "storage_type" = "column_with_row");
+insert into t values (1, 10, 20, parse_json('{"b":false,"b2":true,"s":"hello","n":42}'));
+-- Control table: same shape without the row store, hence no `__row` and no collision.
+create table t_plain (k int not null, v1 int, v2 int, j json)
+primary key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+insert into t_plain values (1, 10, 20, parse_json('{"b":false,"b2":true,"s":"hello","n":42}'));
+set cbo_json_v2_rewrite = true;
+-- Symptom 1: the boolean subfield read as NULL.
+select get_json_bool(j, '$.b') as b from t;
+-- The fingerprint: two extended columns in one statement, only the first one was wrong.
+select get_json_bool(j, '$.b') as b, get_json_bool(j, '$.b2') as b2 from t;
+-- Symptom 2, the leak: a string subfield came back as the row-store blob of the whole row. "hello" is
+-- 5 bytes, the blob was 61; assert the value AND its length so no blob can pass this line.
+select get_json_string(j, '$.s') as s, length(get_json_string(j, '$.s')) as slen from t;
+-- The same blob was handed back for a path the document does not even contain.
+select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) as zzzlen from t;
+-- hex() spells the leak out: the blob carried 0A000000 (v1 = 10), 14000000 (v2 = 20) and the bytes of
+-- "hello". A correct answer has nothing to print here.
+select hex(get_json_string(j, '$.zzz')) as zzzhex from t;
+-- A numeric subfield takes the same silent-NULL route as the boolean one.
+select get_json_int(j, '$.n') as n from t;
+-- A predicate reads through the same iterator, so it silently dropped the row too.
+select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
+-- Regression: the real columns of the very same table must be untouched.
+select k, v1, v2, j from t;
+select k, v1, v2 from t where k = 1;
+-- Regression: the row store itself still reads. A short-circuit point query is served straight out of
+-- `__row`, the very column the collision was stealing the reader from.
+set enable_short_circuit = true;
+select k, v1, v2 from t where k = 1;
+select k, v1, v2, j from t where k = 1;
+select get_json_string(j, '$.s') as s from t where k = 1;
+set enable_short_circuit = false;
+-- Regression: the control table without the row store must answer exactly like the row-store one.
+select get_json_bool(j, '$.b') as b, get_json_bool(j, '$.b2') as b2 from t_plain;
+select get_json_string(j, '$.s') as s, length(get_json_string(j, '$.s')) as slen from t_plain;
+select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) as zzzlen from t_plain;
+select get_json_int(j, '$.n') as n from t_plain;
+select k, v1, v2, j from t_plain;
+-- Control: with the rewrite off nothing goes through an extended column at all, and every answer above
+-- must come back unchanged.
+set cbo_json_v2_rewrite = false;
+select get_json_bool(j, '$.b') as b, get_json_bool(j, '$.b2') as b2 from t;
+select get_json_string(j, '$.s') as s, length(get_json_string(j, '$.s')) as slen from t;
+select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) as zzzlen from t;
+select hex(get_json_string(j, '$.zzz')) as zzzhex from t;
+select get_json_int(j, '$.n') as n from t;
+select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
+select k, v1, v2, j from t;

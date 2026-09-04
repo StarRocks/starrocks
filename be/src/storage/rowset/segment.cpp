@@ -645,6 +645,20 @@ Status Segment::_check_column_unique_id_uniqueness(
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_default(const TabletColumn& column,
                                                                                   ColumnAccessPath* path) {
+    // An extended column is synthesized by the JSON path rewrite and is stored nowhere: its unique id is
+    // minted by counting up from the next_uniq_id the frontend sends (extend_schema_by_access_paths() and
+    // the three meta-scan sites that mirror it), so it names no column on disk and looking it up among the
+    // real column readers is never right. On a row-store table the ids do collide: the backend appends its
+    // private `__row` column -- the encoded whole row -- with the id right after the last frontend-visible
+    // one, which is exactly the id handed to the first extended column of a scan. That lookup then served
+    // the JSON subfield out of `__row`: NULL for a numeric target, whose VARCHAR cast fails silently, and
+    // the raw row blob for a VARCHAR one. _new_extended_column_iterator() resolves the data through
+    // extended_info()->source_column_uid instead, so dispatch on is_extended() first and keep the synthetic
+    // id out of every decision.
+    if (column.is_extended()) {
+        return _new_extended_column_iterator(column, path);
+    }
+
     auto id = column.unique_id();
     if (_column_readers.contains(id)) {
         ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
@@ -672,9 +686,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
                                                                  column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
-    }
-    if (column.is_extended()) {
-        return _new_extended_column_iterator(column, path);
     }
 
     if (!column.has_default_value() && !column.is_nullable()) {

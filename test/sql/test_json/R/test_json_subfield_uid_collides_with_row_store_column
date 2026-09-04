@@ -1,0 +1,128 @@
+-- name: test_json_subfield_uid_collides_with_row_store_column @no_arrow_flight_sql
+ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
+-- result:
+-- !result
+create table t (k int not null, v1 int, v2 int, j json)
+primary key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1", "storage_type" = "column_with_row");
+-- result:
+-- !result
+insert into t values (1, 10, 20, parse_json('{"b":false,"b2":true,"s":"hello","n":42}'));
+-- result:
+-- !result
+create table t_plain (k int not null, v1 int, v2 int, j json)
+primary key(k) distributed by hash(k) buckets 1
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_plain values (1, 10, 20, parse_json('{"b":false,"b2":true,"s":"hello","n":42}'));
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select get_json_bool(j, '$.b') as b from t;
+-- result:
+0
+-- !result
+select get_json_bool(j, '$.b') as b, get_json_bool(j, '$.b2') as b2 from t;
+-- result:
+0	1
+-- !result
+select get_json_string(j, '$.s') as s, length(get_json_string(j, '$.s')) as slen from t;
+-- result:
+hello	5
+-- !result
+select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) as zzzlen from t;
+-- result:
+None	None
+-- !result
+select hex(get_json_string(j, '$.zzz')) as zzzhex from t;
+-- result:
+None
+-- !result
+select get_json_int(j, '$.n') as n from t;
+-- result:
+42
+-- !result
+select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
+-- result:
+1
+-- !result
+select k, v1, v2, j from t;
+-- result:
+1	10	20	{"b": false, "b2": true, "n": 42, "s": "hello"}
+-- !result
+select k, v1, v2 from t where k = 1;
+-- result:
+1	10	20
+-- !result
+set enable_short_circuit = true;
+-- result:
+-- !result
+select k, v1, v2 from t where k = 1;
+-- result:
+1	10	20
+-- !result
+select k, v1, v2, j from t where k = 1;
+-- result:
+1	10	20	{"b": false, "b2": true, "n": 42, "s": "hello"}
+-- !result
+select get_json_string(j, '$.s') as s from t where k = 1;
+-- result:
+hello
+-- !result
+set enable_short_circuit = false;
+-- result:
+-- !result
+select get_json_bool(j, '$.b') as b, get_json_bool(j, '$.b2') as b2 from t_plain;
+-- result:
+0	1
+-- !result
+select get_json_string(j, '$.s') as s, length(get_json_string(j, '$.s')) as slen from t_plain;
+-- result:
+hello	5
+-- !result
+select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) as zzzlen from t_plain;
+-- result:
+None	None
+-- !result
+select get_json_int(j, '$.n') as n from t_plain;
+-- result:
+42
+-- !result
+select k, v1, v2, j from t_plain;
+-- result:
+1	10	20	{"b": false, "b2": true, "n": 42, "s": "hello"}
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select get_json_bool(j, '$.b') as b, get_json_bool(j, '$.b2') as b2 from t;
+-- result:
+0	1
+-- !result
+select get_json_string(j, '$.s') as s, length(get_json_string(j, '$.s')) as slen from t;
+-- result:
+hello	5
+-- !result
+select get_json_string(j, '$.zzz') as zzz, length(get_json_string(j, '$.zzz')) as zzzlen from t;
+-- result:
+None	None
+-- !result
+select hex(get_json_string(j, '$.zzz')) as zzzhex from t;
+-- result:
+None
+-- !result
+select get_json_int(j, '$.n') as n from t;
+-- result:
+42
+-- !result
+select count(*) as cnt_b from t where get_json_bool(j, '$.b') = false;
+-- result:
+1
+-- !result
+select k, v1, v2, j from t;
+-- result:
+1	10	20	{"b": false, "b2": true, "n": 42, "s": "hello"}
+-- !result
