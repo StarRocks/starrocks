@@ -231,9 +231,10 @@ public:
 
     bool already_finished() const { return _already_finished; }
 
-private:
+    // Returns the status passed to `cancel()`, or OK if the writer has never been cancelled.
     Status current_cancel_status() const;
 
+private:
     Status reset_memtable();
 
     Status fill_auto_increment_id(Chunk& chunk);
@@ -1223,6 +1224,10 @@ void DeltaWriter::release_resources() {
 
 void DeltaWriter::cancel(const Status& st) {
     _impl->cancel(st);
+}
+
+Status DeltaWriter::cancel_status() const {
+    return _impl->current_cancel_status();
 }
 
 int64_t DeltaWriter::partition_id() const {
