@@ -718,11 +718,12 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         need_rename = false;
     }
     if (filter_unowned_rows && need_rename) {
-        // The rewrite dropped the siblings' rows and renumbered from zero, so this iterator's emit
-        // positions are now the new segment's rowids. Everything downstream that names a row in the
-        // file this publish produced -- the index upsert value above all -- must stop adding a base
-        // that pointed into the source.
-        _upserts[segment_id]->renumber_to_emit_order();
+        // The rewrite dropped the siblings' rows and renumbered what is left from zero. Collapse the
+        // iterator onto exactly those rows so it presents an ordinary publish over the new segment --
+        // one numbering space, which is what every consumer downstream already expects. Adjusting a
+        // base instead cannot work: the output is in OWNED order while the emit order still counts
+        // the rows that were dropped.
+        RETURN_IF_ERROR(_upserts[segment_id]->collapse_to_owned_rows());
     }
     int64_t t_rewrite_end = MonotonicMillis();
     LOG(INFO) << strings::Substitute(
