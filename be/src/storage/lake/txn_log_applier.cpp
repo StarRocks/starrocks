@@ -30,7 +30,7 @@
 #include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "storage/lake/lake_primary_index.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/table_schema_service.h"
@@ -97,7 +97,7 @@ Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMe
         //
         // A shared-data tablet has exactly one primary-key index implementation left, the cloud-native
         // one: force_cloud_native_pk_persistent_index() rewrites every primary-key tablet's metadata to
-        // enabled + CLOUD_NATIVE as it is loaded, and LakePrimaryIndex::_do_lake_load unconditionally
+        // enabled + CLOUD_NATIVE as it is loaded, and LakePersistentIndex::_do_lake_load unconditionally
         // builds a LakePersistentIndex. The two fields are therefore immutable in practice, and writing
         // them here was the only way a value contradicting that could enter a live publish's metadata --
         // this function's output is both persisted and cached (put_tablet_metadata /
@@ -935,7 +935,7 @@ private:
     int64_t _new_version{0};
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
-    DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
+    DynamicCache<uint64_t, LakePersistentIndex>::Entry* _index_entry{nullptr};
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;

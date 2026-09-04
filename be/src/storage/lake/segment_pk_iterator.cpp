@@ -75,7 +75,7 @@ Status SegmentPKIterator::_load() {
     // function already returns Status, so a selection that cannot be built fails the load instead of
     // handing the caller a chunk it would process as "own every row". current() runs after the
     // consumer loop has already committed the previous chunk, so an error raised there is too late --
-    // LakePrimaryIndex::parallel_upsert checks the iterator status only after flush_memtable() has
+    // LakePersistentIndex::parallel_upsert checks the iterator status only after flush_memtable() has
     // durably written the sstable.
     if (_row_selector != nullptr) {
         ASSIGN_OR_RETURN(_owned, _row_selector->select(*_pk_column_chunk));

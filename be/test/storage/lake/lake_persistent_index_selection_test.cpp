@@ -35,20 +35,20 @@ SegmentPKChunkRef make_ref(uint32_t physical_rowid_offset, std::vector<uint8_t> 
 // The rowids handed to the index must be the row's position in the SOURCE SEGMENT, not its position
 // among the survivors. Getting this wrong is silent: the upsert succeeds and the index points at a
 // different row of the same segment.
-TEST(LakePrimaryIndexSelectionTest, test_owned_rowids_are_absolute_source_positions) {
+TEST(LakePersistentIndexSelectionTest, test_owned_rowids_are_absolute_source_positions) {
     auto ref = make_ref(/*physical_rowid_offset=*/100, {0, 1, 0, 1, 1});
     EXPECT_EQ((std::vector<uint32_t>{101, 103, 104}), owned_rowids_of(ref));
 }
 
 // The offset is the chunk's own base, so a chunk that starts at 0 still yields plain indexes.
-TEST(LakePrimaryIndexSelectionTest, test_owned_rowids_without_an_offset) {
+TEST(LakePersistentIndexSelectionTest, test_owned_rowids_without_an_offset) {
     auto ref = make_ref(/*physical_rowid_offset=*/0, {1, 0, 1});
     EXPECT_EQ((std::vector<uint32_t>{0, 2}), owned_rowids_of(ref));
 }
 
 // A sibling that owns nothing in this chunk must produce no rowids at all, so the caller can skip
 // the upsert rather than issue an empty one.
-TEST(LakePrimaryIndexSelectionTest, test_owned_rowids_when_nothing_is_owned) {
+TEST(LakePersistentIndexSelectionTest, test_owned_rowids_when_nothing_is_owned) {
     EXPECT_TRUE(owned_rowids_of(make_ref(7, {0, 0, 0})).empty());
 }
 

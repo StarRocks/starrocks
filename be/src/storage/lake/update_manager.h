@@ -20,7 +20,7 @@
 #include "cache/dynamic_cache.h"
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
-#include "storage/lake/lake_primary_index.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -39,7 +39,7 @@ class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
 struct AutoIncrementPartialUpdateState;
-using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
+using IndexEntry = DynamicCache<uint64_t, LakePersistentIndex>::Entry;
 
 class PersistentIndexBlockCache {
 public:
@@ -98,13 +98,13 @@ public:
                                   ChunkPtr* out_chunk);
 
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
-                                      const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, LakePersistentIndex& index,
                                       MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
                                       const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
                                       uint32_t* new_del_rebuild_rssid);
 
     Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
-                                Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
+                                Tablet* tablet, LakePersistentIndex& index, IndexEntry* index_entry,
                                 MetaFileBuilder* builder, int64_t base_version, uint32_t del_rebuild_rssid,
                                 const RowsetUpdateStateParams& params);
 
@@ -227,7 +227,7 @@ public:
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
 
-    DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
+    DynamicCache<uint64_t, LakePersistentIndex>& index_cache() { return _index_cache; }
 
     void lock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).lock_shared(); }
 
@@ -251,9 +251,9 @@ private:
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
-                      LakePrimaryIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
+                      LakePersistentIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
     Status _do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
-                      RowsetUpdateState& state, LakePrimaryIndex& index, DeletesMap* new_deletes);
+                      RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes);
 
     // Performs condition-based merge update using parallel chunk-level execution for segments
     // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values
@@ -265,12 +265,12 @@ private:
     // thread-safe.
     Status _do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
                                      int32_t condition_column, const SegmentPKIteratorPtr& upsert,
-                                     LakePrimaryIndex& index, DeletesMap* new_deletes);
+                                     LakePersistentIndex& index, DeletesMap* new_deletes);
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
     Status _handle_index_op(int64_t tablet_id, int64_t base_version, bool need_lock,
-                            const std::function<void(LakePrimaryIndex&)>& op);
+                            const std::function<void(LakePersistentIndex&)>& op);
 
     std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
 
@@ -282,7 +282,7 @@ private:
                                                        ParallelUpsertContext* context, const SegmentPKChunkRef& current,
                                                        const TabletColumn& tablet_column,
                                                        const std::vector<uint32_t>& read_column_ids,
-                                                       LakePrimaryIndex& index);
+                                                       LakePersistentIndex& index);
 
     // Performs condition-based merge update using parallel execution for segments with SST files.
     // This optimized path leverages pre-materialized condition values in SST files to enable
@@ -290,7 +290,7 @@ private:
     // Requires: SST files must exist with condition column values.
     Status _do_update_with_condition_parallel(const RowsetUpdateStateParams& params, uint32_t rowset_id,
                                               int32_t upsert_idx, int32_t condition_column,
-                                              const SegmentPKIteratorPtr& upsert, LakePrimaryIndex& index,
+                                              const SegmentPKIteratorPtr& upsert, LakePersistentIndex& index,
                                               DeletesMap* new_deletes);
 
     struct PkIndexShard {
@@ -307,7 +307,7 @@ private:
     // default 6min
     int64_t _cache_expire_ms = 360000;
     // primary index
-    DynamicCache<uint64_t, LakePrimaryIndex> _index_cache;
+    DynamicCache<uint64_t, LakePersistentIndex> _index_cache;
 
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;

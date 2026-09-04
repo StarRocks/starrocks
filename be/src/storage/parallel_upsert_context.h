@@ -50,7 +50,7 @@ struct ParallelPublishSlot {
 // Where a parallel publish's upsert chain sends the rowids it replaces.
 //
 // The upsert chain is the one parallel step whose fan-out cannot be a plain local
-// lake::ParallelTaskRunner. The caller -- LakePrimaryIndex::parallel_upsert, or the condition-update
+// lake::ParallelTaskRunner. The caller -- LakePersistentIndex::parallel_upsert, or the condition-update
 // upsert phase -- drives the chunk loop and the join, but the work is submitted four layers down in
 // LakePersistentIndex::upsert, because that is where the SST / inactive-memtable lookup happens and
 // therefore where the replaced old values first become known. This object is what those two ends
