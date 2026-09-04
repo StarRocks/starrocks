@@ -205,9 +205,11 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Plan one partition's K-tablet shadow layout lock-free: choose {@code K} from the base data size
-     * and the active compute-node count, sample by the new sort key, plan the boundaries, and build the
-     * shadow {@link MaterializedIndex} via the StarOS createShards RPC. NO db lock is held here.
+     * Plan one partition's K-tablet shadow layout lock-free using the shared tablet-count policy: a zero
+     * target preserves the latest base-index {@code K}, while a nonzero target derives {@code K}
+     * adaptively from the base data size and active compute-node count. When {@code K > 1}, sample by the
+     * new sort key and plan the boundaries; {@code K == 1} skips sampling. Build the shadow
+     * {@link MaterializedIndex} via the StarOS createShards RPC. NO db lock is held here.
      */
     @Override
     protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)

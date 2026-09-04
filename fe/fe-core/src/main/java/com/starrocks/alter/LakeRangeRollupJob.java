@@ -247,10 +247,10 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
 
     /**
      * Plan one partition's K-tablet shadow layout for the rollup index, lock-free: use the shared
-     * tablet-count policy, which preserves the latest base-index tablet count when automatic
-     * resharding is disabled and otherwise derives {@code K} from base data size and active
-     * compute-node count; then sample by the rollup sort key, plan the boundaries, and build the
-     * shadow {@link MaterializedIndex} via the StarOS createShards RPC.
+     * tablet-count policy, which preserves the latest base-index {@code K} when the target is zero and
+     * otherwise derives {@code K} adaptively from base data size and active compute-node count. When
+     * {@code K > 1}, sample by the rollup sort key and plan the boundaries; {@code K == 1} skips sampling.
+     * Build the shadow {@link MaterializedIndex} via the StarOS createShards RPC.
      * NO db lock is held here.
      */
     @Override
