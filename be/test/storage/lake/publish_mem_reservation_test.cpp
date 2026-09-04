@@ -135,7 +135,7 @@ TEST(PublishMemReservationTest, OversizedRejectedWithoutProcessHeadroom) {
     // Process is at 9500 of 10000 KB, so only 500 KB of headroom is left.
     proc.consume(9500 * KB);
     {
-        PublishMemReservation big(&t, 5000 * KB, slot, &proc); // oversized, and 5000 > 500 headroom
+        PublishMemReservation big(&t, 5000 * KB, slot, &proc, 100); // oversized, and 5000 > 500 headroom
         EXPECT_FALSE(big.admitted());
         EXPECT_FALSE(big.holds_oversized_slot());
     }
@@ -146,7 +146,7 @@ TEST(PublishMemReservationTest, OversizedRejectedWithoutProcessHeadroom) {
     // rather than the permanent wedge the oversized route exists to avoid.
     proc.release(9500 * KB);
     {
-        PublishMemReservation big(&t, 5000 * KB, slot, &proc);
+        PublishMemReservation big(&t, 5000 * KB, slot, &proc, 100);
         EXPECT_TRUE(big.admitted());
         EXPECT_TRUE(big.holds_oversized_slot());
         EXPECT_EQ(0, t.consumption()); // still does not charge the shared tracker
@@ -247,6 +247,71 @@ TEST(PublishMemReservationTest, NormalConcurrencyNeverOvershoots) {
 
     EXPECT_LE(peak.load(), limit); // never exceeded the limit under contention
     EXPECT_EQ(0, t.consumption()); // symmetric under load
+}
+
+// --- The NORMAL route needs process headroom too --------------------------------------------------
+// The lake tracker is off-tree, so fitting inside it says nothing about process pressure. A node that is
+// already near the urgent line can otherwise admit a normal publish purely because the lake budget is
+// mostly empty, and then allocate past the process limit.
+TEST(PublishMemReservationTest, NormalRejectedWithoutProcessHeadroom) {
+    MemTracker t(3000 * KB, "p3-test", nullptr);
+    MemTracker proc(10000 * KB, "p3-test-process", nullptr);
+    std::atomic<bool> slot{false};
+
+    // 8400 of 10000 KB used, so the node sits just under an 85 percent urgent line and the entry
+    // backstop does not trip. The lake tracker is completely empty.
+    proc.consume(8400 * KB);
+    {
+        // Not oversized (2000 < 3000 limit) and it fits the empty lake budget, but 8400 + 2000 is well
+        // past 85 percent of the process, so it must be rejected.
+        PublishMemReservation normal(&t, 2000 * KB, slot, &proc, 85);
+        EXPECT_FALSE(normal.admitted());
+        EXPECT_EQ(0, normal.consumed_bytes());
+    }
+    EXPECT_EQ(0, t.consumption()); // a rejected normal publish charges nothing
+    EXPECT_FALSE(slot.load());     // and never touches the oversized slot
+
+    // A small enough publish still fits under the line, so this is backpressure and not a wedge.
+    {
+        PublishMemReservation small(&t, 50 * KB, slot, &proc, 85);
+        EXPECT_TRUE(small.admitted());
+        EXPECT_EQ(50 * KB, small.consumed_bytes());
+    }
+    EXPECT_EQ(0, t.consumption()); // released on scope exit
+    proc.release(8400 * KB);
+}
+
+// The percent is the check's kill switch. At 0 the headroom test is skipped entirely on both routes,
+// so an operator can turn it off live without a restart.
+TEST(PublishMemReservationTest, ZeroUrgentPctDisablesHeadroomCheck) {
+    MemTracker t(3000 * KB, "p3-test", nullptr);
+    MemTracker proc(10000 * KB, "p3-test-process", nullptr);
+    std::atomic<bool> slot{false};
+    proc.consume(9900 * KB); // essentially no headroom left
+
+    {
+        PublishMemReservation normal(&t, 2000 * KB, slot, &proc, 0);
+        EXPECT_TRUE(normal.admitted()); // check disabled, admitted on lake budget alone
+    }
+    {
+        PublishMemReservation big(&t, 5000 * KB, slot, &proc, 0);
+        EXPECT_TRUE(big.admitted()); // oversized route likewise unchecked
+        EXPECT_TRUE(big.holds_oversized_slot());
+    }
+    EXPECT_FALSE(slot.load());
+    proc.release(9900 * KB);
+}
+
+// A percent above 100 must not lift the ceiling above the process limit and quietly disable the check.
+TEST(PublishMemReservationTest, OutOfRangeUrgentPctIsClamped) {
+    MemTracker t(3000 * KB, "p3-test", nullptr);
+    MemTracker proc(10000 * KB, "p3-test-process", nullptr);
+    std::atomic<bool> slot{false};
+    proc.consume(9900 * KB);
+
+    PublishMemReservation normal(&t, 2000 * KB, slot, &proc, 500);
+    EXPECT_FALSE(normal.admitted()); // clamped to 100, so 9900 + 2000 still exceeds the limit
+    proc.release(9900 * KB);
 }
 
 // --- nullptr tracker (gate not wired): admit, touch nothing ------------------------------------
