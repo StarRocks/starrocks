@@ -641,15 +641,33 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
 
     private int weighTableEntry(IcebergTableName key, Table table) {
-        long size = Estimator.estimate(key);
-        if (table != null) {
-            size += Estimator.estimate(table);
-        }
+        long size = Estimator.estimate(key) + weighPrivateTableState(table);
         if (size > Integer.MAX_VALUE) {
             LOG.warn("Table cache entry size for key {} is too large: {} bytes", key, size);
             return Integer.MAX_VALUE;
         }
         return (int) size;
+    }
+
+    // Charge an entry only for the metadata it exclusively owns, which is what evicting it actually
+    // frees. Walking the whole table instead reaches the TableOperations, and from there the objects
+    // the catalog shares across all of its tables -- the Hadoop configuration, the metastore client
+    // pool, the FileIO, the metrics reporter. Those exist once per catalog, so charging them to every
+    // entry makes the ledger grow with the entry count while the heap does not: the cache then
+    // declares itself full while holding a fraction of maximumWeight and evicts continuously.
+    private long weighPrivateTableState(Table table) {
+        if (table == null) {
+            return 0;
+        }
+        if (table instanceof BaseTable) {
+            TableOperations ops = ((BaseTable) table).operations();
+            if (ops != null && ops.current() != null) {
+                return Estimator.estimate(ops.current());
+            }
+        }
+        // Nothing we can attribute to this entry alone; charge its own footprint rather than a whole
+        // shared object graph. Deliberately never throws: the weigher runs on Caffeine's write path.
+        return Estimator.shallow(table);
     }
 
     // Each entry holds a whole table's partition map, which is unbounded in bytes (a table can have
