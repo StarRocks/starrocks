@@ -121,7 +121,11 @@ protected:
     // in SchemaRunningTransactionsScanner::fill_chunk.
     static constexpr int TXN_ID = 1;
     static constexpr int LABEL = 3;
+    static constexpr int DATABASE_NAME = 5;
+    static constexpr int TABLE_IDS = 6;
     static constexpr int STATE = 8;
+    static constexpr int COORDINATOR = 9;
+    static constexpr int SOURCE_TYPE = 10;
     static constexpr int TABLE_NAMES = 7;
     static constexpr int PREPARE_TIME = 12;
     static constexpr int COMMIT_TIME = 14;
@@ -214,6 +218,94 @@ TEST_F(SchemaRunningTransactionsScannerTest, nullable_strings_unset_render_null)
     EXPECT_TRUE(is_null_at(chunk, TABLE_NAMES));
     EXPECT_FALSE(is_null_at(chunk, ERROR_MSG));
     EXPECT_EQ("boom", read_string(chunk, ERROR_MSG));
+}
+
+// The mirror of the unset case: every optional text column carries its value through when the FE sets it.
+// These are the columns an operator actually slices a stall by, so a silent drop here would be invisible in
+// exactly the situation the view exists for.
+TEST_F(SchemaRunningTransactionsScannerTest, nullable_strings_set_materialize) {
+    SchemaRunningTransactionsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    TRunningTxnInfo info = make_min_txn_info(7, "COMMITTED");
+    info.__set_database_name("hot_db");
+    info.__set_table_ids("100,200");
+    info.__set_table_names("orders,order_items");
+    info.__set_coordinator("FE: 127.0.0.1");
+    info.__set_source_type("BACKEND_STREAMING");
+    info.__set_reason("waiting for publish");
+
+    auto chunk = scan_one(scanner, info);
+    EXPECT_EQ("hot_db", read_string(chunk, DATABASE_NAME));
+    EXPECT_EQ("100,200", read_string(chunk, TABLE_IDS));
+    EXPECT_EQ("orders,order_items", read_string(chunk, TABLE_NAMES));
+    EXPECT_EQ("FE: 127.0.0.1", read_string(chunk, COORDINATOR));
+    EXPECT_EQ("BACKEND_STREAMING", read_string(chunk, SOURCE_TYPE));
+    EXPECT_EQ("waiting for publish", read_string(chunk, REASON));
+    EXPECT_FALSE(is_null_at(chunk, DATABASE_NAME));
+    EXPECT_FALSE(is_null_at(chunk, REASON));
+}
+
+// get_next refuses to run before init rather than reading uninitialized scanner state.
+TEST_F(SchemaRunningTransactionsScannerTest, get_next_before_init_is_rejected) {
+    SchemaRunningTransactionsScanner scanner;
+    ChunkPtr chunk;
+    bool eos = false;
+    Status st = scanner.get_next(&chunk, &eos);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_internal_error());
+}
+
+// An empty result set ends the scan immediately, and does so before the null parameter check, so an
+// exhausted scanner reports eos rather than an error.
+TEST_F(SchemaRunningTransactionsScannerTest, empty_result_reports_eos) {
+    SchemaRunningTransactionsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    scanner._result.txns.clear();
+    scanner._cur_idx = 0;
+    ChunkPtr chunk = create_chunk(scanner.get_slot_descs());
+    bool eos = false;
+    EXPECT_OK(scanner.get_next(&chunk, &eos));
+    EXPECT_TRUE(eos);
+}
+
+// With rows still pending, a null output parameter is a caller bug and is reported rather than dereferenced.
+TEST_F(SchemaRunningTransactionsScannerTest, null_output_parameters_are_rejected) {
+    SchemaRunningTransactionsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    scanner._result.txns = {make_min_txn_info(1, "PREPARE")};
+    scanner._cur_idx = 0;
+    bool eos = false;
+    Status st = scanner.get_next(nullptr, &eos);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_internal_error());
+
+    ChunkPtr chunk = create_chunk(scanner.get_slot_descs());
+    Status st2 = scanner.get_next(&chunk, nullptr);
+    EXPECT_FALSE(st2.ok());
+    EXPECT_TRUE(st2.is_internal_error());
+}
+
+// The column count is a contract between the system table definition and the switch in fill_chunk. A slot id
+// outside the declared range means the two have drifted, and that is reported instead of writing past the
+// columns the scanner knows about.
+TEST_F(SchemaRunningTransactionsScannerTest, out_of_range_slot_id_is_rejected) {
+    SchemaRunningTransactionsScanner scanner;
+    init_scanner(scanner, "UTC");
+
+    scanner._result.txns = {make_min_txn_info(1, "PREPARE")};
+    scanner._cur_idx = 0;
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    const auto& slot_descs = scanner.get_slot_descs();
+    MutableColumnPtr column = ColumnHelper::create_column(slot_descs[0]->type(), slot_descs[0]->is_nullable());
+    // 25 is one past the last declared column, so it can never be a valid slot for this scanner.
+    chunk->append_column(std::move(column), 25);
+    bool eos = false;
+    Status st = scanner.get_next(&chunk, &eos);
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_internal_error());
 }
 
 } // namespace starrocks
