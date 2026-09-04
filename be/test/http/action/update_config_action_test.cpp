@@ -12,40 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-<<<<<<< HEAD
 #include "http/action/update_config_action.h"
 
-#include <gtest/gtest.h>
-
-=======
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
 #include <iterator>
-#include <memory>
 #include <string>
 
->>>>>>> 45b9f5a ([Enhancement] Make starlet object-store upload thresholds configurable at runtime (#78448))
 #include "agent/agent_server.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
-<<<<<<< HEAD
-=======
-#include "common/config_agent_fwd.h"
-#include "common/config_cache_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/config_staros_worker_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "common/config_update_registry.h"
-#include "common/config_vector_index_fwd.h"
-#include "common/configbase.h"
-#include "common/system/cpu_info.h"
-#include "common/thread/threadpool.h"
-#include "common/util/bthreads/executor.h"
-#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
-#include "exec/exec_env.h"
->>>>>>> 45b9f5a ([Enhancement] Make starlet object-store upload thresholds configurable at runtime (#78448))
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
@@ -200,43 +179,6 @@ TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
-<<<<<<< HEAD
-=======
-#ifdef WITH_TENANN
-TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_uninitialized_cache_returns_internal_error) {
-    auto* storage_env = StorageEnv::GetInstance();
-    storage_env->destroy_vector_index_cache();
-    auto st = ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "1G");
-    EXPECT_FALSE(st.ok()) << st.to_string();
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-
-    ASSERT_OK(storage_env->init_vector_index_cache(RuntimeEnv::GetInstance()->process_mem_limit(),
-                                                   RuntimeEnv::GetInstance()->vector_index_mem_tracker()));
-}
-
-TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cache) {
-    auto* cache = StorageEnv::GetInstance()->vector_index_cache();
-    ASSERT_NE(cache, nullptr) << "test_main must initialize StorageEnv with vector_index_cache";
-    const std::string saved = config::vector_query_cache_capacity;
-
-    // Absolute bytes.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "4294967296"));
-    EXPECT_EQ(cache->capacity(), 4294967296u);
-
-    // Unit-suffixed.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "512M"));
-    EXPECT_EQ(cache->capacity(), 512u * 1024 * 1024);
-
-    // Percentage of process_mem_limit — exact value depends on test env, just
-    // sanity-check it parses and resizes to something positive.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", "10%"));
-    EXPECT_GT(cache->capacity(), 0u);
-
-    // Restore for downstream tests/files.
-    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("vector_query_cache_capacity", saved));
-}
-#endif
-
 #ifdef USE_STAROS
 
 namespace {
@@ -293,32 +235,32 @@ private:
 
 } // namespace
 
-TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs) {
+TEST_F(UpdateConfigActionTest, update_starlet_upload_threshold_configs) {
     ScopedStarletUploadThresholdConfigs scoped_configs;
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-    auto* registry = ConfigUpdateRegistry::instance();
     for (const auto& mapping : kStarletUploadThresholdMappings) {
         // ASSERT_OK is a do/while macro and cannot take a trailing `<< message`, so capture the
         // status and use a streamable native assertion instead.
-        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        auto st = action.update_config(mapping.be_config, std::to_string(mapping.valid_value));
         ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
         EXPECT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
     }
 }
 
-// starlet's validator rejects non-positive values; the registry must roll the BE config back.
+// starlet's validator rejects non-positive values; the action must roll the BE config back.
 // Covers all five mappings, with both 0 and a negative value.
-TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non_positive) {
+TEST_F(UpdateConfigActionTest, update_starlet_upload_threshold_configs_reject_non_positive) {
     ScopedStarletUploadThresholdConfigs scoped_configs;
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-    auto* registry = ConfigUpdateRegistry::instance();
     for (const auto& mapping : kStarletUploadThresholdMappings) {
-        auto st = registry->update_config(mapping.be_config, std::to_string(mapping.valid_value));
+        auto st = action.update_config(mapping.be_config, std::to_string(mapping.valid_value));
         ASSERT_TRUE(st.ok()) << mapping.be_config << ": " << st;
         ASSERT_EQ(mapping.valid_value, *mapping.flag) << mapping.be_config;
 
         for (const char* bad_value : {"0", "-1"}) {
-            EXPECT_FALSE(registry->update_config(mapping.be_config, bad_value).ok())
+            EXPECT_FALSE(action.update_config(mapping.be_config, bad_value).ok())
                     << mapping.be_config << " should reject " << bad_value;
             EXPECT_EQ(mapping.valid_value, *mapping.flag)
                     << mapping.be_config << " flag changed on rejected " << bad_value;
@@ -329,6 +271,4 @@ TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non
 }
 
 #endif // USE_STAROS
-
->>>>>>> 45b9f5a ([Enhancement] Make starlet object-store upload thresholds configurable at runtime (#78448))
 } // namespace starrocks

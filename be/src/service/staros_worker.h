@@ -151,6 +151,7 @@ private:
 
 extern std::shared_ptr<StarOSWorker> g_worker;
 extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
+void apply_starlet_upload_threshold_configs();
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
 void shutdown_staros_worker();
 void update_staros_starcache();

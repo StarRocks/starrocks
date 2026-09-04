@@ -27,27 +27,16 @@
 #include <algorithm>
 #include <condition_variable>
 #include <functional>
-<<<<<<< HEAD:be/test/service/staros_worker_test.cpp
-=======
 #include <iterator>
-#include <limits>
->>>>>>> 45b9f5a ([Enhancement] Make starlet object-store upload thresholds configurable at runtime (#78448)):be/test/compute_env/staros/staros_worker_test.cpp
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD:be/test/service/staros_worker_test.cpp
 #include "common/config.h"
-=======
-#include "base/testutil/scoped_updater.h"
-#include "base/utility/defer_op.h"
-#include "common/config_metrics_fwd.h"
-#include "common/config_staros_worker_fwd.h"
-#include "common/configbase.h"
->>>>>>> 45b9f5a ([Enhancement] Make starlet object-store upload thresholds configurable at runtime (#78448)):be/test/compute_env/staros/staros_worker_test.cpp
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
+#include "testutil/scoped_updater.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/table_metrics.h"
