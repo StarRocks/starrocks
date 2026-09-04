@@ -178,14 +178,60 @@ jobs:
           # run against the PR's changes, matching pull_request behavior.
           ref: refs/pull/${{ github.event.number }}/merge
 
-      - name: Handbook Tool Tests
+      - name: Detect Handbook Tooling
+        id: tooling
         if: steps.path-filter.outputs.handbook == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          TOOLING: >-
+            build-support/check_repo_handbook.py
+            build-support/handbook_plan.py
+            build-support/test_check_repo_handbook.py
+            build-support/test_handbook_plan.py
+        run: |
+          # This workflow is resolved from main for every branch* PR, but the
+          # checked-out merge ref carries the *base branch's* tree. Release
+          # branches that forked before the handbook tooling landed have no
+          # build-support/check_repo_handbook.py, so running it there failed
+          # with a bogus ModuleNotFoundError instead of a real finding.
+          #
+          # Availability is decided by the BASE ref, never by the PR-controlled
+          # merge tree: a PR that deletes or renames the tooling on a branch
+          # that has it must not be able to skip its own check. The PR tree is
+          # consulted only to keep a PR that *adds* the tooling to a release
+          # branch covered by it -- adding cannot skip anything.
+          #
+          # The checkout here is shallow (no fetch-depth), so fetch the base tip
+          # at depth 1 and read it out of FETCH_HEAD.
+          git fetch --depth=1 --no-tags origin "$BASE_REF"
+
+          base_has=true
+          pr_has=true
+          for f in $TOOLING; do
+            git cat-file -e "FETCH_HEAD:$f" 2>/dev/null || base_has=false
+            [ -f "$f" ] || pr_has=false
+          done
+
+          if [ "$base_has" = true ] && [ "$pr_has" = false ]; then
+            echo "::error::This PR removes handbook tooling that exists on $BASE_REF. Restore it, or drop the check from the pipeline in the same PR."
+            exit 1
+          fi
+
+          if [ "$base_has" = true ] || [ "$pr_has" = true ]; then
+            echo "present=true" >> $GITHUB_OUTPUT
+          else
+            echo "present=false" >> $GITHUB_OUTPUT
+            echo "::notice::Handbook tooling is absent on $BASE_REF and not added by this PR; skipping the handbook check."
+          fi
+
+      - name: Handbook Tool Tests
+        if: steps.path-filter.outputs.handbook == 'true' && steps.tooling.outputs.present == 'true'
         run: |
           python3 -m unittest build-support/test_check_repo_handbook.py
           python3 -m unittest build-support/test_handbook_plan.py
 
       - name: Handbook Check
-        if: steps.path-filter.outputs.handbook == 'true'
+        if: steps.path-filter.outputs.handbook == 'true' && steps.tooling.outputs.present == 'true'
         run: |
           python3 build-support/check_repo_handbook.py
 
@@ -228,20 +274,67 @@ jobs:
           # `--mode changed` still diffs exactly the PR delta.
           ref: refs/pull/${{ github.event.number }}/merge
 
-      - name: Compute Merge Base
+      - name: Detect Schema Tooling
+        id: tooling
         if: steps.path-filter.outputs.schema == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          TOOLING: >-
+            build-support/check_gensrc_schema_compatibility.py
+            build-support/test_check_gensrc_schema_compatibility.py
+            build-support/schema_compatibility_waivers.json
+        run: |
+          # This workflow is resolved from main for every branch* PR, but the
+          # checked-out merge ref carries the *base branch's* tree. Release
+          # branches that forked before the schema checker landed have no
+          # build-support/check_gensrc_schema_compatibility.py, so a PR touching
+          # gensrc/ there failed with a bogus ModuleNotFoundError instead of a
+          # real finding. Backport the build-support/ scripts to a release
+          # branch to turn the check on for it.
+          #
+          # Availability is decided by the BASE ref, never by the PR-controlled
+          # merge tree: a PR that deletes or renames the checker on a branch
+          # that has it must not be able to skip its own schema check. The PR
+          # tree is consulted only to keep a PR that *adds* the tooling to a
+          # release branch covered by it -- adding cannot skip anything.
+          #
+          # Plain fetch, no --depth: the checkout above is fetch-depth 0 and
+          # Compute Merge Base needs the real history, so do not shallow it.
+          git fetch --no-tags origin "$BASE_REF"
+
+          base_has=true
+          pr_has=true
+          for f in $TOOLING; do
+            git cat-file -e "FETCH_HEAD:$f" 2>/dev/null || base_has=false
+            [ -f "$f" ] || pr_has=false
+          done
+
+          if [ "$base_has" = true ] && [ "$pr_has" = false ]; then
+            echo "::error::This PR removes schema compatibility tooling that exists on $BASE_REF. Restore it, or drop the check from the pipeline in the same PR."
+            exit 1
+          fi
+
+          if [ "$base_has" = true ] || [ "$pr_has" = true ]; then
+            echo "present=true" >> $GITHUB_OUTPUT
+          else
+            echo "present=false" >> $GITHUB_OUTPUT
+            echo "::notice::Schema compatibility tooling is absent on $BASE_REF and not added by this PR; skipping the schema check."
+          fi
+
+      - name: Compute Merge Base
+        if: steps.path-filter.outputs.schema == 'true' && steps.tooling.outputs.present == 'true'
         id: merge_base
         run: |
           git fetch origin ${{ github.base_ref }}
           echo "base=$(git merge-base origin/${{ github.base_ref }} HEAD)" >> $GITHUB_OUTPUT
 
       - name: Schema Tool Tests
-        if: steps.path-filter.outputs.schema == 'true'
+        if: steps.path-filter.outputs.schema == 'true' && steps.tooling.outputs.present == 'true'
         run: |
           python3 -m unittest build-support/test_check_gensrc_schema_compatibility.py
 
       - name: Schema Check
-        if: steps.path-filter.outputs.schema == 'true'
+        if: steps.path-filter.outputs.schema == 'true' && steps.tooling.outputs.present == 'true'
         run: |
           python3 build-support/check_gensrc_schema_compatibility.py --mode changed --base "${{ steps.merge_base.outputs.base }}"
 
