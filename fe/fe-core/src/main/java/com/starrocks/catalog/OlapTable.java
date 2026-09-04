@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -116,8 +117,6 @@ import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1188,18 +1187,73 @@ public class OlapTable extends Table {
         return partitionInfo;
     }
 
+    /**
+     * How long to wait for the targeted nodes to acknowledge a drop of their auto-increment map.
+     * Mutable only so a test can pin the strict variant's refusal without sitting out a full minute.
+     */
+    @VisibleForTesting
+    static long dropAutoIncrementMapTimeoutMs = 60L * 1000L;
+
+    /**
+     * Strict invalidation: tell every registered node, alive or not, to drop its cached
+     * auto-increment map for this table, and report failure unless all of them acknowledged.
+     *
+     * <p>Both callers move the table's counter, so an interval a node reserved earlier must not
+     * outlive the change - it would hand out ids below the value just set, or ids already issued.
+     * They differ in what they do about it:
+     *
+     * <ul>
+     * <li>{@code ALTER TABLE ... AUTO_INCREMENT} ({@code LocalMetastore.alterTableAutoIncrement})
+     * uses the result as a gate: it raises the counter only if this returned true.</li>
+     * <li>RESTORE ({@code RestoreJob}) calls this and <em>discards</em> the result, so a timeout
+     * here does not stop it from recovering the counter. That gap is pre-existing and tracked
+     * separately; do not read this contract as if RESTORE were guarded.</li>
+     * </ul>
+     *
+     * <p>RESTORE still needs this variant rather than the best-effort one, for a reason that has
+     * nothing to do with the return value: targeting a node that is not alive leaves its task queued
+     * in {@link AgentTaskQueue}, which is what lets {@code ReportHandler} resend it once that node
+     * reports again. The best-effort variant never builds that task, so such a node would never be
+     * told at all. And it does come back: a node goes {@code isAlive == false} after failed
+     * heartbeats and is marked alive again on the next successful one <em>without restarting</em>
+     * ({@code ComputeNode.handleHbResponse}), so its in-memory interval survives the outage.
+     *
+     * @see #sendDropAutoIncrementMapTaskBestEffort() for the drop path, which must not block
+     */
     public boolean sendDropAutoIncrementMapTask() {
-        Set<Long> nodeIds = Sets.newHashSet();
-        List<Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
-        for (Backend backend : backends) {
-            nodeIds.add(backend.getId());
-        }
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(false));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(false));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
 
-        List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
-        for (ComputeNode cn : computeNodes) {
-            nodeIds.add(cn.getId());
-        }
+    /**
+     * Best-effort invalidation: tell only the nodes that are alive, and do not wait for the rest.
+     *
+     * <p>For DROP TABLE / DROP DATABASE, where the result carries no guarantee and none is needed:
+     * table ids come from {@code getNextId()} and are never reused, so a stale entry left behind on
+     * a node that is not alive can never be hit by a future table.
+     *
+     * <p>Waiting for such a node is not merely useless here, it is harmful.
+     * {@link AgentBatchTask#run()} silently drops a task whose target node is gone or not alive, so
+     * no response ever arrives and nobody counts that latch mark down - the caller burns the full
+     * latch timeout. DROP DATABASE runs this once per auto-increment table while holding the
+     * database WRITE lock, so a single dead node turns into (table count * timeout) of lock hold
+     * time and stalls every other operation on the database.
+     *
+     * <p>The predicate is {@code isAlive()} - the same one {@code AgentBatchTask.run()} applies, so
+     * a node that passes here is a node the dispatch path will really send to - and not
+     * {@code isAvailable()}: a decommissioning node is alive, still serves loads, and still holds a
+     * map worth dropping.
+     */
+    public boolean sendDropAutoIncrementMapTaskBestEffort() {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Set<Long> nodeIds = Sets.newHashSet(clusterInfo.getBackendIds(true));
+        nodeIds.addAll(clusterInfo.getComputeNodeIds(true));
+        return doSendDropAutoIncrementMapTask(nodeIds);
+    }
 
+    private boolean doSendDropAutoIncrementMapTask(Set<Long> nodeIds) {
         AgentBatchTask batchTask = new AgentBatchTask();
 
         for (long nodeId : nodeIds) {
@@ -1218,8 +1272,7 @@ public class OlapTable extends Table {
             }
             AgentTaskExecutor.submit(batchTask);
 
-            // estimate timeout, at most 10 min
-            long timeout = 60L * 1000L;
+            long timeout = dropAutoIncrementMapTimeoutMs;
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
                         batchTask.getTaskNum(), timeout);
@@ -3398,7 +3451,10 @@ public class OlapTable extends Table {
         // which make things easier.
         dropAllTempPartitions();
         if (!replay && hasAutoIncrementColumn()) {
-            sendDropAutoIncrementMapTask();
+            // Best-effort: the table is going away and its id is never reused, so an entry left on
+            // a node that is not alive is unreachable dead memory. Waiting for such a node would
+            // cost a full latch timeout per table with the database WRITE lock held.
+            sendDropAutoIncrementMapTaskBestEffort();
         }
 
         updateBaseCompactionForbiddenTimeRanges(true);
