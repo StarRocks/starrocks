@@ -508,7 +508,7 @@ public:
         // because if `commit` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         if (_index_entry != nullptr) {
-            RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
+            RETURN_IF_ERROR(_index_entry->value().commit(&_builder));
             _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
             // Record publish-phase SST flush stats
             if (config::enable_tablet_write_log) {
