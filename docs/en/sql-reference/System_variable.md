@@ -1465,6 +1465,14 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Unit**: Byte
 * **Data type**: Int
 
+### max_array_length
+
+* **Scope**: Session
+* **Description**: The maximum number of elements in an array produced by an array function. If a function produces a larger array, the query fails instead of returning an oversized array. `0` or a negative value means no limit. This limit is intended for all functions that build arrays, but only [array_agg](sql-functions/array-functions/array_agg.md) enforces it so far.
+* **Default**: 0
+* **Data type**: Long
+* **Introduced in**: v4.2
+
 ### max_parallel_scan_instance_num
 
 * **Scope**: Session
@@ -1561,6 +1569,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
+
+### paimon_reader_mode
+
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
+* **Default**: AUTO
+* **Data type**: String
+* **Introduced in**: v4.2
 
 ### parallel_exchange_instance_num
 

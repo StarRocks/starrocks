@@ -774,7 +774,8 @@ public class SplitTabletJobTest {
         };
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) {
                 excludeTxnIdsArg.set(excludeTransactionIds);
                 return false;
@@ -813,7 +814,7 @@ public class SplitTabletJobTest {
             };
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                public boolean isPreviousTransactionsFinishedForReshard(long endTransactionId, long dbId,
                         List<Long> tableIds, Set<Long> excludeTransactionIds) {
                     return true;
                 }
@@ -878,7 +879,7 @@ public class SplitTabletJobTest {
             };
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                public boolean isPreviousTransactionsFinishedForReshard(long endTransactionId, long dbId,
                         List<Long> tableIds, Set<Long> excludeTransactionIds) {
                     return true;
                 }

@@ -280,8 +280,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: starlet filesystem インスタンス キャッシュの有効期限。
 - 導入バージョン: v3.3.15, 3.4.5
 
-<<<<<<< HEAD
-=======
 ### starlet_fslib_azure_storage_max_single_part_size
 
 - デフォルト: 104857600
@@ -327,7 +325,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタにおいて、S3 または S3 互換オブジェクトストレージへのマルチパートアップロードで使用するパートサイズです。パートのアップロードまで、出力ストリームごとに最大このサイズまでメモリにバッファリングされるため、値を大きくするとメモリ使用量が増加し、同時実行される出力ストリーム数に比例して増加します。値を小さくしすぎるとリクエスト数が増加し、AWS S3 の 10,000 パート上限を超えたり、最小パートサイズ 5 MB を下回ったりする可能性があります。他の S3 互換ストレージでは制限が異なります。変更は進行中のアップロードにも反映されます。値は 0 より大きい必要があり、0 以下の値は拒否されます。有効な値は、BE のコマンドラインで渡された対応する `--fslib_*` gflag を上書きします。BE 起動時に拒否された値は適用されず、BE は以前に有効だった値を保持して警告ログを出力するため、この項目が表示する値が実際に有効な値と異なる場合があります。この項目は共有データクラスタの starlet アップロードを制御するもので、`experimental_s3_*` 項目とは無関係です。
 - 導入バージョン: v4.1.5, v4.2
 
->>>>>>> f19a012081f (Name the GCS upload threshold config gcs, not gs (#60842))
 ### starlet_port
 
 - デフォルト: 9070

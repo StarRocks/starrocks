@@ -277,10 +277,12 @@ private:
     // Processes a single chunk during parallel condition merge.
     // Compares condition column values between old and new rows to decide which rows to delete.
     // This is called concurrently by multiple worker threads, with mutex protecting shared state.
-    Status _process_single_chunk_update_with_condition(
-            const RowsetUpdateStateParams& params, uint32_t rowset_id, int32_t upsert_idx,
-            SegmentPKIterator* segment_pk_iterator, ParallelPublishContext* context, const SegmentPKChunkRef& current,
-            const TabletColumn& tablet_column, const std::vector<uint32_t>& read_column_ids, LakePrimaryIndex& index);
+    Status _process_single_chunk_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
+                                                       int32_t upsert_idx, SegmentPKIterator* segment_pk_iterator,
+                                                       ParallelUpsertContext* context, const SegmentPKChunkRef& current,
+                                                       const TabletColumn& tablet_column,
+                                                       const std::vector<uint32_t>& read_column_ids,
+                                                       LakePrimaryIndex& index);
 
     // Performs condition-based merge update using parallel execution for segments with SST files.
     // This optimized path leverages pre-materialized condition values in SST files to enable

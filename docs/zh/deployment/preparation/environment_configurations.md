@@ -114,6 +114,7 @@ StarRocks 的 Java 组件运行在 JDK 之上。这些 Java 组件包括：
 - FE 的编译目标在 v3.5.0 中从 Java 11 提升到 Java 17，因此 v3.5 及以后版本在运行时需要 JDK 17 或更高版本。
 - 从 v3.5.0 起，StarRocks 不再为特定 JDK 版本提供各自的 JVM 预设；所有 JDK 版本共用同一份 `JAVA_OPTS`。当从 v3.4 或更早版本升级到 v3.5 及以后版本时，请移除 **fe.conf** 中与 JDK 17 不兼容的 `JAVA_OPTS` 选项（例如 CMS 相关选项），并使用 v3.5 及以后版本自带的默认 `JAVA_OPTS`。
 - 从 v4.2 起，推荐使用 JDK 21。运行时的最低版本仍为 JDK 17（FE 的编译目标为 Java 17）；JDK 21 向后兼容 JDK 17 运行时目标。
+- 最低 JDK 和推荐 JDK 遵循 Java LTS 日历。下一次变更计划在 2027 年 10 月之后发布的第一个次版本中生效，届时最低 JDK 将变为 JDK 21，推荐 JDK 将变为 JDK 25。详情请参阅[版本发布指南](../../developers/versions.md)。
 
 :::note
 StarRocks 不支持 JRE。您必须安装完整的 JDK。

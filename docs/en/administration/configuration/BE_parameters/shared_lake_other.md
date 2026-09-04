@@ -289,8 +289,6 @@ This topic introduces the following types of BE configurations:
 - Description: The cache expiration time of starlet filesystem instances.
 - Introduced in: v3.3.15, 3.4.5
 
-<<<<<<< HEAD
-=======
 ### starlet_fslib_azure_storage_max_single_part_size
 
 - Default: 104857600
@@ -336,7 +334,6 @@ This topic introduces the following types of BE configurations:
 - Description: In a shared-data cluster, the part size used for multipart uploads to S3 or an S3-compatible object store. BE buffers up to this many bytes in memory per output stream between part uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the 10,000-part limit or fall below the 5 MB minimum part size that AWS S3 enforces; the limits of other S3-compatible stores differ. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect. This item controls starlet uploads in a shared-data cluster and is unrelated to the `experimental_s3_*` items.
 - Introduced in: v4.1.5, v4.2
 
->>>>>>> f19a012081f (Name the GCS upload threshold config gcs, not gs (#60842))
 ### starlet_port
 
 - Default: 9070

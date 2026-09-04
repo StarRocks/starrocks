@@ -88,6 +88,44 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
 - Introduced in: v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the global-dictionary thrash guard. A "rolling" low-cardinality column—whose instantaneous distinct value count stays below the dictionary threshold but whose value set keeps rotating (for example, a daily-partitioned column that is reloaded with fresh values)—never trips the cardinality blacklist, yet every load introduces values missing from the current global dictionary and invalidates it. Each invalidation forces a full-table dictionary re-collection, which wastes IO and, in shared-data clusters, contends heavily on the segment metadata cache lock. When this guard is enabled, StarRocks counts how often each column's dictionary is invalidated within `dict_thrash_guard_window_sec`; once a column reaches `dict_thrash_guard_threshold` invalidations, StarRocks forbids collecting that column's global dictionary. The forbid takes effect immediately and is persisted as the table's `no_dict_columns` property, so it survives FE restart and leader failover. To re-enable dictionary collection for a column, run `ALTER TABLE ... ENABLE DICTIONARY (column)`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The length of the time window (in seconds) over which the global-dictionary thrash guard counts how often a column's dictionary is invalidated. This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of dictionary invalidations within `dict_thrash_guard_window_sec` at which the global-dictionary thrash guard forbids collecting a column's global dictionary. Set to `0` to disable the count check while keeping the guard enabled (no column is automatically forbidden). This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
+
+### `min_max_stats_collect_interval_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Minimum interval between two min/max statistics collections for the same column. Min/max stats (used to constant-fold `min()`/`max()` and to build compressed group-by keys) are collected on demand via a `[_META_]` MetaScan that reads every segment's zone-map metadata; without throttling a frequently loaded column re-scans on every load, contending on the segment metadata cache the same way global-dictionary re-collection does. Within the interval the min/max optimization is skipped rather than re-collected -- a stale value is never served, so this only affects the optimization, never correctness. Set to `0` to disable throttling.
+- Introduced in: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - Default: true

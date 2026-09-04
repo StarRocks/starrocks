@@ -336,7 +336,7 @@ public class MergeTabletJob extends TabletReshardJob {
         Set<Long> ignoredCompactionTxnIds = GlobalStateMgr.getCurrentState().getCompactionMgr()
                 .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet());
         try {
-            if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinished(
+            if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinishedForReshard(
                     endTransactionId, dbId, List.of(tableId), ignoredCompactionTxnIds)) {
                 return;
             }
@@ -627,6 +627,7 @@ public class MergeTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
+                    newIndex.setTakeoverVersion(commitVersion);
                     physicalPartition.addMaterializedIndex(newIndex,
                             newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }

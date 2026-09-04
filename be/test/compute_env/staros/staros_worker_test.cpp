@@ -18,6 +18,7 @@
 #include <aws/core/Aws.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <gflags/gflags.h>
 #include <grpcpp/grpcpp.h>
 #include <gtest/gtest.h>
 #include <manager.grpc.pb.h>
@@ -26,24 +27,58 @@
 #include <algorithm>
 #include <condition_variable>
 #include <functional>
+#include <iterator>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "common/config_metrics_fwd.h"
+#include "common/config_staros_worker_fwd.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+
 namespace starrocks {
 
 static void add_shard_listener(std::vector<StarOSWorker::ShardId>* shardIds, int* counter, StarOSWorker::ShardId id) {
     shardIds->push_back(id);
     ++*counter;
+}
+
+TEST(StarletRequestTimeoutTest, PreserveTimeoutSemanticsForEachHttpClient) {
+    auto positive = starlet_request_timeout_ms(10000, true);
+    ASSERT_TRUE(positive);
+    EXPECT_EQ(10000, *positive);
+
+    auto disabled = starlet_request_timeout_ms(0, true);
+    ASSERT_TRUE(disabled);
+    EXPECT_EQ(0, *disabled);
+
+    auto poco_unset = starlet_request_timeout_ms(-1, true);
+    ASSERT_TRUE(poco_unset);
+    EXPECT_EQ(-1, *poco_unset);
+
+    auto curl_unset = starlet_request_timeout_ms(-1, false);
+    ASSERT_TRUE(curl_unset);
+    EXPECT_EQ(0, *curl_unset);
+
+    auto max = starlet_request_timeout_ms(std::numeric_limits<int32_t>::max(), true);
+    ASSERT_TRUE(max);
+    EXPECT_EQ(std::numeric_limits<int32_t>::max(), *max);
+    EXPECT_FALSE(starlet_request_timeout_ms(static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1, true));
 }
 
 static Aws::SDKOptions _s_options;
@@ -450,8 +485,6 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     EXPECT_EQ(before_failed + 1, metrics->staros_shard_info_fallback_failed_total.value());
 }
 
-<<<<<<< HEAD
-=======
 namespace {
 
 struct UploadThresholdMapping {
@@ -540,6 +573,5 @@ TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup
     EXPECT_EQ(11L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
 }
 
->>>>>>> f19a012081f (Name the GCS upload threshold config gcs, not gs (#60842))
 } // namespace starrocks
 #endif

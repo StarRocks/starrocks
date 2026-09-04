@@ -423,6 +423,10 @@ struct TQueryOptions {
   // it even when the scan-range count already reaches pipeline_dop) once its rows exceed this ratio times
   // the per-driver ideal share. Only affects enable_lake_prepared_physical_split_scan. Default 1.5.
   225: optional double lake_tablet_internal_parallel_skew_split_ratio = 1.5;
+
+  // Maximum number of elements in an array produced by an array function. The query fails once an
+  // array exceeds it. Only array_agg enforces it so far. <=0 disables the limit. Default 0.
+  226: optional i64 max_array_length = 0;
 }
 
 // A scan range plus the parameters needed to execute that scan.

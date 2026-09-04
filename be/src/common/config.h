@@ -124,10 +124,17 @@ CONF_Bool(enable_jemalloc_memory_tracker, "true");
 // changing any other option is rejected, because the corresponding `opt.*` mallctl nodes are
 // read-only; those need a restart. Note that prof_active can only be turned on when the process
 // was started with prof:true.
+// `oversize_threshold` sends every allocation of at least that many bytes to jemalloc's
+// dedicated huge arena, which is purged eagerly. Keeping the large buffers out of the
+// per-CPU arenas lets them be reused across threads and stops them from dominating the decay
+// bookkeeping of the ordinary arenas, where they otherwise drag small and medium extents into
+// being purged with them and cost a soft page fault each on the next use. It is set above
+// jemalloc's own 8MB default because the huge arena is a single shared arena, so a lower
+// threshold funnels more allocations through its lock.
 // NOTE: keep this default in sync with the normal-mode default in bin/start_backend.sh.
 CONF_mString(jemalloc_conf,
-             "percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,"
-             "background_thread:true,prof:true,prof_active:false");
+             "percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,"
+             "metadata_thp:auto,background_thread:true,prof:true,prof_active:false");
 
 // Whether abort the process if a large memory allocation is detected which the requested
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
@@ -1301,14 +1308,18 @@ CONF_Bool(object_storage_endpoint_path_style_access, "false");
 // Default is -1, indicate to use the default value in sdk (1000ms)
 // Unless you are very far away from your the data center you are talking to, 1000ms is more than sufficient.
 CONF_Int64(object_storage_connect_timeout_ms, "-1");
-// Request timeout for object storage
-// Default is -1, indicate to use the default value in sdk.
-// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
-// below "lowSpeedLimit" for the library to consider it too slow and abort.
-// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
-// value is greater than 0 and less than 1000.
-// When it's 0, low speed limit check will be disabled.
-CONF_mInt64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage.
+//
+// 10 s by default. It is not a deadline on the request: for Curl it is the low speed time, the
+// number of milliseconds the transfer may stay below "lowSpeedLimit" (1 byte/s) before the library
+// gives up, and for the Poco client it is the socket send/receive timeout. Either way a transfer
+// that keeps making progress is never cut off, however long it runs -- only one that has stopped
+// moving entirely. Curl rounds the value down to whole seconds; 0 disables the check, and a
+// negative value leaves the client on its own default.
+//
+// Leaving it unset is what made a stalled read wait out the HTTP client's built-in default:
+// measured on shared-data cold scans, 1.3% of queries hung for ~59 s each.
+CONF_mInt64(object_storage_request_timeout_ms, "10000");
 // Request timeout for object storage specialized for rename_file operation.
 // if this parameter is 0, use object_storage_request_timeout_ms instead.
 CONF_Int64(object_storage_rename_file_request_timeout_ms, "30000");
@@ -1489,8 +1500,6 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
 CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
-<<<<<<< HEAD
-=======
 // Object-store upload thresholds, forwarded to the starlet gflags of the same name without the
 // `starlet_` prefix. For each backend, an object larger than `*_max_single_part_size` is uploaded
 // with a multipart upload instead of a single request, and `*_min_upload_part_size` is the
@@ -1513,7 +1522,6 @@ CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
 CONF_mInt64(starlet_fslib_gcs_max_single_part_size, "104857600");
 CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
 CONF_mInt64(starlet_fslib_azure_storage_min_upload_part_size, "5242880");
->>>>>>> f19a012081f (Name the GCS upload threshold config gcs, not gs (#60842))
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);

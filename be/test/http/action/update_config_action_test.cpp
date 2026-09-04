@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
+#include <iterator>
 #include <memory>
+#include <string>
 
 #include "agent/agent_server.h"
 #include "base/testutil/assert.h"
@@ -27,9 +30,11 @@
 #include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/configbase.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
@@ -47,6 +52,14 @@
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/update_manager.h"
+
+#ifdef USE_STAROS
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+#endif
 
 namespace starrocks {
 
@@ -273,8 +286,6 @@ TEST_F(ConfigUpdateHooksTest, vector_query_cache_capacity_happy_path_resizes_cac
 }
 #endif
 
-<<<<<<< HEAD
-=======
 #ifdef USE_STAROS
 
 namespace {
@@ -368,5 +379,4 @@ TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non
 
 #endif // USE_STAROS
 
->>>>>>> f19a012081f (Name the GCS upload threshold config gcs, not gs (#60842))
 } // namespace starrocks

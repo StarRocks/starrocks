@@ -22,6 +22,17 @@ select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} whe
 select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where k2 = "null";
 
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+
+-- CTAS must derive the partition column's nullability from the query, like plain CREATE TABLE
+-- does. An Iceberg identity partition accepts NULL, so the column must stay nullable.
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} (k1, k2) partition by (k2) as select 1, cast(null as string);
+desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0};
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} select 2, "null";
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} order by k1;
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} where k2 is null;
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} where k2 = "null";
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_ctas_${uuid0} force;
+
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};
 

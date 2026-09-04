@@ -56,6 +56,13 @@ description: "Alphabetical s"
 - 単位: -
 - 説明: `/proc/net/snmp`によって返されるメトリクス。
 
+## `starrocks_be_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: BEノードのビルド情報。メトリクスの値は常に `1` です。
+
 ## `starrocks_be_clone_task_copy_bytes`
 
 - 単位: バイト
@@ -182,6 +189,12 @@ description: "Alphabetical s"
 - 単位: カウント
 - タイプ: 累積値
 - 説明: `FlatJsonColumnWriter` に追加された行数（`append()` 時点でカウント、実際のフラット化の前）。
+
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 共有データモード専用。Lake tablet metadata をリモートストレージから読み取り、`NotFound` が返された試行の総数。tablet の metadata は個別の metadata ファイルか bundle metadata ファイルのいずれか一方にのみ存在し、両方に存在することはありません。いずれの読み取りもカウント対象で、vacuum が発行する bundle 読み取りも含まれます。失敗したフォールバック読み取りはそれぞれ個別にカウントされます。キャッシュミスおよび読み取り成功時には、このメトリクスは増加しません。レプリケーションでのソースクラスタ metadata の読み取り、およびリストアでのスナップショット metadata の読み取りはカウントされません。
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -336,6 +349,13 @@ description: "Alphabetical s"
 - 単位: 個
 - タイプ: 累積
 - 説明: リポジトリから削除されたバックアップスナップショットの合計数。TTL による自動クリーンアップと DROP SNAPSHOT の両方を含みます。
+
+## `starrocks_fe_build_info`
+
+- 単位: -
+- タイプ: 瞬間
+- ラベル: `version`、`commit_hash`
+- 説明: FEノードのビルド情報。メトリクスの値は常に `1` です。
 
 ## `starrocks_fe_clone_task_copy_bytes`
 
