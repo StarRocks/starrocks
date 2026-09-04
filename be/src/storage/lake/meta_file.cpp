@@ -287,6 +287,14 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // An owned-only rewrite drops the rows this tablet does not own, so the replacement holds
+        // fewer than the metadata copied from op_write says. Nothing else refreshes this, and both
+        // the persistent-index rebuild accounting and the split statistics read it, so carry the real
+        // count. Zero means the rewrite did not filter (the copy-and-append path) and the source's
+        // count still stands.
+        if (replace_seg.second.num_rows > 0) {
+            segment_meta->set_num_rows(replace_seg.second.num_rows);
+        }
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
@@ -1511,6 +1519,14 @@ Status MetaFileBuilder::set_final_rowset() {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // An owned-only rewrite drops the rows this tablet does not own, so the replacement holds
+        // fewer than the metadata copied from op_write says. Nothing else refreshes this, and both
+        // the persistent-index rebuild accounting and the split statistics read it, so carry the real
+        // count. Zero means the rewrite did not filter (the copy-and-append path) and the source's
+        // count still stands.
+        if (replace_seg.second.num_rows > 0) {
+            segment_meta->set_num_rows(replace_seg.second.num_rows);
+        }
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
