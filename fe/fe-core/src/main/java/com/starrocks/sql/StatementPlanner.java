@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.LogicalSinkMVMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
@@ -588,9 +589,24 @@ public class StatementPlanner {
         } else {
             long warehouseId = session.getCurrentWarehouseId();
             long dbId = db.getId();
+            // For TO-table MVs (CREATE MATERIALIZED VIEW ... TO <table>), a load into the base table
+            // fans out into each MV's target table within the SAME transaction. The target tables must
+            // therefore be part of the txn so their tablets are committed and published together.
+            List<Long> txnTableIds = Lists.newArrayList(targetTable.getId());
+            List<OlapTable> sinkTargetTables = Lists.newArrayList();
+            if (targetTable instanceof OlapTable && ((OlapTable) targetTable).hasLogicalSinkMV()) {
+                for (LogicalSinkMVMeta meta : ((OlapTable) targetTable).getLogicalSinkMVs().values()) {
+                    Table tgt = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(dbId, meta.getTargetTableId());
+                    if (tgt instanceof OlapTable && !txnTableIds.contains(tgt.getId())) {
+                        txnTableIds.add(tgt.getId());
+                        sinkTargetTables.add((OlapTable) tgt);
+                    }
+                }
+            }
             txnId = transactionMgr.beginTransaction(
                     dbId,
-                    Lists.newArrayList(targetTable.getId()),
+                    txnTableIds,
                     label,
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
@@ -602,6 +618,9 @@ public class StatementPlanner {
             if (targetTable instanceof OlapTable) {
                 TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
                 txnState.addTableIndexes((OlapTable) targetTable);
+                for (OlapTable sinkTargetTable : sinkTargetTables) {
+                    txnState.addTableIndexes(sinkTargetTable);
+                }
             }
         }
 

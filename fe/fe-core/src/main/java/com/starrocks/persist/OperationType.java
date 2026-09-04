@@ -636,6 +636,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_SET_VIEW_SECURITY_LOG = 13542;
 
+    // CK-compatible logical sink MV (`CREATE MATERIALIZED VIEW ... TO <table>`).
+    public static final short OP_CREATE_LOGICAL_SINK_MV = 13601;
+    public static final short OP_DROP_LOGICAL_SINK_MV = 13602;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

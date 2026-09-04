@@ -679,6 +679,7 @@ createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
     comment?
+    (TO toTableName=qualifiedName)?
     materializedViewDesc*
     AS queryStatement
     ;
