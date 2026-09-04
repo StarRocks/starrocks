@@ -78,7 +78,7 @@ public:
             const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
             uint32_t emitted_rowid_base, uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
             SegmentFileMark segment_file_mark = {}, RewriteVectorIndexOptions vector_index_opts = {},
-            std::vector<int64_t>* out_vector_index_ids = nullptr);
+            std::vector<int64_t>* out_vector_index_ids = nullptr, size_t* out_num_rows = nullptr);
 
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
@@ -91,7 +91,7 @@ public:
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
             const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {},
             std::vector<int64_t>* out_vector_index_ids = nullptr, const Filter& owned = Filter{},
-            uint32_t emitted_rowid_base = 0);
+            uint32_t emitted_rowid_base = 0, size_t* out_num_rows = nullptr);
 };
 
 } // namespace starrocks

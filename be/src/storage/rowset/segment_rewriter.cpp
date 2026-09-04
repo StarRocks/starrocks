@@ -143,7 +143,7 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
         const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
         uint32_t emitted_rowid_base, uint32_t segment_id, const FooterPointerPB& partial_rowset_footer,
         SegmentFileMark segment_file_mark, RewriteVectorIndexOptions vector_index_opts,
-        std::vector<int64_t>* out_vector_index_ids) {
+        std::vector<int64_t>* out_vector_index_ids, size_t* out_num_rows) {
     RETURN_ERROR_IF_FALSE(resolved_column_ids.size() == resolved_columns.size(),
                           "resolved column ids and columns disagree");
     RETURN_ERROR_IF_FALSE(!owned.empty(), "owned-only rewrite needs an ownership mask");
@@ -254,6 +254,13 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
 
     record_rewrite_vector_index_ids(writer, out_vector_index_ids);
     dest->size = segment_file_size;
+    // The output holds fewer rows than its source and nothing downstream can infer that: the
+    // replacement metadata is copied from the source segment, so unless the caller carries the real
+    // count into it the segment goes on advertising the shared segment's, which the persistent-index
+    // rebuild accounting and the split statistics both read.
+    if (out_num_rows != nullptr) {
+        *out_num_rows = out->num_rows();
+    }
     return Status::OK();
 }
 
@@ -366,7 +373,8 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
         starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
         const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
         const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts,
-        std::vector<int64_t>* out_vector_index_ids, const Filter& owned, uint32_t emitted_rowid_base) {
+        std::vector<int64_t>* out_vector_index_ids, const Filter& owned, uint32_t emitted_rowid_base,
+        size_t* out_num_rows) {
     if (unmodified_column_ids.size() == 0) {
         DCHECK_EQ(unmodified_column_data, nullptr);
     }
@@ -489,6 +497,11 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
 
     record_rewrite_vector_index_ids(writer, out_vector_index_ids);
     dest->size = segment_file_size;
+    // Same duty as the owned-only rewrite above when a mask filtered rows out; num_rows already
+    // tracks what survived.
+    if (out_num_rows != nullptr) {
+        *out_num_rows = num_rows;
+    }
     return Status::OK();
 }
 

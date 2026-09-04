@@ -670,11 +670,15 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         SegmentFileInfo file_info;
         file_info.path = params.tablet->segment_location(dest_path);
+        size_t ai_kept_rows = 0;
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
                 src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
                 unmodified_column_ids, has_partial_update_state(params) ? rewrite_write_columns : nullptr,
                 params.tablet, std::move(vector_index_opts), &file_info.vector_index_ids, owned,
-                _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0));
+                _upserts[segment_id] != nullptr ? _upserts[segment_id]->physical_rowid_base() : 0, &ai_kept_rows));
+        if (filter_unowned_rows) {
+            file_info.num_rows = static_cast<int64_t>(ai_kept_rows);
+        }
         file_info.path = dest_path;
         stamp_rewrite_vector_index_owner(params, &file_info);
         (*replace_segments)[segment_id] = file_info;
@@ -684,11 +688,13 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         file_info.path = params.tablet->segment_location(dest_path);
 
         if (filter_unowned_rows) {
+            size_t kept_rows = 0;
             RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update_owned_only(
                     src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, owned,
                     _upserts[segment_id]->physical_rowid_base(), segment_id, partial_rowset_footer,
                     {root_path, std::to_string(rowset_meta.id())}, std::move(vector_index_opts),
-                    &file_info.vector_index_ids));
+                    &file_info.vector_index_ids, &kept_rows));
+            file_info.num_rows = static_cast<int64_t>(kept_rows);
         } else {
             RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
                     src, &file_info, params.tablet_schema, unmodified_column_ids, *rewrite_write_columns, segment_id,
@@ -704,7 +710,13 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         // reachable when a schema change lands between the partial write and its publish): there
         // the rewrite never sees a SegmentWriter, so carry the src's scheduled ids (async has no
         // .vi file to copy) lest the metadata refresh wipe them.
-        if (!defer_vector_index_build) {
+        if (filter_unowned_rows) {
+            // The owned-only rewrites put every column through a column writer, so a synchronous
+            // vector index for the dest has already been built over the filtered, renumbered rows and
+            // recorded in file_info. Carrying the source's would copy_file OVER that index with one
+            // whose row ids address the unfiltered source, and a vector query could then return rows
+            // the dest no longer holds.
+        } else if (!defer_vector_index_build) {
             RETURN_IF_ERROR(carry_src_segment_vector_indexes(params, src_seg_meta, src_path, dest_path, &file_info));
         } else if (unmodified_column_ids.empty()) {
             // Copy-only async fast path (see the block comment above).
@@ -716,6 +728,16 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
         (*replace_segments)[segment_id] = file_info;
     } else {
         need_rename = false;
+    }
+    // A filtered rewrite renumbers the rows it keeps, which would invalidate the row ids inside an
+    // eager-built primary-key SST that op_write carries -- dropping the unowned entries cannot remap
+    // the survivors. The two cannot co-occur: op_write SSTs come only from a spilling load
+    // (SpillMemTableSink is the sole write-side caller of try_enable_pk_index_eager_build) and
+    // should_enable_load_spill() requires !is_partial_update(), while a rewrite requires
+    // rewrite_segments_meta, which only a partial write emits. Assert it rather than leave the
+    // reasoning in a comment, because the renumbering below is what makes it load-bearing.
+    if (filter_unowned_rows && params.op_write.ssts_size() > 0) {
+        return Status::InternalError("an owned-only rewrite cannot renumber rows under an eager-built primary key SST");
     }
     if (filter_unowned_rows && need_rename) {
         // The rewrite dropped the siblings' rows and renumbered what is left from zero. Collapse the
