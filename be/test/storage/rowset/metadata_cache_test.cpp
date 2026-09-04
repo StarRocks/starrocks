@@ -349,8 +349,7 @@ TEST_F(MetadataCacheTest, update_charge_on_last_reader_release) {
     rowset->release();
     ASSERT_EQ(2, update_charge_calls);
     ASSERT_EQ(loaded_rowset_size, captured_charge);
-    ASSERT_EQ(loaded_rowset_size - initial_rowset_size,
-              metadata_cache->get_memory_usage() - initial_cache_usage);
+    ASSERT_EQ(loaded_rowset_size - initial_rowset_size, metadata_cache->get_memory_usage() - initial_cache_usage);
     ASSERT_GT(rowset->segment_memory_usage(), 0);
 
     const size_t updated_cache_usage = metadata_cache->get_memory_usage();
@@ -394,8 +393,7 @@ TEST_F(MetadataCacheTest, skip_charge_calculation_for_ineligible_rowsets) {
     int segment_memory_usage_calls = 0;
     const int32_t old_metadata_cache_memory_limit_percent = config::metadata_cache_memory_limit_percent;
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack("Rowset::segment_memory_usage",
-                                         [&](void*) { ++segment_memory_usage_calls; });
+    SyncPoint::GetInstance()->SetCallBack("Rowset::segment_memory_usage", [&](void*) { ++segment_memory_usage_calls; });
     DeferOp defer([old_metadata_cache_memory_limit_percent] {
         config::metadata_cache_memory_limit_percent = old_metadata_cache_memory_limit_percent;
         SyncPoint::GetInstance()->ClearCallBack("Rowset::segment_memory_usage");
