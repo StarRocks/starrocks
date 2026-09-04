@@ -1389,8 +1389,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         private ScalarOperator merge(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
-            if (collectors.stream().anyMatch(s -> s.getType().isArrayType()
-                    || s.getType().isStructType())) {
+            // the result becomes a new dictionary, so it must be a scalar string; the collectors are
+            // BOOLEAN sentinels for constant operands and cannot report the operator's own type
+            Type selfType = scalarOperator.getType();
+            if (selfType.isArrayType() || selfType.isStructType()
+                    || collectors.stream().anyMatch(s -> s.getType().isArrayType()
+                        || s.getType().isStructType())) {
                 return forbidden(collectors, scalarOperator);
             }
             return mergeWithArray(collectors, scalarOperator);
