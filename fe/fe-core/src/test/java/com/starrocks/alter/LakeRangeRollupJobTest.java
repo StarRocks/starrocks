@@ -32,9 +32,11 @@ import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Config;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -336,6 +338,54 @@ public class LakeRangeRollupJobTest {
     }
 
     // ---- planPartitionShadow test (Task 3 Step 1 / Step 2 / Step 4) -------------
+
+    @Test
+    public void testZeroTargetPreservesSingleTabletWithoutSampling() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            LakeRangeRollupJob job = newConfiguredRollupJob(
+                    List.of(table.getSchemaByIndexMetaId(baseIndexMetaId).get(0)));
+            job.setSampler(request -> {
+                throw new AssertionError("K=1 must bypass sampling");
+            });
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            PendingPartitionPlan plan = newPendingPlan(partition);
+
+            job.planPartitionShadow(plan, table, DB_NAME);
+
+            assertEquals(1, plan.shadowTabletCount);
+            assertTrue(plan.boundaries.isEmpty());
+            assertEquals(1, plan.shadowIndex.getTablets().size());
+            assertTrue(plan.shadowIndex.getTablets().get(0).getRange().getRange().isAll());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
+
+    @Test
+    public void testZeroTargetPreservesMultipleLatestIndexTablets() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            MaterializedIndex baseIndex = partition.getLatestIndex(baseIndexMetaId);
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+            LakeRangeRollupJob job = newConfiguredRollupJob(List.of(baseSchema.get(1), baseSchema.get(0)));
+            job.setSampler(stubSamplerReturning(sampleOver(baseSchema.get(1), baseSchema.get(0))));
+            PendingPartitionPlan plan = newPendingPlan(partition);
+
+            job.planPartitionShadow(plan, table, DB_NAME);
+
+            assertEquals(3, plan.shadowTabletCount);
+            assertEquals(2, plan.boundaries.size());
+            assertEquals(3, plan.shadowIndex.getTablets().size());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
 
     @Test
     public void testPlanPartitionShadowBuildsKTabletShadowByRollupSortKey() throws Exception {

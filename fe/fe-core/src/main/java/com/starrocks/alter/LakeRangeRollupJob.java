@@ -23,13 +23,11 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
 import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
 import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
-import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
-import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -257,10 +255,11 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
             throws AlterCancelException {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        Estimates estimates = new Estimates(plan.partitionDataSize, 0L);
-        int requestedTabletCount = TabletPreSplitCoordinator.selectTabletCount(estimates, activeComputeNodeCount);
-        List<Tuple> boundaries = planBoundaries(dbName, plan.tableName, plan.partitionName,
-                plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
+        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
+        List<Tuple> boundaries = requestedTabletCount == 1
+                ? List.of()
+                : planBoundaries(dbName, plan.tableName, plan.partitionName,
+                        plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
         // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
         int shadowTabletCount = boundaries.size() + 1;
         List<TabletRange> ranges = buildTabletRanges(boundaries);
