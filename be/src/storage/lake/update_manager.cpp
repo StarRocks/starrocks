@@ -441,7 +441,14 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // index the delete logically follows (delete sorts after that segment via the reserved UINT32_MAX
     // rowid). Falls back to the max segment id when the writer could not determine the order (spill /
     // older writers / column-mode), reproducing the legacy "all deletes after all upserts" behavior.
-    uint32_t max_segment_id = 0;
+    // Default to this op_write's own reserved slot, not 0: rowset_segment_ids already carries
+    // assigned_global_segments, so an op_write WITH segments gets the right base from the max below --
+    // but a segmentless one (a pure-delete statement) leaves the vector empty, and falling back to 0
+    // would place its delete at the very start of the merged rowset's rssid range instead of at the
+    // slot get_rowset_id_step() reserves for it. MetaFileBuilder::add_rowset() records seg_base for
+    // exactly that case, so apply has to agree or the two diverge again for a middle or trailing
+    // pure-delete statement. Outside batch apply assigned_global_segments is 0, so this is a no-op there.
+    uint32_t max_segment_id = assigned_global_segments;
     if (!rowset_segment_ids.empty()) {
         max_segment_id = *std::max_element(rowset_segment_ids.begin(), rowset_segment_ids.end());
     }
