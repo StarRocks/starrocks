@@ -69,6 +69,10 @@ public:
     // EMITTED -- one entry per emitted row, owned or not -- and |emitted_rowid_base| says where that
     // run starts in the source file. Both halves are therefore filtered by the same mask, and a source
     // row outside the emitted run is not this tablet's either, so it goes as well.
+    // Exposed for testing: the (emitted base, mask) -> source-row selection arithmetic both
+    // owned-only rewrites share. See the definition for why rows outside the emitted run go too.
+    static Filter build_owned_selection(size_t num_rows, uint32_t emitted_rowid_base, const Filter& owned);
+
     static Status rewrite_partial_update_owned_only(
             const FileInfo& src, FileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
             const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,

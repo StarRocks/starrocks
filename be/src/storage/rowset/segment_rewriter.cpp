@@ -121,6 +121,23 @@ Status SegmentRewriter::rewrite_partial_update(const FileInfo& src, FileInfo* de
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
+// Turn a cross-publish ownership mask into a selection over the SOURCE segment's rows.
+//
+// |owned| covers the run of rows the publish iterator emitted, which starts at |emitted_rowid_base|:
+// a rowid-narrowed read -- what a sort-key == PK tablet gets, because there the tablet range does
+// resolve to a rowid interval -- emits a slice rather than the whole file. A source row outside that
+// run was never offered to this tablet and belongs to no one here, so it is dropped along with the
+// rows the mask excludes. Shared by both owned-only rewrites so the arithmetic exists once.
+Filter SegmentRewriter::build_owned_selection(size_t num_rows, uint32_t emitted_rowid_base, const Filter& owned) {
+    Filter selection(num_rows, 0);
+    for (size_t i = 0; i < num_rows; i++) {
+        if (i >= emitted_rowid_base && i - emitted_rowid_base < owned.size()) {
+            selection[i] = owned[i - emitted_rowid_base];
+        }
+    }
+    return selection;
+}
+
 Status SegmentRewriter::rewrite_partial_update_owned_only(
         const FileInfo& src, FileInfo* dest, const std::shared_ptr<const TabletSchema>& tschema,
         const std::vector<uint32_t>& resolved_column_ids, MutableColumns& resolved_columns, const Filter& owned,
@@ -187,15 +204,15 @@ Status SegmentRewriter::rewrite_partial_update_owned_only(
         if (chunk_rows == 0) {
             continue;
         }
-        Filter selection(chunk_rows, 0);
-        for (size_t i = 0; i < chunk_rows; i++) {
-            const size_t abs = source_row + i;
-            if (abs >= emitted_rowid_base && abs - emitted_rowid_base < owned.size()) {
-                selection[i] = owned[abs - emitted_rowid_base];
-            }
-        }
+        // Rebase the mask onto this chunk: the helper works in source-row terms, so shift the run's
+        // start by how many rows the read has already delivered.
+        const uint32_t chunk_base =
+                emitted_rowid_base > source_row ? static_cast<uint32_t>(emitted_rowid_base - source_row) : 0;
+        const Filter chunk_owned = source_row > emitted_rowid_base
+                                           ? Filter(owned.begin() + (source_row - emitted_rowid_base), owned.end())
+                                           : owned;
+        chunk->filter(build_owned_selection(chunk_rows, chunk_base, chunk_owned));
         source_row += chunk_rows;
-        chunk->filter(selection);
         kept->append(*chunk);
     }
     iter->close();
@@ -409,13 +426,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     // the whole file -- so a source row outside that run is not this tablet's either, and the columns
     // the caller supplies are indexed like |owned| and take the same mask.
     if (!owned.empty()) {
-        Filter selection(num_rows, 0);
-        for (uint32_t i = 0; i < num_rows; i++) {
-            if (i >= emitted_rowid_base && i - emitted_rowid_base < owned.size()) {
-                selection[i] = owned[i - emitted_rowid_base];
-            }
-        }
-        const size_t kept_rows = read_chunk->filter(selection);
+        const size_t kept_rows = read_chunk->filter(build_owned_selection(num_rows, emitted_rowid_base, owned));
         if (unmodified_column_data != nullptr) {
             for (auto& column : *unmodified_column_data) {
                 RETURN_ERROR_IF_FALSE(column->size() == owned.size(),
