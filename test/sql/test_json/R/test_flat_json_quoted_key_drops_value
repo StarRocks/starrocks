@@ -1,0 +1,311 @@
+-- name: test_flat_json_quoted_key_drops_value
+create table t_q (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_q_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t_q values
+  (1, parse_json('{"\\"q\\"":1,"p":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+-- result:
+-- !result
+insert into t_q_ctl values
+  (1, parse_json('{"\\"q\\"":1,"p":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t_q[_META_];
+-- result:
+["nulls(TINYINT), p(BIGINT), remain(JSON)"]
+-- !result
+select k, cast(j as string) from t_q order by k;
+-- result:
+1	{"\"q\"": 1, "p": 1}
+2	{"\"q\"": 2, "p": 2}
+3	{"\"q\"": 3, "p": 3}
+4	{"\"q\"": 4, "p": 4}
+5	{"\"q\"": 5, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_q order by k;
+-- result:
+1	2	["\"q\"", "p"]
+2	2	["\"q\"", "p"]
+3	2	["\"q\"", "p"]
+4	2	["\"q\"", "p"]
+5	2	["\"q\"", "p"]
+-- !result
+select k, cast(j as string) from t_q_ctl order by k;
+-- result:
+1	{"\"q\"": 1, "p": 1}
+2	{"\"q\"": 2, "p": 2}
+3	{"\"q\"": 3, "p": 3}
+4	{"\"q\"": 4, "p": 4}
+5	{"\"q\"": 5, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_q_ctl order by k;
+-- result:
+1	2	["\"q\"", "p"]
+2	2	["\"q\"", "p"]
+3	2	["\"q\"", "p"]
+4	2	["\"q\"", "p"]
+5	2	["\"q\"", "p"]
+-- !result
+create table t_qr (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_qr_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t_qr values
+  (1, parse_json('{"\\"q\\"":1,"p":1,"s":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+-- result:
+-- !result
+insert into t_qr_ctl values
+  (1, parse_json('{"\\"q\\"":1,"p":1,"s":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t_qr[_META_];
+-- result:
+["nulls(TINYINT), p(BIGINT), remain(JSON)"]
+-- !result
+select k, cast(j as string) from t_qr order by k;
+-- result:
+1	{"\"q\"": 1, "p": 1, "s": 1}
+2	{"\"q\"": 2, "p": 2}
+3	{"\"q\"": 3, "p": 3}
+4	{"\"q\"": 4, "p": 4}
+5	{"\"q\"": 5, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_qr order by k;
+-- result:
+1	3	["\"q\"", "p", "s"]
+2	2	["\"q\"", "p"]
+3	2	["\"q\"", "p"]
+4	2	["\"q\"", "p"]
+5	2	["\"q\"", "p"]
+-- !result
+select k, cast(j as string) from t_qr_ctl order by k;
+-- result:
+1	{"\"q\"": 1, "p": 1, "s": 1}
+2	{"\"q\"": 2, "p": 2}
+3	{"\"q\"": 3, "p": 3}
+4	{"\"q\"": 4, "p": 4}
+5	{"\"q\"": 5, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_qr_ctl order by k;
+-- result:
+1	3	["\"q\"", "p", "s"]
+2	2	["\"q\"", "p"]
+3	2	["\"q\"", "p"]
+4	2	["\"q\"", "p"]
+5	2	["\"q\"", "p"]
+-- !result
+create table t_nest (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_nest_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t_nest values
+  (1, parse_json('{"\\"":{"x":1},"p":1}')),
+  (2, parse_json('{"\\"":{"x":2},"p":2}')),
+  (3, parse_json('{"\\"":{"x":3},"p":3}')),
+  (4, parse_json('{"\\"":{"x":4},"p":4}')),
+  (5, parse_json('{"\\"":{"x":5},"p":5}'));
+-- result:
+-- !result
+insert into t_nest_ctl values
+  (1, parse_json('{"\\"":{"x":1},"p":1}')),
+  (2, parse_json('{"\\"":{"x":2},"p":2}')),
+  (3, parse_json('{"\\"":{"x":3},"p":3}')),
+  (4, parse_json('{"\\"":{"x":4},"p":4}')),
+  (5, parse_json('{"\\"":{"x":5},"p":5}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t_nest[_META_];
+-- result:
+["nulls(TINYINT), p(BIGINT), remain(JSON)"]
+-- !result
+select k, cast(j as string) from t_nest order by k;
+-- result:
+1	{"\"": {"x": 1}, "p": 1}
+2	{"\"": {"x": 2}, "p": 2}
+3	{"\"": {"x": 3}, "p": 3}
+4	{"\"": {"x": 4}, "p": 4}
+5	{"\"": {"x": 5}, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_nest order by k;
+-- result:
+1	2	["\"", "p"]
+2	2	["\"", "p"]
+3	2	["\"", "p"]
+4	2	["\"", "p"]
+5	2	["\"", "p"]
+-- !result
+select k, cast(j as string) from t_nest_ctl order by k;
+-- result:
+1	{"\"": {"x": 1}, "p": 1}
+2	{"\"": {"x": 2}, "p": 2}
+3	{"\"": {"x": 3}, "p": 3}
+4	{"\"": {"x": 4}, "p": 4}
+5	{"\"": {"x": 5}, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_nest_ctl order by k;
+-- result:
+1	2	["\"", "p"]
+2	2	["\"", "p"]
+3	2	["\"", "p"]
+4	2	["\"", "p"]
+5	2	["\"", "p"]
+-- !result
+create table t_safe (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_safe_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t_safe values
+  (1, parse_json('{"a\\"b":1,"a\\"b\\"":1,"\\"a\\"b":1,"\'q\'":1,"plain":1}')),
+  (2, parse_json('{"a\\"b":2,"a\\"b\\"":2,"\\"a\\"b":2,"\'q\'":2,"plain":2}')),
+  (3, parse_json('{"a\\"b":3,"a\\"b\\"":3,"\\"a\\"b":3,"\'q\'":3,"plain":3}')),
+  (4, parse_json('{"a\\"b":4,"a\\"b\\"":4,"\\"a\\"b":4,"\'q\'":4,"plain":4}')),
+  (5, parse_json('{"a\\"b":5,"a\\"b\\"":5,"\\"a\\"b":5,"\'q\'":5,"plain":5}'));
+-- result:
+-- !result
+insert into t_safe_ctl values
+  (1, parse_json('{"a\\"b":1,"a\\"b\\"":1,"\\"a\\"b":1,"\'q\'":1,"plain":1}')),
+  (2, parse_json('{"a\\"b":2,"a\\"b\\"":2,"\\"a\\"b":2,"\'q\'":2,"plain":2}')),
+  (3, parse_json('{"a\\"b":3,"a\\"b\\"":3,"\\"a\\"b":3,"\'q\'":3,"plain":3}')),
+  (4, parse_json('{"a\\"b":4,"a\\"b\\"":4,"\\"a\\"b":4,"\'q\'":4,"plain":4}')),
+  (5, parse_json('{"a\\"b":5,"a\\"b\\"":5,"\\"a\\"b":5,"\'q\'":5,"plain":5}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t_safe[_META_];
+-- result:
+["nulls(TINYINT), \"a\"b(BIGINT), 'q'(BIGINT), a\"b(BIGINT), a\"b\"(BIGINT), plain(BIGINT)"]
+-- !result
+select k, cast(j as string) from t_safe order by k;
+-- result:
+1	{"\"a\"b": 1, "'q'": 1, "a\"b": 1, "a\"b\"": 1, "plain": 1}
+2	{"\"a\"b": 2, "'q'": 2, "a\"b": 2, "a\"b\"": 2, "plain": 2}
+3	{"\"a\"b": 3, "'q'": 3, "a\"b": 3, "a\"b\"": 3, "plain": 3}
+4	{"\"a\"b": 4, "'q'": 4, "a\"b": 4, "a\"b\"": 4, "plain": 4}
+5	{"\"a\"b": 5, "'q'": 5, "a\"b": 5, "a\"b\"": 5, "plain": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_safe order by k;
+-- result:
+1	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+2	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+3	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+4	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+5	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+-- !result
+select k, cast(j as string) from t_safe_ctl order by k;
+-- result:
+1	{"\"a\"b": 1, "'q'": 1, "a\"b": 1, "a\"b\"": 1, "plain": 1}
+2	{"\"a\"b": 2, "'q'": 2, "a\"b": 2, "a\"b\"": 2, "plain": 2}
+3	{"\"a\"b": 3, "'q'": 3, "a\"b": 3, "a\"b\"": 3, "plain": 3}
+4	{"\"a\"b": 4, "'q'": 4, "a\"b": 4, "a\"b\"": 4, "plain": 4}
+5	{"\"a\"b": 5, "'q'": 5, "a\"b": 5, "a\"b\"": 5, "plain": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_safe_ctl order by k;
+-- result:
+1	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+2	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+3	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+4	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+5	5	["\"a\"b", "'q'", "a\"b", "a\"b\"", "plain"]
+-- !result
+create table t_dot (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_dot_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t_dot values
+  (1, parse_json('{"a.b":1,"p":1}')),
+  (2, parse_json('{"a.b":2,"p":2}')),
+  (3, parse_json('{"a.b":3,"p":3}')),
+  (4, parse_json('{"a.b":4,"p":4}')),
+  (5, parse_json('{"a.b":5,"p":5}'));
+-- result:
+-- !result
+insert into t_dot_ctl values
+  (1, parse_json('{"a.b":1,"p":1}')),
+  (2, parse_json('{"a.b":2,"p":2}')),
+  (3, parse_json('{"a.b":3,"p":3}')),
+  (4, parse_json('{"a.b":4,"p":4}')),
+  (5, parse_json('{"a.b":5,"p":5}'));
+-- result:
+-- !result
+select flat_json_meta(j) from t_dot[_META_];
+-- result:
+["nulls(TINYINT), p(BIGINT), remain(JSON)"]
+-- !result
+select k, cast(j as string) from t_dot order by k;
+-- result:
+1	{"a.b": 1, "p": 1}
+2	{"a.b": 2, "p": 2}
+3	{"a.b": 3, "p": 3}
+4	{"a.b": 4, "p": 4}
+5	{"a.b": 5, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_dot order by k;
+-- result:
+1	2	["a.b", "p"]
+2	2	["a.b", "p"]
+3	2	["a.b", "p"]
+4	2	["a.b", "p"]
+5	2	["a.b", "p"]
+-- !result
+select k, cast(j as string) from t_dot_ctl order by k;
+-- result:
+1	{"a.b": 1, "p": 1}
+2	{"a.b": 2, "p": 2}
+3	{"a.b": 3, "p": 3}
+4	{"a.b": 4, "p": 4}
+5	{"a.b": 5, "p": 5}
+-- !result
+select k, json_length(j), cast(json_keys(j) as string) from t_dot_ctl order by k;
+-- result:
+1	2	["a.b", "p"]
+2	2	["a.b", "p"]
+3	2	["a.b", "p"]
+4	2	["a.b", "p"]
+5	2	["a.b", "p"]
+-- !result

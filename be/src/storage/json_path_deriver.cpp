@@ -360,6 +360,25 @@ void dfs_downgrade_uint(JsonFlatPath* node) {
     }
 }
 
+// A flat JSON sub-column is addressed by a PATH STRING whose levels are joined with '.', and a key
+// that carries the separator itself is wrapped in quotes (the FE wraps it, see
+// SubfieldAccessPathNormalizer.formatJsonPath) and unwrapped again by JsonFlatPath::split_path().
+// A key whose own text is already quote-wrapped, or that opens a quote it never closes, therefore
+// builds a path string that split_path() reads back as a DIFFERENT key: the tree the flattener walks
+// would be keyed by that other name, the raw key would never be found in it, and its value would be
+// dropped on write. So extract a key only if its path string survives the round trip, in both the
+// positions a level can take: alone as the last level, and followed by the separator of a descendant.
+static bool key_survives_path_round_trip(const std::string_view& key) {
+    auto [leaf_key, leaf_next] = JsonFlatPath::split_path(key);
+    if (leaf_key != key || !leaf_next.empty()) {
+        return false;
+    }
+    // the descendant name is arbitrary, split_path() only has to find the separator in front of it
+    const std::string as_level = std::string(key) + ".probe";
+    auto [level_key, level_next] = JsonFlatPath::split_path(as_level);
+    return level_key == key && level_next == "probe";
+}
+
 // why dfs? because need compute parent isn't extract base on bottom-up, stack is not suitable
 uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& absolute_path,
                                         std::vector<std::pair<JsonFlatPath*, std::string>>* hit_leaf) {
@@ -378,13 +397,15 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
 
     uint32_t flat_count = 0;
     for (auto& [key, child] : node->children) {
-        if (!key.empty() && key.find('.') == std::string::npos) {
+        if (!key.empty() && key.find('.') == std::string::npos && key_survives_path_round_trip(key)) {
             // ignore empty key/quote key, it's can't handle in SQL
             // why not support `.` in key?
             // FE will add `"`. e.g: `a.b` -> `"a.b"`, in binary `\"a.b\"`
             // but BE is hard to handle `"`, because vpackjson don't add escape for `"` and `\`
             // input string `a\"b` -> in binary `a\\\"b` -> vpack json binary `a\"b`
             // it's take us can't identify `"` and `\` corrently
+            // the quote half of that is key_survives_path_round_trip(): a key that split_path() hands
+            // back as another key can't be addressed by the path string built from it here
             std::string abs_path = fmt::format("{}.{}", absolute_path, key);
             flat_count += _dfs_finalize(child.get(), abs_path, hit_leaf);
         } else {

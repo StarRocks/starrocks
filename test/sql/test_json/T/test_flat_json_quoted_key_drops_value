@@ -1,0 +1,149 @@
+-- name: test_flat_json_quoted_key_drops_value
+-- A flat JSON sub-column is addressed by a PATH STRING whose levels are joined with '.'. A JSON key
+-- may itself contain '.', so the FE wraps such a key in quotes (key `a.b` -> path `"a.b"`) and
+-- JsonFlatPath::split_path() strips the wrapping quotes back off. A key whose own text already starts
+-- and ends with a quote therefore builds a path string that is indistinguishable from a wrapped key:
+-- the real three-character key `"q"` becomes the path `"q"`, which splits back to `q`. The deriver
+-- still promises the sub-column, but the flattener looks the raw key `"q"` up in a tree that now
+-- holds `q`, misses, and -- with no remain column on the table -- DROPS THE VALUE: on write. The
+-- entry is gone from the document on read and json_length()/json_keys() no longer see it, while
+-- flat_json_meta() still advertises the sub-column that was never written. The deriver's own comment
+-- said it meant to skip "empty key/quote key", but the condition only ever checked for '.'.
+-- The same ambiguity hits a key that merely STARTS with a quote (`"`): it round-trips as a leaf, but
+-- not once it has children, because the closing-quote scan then swallows the '.' separator, so the
+-- whole sub-object is dropped. Such keys are now rejected by a round-trip self-check on the key and
+-- kept verbatim in the remain column instead.
+-- Every table below is loaded from its own literals: a control table filled with `insert into ctl
+-- select * from flat` would inherit the rows the flat table already lost and prove nothing.
+-- Section 1: the defect. Only `"q"` and `p` are present in every row, so nothing is sparse and the
+-- table gets NO remain column -- that is what turns the missed lookup into silent data loss.
+create table t_q (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_q_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t_q values
+  (1, parse_json('{"\\"q\\"":1,"p":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+insert into t_q_ctl values
+  (1, parse_json('{"\\"q\\"":1,"p":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+select flat_json_meta(j) from t_q[_META_];
+select k, cast(j as string) from t_q order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_q order by k;
+select k, cast(j as string) from t_q_ctl order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_q_ctl order by k;
+-- Section 2: the same key on a table that DOES have a remain column (key `s` hits one row out of
+-- five, below json_flat_sparsity_factor). The missed lookup then falls into the remain instead of
+-- nowhere, and the read is already correct -- so no-remain is a precondition of the data loss, and
+-- this section must be byte-identical before and after the fix.
+create table t_qr (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_qr_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t_qr values
+  (1, parse_json('{"\\"q\\"":1,"p":1,"s":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+insert into t_qr_ctl values
+  (1, parse_json('{"\\"q\\"":1,"p":1,"s":1}')),
+  (2, parse_json('{"\\"q\\"":2,"p":2}')),
+  (3, parse_json('{"\\"q\\"":3,"p":3}')),
+  (4, parse_json('{"\\"q\\"":4,"p":4}')),
+  (5, parse_json('{"\\"q\\"":5,"p":5}'));
+select flat_json_meta(j) from t_qr[_META_];
+select k, cast(j as string) from t_qr order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_qr order by k;
+select k, cast(j as string) from t_qr_ctl order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_qr_ctl order by k;
+-- Section 3: a key that is a single quote character and holds a sub-object. As a leaf such a key
+-- round-trips, so the leading-quote form is not caught by looking for a trailing quote; with a child
+-- the path `"` + `.x` is scanned for the closing quote first, the '.' separator is skipped, and the
+-- level becomes the single key `".x` -- the whole sub-object is dropped on write.
+create table t_nest (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_nest_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t_nest values
+  (1, parse_json('{"\\"":{"x":1},"p":1}')),
+  (2, parse_json('{"\\"":{"x":2},"p":2}')),
+  (3, parse_json('{"\\"":{"x":3},"p":3}')),
+  (4, parse_json('{"\\"":{"x":4},"p":4}')),
+  (5, parse_json('{"\\"":{"x":5},"p":5}'));
+insert into t_nest_ctl values
+  (1, parse_json('{"\\"":{"x":1},"p":1}')),
+  (2, parse_json('{"\\"":{"x":2},"p":2}')),
+  (3, parse_json('{"\\"":{"x":3},"p":3}')),
+  (4, parse_json('{"\\"":{"x":4},"p":4}')),
+  (5, parse_json('{"\\"":{"x":5},"p":5}'));
+select flat_json_meta(j) from t_nest[_META_];
+select k, cast(j as string) from t_nest order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_nest order by k;
+select k, cast(j as string) from t_nest_ctl order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_nest_ctl order by k;
+-- Section 4: the regression guard, and the reason the guard is a round trip and not a quote hunt.
+-- None of these keys is ambiguous -- an interior quote (a"b), a trailing quote (a"b"), a leading
+-- quote with a closing one that is not the last character ("a"b), single quotes ('q'), a plain key --
+-- so every one of them must STILL be extracted into a sub-column (visible in flat_json_meta) and
+-- still read back exactly. This block must be byte-identical before and after the fix.
+create table t_safe (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_safe_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t_safe values
+  (1, parse_json('{"a\\"b":1,"a\\"b\\"":1,"\\"a\\"b":1,"\'q\'":1,"plain":1}')),
+  (2, parse_json('{"a\\"b":2,"a\\"b\\"":2,"\\"a\\"b":2,"\'q\'":2,"plain":2}')),
+  (3, parse_json('{"a\\"b":3,"a\\"b\\"":3,"\\"a\\"b":3,"\'q\'":3,"plain":3}')),
+  (4, parse_json('{"a\\"b":4,"a\\"b\\"":4,"\\"a\\"b":4,"\'q\'":4,"plain":4}')),
+  (5, parse_json('{"a\\"b":5,"a\\"b\\"":5,"\\"a\\"b":5,"\'q\'":5,"plain":5}'));
+insert into t_safe_ctl values
+  (1, parse_json('{"a\\"b":1,"a\\"b\\"":1,"\\"a\\"b":1,"\'q\'":1,"plain":1}')),
+  (2, parse_json('{"a\\"b":2,"a\\"b\\"":2,"\\"a\\"b":2,"\'q\'":2,"plain":2}')),
+  (3, parse_json('{"a\\"b":3,"a\\"b\\"":3,"\\"a\\"b":3,"\'q\'":3,"plain":3}')),
+  (4, parse_json('{"a\\"b":4,"a\\"b\\"":4,"\\"a\\"b":4,"\'q\'":4,"plain":4}')),
+  (5, parse_json('{"a\\"b":5,"a\\"b\\"":5,"\\"a\\"b":5,"\'q\'":5,"plain":5}'));
+select flat_json_meta(j) from t_safe[_META_];
+select k, cast(j as string) from t_safe order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_safe order by k;
+select k, cast(j as string) from t_safe_ctl order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_safe_ctl order by k;
+-- Section 5: a key holding the level separator was already excluded and kept in the remain, which is
+-- why it always read back correctly. The round-trip check must not change that either way.
+create table t_dot (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_dot_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t_dot values
+  (1, parse_json('{"a.b":1,"p":1}')),
+  (2, parse_json('{"a.b":2,"p":2}')),
+  (3, parse_json('{"a.b":3,"p":3}')),
+  (4, parse_json('{"a.b":4,"p":4}')),
+  (5, parse_json('{"a.b":5,"p":5}'));
+insert into t_dot_ctl values
+  (1, parse_json('{"a.b":1,"p":1}')),
+  (2, parse_json('{"a.b":2,"p":2}')),
+  (3, parse_json('{"a.b":3,"p":3}')),
+  (4, parse_json('{"a.b":4,"p":4}')),
+  (5, parse_json('{"a.b":5,"p":5}'));
+select flat_json_meta(j) from t_dot[_META_];
+select k, cast(j as string) from t_dot order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_dot order by k;
+select k, cast(j as string) from t_dot_ctl order by k;
+select k, json_length(j), cast(json_keys(j) as string) from t_dot_ctl order by k;
