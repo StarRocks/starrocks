@@ -24,6 +24,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -123,22 +124,42 @@ public class TransactionLoadCoordinatorMgr {
      *
      * @param label         the transaction label
      * @param warehouseName the name of the warehouse
+     * @param dbName        the database name, used to look up the live transaction state
      * @return the allocated {@link ComputeNode}
-     * @throws StarRocksException if allocation fails or no suitable node is found
      */
-    public @NonNull ComputeNode allocate(String label, String warehouseName) throws StarRocksException {
+    public @NonNull ComputeNode allocate(String label, String warehouseName, String dbName)
+            throws StarRocksException {
         // Check if the label already exists in cache to avoid overwriting
         // This ensures that repeated BEGIN requests for the same label
         // are routed to the same BE where the transaction context exists
         Long existingNodeId = cache.getIfPresent(label);
         if (existingNodeId != null) {
-            ComputeNode node = getNodeFromId(existingNodeId);
-            if (node.isAvailable()) {
-                return node;
+            ComputeNode node = null;
+            try {
+                node = getNodeFromId(existingNodeId);
+            } catch (StarRocksException e) {
+                // The cached node no longer exists in the cluster; treat the entry as stale.
+                LOG.info("Cached coordinator {} is gone, reassigning: {}", existingNodeId, e.getMessage());
+                cache.invalidate(label);
             }
-            // The cached coordinator is unavailable (e.g. shutting down); drop the stale entry
-            // and allocate another node.
-            cache.invalidate(label);
+            if (node != null) {
+                if (node.isAvailable()) {
+                    return node;
+                }
+                // The cached coordinator is unavailable (e.g. shutting down). If its
+                // transaction is still PREPARE there, keep routing to it: the retried BEGIN
+                // is served idempotently by the BE that owns the stream context, while
+                // re-allocating would misroute the retry and the later LOAD to a BE without
+                // the context. If that BE dies for good, its coordinator transactions are
+                // aborted via the heartbeat-failure path and the next allocate reassigns
+                // here. PREPARED and beyond are txn-id based (the BE removes its stream
+                // context in _commit_transaction even when prepare=true), so they are
+                // served by any node and must reassign.
+                if (transactionOwnedBy(label, dbName, existingNodeId)) {
+                    return node;
+                }
+                cache.invalidate(label);
+            }
         }
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -149,6 +170,25 @@ public class TransactionLoadCoordinatorMgr {
         ComputeNode node = getNodeFromId(chosenNodeId);
         cache.put(label, chosenNodeId);
         return node;
+    }
+
+    /**
+     * Returns true when the label's transaction is still PREPARE on its coordinator backend
+     * (the given node). Only PREPARE still relies on the stream context held by that BE:
+     * PREPARED and beyond have already removed it there, so their retries are txn-id based
+     * and served by any node.
+     */
+    private boolean transactionOwnedBy(String label, String dbName, long nodeId) throws StarRocksException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            return false;
+        }
+        TransactionState txnState = globalStateMgr.getGlobalTransactionMgr()
+                .getLabelTransactionState(db.getId(), label);
+        return txnState != null && txnState.getTransactionStatus() == TransactionStatus.PREPARE
+                && TransactionState.TxnSourceType.BE.equals(txnState.getCoordinator().sourceType)
+                && txnState.getCoordinator().getBackendId() == nodeId;
     }
 
     /**
