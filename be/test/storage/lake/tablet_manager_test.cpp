@@ -180,6 +180,179 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
     EXPECT_EQ(res.value()->txn_id(), 2);
 }
 
+// A txn log is immutable once written, so a load that fails with Corruption is most likely served a
+// corrupted block from the local data cache. The loader must drop that cache copy and re-read once
+// instead of failing every publish until the cache entry is evicted, mirroring
+// tablet_meta_read_corrupted_and_recover. The test file system has no local cache to drop, so the
+// TabletManager::corrupted_txn_log_handler sync point stands in for a successful drop.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_and_recover) {
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(2);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    // put_txn_log() also fills the metacache; drop it so get_txn_log() has to read the file.
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    // The txn log may be read with the legacy headerless format or the checksummed header format
+    // depending on lake_enable_protobuf_file_checksum, so inject the first-read corruption on both.
+    auto inject_first_read_corruption = [&](void* arg) {
+        if (read_count++ == 0) {
+            *(Status*)arg = Status::Corruption("injected error");
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 2);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(res.value()->tablet_id(), tablet_id);
+    EXPECT_EQ(res.value()->txn_id(), 2);
+    EXPECT_EQ(1, handler_called);
+    // Exactly one retry: the corrupted first read plus the re-read after the drop.
+    EXPECT_EQ(2, read_count);
+}
+
+// When the corrupted cache copy cannot be dropped (here: the test file system has no local cache,
+// so drop_local_cache reports NotFound), the original Corruption is reported and nothing is re-read.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_drop_cache_failed) {
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(3);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_corruption = [&](void* arg) {
+        ++read_count;
+        *(Status*)arg = Status::Corruption("injected error");
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_corruption);
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 3);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    EXPECT_EQ(1, read_count);
+    // A failed load must not leave anything in the metacache.
+    EXPECT_EQ(nullptr, _tablet_manager->metacache()->lookup_txn_log(_tablet_manager->txn_log_location(tablet_id, 3)));
+}
+
+// With lake_clear_corrupted_cache_meta off, a corrupted txn log read is reported as is: no cache drop
+// is attempted and nothing is re-read.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, txnlog_read_corrupted_clear_cache_disabled) {
+    auto old_flag = config::lake_clear_corrupted_cache_meta;
+    config::lake_clear_corrupted_cache_meta = false;
+    DeferOp guard([old_flag]() { config::lake_clear_corrupted_cache_meta = old_flag; });
+
+    starrocks::TxnLog txn_log;
+    auto tablet_id = next_id();
+    txn_log.set_tablet_id(tablet_id);
+    txn_log.set_txn_id(4);
+    EXPECT_OK(_tablet_manager->put_txn_log(txn_log));
+    _tablet_manager->metacache()->prune();
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_corruption = [&](void* arg) {
+        ++read_count;
+        *(Status*)arg = Status::Corruption("injected error");
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto res = _tablet_manager->get_txn_log(tablet_id, 4);
+    ASSERT_TRUE(res.status().is_corruption()) << res.status();
+    EXPECT_EQ(0, handler_called);
+    EXPECT_EQ(1, read_count);
+}
+
+// The combined txn log written by a combined-txn publish takes the same recovery path as a single
+// txn log: drop the corrupted cache copy, re-read once, then serve every tablet's entry.
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, combined_txnlog_read_corrupted_and_recover) {
+    const int64_t txn_id = 5;
+    auto partition_id = next_id();
+    auto tablet_id_1 = next_id();
+    auto tablet_id_2 = next_id();
+    starrocks::CombinedTxnLogPB combined_log;
+    for (auto tablet_id : {tablet_id_1, tablet_id_2}) {
+        auto* log = combined_log.add_txn_logs();
+        log->set_partition_id(partition_id);
+        log->set_tablet_id(tablet_id);
+        log->set_txn_id(txn_id);
+    }
+    EXPECT_OK(_tablet_manager->put_combined_txn_log(combined_log));
+
+    int read_count = 0;
+    int handler_called = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::load::corruption");
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_txn_log_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto inject_first_read_corruption = [&](void* arg) {
+        if (read_count++ == 0) {
+            *(Status*)arg = Status::Corruption("injected error");
+        }
+    };
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFile::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::load::corruption", inject_first_read_corruption);
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_txn_log_handler", [&](void* arg) {
+        ++handler_called;
+        *(Status*)arg = Status::OK();
+    });
+
+    auto log_path = _tablet_manager->combined_txn_log_location(tablet_id_1, txn_id);
+    auto res = _tablet_manager->get_combined_txn_log(log_path);
+    ASSERT_TRUE(res.ok()) << res.status();
+    EXPECT_EQ(1, handler_called);
+    EXPECT_EQ(2, read_count);
+    ASSERT_EQ(2, res.value()->txn_logs_size());
+    EXPECT_EQ(tablet_id_1, res.value()->txn_logs(0).tablet_id());
+    EXPECT_EQ(tablet_id_2, res.value()->txn_logs(1).tablet_id());
+    EXPECT_EQ(txn_id, res.value()->txn_logs(1).txn_id());
+    // The healed copy, not the corrupted one, is what the metacache serves from now on.
+    auto cached = _tablet_manager->metacache()->lookup_combined_txn_log(log_path);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(2, cached->txn_logs_size());
+}
+
 // Compatibility: tablet metadata / txn logs written by an older BE without the checksum
 // header (legacy plain protobuf) must still be read correctly through the new load path.
 // This verifies the LAKE_META_HEADER_MAGIC_NUMBER detection: a legacy file does not carry

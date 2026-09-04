@@ -475,6 +475,10 @@ private:
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
+    // Same contract as corrupted_tablet_meta_handler(), for txn log files (single, combined, vlog and
+    // slog): OK means the corrupted local cache copy was dropped and the caller may re-read once, any
+    // other status is the original error to propagate.
+    Status corrupted_txn_log_handler(const Status& s, const std::string& txn_log_location);
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
     StatusOr<TabletBasicInfo> get_tablet_basic_info(int64_t tablet_id, int64_t table_id, int64_t partition_id,

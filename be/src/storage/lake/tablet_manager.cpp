@@ -776,6 +776,28 @@ Status TabletManager::corrupted_tablet_meta_handler(const Status& s, const std::
     }
 }
 
+// A txn log is immutable once written, so bytes that fail the checksum or do not parse are most
+// likely a corrupted block in the local data cache rather than in remote storage; dropping the cache
+// makes the re-read go through to the remote object. Without this, a publish keeps hitting the same
+// poisoned cache copy until it is evicted. Gated by lake_clear_corrupted_cache_meta together with
+// tablet metadata, since txn logs are metadata files. Segment pages, del files and persistent-index
+// sstables recover from cache corruption the same way.
+Status TabletManager::corrupted_txn_log_handler(const Status& s, const std::string& txn_log_location) {
+    if (s.is_corruption() && config::lake_clear_corrupted_cache_meta) {
+        auto drop_status = drop_local_cache(txn_log_location);
+        TEST_SYNC_POINT_CALLBACK("TabletManager::corrupted_txn_log_handler", &drop_status);
+        if (!drop_status.ok()) {
+            LOG(WARNING) << "clear corrupted cache for " << txn_log_location << " failed, "
+                         << "error: " << drop_status << ", original error: " << s;
+            return s; // report the original corruption so the txn log load can be retried
+        }
+        LOG(INFO) << "clear corrupted cache for " << txn_log_location << ", re-reading after: " << s;
+        return Status::OK();
+    } else {
+        return s;
+    }
+}
+
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_data_cache,
                                                                 int64_t expected_gtid,
                                                                 const std::shared_ptr<FileSystem>& fs) {
@@ -1322,7 +1344,13 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     TEST_ERROR_POINT("TabletManager::load_txn_log");
     auto t0 = butil::gettimeofday_us();
     auto meta = std::make_shared<TxnLog>();
-    RETURN_IF_ERROR(load_lake_protobuf(txn_log_path, meta.get(), fill_cache));
+    auto s = load_lake_protobuf(txn_log_path, meta.get(), fill_cache);
+    if (!s.ok()) {
+        RETURN_IF_ERROR(corrupted_txn_log_handler(s, txn_log_path));
+        // The failed parse may have left partial content behind, so read again into a fresh log.
+        meta = std::make_shared<TxnLog>();
+        RETURN_IF_ERROR(load_lake_protobuf(txn_log_path, meta.get(), fill_cache));
+    }
     // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
     normalize_txn_log_after_load(meta.get());
     auto t1 = butil::gettimeofday_us();
@@ -1356,7 +1384,13 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
 StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::string& path, bool fill_cache) {
     TEST_ERROR_POINT("TabletManager::get_combined_txn_log");
     auto log = std::make_shared<CombinedTxnLogPB>();
-    RETURN_IF_ERROR(load_lake_protobuf(path, log.get(), fill_cache));
+    auto s = load_lake_protobuf(path, log.get(), fill_cache);
+    if (!s.ok()) {
+        RETURN_IF_ERROR(corrupted_txn_log_handler(s, path));
+        // The failed parse may have left partial content behind, so read again into a fresh log.
+        log = std::make_shared<CombinedTxnLogPB>();
+        RETURN_IF_ERROR(load_lake_protobuf(path, log.get(), fill_cache));
+    }
     // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
     for (auto& txn_log : *log->mutable_txn_logs()) {
         normalize_txn_log_after_load(&txn_log);
