@@ -41,8 +41,6 @@ class LakePersistentIndex;
 class LakePersistentIndexParallelCompactMgr;
 class SegmentPKIterator;
 
-struct SegmentPKChunkRef;
-
 // The tablet-level primary-key index of a shared-data tablet: owns the load state, the reader/writer
 // lock the publish path serializes on, and the one LakePersistentIndex that does the work.
 //
@@ -147,24 +145,6 @@ public:
                                          std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
                                          std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
                                          std::vector<Filter>* owned_per_segment = nullptr);
-
-    // This function will be called when parallel upsert happens.
-    // The process flow of parallel upsert is:
-    // 1. upsert into memtable. (serialize)
-    // 2. parallel get from inactive memtables and sstables. (parallel)
-    // 3. Call `flush_memtable`, and flush memtable into sstable when memtable is full. (serialize)
-    // Upsert only the rows |current.owned| marks as this tablet's, each keyed to the rowid it has in
-    // the SOURCE segment rather than its position among the survivors. |slot->pk_column| holds the
-    // encoded keys and is filtered in place.
-    //
-    // Cross publish only: an ordinary publish carries an empty mask and keeps the plain overload,
-    // which needs no per-row rowid vector and works on the in-memory index too.
-    //
-    // The slot belongs to the caller: it also carries the encoded column, whose bytes the index
-    // keeps referencing after this returns when the upsert runs asynchronously. Both call sites hand
-    // over a fresh slot, so the append-only scratch inside it always starts empty.
-    Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
-                        ParallelUpsertContext* context);
 
     Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
                            DeletesMap* new_deletes);

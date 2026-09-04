@@ -260,6 +260,19 @@ public:
     Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
                            DeletesMap* new_deletes);
 
+    // Upsert only the rows |current.owned| marks as this tablet's, each keyed to the rowid it has in
+    // the SOURCE segment rather than its position among the survivors. |slot->pk_column| holds the
+    // encoded keys and is filtered in place. Cross publish only: an ordinary publish carries an empty
+    // mask and keeps the plain overload, which needs no per-row rowid vector.
+    //
+    // Parallel upsert runs in three steps, and this is step 1:
+    // 1. upsert into the memtable                                      (serial)
+    // 2. resolve the replaced rowids from inactive memtables and ssts  (parallel)
+    // 3. flush_memtable(), which writes an sst once the memtable fills  (serial)
+    //
+    // The slot belongs to the caller: it also carries the encoded column, whose bytes the index keeps
+    // referencing after this returns when the lookup is deferred. Every call site hands over a fresh
+    // slot, so the append-only scratch inside it always starts empty.
     Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
                         ParallelUpsertContext* ctx);
 
