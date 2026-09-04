@@ -18,6 +18,7 @@
 
 #include <filesystem>
 
+#include "base/decimal_types.h"
 #include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -499,6 +500,88 @@ TEST_F(ColumnConverterTest, FLBAUUIDTest) {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
             check(file_path, col_type, col_name, "['b4f20d71-755e-572f-95c1-518871b9ca71']", expected_rows);
         }
+    }
+}
+
+// A dictionary decoder with a filter pushed into it appends a zero-length placeholder for every
+// row the filter excludes and leaves those rows marked NOT NULL, see
+// DictDecoder<Slice>::_next_batch_value. BinaryToDecimalConverter walks the source bytes with a
+// fixed `type_length` stride, so each placeholder used to consume the bytes of the next row: every
+// row after the first excluded one decoded from a misaligned offset -- corrupting the rows that do
+// survive the filter -- and the loop finally read past the end of the byte buffer. The rows that
+// survive must decode exactly, no matter how the excluded rows are laid out.
+TEST_F(ColumnConverterTest, FLBADecimalRowsNotContiguous) {
+    constexpr int32_t kTypeLength = 16;
+    constexpr int32_t kPrecision = 38;
+    constexpr int32_t kScale = 2;
+
+    // Two's complement in big-endian byte order, the way parquet stores a decimal in a fixed
+    // length byte array.
+    auto flba = [](int128_t unscaled) {
+        std::string bytes(kTypeLength, '\0');
+        auto bits = static_cast<uint128_t>(unscaled);
+        for (int i = kTypeLength - 1; i >= 0; i--) {
+            bytes[i] = static_cast<char>(bits & 0xFF);
+            bits >>= 8;
+        }
+        return bytes;
+    };
+
+    ParquetField field;
+    field.physical_type = tparquet::Type::FIXED_LEN_BYTE_ARRAY;
+    field.type_length = kTypeLength;
+    field.scale = kScale;
+    field.precision = kPrecision;
+
+    const TypeDescriptor col_type =
+            TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, kPrecision, kScale);
+
+    auto run = [&](const std::vector<std::string>& values, const std::vector<uint8_t>& is_null) {
+        std::unique_ptr<ColumnConverter> converter;
+        Status st = ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter);
+        EXPECT_TRUE(st.ok()) << st.message();
+
+        auto data = BinaryColumn::create();
+        auto nulls = NullColumn::create();
+        for (size_t i = 0; i < values.size(); i++) {
+            data->append(Slice(values[i]));
+            nulls->get_data().push_back(is_null[i]);
+        }
+        auto src = NullableColumn::create(std::move(data), std::move(nulls));
+        src->update_has_null();
+
+        auto dst = ColumnHelper::create_column(col_type, true);
+        st = converter->convert(src.get(), dst.get());
+        EXPECT_TRUE(st.ok()) << st.message();
+        return dst;
+    };
+
+    // 123.45 / 8.00 / -678.90 survive the filter. Rows 1, 2 and 6 were excluded by a pushed-down
+    // filter, so the decoder appended no bytes for them without marking them NULL. Row 4 is a real
+    // NULL, which also contributes no bytes.
+    {
+        auto dst = run({flba(12345), "", "", flba(800), "", flba(-67890), ""}, {0, 0, 0, 0, 1, 0, 0});
+        ASSERT_EQ(size_t(7), dst->size());
+
+        auto* nullable = down_cast<NullableColumn*>(dst.get());
+        const auto& unscaled = down_cast<Decimal128Column*>(nullable->data_column_raw_ptr())->get_data();
+        EXPECT_EQ(int64_t(12345), static_cast<int64_t>(unscaled[0]));
+        EXPECT_EQ(int64_t(800), static_cast<int64_t>(unscaled[3]));
+        EXPECT_EQ(int64_t(-67890), static_cast<int64_t>(unscaled[5]));
+        EXPECT_TRUE(nullable->is_null(4));
+    }
+
+    // The contiguous layout every decoder produces without a pushed-down filter must be unaffected.
+    {
+        auto dst = run({flba(12345), flba(800), "", flba(-67890)}, {0, 0, 1, 0});
+        ASSERT_EQ(size_t(4), dst->size());
+
+        auto* nullable = down_cast<NullableColumn*>(dst.get());
+        const auto& unscaled = down_cast<Decimal128Column*>(nullable->data_column_raw_ptr())->get_data();
+        EXPECT_EQ(int64_t(12345), static_cast<int64_t>(unscaled[0]));
+        EXPECT_EQ(int64_t(800), static_cast<int64_t>(unscaled[1]));
+        EXPECT_EQ(int64_t(-67890), static_cast<int64_t>(unscaled[3]));
+        EXPECT_TRUE(nullable->is_null(2));
     }
 }
 
