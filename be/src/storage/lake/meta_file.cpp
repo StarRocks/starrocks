@@ -487,6 +487,13 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         // onto new_schema, so it is the allocated target, not the FE catalog
         // snapshot's own version -- comparing the latter would reject every REPLAY,
         // since after the first apply the metadata already carries the target.
+        // A schema with no columns would wipe the tablet's column definitions and
+        // leave it unreadable. FE always sends the full column set, so an empty one
+        // means the log is not trustworthy -- reject rather than apply it.
+        if (op.new_schema().column_size() == 0) {
+            return Status::InternalError(strings::Substitute(
+                    "apply_add_index: refusing to install a schema with no columns. tablet=$0", _tablet_meta->id()));
+        }
         const int64_t target_version = op.new_schema().schema_version();
         if (schema->has_schema_version() && target_version < schema->schema_version()) {
             return Status::InternalError(strings::Substitute(

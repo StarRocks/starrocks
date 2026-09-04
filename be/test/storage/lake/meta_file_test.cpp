@@ -3619,6 +3619,38 @@ TEST_F(MetaFileTest, test_apply_add_index_next_unique_id_takes_the_higher_mark) 
 // standalone new_schema_id field (logs written before new_schema existed). Both
 // must reach the same end state for the id, and the legacy encoding must keep
 // working -- an upgraded BE still has to apply logs an older one left behind.
+// Installing the column set means replacing it, so an empty one would wipe the
+// tablet's column definitions and leave it unreadable. FE always sends the full
+// set, so an empty one means the log cannot be trusted -- reject it instead of
+// applying it, and leave the existing schema untouched.
+TEST_F(MetaFileTest, test_apply_add_index_rejects_schema_with_no_columns) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20119);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20119);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+    push_column(schema, /*col_uid=*/43, "c2");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
+    // Deliberately no columns.
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(42);
+
+    EXPECT_FALSE(builder.apply_add_index(op).ok());
+    // The tablet keeps its columns and its id.
+    EXPECT_EQ(2, schema->column_size());
+    EXPECT_EQ(500, schema->id());
+}
+
 TEST_F(MetaFileTest, test_apply_add_index_accepts_legacy_standalone_schema_id) {
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20118);
     auto metadata = std::make_shared<TabletMetadata>();
