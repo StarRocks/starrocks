@@ -634,7 +634,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The target size of the tablets after the SPLIT or MERGE operation.
+- Description: The target size of tablets after a SPLIT or MERGE operation. `0` disables automatic size-based tablet splitting and merging. When a shared-data online range rewrite runs with this value set to `0`, it uses each latest base index's current tablet count as the requested count and recomputes boundaries in the new sort-key space instead of reusing the old boundaries. The actual count can be smaller if sampling cannot produce enough distinct boundaries.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_max_split_count`
