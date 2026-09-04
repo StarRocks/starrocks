@@ -763,6 +763,10 @@ private:
                 }
                 for (auto&& old_rowset : old_rowsets) {
                     if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        // Drop the delete_predicate before archiving into compaction_inputs; it is
+                        // consumed only by vacuum/file cleanup, never by readers, so it is pure
+                        // metadata bloat here (same rationale as the compaction archival paths).
+                        old_rowset.clear_delete_predicate();
                         _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
                     }
                 }
@@ -793,6 +797,11 @@ private:
                 apply_replication_dcg_meta(op_replication, old_next_rowset_id, _metadata.get());
                 _metadata->set_next_rowset_id(new_next_rowset_id);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+                // Drop delete_predicate on the archived inputs; compaction_inputs is consumed only
+                // by vacuum/file cleanup, never by readers, so the predicate is pure metadata bloat.
+                for (auto& archived : *_metadata->mutable_compaction_inputs()) {
+                    archived.clear_delete_predicate();
+                }
             }
 
             _metadata->set_cumulative_point(0);
@@ -1164,9 +1173,13 @@ private:
         const auto end_input_pos = pre_input_pos + 1;
         for (auto iter = first_input_pos; iter != end_input_pos; ++iter) {
             if (iter != last_input_pos) {
+                // Drop the delete_predicate before archiving into compaction_inputs; it is consumed
+                // only by vacuum/file cleanup, never by readers, so it is pure metadata bloat here.
+                (*iter).clear_delete_predicate();
                 _metadata->mutable_compaction_inputs()->Add(std::move(*iter));
             } else {
                 // might be a partial compaction, use real last input rowset
+                last_input_rowset.clear_delete_predicate();
                 _metadata->mutable_compaction_inputs()->Add(std::move(last_input_rowset));
             }
         }
@@ -1322,6 +1335,10 @@ private:
                 }
                 for (auto&& old_rowset : old_rowsets) {
                     if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        // Drop the delete_predicate before archiving into compaction_inputs; it is
+                        // consumed only by vacuum/file cleanup, never by readers, so it is pure
+                        // metadata bloat here (same rationale as the compaction archival paths).
+                        old_rowset.clear_delete_predicate();
                         _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
                     }
                 }
@@ -1333,6 +1350,11 @@ private:
                 }
                 apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+                // Drop delete_predicate on the archived inputs; compaction_inputs is consumed only
+                // by vacuum/file cleanup, never by readers, so the predicate is pure metadata bloat.
+                for (auto& archived : *_metadata->mutable_compaction_inputs()) {
+                    archived.clear_delete_predicate();
+                }
             }
             std::unordered_set<std::string> new_referenced_files;
             for (const auto& [_, dcg] : _metadata->dcg_meta().dcgs()) {
