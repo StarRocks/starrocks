@@ -81,7 +81,10 @@ public:
 
     // UpdateManager's index cache stores this class by value and creates an entry from a tablet id
     // alone, so it needs a default-constructible type. lake_load() supplies the tablet.
-    LakePersistentIndex() = default;
+    //
+    // Defined in the .cpp, not defaulted here: a constructor needs its members' destructors for
+    // unwinding, and _sstable_filesets holds unique_ptrs to a type this header only forward-declares.
+    LakePersistentIndex();
 
     ~LakePersistentIndex();
 

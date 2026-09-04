@@ -60,6 +60,8 @@
 
 namespace starrocks::lake {
 
+LakePersistentIndex::LakePersistentIndex() = default;
+
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
         : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
