@@ -130,6 +130,7 @@ set(EXEC_FILES
         ./exec/repeat_node_test.cpp
         ./exec/set_hash_set_test.cpp
         ./exec/sorting_test.cpp
+        ./exec/tablet_sink_global_dict_words_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
         ./exec/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
