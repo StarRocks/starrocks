@@ -118,7 +118,6 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -215,29 +214,20 @@ public class OlapTableSink extends DataSink {
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState explicitTxnState = globalTransactionMgr.reserveExplicitTransactionLayout(
+                txnId, dbId, dstTable.getId());
         TransactionState txnState = globalTransactionMgr.getTransactionState(dbId, txnId);
-        if (txnState == null) {
-            // Multi-statement stream load plans its sub-task sinks during the load, before the
-            // explicit transaction is upserted into the DatabaseTransactionMgr at commit time, so
-            // getTransactionState misses. Fall back to the explicit transaction registry so the sink
-            // observes the transaction's combined-txn-log decision; otherwise write_txn_log stays at
-            // the per-tablet default while publish expects combined logs, wedging publish.
-            //
-            // Restricted to MULTI_STATEMENT_STREAMING on purpose: INSERT_STREAMING (BEGIN ... COMMIT)
-            // emits per-load-id txn logs that publish reads via the load_ids branch (which takes
-            // precedence over combined_txn_log), so its sink must keep the default per-load-id mode.
-            // Honoring the combined flag here would make BE skip those per-load-id logs and lose data.
-            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
-            if (explicitTxnState != null && explicitTxnState.getTransactionState() != null
-                    && explicitTxnState.getTransactionState().getSourceType()
-                            == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
-                txnState = explicitTxnState.getTransactionState();
-            }
+        if (txnState == null && explicitTxnState != null
+                && explicitTxnState.getSourceType() == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
+            txnState = explicitTxnState;
         }
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
-            tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+            if (explicitTxnState == null
+                    || explicitTxnState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+                tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+            }
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
@@ -386,20 +376,14 @@ public class OlapTableSink extends DataSink {
             return null;
         }
 
-        // normal transaction state
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        TransactionState txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
-
+        TransactionState txnState = globalTransactionMgr.reserveExplicitTransactionLayout(
+                txnId, tSink.getDb_id(), tSink.getTable_id());
         if (txnState == null) {
-            // explicit transaction state
-            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
-            if (explicitTxnState != null) {
-                txnState = explicitTxnState.getTransactionState();
-            }
-
-            if (txnState == null) {
-                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
-            }
+            txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
+        }
+        if (txnState == null) {
+            throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
         }
 
         return txnState;
@@ -751,6 +735,16 @@ public class OlapTableSink extends DataSink {
         return filtered;
     }
 
+    private static List<MaterializedIndex> selectWriteIndexes(
+            OlapTable table, PhysicalPartition physicalPartition,
+            @Nullable TransactionState txnState, @Nullable Long targetWriteIndexId)
+            throws StarRocksException {
+        List<MaterializedIndex> candidates = txnState == null
+                ? physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)
+                : txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition);
+        return filterTargetWriteIndexes(candidates, physicalPartition, targetWriteIndexId);
+    }
+
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
@@ -797,9 +791,8 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                                physicalPartition, targetWriteIndexId);
+                        List<MaterializedIndex> indexes = selectWriteIndexes(
+                                table, physicalPartition, txnState, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -880,9 +873,8 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                                physicalPartition, targetWriteIndexId);
+                        List<MaterializedIndex> indexes = selectWriteIndexes(
+                                table, physicalPartition, txnState, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -925,9 +917,8 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
-                    List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                            physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                            physicalPartition, targetWriteIndexId);
+                    List<MaterializedIndex> indexes = selectWriteIndexes(
+                            table, physicalPartition, txnState, targetWriteIndexId);
                     setMaterializedIndexes(tPartition, indexes);
                     partitionParam.addToPartitions(tPartition);
                     if (txnState != null) {
@@ -1096,9 +1087,8 @@ public class OlapTableSink extends DataSink {
             List<Long> allTabletIds = new ArrayList<>();
             for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
-                List<MaterializedIndex> indexes = (txnState != null)
-                        ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                        : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                List<MaterializedIndex> indexes = selectWriteIndexes(
+                        table, physicalPartition, txnState, null);
                 for (MaterializedIndex index : indexes) {
                     for (Tablet tablet : index.getTablets()) {
                         allTabletIds.add(tablet.getId());
@@ -1121,9 +1111,8 @@ public class OlapTableSink extends DataSink {
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
             LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
-            List<MaterializedIndex> indexes = (txnState != null)
-                    ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                    : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+            List<MaterializedIndex> indexes = selectWriteIndexes(
+                    table, physicalPartition, txnState, null);
             for (MaterializedIndex index : indexes) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
