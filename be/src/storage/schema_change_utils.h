@@ -90,7 +90,8 @@ public:
     void init_runtime_state(const TQueryOptions& query_options, const TQueryGlobals& query_globals);
 
     Status append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& new_chunk,
-                                    const std::vector<uint32_t>& all_ref_columns_ids, int base_schema_columns);
+                                    const std::vector<uint32_t>& all_ref_columns_ids,
+                                    const std::vector<uint32_t>& new_columns_ids);
 
     const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
     std::vector<ColumnId>* get_mutable_selected_column_indexes() { return &_selected_column_indexes; }
