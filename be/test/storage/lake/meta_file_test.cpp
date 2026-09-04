@@ -752,6 +752,56 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
+    // Regression for the metadata-reclaim change: when compaction archives its input
+    // rowsets into compaction_inputs, the (potentially large) delete_predicate must be
+    // dropped from the archived copy. compaction_inputs is consumed only by vacuum/file
+    // cleanup, never by readers, so the predicate is pure metadata bloat once moved.
+    const int64_t tablet_id = 10007;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(112);
+
+    // Two live rowsets, each carrying a delete_predicate.
+    auto* r0 = metadata->add_rowsets();
+    r0->set_id(110);
+    r0->set_overlapped(false);
+    r0->set_num_rows(10);
+    r0->set_data_size(100);
+    r0->add_segment_metas()->set_filename("aaa.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = metadata->add_rowsets();
+    r1->set_id(111);
+    r1->set_overlapped(false);
+    r1->set_num_rows(20);
+    r1->set_data_size(200);
+    r1->add_segment_metas()->set_filename("bbb.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+
+    // Pre-condition: both live rowsets currently carry the predicate.
+    ASSERT_TRUE(metadata->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(metadata->rowsets(1).has_delete_predicate());
+
+    // Compact 110 + 111 -> archived into compaction_inputs.
+    metadata->set_version(11);
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(110);
+    op_compaction.add_input_rowsets(111);
+    RowsetMetadataPB output_rowset;
+    output_rowset.add_segment_metas()->set_filename("ccc.dat");
+    op_compaction.mutable_output_rowset()->CopyFrom(output_rowset);
+    op_compaction.set_compact_version(11);
+    builder.apply_opcompaction(op_compaction, 111, 0);
+
+    // The archived compaction_inputs must NOT retain the delete_predicate.
+    ASSERT_EQ(2, metadata->compaction_inputs_size());
+    EXPECT_FALSE(metadata->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(metadata->compaction_inputs(1).has_delete_predicate());
+}
+
 TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
     const int64_t tablet_id = 32001;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
