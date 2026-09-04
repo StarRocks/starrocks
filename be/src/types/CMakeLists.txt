@@ -18,6 +18,7 @@ ADD_BE_LIB(Types
     bitmap_value.cpp
     datum.cpp
     decimalv2_value.cpp
+    geo_type_descriptor.cpp
     int128_to_double.cpp
     hll.cpp
     json_value.cpp

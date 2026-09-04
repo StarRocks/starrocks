@@ -37,6 +37,59 @@ syntax = "proto2";
 package starrocks;
 option java_package = "com.starrocks.proto";
 
+enum PGeoLogicalType {
+    GEO_LOGICAL_TYPE_UNKNOWN = 0;
+    GEO_LOGICAL_TYPE_GEOGRAPHY = 1;
+    GEO_LOGICAL_TYPE_GEOMETRY = 2;
+}
+
+enum PGeoCoordinateSystem {
+    GEO_COORDINATE_SYSTEM_UNKNOWN = 0;
+    GEO_COORDINATE_SYSTEM_SPHERICAL = 1;
+    GEO_COORDINATE_SYSTEM_CARTESIAN = 2;
+}
+
+enum PGeoEdgeAlgorithm {
+    GEO_EDGE_ALGORITHM_UNKNOWN = 0;
+    GEO_EDGE_ALGORITHM_GEODESIC = 1;
+    GEO_EDGE_ALGORITHM_LINEAR = 2;
+}
+
+enum PGeoEncoding {
+    GEO_ENCODING_UNKNOWN = 0;
+    GEO_ENCODING_WKB = 1;
+}
+
+enum PGeoDimension {
+    GEO_DIMENSION_UNKNOWN = 0;
+    GEO_DIMENSION_XY = 1;
+    GEO_DIMENSION_XYZ = 2;
+    GEO_DIMENSION_XYM = 3;
+    GEO_DIMENSION_XYZM = 4;
+    GEO_DIMENSION_MIXED = 5;
+}
+
+enum PGeoValidationState {
+    GEO_VALIDATION_STATE_UNKNOWN = 0;
+    GEO_VALIDATION_STATE_UNVALIDATED = 1;
+    GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED = 2;
+    GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED = 3;
+}
+
+message PGeoTypeDesc {
+    optional PGeoLogicalType logical_type = 1;
+    optional PGeoCoordinateSystem coordinate_system = 2;
+    optional PGeoEdgeAlgorithm edge_algorithm = 3;
+    optional string crs = 4;
+    optional int32 srid = 5;
+}
+
+message PGeoStorageDesc {
+    optional PGeoEncoding encoding = 1;
+    optional PGeoDimension dimension = 2;
+    optional PGeoValidationState validation_state = 3;
+}
+
 message PScalarType {
     // TPrimitiveType, use int32 to avoid redefine Enum
     required int32 type = 1;
@@ -45,6 +98,9 @@ message PScalarType {
     // Only set for DECIMAL
     optional int32 precision = 3;
     optional int32 scale = 4;
+    // Only meaningful for native GEOGRAPHY/GEOMETRY values.
+    optional PGeoTypeDesc geo_type_desc = 5;
+    optional PGeoStorageDesc geo_storage_desc = 6;
 };
 
 // Represents a field in a STRUCT type.

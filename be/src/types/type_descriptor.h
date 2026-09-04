@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "thrift/protocol/TDebugProtocol.h"
 #include "types/constexpr.h"
+#include "types/geo_type_descriptor.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -50,6 +52,12 @@ struct TypeDescriptor {
     /// Default false means "shift a UTC instant into the session timezone" (Hive / Iceberg /
     /// Paimon LTZ); true means the value is a naive wall clock that must NOT be shifted.
     bool datetime_is_ntz{false};
+
+    // Native geo semantics and storage metadata. These descriptors are kept
+    // separate because identical WKB bytes may represent either planar
+    // GEOMETRY or spherical GEOGRAPHY values.
+    std::optional<GeoTypeDescriptor> geo_type_desc;
+    std::optional<GeoStorageDescriptor> geo_storage_desc;
 
     /// Must be kept in sync with FE's max precision/scale.
     static const int MAX_PRECISION = 76;
@@ -232,6 +240,9 @@ struct TypeDescriptor {
     }
 
     bool is_assignable(const TypeDescriptor& o) const {
+        if (geo_type_desc != o.geo_type_desc || geo_storage_desc != o.geo_storage_desc) {
+            return false;
+        }
         if (is_complex_type()) {
             if ((type != o.type) || (children.size() != o.children.size())) {
                 return false;
@@ -252,6 +263,9 @@ struct TypeDescriptor {
 
     bool operator==(const TypeDescriptor& o) const {
         if (type != o.type) {
+            return false;
+        }
+        if (geo_type_desc != o.geo_type_desc || geo_storage_desc != o.geo_storage_desc) {
             return false;
         }
         if (children != o.children) {

@@ -41,6 +41,12 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         scale = (scalar_type.__isset.scale) ? scalar_type.scale : -1;
         precision = (scalar_type.__isset.precision) ? scalar_type.precision : -1;
         datetime_is_ntz = scalar_type.__isset.datetime_is_ntz && scalar_type.datetime_is_ntz;
+        if (scalar_type.__isset.geo_type_desc) {
+            geo_type_desc = GeoTypeDescriptor::from_thrift(scalar_type.geo_type_desc);
+        }
+        if (scalar_type.__isset.geo_storage_desc) {
+            geo_storage_desc = GeoStorageDescriptor::from_thrift(scalar_type.geo_storage_desc);
+        }
 
         if (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
             type == TYPE_DECIMAL128 || type == TYPE_DECIMAL256) {
@@ -122,6 +128,12 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         if (datetime_is_ntz) {
             scalar_type.__set_datetime_is_ntz(true);
         }
+        if (geo_type_desc.has_value()) {
+            scalar_type.__set_geo_type_desc(geo_type_desc->to_thrift());
+        }
+        if (geo_storage_desc.has_value()) {
+            scalar_type.__set_geo_storage_desc(geo_storage_desc->to_thrift());
+        }
     }
 }
 
@@ -156,6 +168,12 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         if (precision != -1) {
             scalar_type->set_precision(precision);
         }
+        if (geo_type_desc.has_value()) {
+            *scalar_type->mutable_geo_type_desc() = geo_type_desc->to_protobuf();
+        }
+        if (geo_storage_desc.has_value()) {
+            *scalar_type->mutable_geo_storage_desc() = geo_storage_desc->to_protobuf();
+        }
     }
 }
 
@@ -174,6 +192,12 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         len = scalar_type.has_len() ? scalar_type.len() : -1;
         scale = scalar_type.has_scale() ? scalar_type.scale() : -1;
         precision = scalar_type.has_precision() ? scalar_type.precision() : -1;
+        if (scalar_type.has_geo_type_desc()) {
+            geo_type_desc = GeoTypeDescriptor::from_protobuf(scalar_type.geo_type_desc());
+        }
+        if (scalar_type.has_geo_storage_desc()) {
+            geo_storage_desc = GeoStorageDescriptor::from_protobuf(scalar_type.geo_storage_desc());
+        }
 
         if (type == TYPE_CHAR || type == TYPE_VARCHAR || type == TYPE_HLL) {
             DCHECK(scalar_type.has_len());

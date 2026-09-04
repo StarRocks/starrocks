@@ -842,4 +842,95 @@ TEST_F(TypeDescriptorTest, test_create_variant_type) {
     ASSERT_EQ(variant_desc.len, variant_desc2.len);
 }
 
+TEST_F(TypeDescriptorTest, geo_descriptor_thrift_round_trip) {
+    TypeDescriptor descriptor = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    descriptor.geo_type_desc = GeoTypeDescriptor{
+            .logical_type = TGeoLogicalType::GEOGRAPHY,
+            .coordinate_system = TGeoCoordinateSystem::SPHERICAL,
+            .edge_algorithm = TGeoEdgeAlgorithm::GEODESIC,
+            .crs = "OGC:CRS84",
+            .srid = 4326,
+    };
+    descriptor.geo_storage_desc = GeoStorageDescriptor{
+            .encoding = TGeoEncoding::WKB,
+            .dimension = TGeoDimension::XY,
+            .validation_state = TGeoValidationState::STRUCTURALLY_VALIDATED,
+    };
+
+    TTypeDesc thrift = descriptor.to_thrift();
+    ASSERT_TRUE(thrift.types.front().scalar_type.__isset.geo_type_desc);
+    ASSERT_TRUE(thrift.types.front().scalar_type.__isset.geo_storage_desc);
+    EXPECT_EQ("OGC:CRS84", thrift.types.front().scalar_type.geo_type_desc.crs);
+
+    TypeDescriptor round_trip = TypeDescriptor::from_thrift(thrift);
+    EXPECT_EQ(descriptor, round_trip);
+    EXPECT_TRUE(descriptor.is_assignable(round_trip));
+}
+
+TEST_F(TypeDescriptorTest, geo_descriptor_protobuf_round_trip) {
+    TypeDescriptor descriptor = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    descriptor.geo_type_desc = GeoTypeDescriptor{
+            .logical_type = TGeoLogicalType::GEOMETRY,
+            .coordinate_system = TGeoCoordinateSystem::CARTESIAN,
+            .edge_algorithm = TGeoEdgeAlgorithm::LINEAR,
+            .crs = "EPSG:3857",
+            .srid = 3857,
+    };
+    descriptor.geo_storage_desc = GeoStorageDescriptor{
+            .encoding = TGeoEncoding::WKB,
+            .dimension = TGeoDimension::XYZM,
+            .validation_state = TGeoValidationState::SEMANTICALLY_VALIDATED,
+    };
+
+    PTypeDesc protobuf = descriptor.to_protobuf();
+    ASSERT_TRUE(protobuf.types(0).scalar_type().has_geo_type_desc());
+    ASSERT_TRUE(protobuf.types(0).scalar_type().has_geo_storage_desc());
+    EXPECT_EQ("EPSG:3857", protobuf.types(0).scalar_type().geo_type_desc().crs());
+
+    TypeDescriptor round_trip = TypeDescriptor::from_protobuf(protobuf);
+    EXPECT_EQ(descriptor, round_trip);
+    EXPECT_TRUE(descriptor.is_assignable(round_trip));
+}
+
+TEST_F(TypeDescriptorTest, geo_descriptor_participates_in_type_identity) {
+    TypeDescriptor geography = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    geography.geo_type_desc = GeoTypeDescriptor{
+            .logical_type = TGeoLogicalType::GEOGRAPHY,
+            .coordinate_system = TGeoCoordinateSystem::SPHERICAL,
+            .edge_algorithm = TGeoEdgeAlgorithm::GEODESIC,
+            .crs = "OGC:CRS84",
+    };
+    geography.geo_storage_desc = GeoStorageDescriptor{
+            .encoding = TGeoEncoding::WKB,
+            .dimension = TGeoDimension::XY,
+            .validation_state = TGeoValidationState::STRUCTURALLY_VALIDATED,
+    };
+
+    TypeDescriptor geometry = geography;
+    geometry.geo_type_desc->logical_type = TGeoLogicalType::GEOMETRY;
+    geometry.geo_type_desc->coordinate_system = TGeoCoordinateSystem::CARTESIAN;
+    geometry.geo_type_desc->edge_algorithm = TGeoEdgeAlgorithm::LINEAR;
+
+    EXPECT_NE(geography, geometry);
+    EXPECT_FALSE(geography.is_assignable(geometry));
+
+    TypeDescriptor plain_varbinary = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    EXPECT_NE(geography, plain_varbinary);
+    EXPECT_FALSE(geography.is_assignable(plain_varbinary));
+}
+
+TEST_F(TypeDescriptorTest, absent_geo_descriptor_preserves_existing_scalar_contract) {
+    TypeDescriptor descriptor = TypeDescriptor::create_varbinary_type(128);
+
+    TypeDescriptor thrift_round_trip = TypeDescriptor::from_thrift(descriptor.to_thrift());
+    EXPECT_EQ(descriptor, thrift_round_trip);
+    EXPECT_FALSE(thrift_round_trip.geo_type_desc.has_value());
+    EXPECT_FALSE(thrift_round_trip.geo_storage_desc.has_value());
+
+    TypeDescriptor protobuf_round_trip = TypeDescriptor::from_protobuf(descriptor.to_protobuf());
+    EXPECT_EQ(descriptor, protobuf_round_trip);
+    EXPECT_FALSE(protobuf_round_trip.geo_type_desc.has_value());
+    EXPECT_FALSE(protobuf_round_trip.geo_storage_desc.has_value());
+}
+
 } // namespace starrocks
