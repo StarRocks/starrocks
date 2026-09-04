@@ -1,0 +1,272 @@
+-- name: test_flat_json_subtree_from_non_object_document
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+-- result:
+-- !result
+create table t_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+-- result:
+-- !result
+insert into t values
+  (1, parse_json('{"o":{"x":1},"a":{"b":{"y":1}}}')),
+  (2, parse_json('{"o":{"x":2},"a":{"b":{"y":2}}}')),
+  (3, parse_json('{"o":{"x":3},"a":{"b":{"y":3}}}')),
+  (4, parse_json('{"o":{"x":4},"a":{"b":{"y":4}}}')),
+  (5, parse_json('{"o":{"x":5},"a":{"b":{"y":5}}}')),
+  (6, parse_json('{"o":{"x":6},"a":{"b":{"y":6}}}')),
+  (7, parse_json('{"o":{"x":7},"a":{"b":{"y":7}}}')),
+  (8, parse_json('{"o":{"x":8},"a":{"b":{"y":8}}}')),
+  (9, parse_json('[1,2,3]')),
+  (10, parse_json('"just_a_string"')),
+  (11, parse_json('{"p":1}')),
+  (12, parse_json('{"o":{"z":9},"a":{"b":{"z":9}}}'));
+-- result:
+-- !result
+insert into t_ctl select k, j from t;
+-- result:
+-- !result
+select flat_json_meta(j) from t[_META_];
+-- result:
+["nulls(TINYINT), a.b.y(BIGINT), o.x(BIGINT), remain(JSON)"]
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t order by k;
+-- result:
+1	{"x": 1}	{"y": 1}	{"b": {"y": 1}}
+2	{"x": 2}	{"y": 2}	{"b": {"y": 2}}
+3	{"x": 3}	{"y": 3}	{"b": {"y": 3}}
+4	{"x": 4}	{"y": 4}	{"b": {"y": 4}}
+5	{"x": 5}	{"y": 5}	{"b": {"y": 5}}
+6	{"x": 6}	{"y": 6}	{"b": {"y": 6}}
+7	{"x": 7}	{"y": 7}	{"b": {"y": 7}}
+8	{"x": 8}	{"y": 8}	{"b": {"y": 8}}
+9	None	None	None
+10	None	None	None
+11	None	None	None
+12	{"z": 9}	{"z": 9}	{"b": {"z": 9}}
+-- !result
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t order by k;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	1	1	1
+5	1	1	1
+6	1	1	1
+7	1	1	1
+8	1	1	1
+9	0	0	0
+10	0	0	0
+11	0	0	0
+12	1	1	1
+-- !result
+select count(*) as cnt_o from t where json_exists(j,'$.o');
+-- result:
+9
+-- !result
+select count(*) as cnt_ab from t where json_exists(j,'$.a.b');
+-- result:
+9
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t order by k;
+-- result:
+1	{"x": 1}	1
+2	{"x": 2}	1
+3	{"x": 3}	1
+4	{"x": 4}	1
+5	{"x": 5}	1
+6	{"x": 6}	1
+7	{"x": 7}	1
+8	{"x": 8}	1
+9	None	0
+10	None	0
+11	None	0
+12	{"z": 9}	1
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t order by k;
+-- result:
+1	{"x": 1}	{"y": 1}	{"b": {"y": 1}}
+2	{"x": 2}	{"y": 2}	{"b": {"y": 2}}
+3	{"x": 3}	{"y": 3}	{"b": {"y": 3}}
+4	{"x": 4}	{"y": 4}	{"b": {"y": 4}}
+5	{"x": 5}	{"y": 5}	{"b": {"y": 5}}
+6	{"x": 6}	{"y": 6}	{"b": {"y": 6}}
+7	{"x": 7}	{"y": 7}	{"b": {"y": 7}}
+8	{"x": 8}	{"y": 8}	{"b": {"y": 8}}
+9	None	None	None
+10	None	None	None
+11	None	None	None
+12	{"z": 9}	{"z": 9}	{"b": {"z": 9}}
+-- !result
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t order by k;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	1	1	1
+5	1	1	1
+6	1	1	1
+7	1	1	1
+8	1	1	1
+9	0	0	0
+10	0	0	0
+11	0	0	0
+12	1	1	1
+-- !result
+select count(*) as cnt_o from t where json_exists(j,'$.o');
+-- result:
+9
+-- !result
+select count(*) as cnt_ab from t where json_exists(j,'$.a.b');
+-- result:
+9
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t order by k;
+-- result:
+1	{"x": 1}	1
+2	{"x": 2}	1
+3	{"x": 3}	1
+4	{"x": 4}	1
+5	{"x": 5}	1
+6	{"x": 6}	1
+7	{"x": 7}	1
+8	{"x": 8}	1
+9	None	0
+10	None	0
+11	None	0
+12	{"z": 9}	1
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t_ctl order by k;
+-- result:
+1	{"x": 1}	{"y": 1}	{"b": {"y": 1}}
+2	{"x": 2}	{"y": 2}	{"b": {"y": 2}}
+3	{"x": 3}	{"y": 3}	{"b": {"y": 3}}
+4	{"x": 4}	{"y": 4}	{"b": {"y": 4}}
+5	{"x": 5}	{"y": 5}	{"b": {"y": 5}}
+6	{"x": 6}	{"y": 6}	{"b": {"y": 6}}
+7	{"x": 7}	{"y": 7}	{"b": {"y": 7}}
+8	{"x": 8}	{"y": 8}	{"b": {"y": 8}}
+9	None	None	None
+10	None	None	None
+11	None	None	None
+12	{"z": 9}	{"z": 9}	{"b": {"z": 9}}
+-- !result
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t_ctl order by k;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	1	1	1
+5	1	1	1
+6	1	1	1
+7	1	1	1
+8	1	1	1
+9	0	0	0
+10	0	0	0
+11	0	0	0
+12	1	1	1
+-- !result
+select count(*) as cnt_o from t_ctl where json_exists(j,'$.o');
+-- result:
+9
+-- !result
+select count(*) as cnt_ab from t_ctl where json_exists(j,'$.a.b');
+-- result:
+9
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t_ctl order by k;
+-- result:
+1	{"x": 1}	1
+2	{"x": 2}	1
+3	{"x": 3}	1
+4	{"x": 4}	1
+5	{"x": 5}	1
+6	{"x": 6}	1
+7	{"x": 7}	1
+8	{"x": 8}	1
+9	None	0
+10	None	0
+11	None	0
+12	{"z": 9}	1
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t_ctl order by k;
+-- result:
+1	{"x": 1}	{"y": 1}	{"b": {"y": 1}}
+2	{"x": 2}	{"y": 2}	{"b": {"y": 2}}
+3	{"x": 3}	{"y": 3}	{"b": {"y": 3}}
+4	{"x": 4}	{"y": 4}	{"b": {"y": 4}}
+5	{"x": 5}	{"y": 5}	{"b": {"y": 5}}
+6	{"x": 6}	{"y": 6}	{"b": {"y": 6}}
+7	{"x": 7}	{"y": 7}	{"b": {"y": 7}}
+8	{"x": 8}	{"y": 8}	{"b": {"y": 8}}
+9	None	None	None
+10	None	None	None
+11	None	None	None
+12	{"z": 9}	{"z": 9}	{"b": {"z": 9}}
+-- !result
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t_ctl order by k;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	1	1	1
+5	1	1	1
+6	1	1	1
+7	1	1	1
+8	1	1	1
+9	0	0	0
+10	0	0	0
+11	0	0	0
+12	1	1	1
+-- !result
+select count(*) as cnt_o from t_ctl where json_exists(j,'$.o');
+-- result:
+9
+-- !result
+select count(*) as cnt_ab from t_ctl where json_exists(j,'$.a.b');
+-- result:
+9
+-- !result
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t_ctl order by k;
+-- result:
+1	{"x": 1}	1
+2	{"x": 2}	1
+3	{"x": 3}	1
+4	{"x": 4}	1
+5	{"x": 5}	1
+6	{"x": 6}	1
+7	{"x": 7}	1
+8	{"x": 8}	1
+9	None	0
+10	None	0
+11	None	0
+12	{"z": 9}	1
+-- !result

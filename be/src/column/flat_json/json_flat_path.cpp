@@ -58,21 +58,24 @@ JsonFlatPath* JsonFlatPath::normalize_from_path(const std::string_view& path, Js
 *                    /    \
 *                b3(IN)   b4(IN)
 */
-void JsonFlatPath::set_root(const std::string_view& new_root_path, JsonFlatPath* node) {
+JsonFlatPath* JsonFlatPath::set_root(const std::string_view& new_root_path, JsonFlatPath* node) {
     node->op = OP_IGNORE;
     if (new_root_path.empty()) {
         node->op = OP_ROOT;
-        return;
+        return node;
     }
     auto [key, next] = split_path(new_root_path);
 
+    // the node the caller re-rooted at, or null when this level has no child for the next level key
+    JsonFlatPath* new_root = nullptr;
     auto iter = node->children.begin();
     for (; iter != node->children.end(); iter++) {
         iter->second->op = OP_EXCLUDE;
         if (iter->first == key) {
-            set_root(next, iter->second.get());
+            new_root = set_root(next, iter->second.get());
         }
     }
+    return new_root;
 }
 
 } // namespace starrocks

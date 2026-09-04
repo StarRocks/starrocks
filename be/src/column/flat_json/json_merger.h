@@ -64,6 +64,13 @@ private:
 
     void _merge_json(const JsonFlatPath* root, vpack::Builder* builder, size_t index);
 
+    // The remain column is always stored at the document root, but set_root_path() re-roots the flat
+    // path tree at `_root_path`. Descend the remain slice by the same levels so the merge only ever
+    // sees the sub-slice the new root points at. Returns false when the row's remain doesn't hold
+    // that node (the key is absent, or something on the way down isn't an object, e.g. a whole
+    // document that is an array or a scalar), which means the remain contributes nothing to the row.
+    bool _descend_remain_to_root(const vpack::Slice& remain, vpack::Slice* root_remain) const;
+
     void _add_level_paths_impl(const std::string_view& path, JsonFlatPath* root);
 
     void _check_has_non_null_values(const JsonFlatPath* root, size_t index, bool* has_non_null_values);
@@ -77,6 +84,14 @@ private:
     std::vector<std::string> _exclude_paths;
     std::vector<std::string> _level_paths;
     bool _output_nullable = false;
+    // for read, the path the flat tree was re-rooted at, empty when merging the whole column
+    std::string _root_path;
+    bool _has_root_path = false;
+    // for read, the node set_root() marked OP_ROOT, i.e. the node `_root_path` names. Once a row's
+    // remain has been descended to that node there is nothing left to look for above it, so the merge
+    // starts here instead of walking the outer levels down a second time. Null when the whole column
+    // is merged, and also when the flat tree holds no node for `_root_path`.
+    const JsonFlatPath* _root_node = nullptr;
 };
 
 } // namespace starrocks

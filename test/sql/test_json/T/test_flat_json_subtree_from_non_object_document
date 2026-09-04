@@ -1,0 +1,88 @@
+-- name: test_flat_json_subtree_from_non_object_document
+-- Asking a flat_json table for a subtree that a row does not have could return that row's WHOLE
+-- document. On flat_json.enable=true the nested leaves become sub-columns (o.x, a.b.y) and whatever
+-- was not extracted is kept verbatim in the `remain` sub-column, at the DOCUMENT root. When the FE
+-- pushes $.o down as a column access path the BE re-roots the flat path tree at `o`
+-- (JsonMerger::set_root_path) but the merge kept reading the remain from the document root, so a row
+-- whose remain root is not an object at all was appended as-is: the answer for $.o was the entire
+-- document. That is not an exotic shape -- one JSON column routinely holds objects in most rows and
+-- an array or a bare scalar in a few -- and the harm is not only the odd value: the row also stops
+-- being NULL, so json_exists() says 1 and `count(*) ... where json_exists()` over-counts.
+-- Rows 1-8 are what make o.x and a.b.y real sub-columns (a path needs a hit rate over
+-- json_flat_sparsity_factor, and the leaves must be objects everywhere they appear, otherwise the
+-- deriver stops at `o` and hands back a plain JSON sub-column that never reaches the merge).
+-- Row 9 is a top-level array and row 10 a top-level scalar: those are the leaking rows, both must be
+-- NULL / 0. Row 11 is an object that simply lacks the keys, the shape that was already correct and
+-- must stay so. Row 12 has the requested nodes with only non-extracted children, so it can only be
+-- answered by descending the remain and merging it -- it is the guard that the descent did not turn
+-- the correct rows into NULL.
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="true");
+create table t_ctl (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1
+  properties("replication_num"="1","flat_json.enable"="false");
+insert into t values
+  (1, parse_json('{"o":{"x":1},"a":{"b":{"y":1}}}')),
+  (2, parse_json('{"o":{"x":2},"a":{"b":{"y":2}}}')),
+  (3, parse_json('{"o":{"x":3},"a":{"b":{"y":3}}}')),
+  (4, parse_json('{"o":{"x":4},"a":{"b":{"y":4}}}')),
+  (5, parse_json('{"o":{"x":5},"a":{"b":{"y":5}}}')),
+  (6, parse_json('{"o":{"x":6},"a":{"b":{"y":6}}}')),
+  (7, parse_json('{"o":{"x":7},"a":{"b":{"y":7}}}')),
+  (8, parse_json('{"o":{"x":8},"a":{"b":{"y":8}}}')),
+  (9, parse_json('[1,2,3]')),
+  (10, parse_json('"just_a_string"')),
+  (11, parse_json('{"p":1}')),
+  (12, parse_json('{"o":{"z":9},"a":{"b":{"z":9}}}'));
+insert into t_ctl select k, j from t;
+-- The defect needs this exact schema: o.x and a.b.y extracted, everything else in remain. If a future
+-- change to the path deriver stops extracting them, the queries below go down another path and stop
+-- testing anything, so pin the shape here.
+select flat_json_meta(j) from t[_META_];
+set cbo_prune_json_subfield = true;
+-- Channel 1: no v2 rewrite, so every read of $.o goes through the merge.
+set cbo_json_v2_rewrite = false;
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t order by k;
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t order by k;
+-- The user-visible harm: 9 rows have $.o, not 12 and not 11.
+select count(*) as cnt_o from t where json_exists(j,'$.o');
+-- $.a.b is two levels deep, so it also proves the remain is descended level by level.
+select count(*) as cnt_ab from t where json_exists(j,'$.a.b');
+-- Reading one path at two types declines the v2 rewrite for that path, which is what keeps the cast
+-- on the JSON-typed read in channel 2 as well.
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t order by k;
+-- Channel 2: with the v2 rewrite on the casts read typed sub-columns, but json_exists forces the
+-- access path back to JSON and still goes through the merge, so this channel must be checked too.
+set cbo_json_v2_rewrite = true;
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t order by k;
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t order by k;
+select count(*) as cnt_o from t where json_exists(j,'$.o');
+select count(*) as cnt_ab from t where json_exists(j,'$.a.b');
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t order by k;
+-- Control: the same rows on a table that is not flattened. Flat JSON is a storage layout, so every
+-- answer in both channels above must equal the corresponding answer here.
+set cbo_json_v2_rewrite = false;
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t_ctl order by k;
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t_ctl order by k;
+select count(*) as cnt_o from t_ctl where json_exists(j,'$.o');
+select count(*) as cnt_ab from t_ctl where json_exists(j,'$.a.b');
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t_ctl order by k;
+set cbo_json_v2_rewrite = true;
+select k, cast(j->'$.o' as string) as o_sub, cast(j->'$.a.b' as string) as ab_sub,
+       cast(j->'$.a' as string) as a_sub
+from t_ctl order by k;
+select k, json_exists(j,'$.o') as ex_o, json_exists(j,'$.a.b') as ex_ab, json_exists(j,'$.a') as ex_a
+from t_ctl order by k;
+select count(*) as cnt_o from t_ctl where json_exists(j,'$.o');
+select count(*) as cnt_ab from t_ctl where json_exists(j,'$.a.b');
+select k, cast(j->'$.o' as string) as o_sub, json_exists(j,'$.o') as ex_o from t_ctl order by k;

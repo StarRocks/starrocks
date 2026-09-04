@@ -77,7 +77,34 @@ void JsonMerger::add_level_paths(const std::vector<std::string>& level_paths) {
 }
 
 void JsonMerger::set_root_path(const std::string& base_path) {
-    JsonFlatPath::set_root(base_path, _src_root.get());
+    _root_path = base_path;
+    // an empty base path is the document root itself, there is nothing to descend
+    _has_root_path = !base_path.empty();
+    auto* new_root = JsonFlatPath::set_root(base_path, _src_root.get());
+    // Keep the re-rooted node so _merge_impl() can merge straight from it. With an empty base path
+    // set_root() hands back _src_root itself, but then the merge already starts at the document root
+    // and the old walk is the only correct one, so don't shortcut that case.
+    _root_node = _has_root_path ? new_root : nullptr;
+}
+
+bool JsonMerger::_descend_remain_to_root(const vpack::Slice& remain, vpack::Slice* root_remain) const {
+    auto current = remain;
+    std::string_view path = _root_path;
+    while (!path.empty()) {
+        if (!current.isObject()) {
+            return false;
+        }
+        // split the same way set_root() walked the flat tree, so a quoted level keeps working
+        auto [key, next] = JsonFlatPath::split_path(path);
+        auto child = current.get(vpack::StringRef(key.data(), key.size()));
+        if (child.isNone()) {
+            return false;
+        }
+        current = child;
+        path = next;
+    }
+    *root_remain = current;
+    return true;
 }
 
 ColumnPtr JsonMerger::merge(const Columns& columns) {
@@ -122,7 +149,16 @@ void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& n
         for (size_t i = 0; i < rows; i++) {
             auto obj = remain->get_object(i);
             auto vs = obj->to_vslice();
-            if (obj->is_invalid()) {
+            // when the tree was re-rooted, the remain has to be descended by the same levels before
+            // it can say anything about the requested node
+            auto root_vs = vs;
+            bool remain_has_root = !obj->is_invalid();
+            if (remain_has_root && _has_root_path) {
+                remain_has_root = _descend_remain_to_root(vs, &root_vs);
+            }
+            if (!remain_has_root) {
+                // no remain for this row: build the node from the flat columns alone, which yields an
+                // empty object, and so a null row, when they hold nothing either
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
                 _merge_json(_src_root.get(), &builder, i);
@@ -130,17 +166,39 @@ void JsonMerger::_merge_impl(size_t rows, JsonColumn& json_result, NullColumn& n
                 auto slice = builder.slice();
                 json_result.append(JsonValue(slice));
                 null_result.append(slice.isEmptyObject());
-            } else if (!vs.isObject()) {
-                for (int k = 0; k < _src_paths.size(); k++) {
-                    // check child column should be null
-                    DCHECK(_src_columns[k]->is_null(i));
+            } else if (!root_vs.isObject()) {
+                if (!_has_root_path) {
+                    for (int k = 0; k < _src_paths.size(); k++) {
+                        // check child column should be null
+                        DCHECK(_src_columns[k]->is_null(i));
+                    }
                 }
-                json_result.append(JsonValue(vs));
-                null_result.append(vs.isEmptyObject());
+                json_result.append(JsonValue(root_vs));
+                null_result.append(root_vs.isEmptyObject());
             } else {
                 vpack::Builder builder;
                 builder.add(vpack::Value(vpack::ValueType::Object));
-                _merge_json_with_remain<IN_TREE>(_src_root.get(), &vs, &builder, i);
+                if (_root_node != nullptr) {
+                    // _descend_remain_to_root() already walked this row's remain down to the re-rooted
+                    // node, so merge from there. Starting at _src_root instead would walk the same
+                    // levels a second time -- the OP_ROOT hop below is that very descent -- and the
+                    // levels above the new root cannot contribute anything:
+                    //   - set_root() marked every sibling on the way down OP_EXCLUDE, so the first
+                    //     loop skips them and the second loop skips them;
+                    //   - a re-rooted tree leaves _src_root OP_IGNORE, so merge() picks
+                    //     _merge_impl<false> and the first loop drops, rather than copies, the remain
+                    //     keys the flat tree does not know;
+                    //   - OP_IGNORE recurses with the same builder and adds no level;
+                    //   - the second loop reaches the level key itself only to find the remain has it
+                    //     (_descend_remain_to_root() just got it from there) and continue.
+                    // IN_TREE is true because that is what the OP_ROOT hop in
+                    // _merge_json_with_remain() passes.
+                    _merge_json_with_remain<true>(_root_node, &root_vs, &builder, i);
+                } else {
+                    // Merging the whole column, or a root path the flat tree has no node for: walk the
+                    // tree from _src_root, where the remain is stored.
+                    _merge_json_with_remain<IN_TREE>(_src_root.get(), &vs, &builder, i);
+                }
                 builder.close();
                 auto slice = builder.slice();
                 json_result.append(JsonValue(slice));

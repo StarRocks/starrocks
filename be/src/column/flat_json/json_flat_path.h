@@ -81,7 +81,9 @@ public:
     static JsonFlatPath* normalize_from_path(const std::string_view& path, JsonFlatPath* root);
 
     // set new root, other path will set to exclude, the node must include the root path
-    static void set_root(const std::string_view& new_root_path, JsonFlatPath* node);
+    // returns the node marked OP_ROOT, which is the node `new_root_path` names, or null when the tree
+    // has no node for it (the whole subtree below `node` ends up OP_EXCLUDE in that case)
+    static JsonFlatPath* set_root(const std::string_view& new_root_path, JsonFlatPath* node);
 
     static std::string debug_flat_json(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                        bool has_remain) {
