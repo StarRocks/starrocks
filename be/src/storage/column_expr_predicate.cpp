@@ -438,9 +438,8 @@ bool ColumnExprPredicate::can_pushdown_non_scored_limit() const {
     if (expr->node_type() == TExprNodeType::MATCH_EXPR) {
         return true;
     }
-    auto* function = expr->node_type() == TExprNodeType::FUNCTION_CALL
-                             ? down_cast<VectorizedFunctionCallExpr*>(expr)
-                             : nullptr;
+    auto* function =
+            expr->node_type() == TExprNodeType::FUNCTION_CALL ? down_cast<VectorizedFunctionCallExpr*>(expr) : nullptr;
     return function != nullptr && boost::iequals(function->get_function_desc()->name, LIKE_FN_NAME);
 }
 

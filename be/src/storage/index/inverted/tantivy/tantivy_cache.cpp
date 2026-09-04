@@ -236,8 +236,7 @@ void TantivyReaderCache::_maybe_insert(const std::string& key, const ResourcePtr
         resource->cache_mem_tracker = nullptr;
         resource->tracked_bytes = 0;
         if (_mem_tracker != nullptr) {
-            _mem_tracker->release_without_root(
-                    estimated_bytes - std::min(estimated_bytes, resource->resident_bytes));
+            _mem_tracker->release_without_root(estimated_bytes - std::min(estimated_bytes, resource->resident_bytes));
         }
     }
     _cache->release(entry);
@@ -418,14 +417,14 @@ void TantivyQueryCache::maybe_insert(const std::string& key, const roaring::Roar
     if (_mem_tracker != nullptr) {
         _mem_tracker->consume_without_root(final_bytes);
     }
-    BitmapPtr immutable_bitmap(mutable_bitmap.release(), [tracker = _mem_tracker, allocation_tracker,
-                                                          final_bytes](const auto* value) {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(allocation_tracker);
-        delete value;
-        if (tracker != nullptr) {
-            tracker->release_without_root(final_bytes);
-        }
-    });
+    BitmapPtr immutable_bitmap(mutable_bitmap.release(),
+                               [tracker = _mem_tracker, allocation_tracker, final_bytes](const auto* value) {
+                                   SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(allocation_tracker);
+                                   delete value;
+                                   if (tracker != nullptr) {
+                                       tracker->release_without_root(final_bytes);
+                                   }
+                               });
 
     auto* entry = _cache->get_or_create(key);
     bool inserted = false;

@@ -87,15 +87,15 @@ struct RustResult {
 };
 
 struct TantivyReaderResourceUsage {
-  uint64_t estimated_bytes;
-  uint32_t fd_charge;
-  uint64_t pull_directory_read_time_ns;
-  uint64_t pull_directory_read_lock_wait_time_ns;
-  uint64_t materialized_bytes;
-  uint64_t resident_bytes;
-  uint64_t resident_read_count;
-  uint64_t resident_read_bytes;
-  bool resident_directory;
+    uint64_t estimated_bytes;
+    uint32_t fd_charge;
+    uint64_t pull_directory_read_time_ns;
+    uint64_t pull_directory_read_lock_wait_time_ns;
+    uint64_t materialized_bytes;
+    uint64_t resident_bytes;
+    uint64_t resident_read_count;
+    uint64_t resident_read_bytes;
+    bool resident_directory;
 };
 
 /**
@@ -136,7 +136,7 @@ struct RustF32Array {
  * `set_bitset` callback so tantivy hits stream straight into the result bitmap
  * without a `Vec<u32>` round-trip.
  */
-using SetBitmapFn = uintptr_t(*)(void *ctx, const uint32_t *ids, uintptr_t len);
+using SetBitmapFn = uintptr_t (*)(void* ctx, const uint32_t* ids, uintptr_t len);
 
 /**
  * Owned array of NUL-terminated C strings. Must be released via
@@ -152,20 +152,20 @@ struct RustStringArray {
  * `RustTokenArray` and released by `tantivy_free_token_array`.
  */
 struct RustToken {
-  char *term;
-  uintptr_t position;
-  uintptr_t position_length;
-  uintptr_t start_offset;
-  uintptr_t end_offset;
-  char *token_type;
+    char* term;
+    uintptr_t position;
+    uintptr_t position_length;
+    uintptr_t start_offset;
+    uintptr_t end_offset;
+    char* token_type;
 };
 
 /**
  * Owned structured token array returned by analyzer-detail FFI calls.
  */
 struct RustTokenArray {
-  RustToken *ptr;
-  uintptr_t len;
+    RustToken* ptr;
+    uintptr_t len;
 };
 
 /**
@@ -192,10 +192,8 @@ extern "C" {
  *
  * SAFETY: `path` and `field_name` must be valid NUL-terminated C strings.
  */
-RustResult tantivy_load_index_reader(const char *path,
-                                     const char *field_name,
-                                     const char *tokenizer_name,
-                                     const char *analyzer_digest);
+RustResult tantivy_load_index_reader(const char* path, const char* field_name, const char* tokenizer_name,
+                                     const char* analyzer_digest);
 
 /**
  * Open an index from a compound `.idx` file via PullDirectory.
@@ -217,20 +215,16 @@ RustResult tantivy_load_index_reader(const char *path,
  * Both file-table arguments and `field_name` must be valid NUL-terminated C
  * strings.
  */
-RustResult tantivy_open_compound_reader(void *ra_file_handle,
-                                        void *read_buffer_pool,
-                                        bool use_resident_directory,
-                                        const char *file_table_json,
-                                        const char *resident_file_table_json,
-                                        const char *field_name,
-                                        const char *tokenizer_name,
-                                        const char *analyzer_digest);
+RustResult tantivy_open_compound_reader(void* ra_file_handle, void* read_buffer_pool, bool use_resident_directory,
+                                        const char* file_table_json, const char* resident_file_table_json,
+                                        const char* field_name, const char* tokenizer_name,
+                                        const char* analyzer_digest);
 
 /**
  * Return the current resource estimate and cumulative PullDirectory timings.
  * Returns false for a NULL reader or output pointer.
  */
-bool tantivy_index_reader_resource_usage(const void *reader, TantivyReaderResourceUsage *out);
+bool tantivy_index_reader_resource_usage(const void* reader, TantivyReaderResourceUsage* out);
 
 /**
  * Single-term query. Matching row ids are written into `*out`. Caller MUST
@@ -291,12 +285,8 @@ RustResult tantivy_match_all_query_scored(const void* reader, const FFISlice* te
  *
  * SAFETY: same as `tantivy_match_query`.
  */
-RustResult tantivy_phrase_match_query(const void *reader,
-                                      const FFISlice *terms,
-                                      uintptr_t count,
-                                      const uint32_t *positions,
-                                      uint32_t slop,
-                                      RustU32Array *out);
+RustResult tantivy_phrase_match_query(const void* reader, const FFISlice* terms, uintptr_t count,
+                                      const uint32_t* positions, uint32_t slop, RustU32Array* out);
 
 /**
  * MATCH_WILDCARD query: returns rows whose indexed term matches the SQL
@@ -312,55 +302,33 @@ RustResult tantivy_wildcard_query(const void* reader, const uint8_t* pattern_ptr
  * EQUAL / single-term → bitmap. SAFETY: as `tantivy_term_query`; `ctx`/`append`
  * must be valid for the duration of the call.
  */
-RustResult tantivy_term_query_bitmap(const void *reader,
-                                     const uint8_t *term_ptr,
-                                     uintptr_t term_len,
-                                     uintptr_t limit,
-                                     void *ctx,
-                                     SetBitmapFn append);
+RustResult tantivy_term_query_bitmap(const void* reader, const uint8_t* term_ptr, uintptr_t term_len, uintptr_t limit,
+                                     void* ctx, SetBitmapFn append);
 
 /**
  * MATCH_ANY → bitmap. SAFETY: as `tantivy_match_query`.
  */
-RustResult tantivy_match_query_bitmap(const void *reader,
-                                      const FFISlice *terms,
-                                      uintptr_t count,
-                                      uintptr_t limit,
-                                      void *ctx,
-                                      SetBitmapFn append);
+RustResult tantivy_match_query_bitmap(const void* reader, const FFISlice* terms, uintptr_t count, uintptr_t limit,
+                                      void* ctx, SetBitmapFn append);
 
 /**
  * MATCH_ALL → bitmap. SAFETY: as `tantivy_match_query`.
  */
-RustResult tantivy_match_all_query_bitmap(const void *reader,
-                                          const FFISlice *terms,
-                                          uintptr_t count,
-                                          double min_df_ratio,
-                                          uintptr_t limit,
-                                          void *ctx,
-                                          SetBitmapFn append);
+RustResult tantivy_match_all_query_bitmap(const void* reader, const FFISlice* terms, uintptr_t count,
+                                          double min_df_ratio, uintptr_t limit, void* ctx, SetBitmapFn append);
 
 /**
  * MATCH_PHRASE → bitmap. SAFETY: as `tantivy_phrase_match_query`.
  */
-RustResult tantivy_phrase_match_query_bitmap(const void *reader,
-                                             const FFISlice *terms,
-                                             uintptr_t count,
-                                             const uint32_t *positions,
-                                             uint32_t slop,
-                                             uintptr_t limit,
-                                             void *ctx,
+RustResult tantivy_phrase_match_query_bitmap(const void* reader, const FFISlice* terms, uintptr_t count,
+                                             const uint32_t* positions, uint32_t slop, uintptr_t limit, void* ctx,
                                              SetBitmapFn append);
 
 /**
  * MATCH_WILDCARD → bitmap. SAFETY: as `tantivy_wildcard_query`.
  */
-RustResult tantivy_wildcard_query_bitmap(const void *reader,
-                                         const uint8_t *pattern_ptr,
-                                         uintptr_t pattern_len,
-                                         uintptr_t limit,
-                                         void *ctx,
-                                         SetBitmapFn append);
+RustResult tantivy_wildcard_query_bitmap(const void* reader, const uint8_t* pattern_ptr, uintptr_t pattern_len,
+                                         uintptr_t limit, void* ctx, SetBitmapFn append);
 
 /**
  * Release a reader handle. Safe on NULL.
@@ -395,15 +363,9 @@ void tantivy_free_index_reader(void* reader);
  * SAFETY: `path`, `field_name`, `tokenizer` must be valid NUL-terminated
  * C strings. `merge_policy` may be NULL.
  */
-RustResult tantivy_create_index_writer(const char *path,
-                                       const char *field_name,
-                                       const char *tokenizer,
-                                       const char *analyzer_digest,
-                                       bool support_phrase,
-                                       bool support_bm25,
-                                       uintptr_t memory_budget_bytes,
-                                       uintptr_t num_threads,
-                                       const char *merge_policy);
+RustResult tantivy_create_index_writer(const char* path, const char* field_name, const char* tokenizer,
+                                       const char* analyzer_digest, bool support_phrase, bool support_bm25,
+                                       uintptr_t memory_budget_bytes, uintptr_t num_threads, const char* merge_policy);
 
 /**
  * Append a batch of UTF-8 strings as documents in order. `values_ptr` is an
@@ -476,36 +438,30 @@ void tantivy_free_token_array(RustTokenArray array);
  * Validate and canonicalize an analyzer definition or legacy tokenizer name.
  * Returns `[canonical_json, sha256_digest]` in `out`.
  */
-RustResult tantivy_analyzer_canonicalize(const char *definition, RustStringArray *out);
+RustResult tantivy_analyzer_canonicalize(const char* definition, RustStringArray* out);
 
 /**
  * Create a reusable analyzer handle. `expected_digest` may be NULL/empty.
  */
-RustResult tantivy_create_analyzer(const char *definition, const char *expected_digest);
+RustResult tantivy_create_analyzer(const char* definition, const char* expected_digest);
 
-void tantivy_free_analyzer(void *analyzer);
+void tantivy_free_analyzer(void* analyzer);
 
 /**
  * Retain an analyzer by returning an independently owned handle that uses the
  * same immutable pipeline. The returned pointer must be released with
  * `tantivy_free_analyzer`.
  */
-RustResult tantivy_retain_analyzer(const void *analyzer);
+RustResult tantivy_retain_analyzer(const void* analyzer);
 
-RustResult tantivy_analyzer_tokenize(const void *analyzer,
-                                     const uint8_t *text_ptr,
-                                     uintptr_t text_len,
-                                     RustStringArray *out);
+RustResult tantivy_analyzer_tokenize(const void* analyzer, const uint8_t* text_ptr, uintptr_t text_len,
+                                     RustStringArray* out);
 
-RustResult tantivy_analyzer_tokenize_detail(const void *analyzer,
-                                            const uint8_t *text_ptr,
-                                            uintptr_t text_len,
-                                            RustTokenArray *out);
+RustResult tantivy_analyzer_tokenize_detail(const void* analyzer, const uint8_t* text_ptr, uintptr_t text_len,
+                                            RustTokenArray* out);
 
-RustResult tantivy_tokenize(const char *tokenizer_name,
-                            const uint8_t *text_ptr,
-                            uintptr_t text_len,
-                            RustStringArray *out);
+RustResult tantivy_tokenize(const char* tokenizer_name, const uint8_t* text_ptr, uintptr_t text_len,
+                            RustStringArray* out);
 
 /**
  * Run and drop a task previously handed to the BE pool. Called by the BE pool
@@ -538,16 +494,14 @@ void tantivy_binding_init_thread_pool(TantivyPoolSubmitFn submit, TantivyPoolSub
 /**
  * Lease a buffer from the C++ process-local Tantivy read-buffer pool.
  */
-extern uint8_t *sr_tantivy_read_buffer_acquire(void *pool,
-                                               uintptr_t requested_bytes,
-                                               uintptr_t *capacity_bytes);
+extern uint8_t* sr_tantivy_read_buffer_acquire(void* pool, uintptr_t requested_bytes, uintptr_t* capacity_bytes);
 
 /**
  * Return a buffer after the last OwnedBytes view has been dropped.
  */
-extern void sr_tantivy_read_buffer_release(void *pool, uint8_t *buffer, uintptr_t capacity_bytes);
+extern void sr_tantivy_read_buffer_release(void* pool, uint8_t* buffer, uintptr_t capacity_bytes);
 
-}  // extern "C"
+} // extern "C"
 
 } // namespace starrocks::tantivy_binding
 

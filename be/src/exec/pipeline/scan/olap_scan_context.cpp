@@ -174,9 +174,8 @@ OlapScanContextFactory::OlapScanContextFactory(OlapScanNode* const scan_node, in
                         std::move(chunk_buffer_limiter)),
           _contexts(shared_morsel_queue ? 1 : dop),
           _jit_rewriter(dop),
-          _non_scored_limit_budget(scan_node->limit() > 0
-                                           ? std::make_shared<std::atomic<int64_t>>(scan_node->limit())
-                                           : nullptr) {}
+          _non_scored_limit_budget(scan_node->limit() > 0 ? std::make_shared<std::atomic<int64_t>>(scan_node->limit())
+                                                          : nullptr) {}
 
 OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence) {
     DCHECK_LT(driver_sequence, _dop);

@@ -71,8 +71,8 @@ StatusOr<TantivyCanonicalQuery> canonicalize_query(void* analyzer, InvertedIndex
                                                    const void* query_value);
 
 bool is_resident_metadata_file(std::string_view name) {
-    return name == "meta.json" || name == ".managed.json" || name.ends_with(".term") ||
-           name.ends_with(".fieldnorm") || name.ends_with(".fast") || name.ends_with(".lock");
+    return name == "meta.json" || name == ".managed.json" || name.ends_with(".term") || name.ends_with(".fieldnorm") ||
+           name.ends_with(".fast") || name.ends_with(".lock");
 }
 
 void append_mtime(FileSystem* fs, const std::string& path, std::string* version) {
@@ -87,13 +87,13 @@ std::shared_ptr<TantivyReaderResource> make_reader_resource(MemTracker* allocati
         return std::make_shared<TantivyReaderResource>();
     }
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(allocation_tracker);
-    return std::shared_ptr<TantivyReaderResource>(
-            new TantivyReaderResource(), [allocation_tracker](TantivyReaderResource* resource) {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(allocation_tracker);
-                delete resource;
-            });
+    return std::shared_ptr<TantivyReaderResource>(new TantivyReaderResource(),
+                                                  [allocation_tracker](TantivyReaderResource* resource) {
+                                                      SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(allocation_tracker);
+                                                      delete resource;
+                                                  });
 }
-}
+} // namespace
 
 TantivyInvertedReader::TantivyInvertedReader(std::string path, uint32_t index_id, std::string field_name,
                                              std::string analyzer_definition, std::string analyzer_digest)
@@ -190,9 +190,9 @@ Status TantivyInvertedReader::load_compound(std::unique_ptr<RandomAccessFile> ra
     if (auto* cache_manager = ExecEnv::GetInstance()->tantivy_cache_manager(); cache_manager != nullptr) {
         resource->read_buffer_pool = cache_manager->read_buffer_pool();
     }
-    tb::RustResult r = tb::tantivy_open_compound_reader(
-            resource->ra_file.get(), resource->read_buffer_pool.get(), false, file_table_json.c_str(), "{}",
-            _field_name.c_str(), _analyzer_definition.c_str(), _analyzer_digest.c_str());
+    tb::RustResult r = tb::tantivy_open_compound_reader(resource->ra_file.get(), resource->read_buffer_pool.get(),
+                                                        false, file_table_json.c_str(), "{}", _field_name.c_str(),
+                                                        _analyzer_definition.c_str(), _analyzer_digest.c_str());
     TantivyResultGuard guard(r);
     RETURN_IF_ERROR(tantivy_status_from_error(r));
 
@@ -311,8 +311,7 @@ StatusOr<std::shared_ptr<TantivyReaderResource>> TantivyInvertedReader::_open_co
             continue;
         }
         if (file_count++ > 0) file_table_json += ",";
-        file_table_json +=
-                fmt::format(R"("{}":{{"offset":{},"length":{}}})", file.name, file.offset, file.length);
+        file_table_json += fmt::format(R"("{}":{{"offset":{},"length":{}}})", file.name, file.offset, file.length);
         if (file.length > std::numeric_limits<size_t>::max() - logical_file_bytes) {
             logical_file_bytes = std::numeric_limits<size_t>::max();
         } else {
@@ -348,15 +347,14 @@ StatusOr<std::shared_ptr<TantivyReaderResource>> TantivyInvertedReader::_open_co
             resident_file_bytes = 0;
             for (const auto& file : layout.files) {
                 if (file.name != "_starrocks_null_bitmap" && is_resident_metadata_file(file.name)) {
-                    resident_file_bytes =
-                            file.length > std::numeric_limits<size_t>::max() - resident_file_bytes
-                                    ? std::numeric_limits<size_t>::max()
-                                    : resident_file_bytes + static_cast<size_t>(file.length);
+                    resident_file_bytes = file.length > std::numeric_limits<size_t>::max() - resident_file_bytes
+                                                  ? std::numeric_limits<size_t>::max()
+                                                  : resident_file_bytes + static_cast<size_t>(file.length);
                 }
             }
         }
-        use_resident_directory = allow_resident_directory && resident_file_bytes > 0 &&
-                                 would_admit_resident_bytes(resident_file_bytes);
+        use_resident_directory =
+                allow_resident_directory && resident_file_bytes > 0 && would_admit_resident_bytes(resident_file_bytes);
         if (use_resident_directory) {
             resident_file_table_json = "{";
             size_t resident_file_count = 0;
@@ -393,15 +391,15 @@ StatusOr<std::shared_ptr<TantivyReaderResource>> TantivyInvertedReader::_open_co
         RETURN_IF_ERROR(resource->ra_file->read_at_fully(manifest->offset, actual.data(), manifest->length));
         boost::algorithm::trim(actual);
         if (actual != _analyzer_digest) {
-            return Status::Corruption(fmt::format("tantivy analyzer manifest mismatch: metadata={}, index={}",
-                                                  _analyzer_digest, actual));
+            return Status::Corruption(
+                    fmt::format("tantivy analyzer manifest mismatch: metadata={}, index={}", _analyzer_digest, actual));
         }
     }
 
-    tb::RustResult r = tb::tantivy_open_compound_reader(
-            resource->ra_file.get(), resource->read_buffer_pool.get(), use_resident_directory, file_table_json.c_str(),
-            resident_file_table_json.c_str(), _field_name.c_str(), _analyzer_definition.c_str(),
-            _analyzer_digest.c_str());
+    tb::RustResult r = tb::tantivy_open_compound_reader(resource->ra_file.get(), resource->read_buffer_pool.get(),
+                                                        use_resident_directory, file_table_json.c_str(),
+                                                        resident_file_table_json.c_str(), _field_name.c_str(),
+                                                        _analyzer_definition.c_str(), _analyzer_digest.c_str());
     TantivyResultGuard guard(r);
     RETURN_IF_ERROR(tantivy_status_from_error(r));
     resource->reader = TantivyReaderGuard(r.value.ptr);
@@ -465,8 +463,8 @@ Status TantivyInvertedReader::query_limited(OlapReaderStatistics* /*stats*/, con
 Status TantivyInvertedReader::query_scored(OlapReaderStatistics* /*stats*/, const std::string& /*column_name*/,
                                            const void* query_value, InvertedIndexQueryType query_type, int32_t limit,
                                            float min_score, float max_score, roaring::Roaring* bit_map,
-                                                        std::unordered_map<uint32_t, float>* row_to_score,
-                                                        const InvertedIndexQueryOptions& options) {
+                                           std::unordered_map<uint32_t, float>* row_to_score,
+                                           const InvertedIndexQueryOptions& options) {
     if (auto* cache_manager = ExecEnv::GetInstance()->tantivy_cache_manager(); cache_manager != nullptr) {
         cache_manager->query_cache()->record_bypass();
     }

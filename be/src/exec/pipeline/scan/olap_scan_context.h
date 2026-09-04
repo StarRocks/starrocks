@@ -127,9 +127,7 @@ public:
     const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
-    const std::shared_ptr<std::atomic<int64_t>>& non_scored_limit_budget() const {
-        return _non_scored_limit_budget;
-    }
+    const std::shared_ptr<std::atomic<int64_t>>& non_scored_limit_budget() const { return _non_scored_limit_budget; }
 
     void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
     void notify_observers() { _observable.notify_source_observers(); }

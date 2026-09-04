@@ -69,8 +69,8 @@ public:
         return Status::NotSupported("scored inverted-index query not supported by this implementation");
     }
 
-    virtual Status query_null(OlapReaderStatistics* stats, const std::string& column_name,
-                              roaring::Roaring* bit_map, const InvertedIndexQueryOptions& options = {}) = 0;
+    virtual Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map,
+                              const InvertedIndexQueryOptions& options = {}) = 0;
 
     virtual InvertedIndexReaderType get_inverted_index_reader_type() = 0;
 

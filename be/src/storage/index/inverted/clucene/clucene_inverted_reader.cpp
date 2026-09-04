@@ -50,8 +50,7 @@ Status CLuceneInvertedReader::create(const std::string& path, const std::shared_
 
 Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const std::string& column_name,
                                             const void* query_value, InvertedIndexQueryType query_type,
-                                            roaring::Roaring* bit_map,
-                                            const InvertedIndexQueryOptions& /*options*/) {
+                                            roaring::Roaring* bit_map, const InvertedIndexQueryOptions& /*options*/) {
     std::string search_str;
     std::wstring search_wstr;
     std::vector<std::wstring> tokens;

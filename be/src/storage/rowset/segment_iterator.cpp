@@ -1891,10 +1891,9 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         bool use_global_dict_code = _can_using_global_dict(f);
         bool use_dict_code = _can_using_dict_code(f);
 
-        const bool prune_on_index = _inverted_index_ctx &&
-                                    _inverted_index_ctx->prune_cols_candidate_by_inverted_index.count(f->id()) &&
-                                    !delete_pred_columns.count(f->id()) &&
-                                    (_opts.count_on_index || !output_columns.count(f->id()));
+        const bool prune_on_index =
+                _inverted_index_ctx && _inverted_index_ctx->prune_cols_candidate_by_inverted_index.count(f->id()) &&
+                !delete_pred_columns.count(f->id()) && (_opts.count_on_index || !output_columns.count(f->id()));
         if (prune_on_index) {
             if (_opts.count_on_index && output_columns.count(f->id())) {
                 // Keep the planner-visible slot in its original type. The column is filled
@@ -2009,8 +2008,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     std::unordered_map<ColumnId, size_t> output_indexes; // fid -> output schema index
     for (size_t i = 0; i < build_read_index_size; i++) {
         const ColumnId cid = ctx->_read_schema.field(i)->id();
-        const bool count_row_carrier = _opts.count_on_index && ctx->_prune_cols.count(i) &&
-                                       output_columns.count(cid);
+        const bool count_row_carrier = _opts.count_on_index && ctx->_prune_cols.count(i) && output_columns.count(cid);
         if (!ctx->_skip_dict_decode_indexes[i] || count_row_carrier) {
             read_indexes[cid] = i;
         }
@@ -2451,14 +2449,12 @@ Status SegmentIterator::_apply_inverted_index() {
 
     const auto& immediate_predicates = _opts.pred_tree.get_immediate_column_predicate_map();
     const bool can_pushdown_non_scored_limit =
-            _opts.inverted_index_non_scored_limit > 0 &&
-            _opts.inverted_index_non_scored_limit_budget != nullptr &&
+            _opts.inverted_index_non_scored_limit > 0 && _opts.inverted_index_non_scored_limit_budget != nullptr &&
             _opts.inverted_index_non_scored_limit_budget->load(std::memory_order_relaxed) > 0 &&
             !_opts.use_bm25_score && !_opts.is_primary_keys && !_opts.has_preaggregation &&
             _opts.delete_predicates.empty() && _opts.runtime_filter_preds.empty() &&
-            !_opts.runtime_range_pruner.has_runtime_filters() &&
-            !_opts.sample_options.enable_sampling && _scan_range.span_size() == num_rows() &&
-            _opts.pred_tree.size() == 1 && immediate_predicates.size() == 1 &&
+            !_opts.runtime_range_pruner.has_runtime_filters() && !_opts.sample_options.enable_sampling &&
+            _scan_range.span_size() == num_rows() && _opts.pred_tree.size() == 1 && immediate_predicates.size() == 1 &&
             immediate_predicates.begin()->second.size() == 1 &&
             immediate_predicates.begin()->second[0]->type() == PredicateType::kExpr &&
             down_cast<const ColumnExprPredicate*>(immediate_predicates.begin()->second[0])
