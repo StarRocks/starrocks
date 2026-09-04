@@ -2468,13 +2468,20 @@ TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_condition_update_masks
     }
     seg_iter->close();
 
-    ASSERT_EQ(static_cast<size_t>(n), rows.size());
+    // Only this tablet's rows reach the file now. A condition LOSER among them is still here, at the
+    // value the load wrote, because it is the delete vector that hides it -- but a sibling's row is
+    // gone outright, so there is no default-valued copy of it left to serve.
+    ASSERT_EQ(static_cast<size_t>(kOwnedRows), rows.size()) << "the rewrite must drop the unowned rows";
     for (int key = 0; key < n; key++) {
         const bool owned = key >= kOwnedLower && key < kOwnedUpper;
         auto it = rows.find(key);
+        if (!owned) {
+            EXPECT_EQ(rows.end(), it) << "key " << key << " belongs to a sibling and must not be here";
+            continue;
+        }
         ASSERT_NE(rows.end(), it) << "key " << key << " missing from the rewritten segment";
         EXPECT_EQ(key * (key % 2 == 0 ? 5 : 2), it->second.first) << "key " << key;
-        EXPECT_EQ(owned ? key * 4 : 10, it->second.second) << "key " << key;
+        EXPECT_EQ(key * 4, it->second.second) << "key " << key;
     }
 }
 
