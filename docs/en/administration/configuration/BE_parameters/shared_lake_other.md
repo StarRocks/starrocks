@@ -85,6 +85,54 @@ This topic introduces the following types of BE configurations:
 - Description: The reader's remote I/O buffer size for cloud-native table compaction in a shared-data cluster. The default value is 1MB. You can increase this value to accelerate compaction process.
 - Introduced in: v3.2.3
 
+<<<<<<< HEAD
+=======
+### lake_dump_tablet_metadata_per_request_memory_limit_bytes
+
+- Default: 268435456
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The tracked memory budget for synchronous allocations made while processing one `/api/cloudnative/dump_tablet_metadata` request on a CN. It uses the standard MemTracker accounting granularity rather than enforcing a byte-exact ceiling. It covers metadata inspection, sensitive-field redaction, and JSON serialization, but not the metadata already stored in the CN metadata cache or the asynchronous HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.2
+
+### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
+
+- Default: 33554432
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum size of the complete JSON response for one `/api/cloudnative/dump_tablet_metadata` request. The size is checked before the response is handed to the HTTP output buffer. Each request uses the value captured when it is admitted. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.2
+
+### lake_dump_tablet_metadata_max_concurrency
+
+- Default: 1
+- Type: Int
+- Unit: Requests
+- Is mutable: Yes
+- Description: The maximum number of `/api/cloudnative/dump_tablet_metadata` requests admitted concurrently on one CN. A request continues to occupy one slot until its HTTP request is released. Increasing the value applies immediately to new requests. Decreasing it does not cancel admitted requests, and new requests are rejected until the active count is below the new limit. If this value is less than or equal to `0`, new requests fail closed.
+- Introduced in: v4.2
+
+### lake_enable_del_file_crc_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to verify a Primary Key delete file (`.del`) of a shared-data cluster against the CRC32C recorded in its metadata when the file is read back during transaction publish or Primary Key index rebuild. When a mismatch is detected, the operation fails with a corruption error instead of erasing the wrong primary keys. Delete files written before the checksum existed carry none and are always accepted, so this item has no effect on data written by an earlier version. Writing the checksum is not controlled by this item; this item only controls verification.
+- Introduced in: v4.2
+
+### lake_enable_pk_preserve_txn_delete_order
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to preserve the in-transaction upsert/delete order for Primary Key tables in a shared-data cluster. When a single load transaction contains both a `DELETE` and a later re-`UPSERT` of the same key, enabling this makes the re-upsert win (consistent with shared-nothing clusters). It is enabled by default. For downgrade safety, set it to `false` before rolling back to (or running a mixed cluster with) a BE version without this fix: when enabled, a load can persist on-disk metadata that a pre-fix BE would misinterpret, potentially producing duplicate primary keys. When disabled, deletes fall back to the legacy behavior (applied after all upserts in the transaction).
+- Introduced in: v4.1.4
+
+>>>>>>> f3109c4 ([BugFix] Restrict tablet metadata dumps to the local cache (#78449))
 ### lake_enable_protobuf_file_checksum
 
 - Default: false

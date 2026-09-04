@@ -82,6 +82,54 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 引入版本：v3.2.3
 
+<<<<<<< HEAD
+=======
+### lake_dump_tablet_metadata_per_request_memory_limit_bytes
+
+- 默认值：268435456
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：CN 同步处理单个 `/api/cloudnative/dump_tablet_metadata` 请求时的受跟踪内存预算。该预算使用标准 MemTracker 统计粒度，并非精确到字节的硬上限。该限制覆盖元数据检查、敏感字段脱敏和 JSON 序列化，但不包含 CN 元数据缓存中已存在的元数据，也不包含异步 HTTP 输出缓冲区。每个请求使用其被接纳时读取到的配置值。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_dump_tablet_metadata_per_request_json_size_limit_bytes
+
+- 默认值：33554432
+- 类型：Long
+- 单位：Bytes
+- 是否动态：是
+- 描述：单个 `/api/cloudnative/dump_tablet_metadata` 请求完整 JSON 响应的最大字节数。响应交给 HTTP 输出缓冲区之前会检查该限制。每个请求使用其被接纳时读取到的配置值。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_dump_tablet_metadata_max_concurrency
+
+- 默认值：1
+- 类型：Int
+- 单位：请求
+- 是否动态：是
+- 描述：单个 CN 上可同时接纳的 `/api/cloudnative/dump_tablet_metadata` 请求数上限。请求在其 HTTP request 被释放之前一直占用一个并发名额。调大配置会立即影响新请求；调小配置不会取消已接纳的请求，在活跃请求数降到新上限以下之前会拒绝新请求。如果该值小于或等于 `0`，新请求将以 fail-closed 方式被拒绝。
+- 引入版本：v4.2
+
+### lake_enable_del_file_crc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，在事务 Publish 或主键索引重建过程中读取主键表删除文件（`.del`）时，是否根据其元数据中记录的 CRC32C 进行校验。校验不通过时，该操作会返回文件损坏错误并失败，而不是删除错误的主键。在该校验和引入之前写入的删除文件不带校验和，会被始终接受，因此该配置项不会影响旧版本写入的数据。该配置项不控制校验和的写入，仅控制读取时是否校验。
+- 引入版本：v4.2
+
+### lake_enable_pk_preserve_txn_delete_order
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，是否在单个导入事务内保留主键表 UPSERT 与 DELETE 的先后顺序。当同一个导入事务中同一个 key 先 `DELETE` 后再 `UPSERT` 时，开启该配置后以最后写入的 `UPSERT` 为准（与存算一体集群行为一致）。默认开启。出于降级安全考虑，在回滚到（或与其混部）不支持该修复的 BE 版本之前，请先将其设为 `false`：开启后，导入可能会持久化新版本格式的元数据，若 BE 回滚到不支持该修复的版本会被错误解析，可能产生主键重复。关闭时，DELETE 回退到旧有行为（在事务内所有 UPSERT 之后生效）。
+- 引入版本：v4.1.4
+
+>>>>>>> f3109c4 ([BugFix] Restrict tablet metadata dumps to the local cache (#78449))
 ### lake_enable_protobuf_file_checksum
 
 - 默认值：false
