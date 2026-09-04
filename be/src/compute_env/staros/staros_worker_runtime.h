@@ -43,6 +43,10 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
 void shutdown_staros_worker();
 void set_starlet_in_shutdown();
 
+// Applies the starlet_fslib_*_part_size BE configs to their starlet gflags, validating each value
+// with starlet's own predicate. Called during worker init; exposed for tests.
+void apply_starlet_upload_threshold_configs();
+
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);
 std::unique_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::unique_ptr<staros::starlet::Starlet> starlet);

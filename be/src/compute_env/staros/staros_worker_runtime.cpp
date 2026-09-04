@@ -48,6 +48,12 @@ DECLARE_int32(fslib_s3client_nonread_retry_scale_factor);
 DECLARE_int32(fslib_s3client_connect_timeout_ms);
 DECLARE_int32(fslib_s3client_request_timeout_ms);
 DECLARE_bool(fslib_s3client_use_list_objects_v1);
+// Object-store upload thresholds; see the starlet_fslib_* BE configs of the same names.
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 // threadpool size for buffer prefetch task
 DECLARE_int32(fs_buffer_prefetch_threadpool_size);
 // switch to turn on/off buffer prefetch when read
@@ -60,7 +66,33 @@ namespace {
 std::shared_ptr<StarOSWorker> g_worker;
 std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
+// starlet's validator only runs through SetCommandLineOption, so apply it explicitly here.
+// Calling starlet's own predicate avoids duplicating its rule, while the typed FLAGS_ assignment
+// keeps compile-time name checking and keeps the defining archive member linked.
+void apply_positive_int64_starlet_flag(const char* be_config, const char* flag_name, int64_t& flag, int64_t value) {
+    if (!staros::starlet::common::validate_positive_int64(flag_name, value)) {
+        LOG(WARNING) << "invalid value for BE config " << be_config << " (starlet flag " << flag_name << "): " << value
+                     << "; not applied, effective value remains " << flag;
+        return;
+    }
+    flag = value;
+}
+
 } // namespace
+
+void apply_starlet_upload_threshold_configs() {
+#define APPLY_STARLET_UPLOAD_THRESHOLD(BE_CONFIG, STARLET_FLAG) \
+    apply_positive_int64_starlet_flag(#BE_CONFIG, #STARLET_FLAG, FLAGS_##STARLET_FLAG, config::BE_CONFIG)
+
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_gs_max_single_part_size, fslib_gs_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_max_single_part_size,
+                                   fslib_azure_storage_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_min_upload_part_size,
+                                   fslib_azure_storage_min_upload_part_size);
+#undef APPLY_STARLET_UPLOAD_THRESHOLD
+}
 
 namespace fslib = staros::starlet::fslib;
 
@@ -120,6 +152,7 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
         FLAGS_fslib_s3client_request_timeout_ms = *timeout;
     }
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+    apply_starlet_upload_threshold_configs();
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
