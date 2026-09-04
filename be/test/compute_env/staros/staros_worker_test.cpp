@@ -495,7 +495,7 @@ struct UploadThresholdMapping {
 const UploadThresholdMapping kUploadThresholdMappings[] = {
         {"starlet_fslib_s3_max_single_part_size", "fslib_s3_max_single_part_size"},
         {"starlet_fslib_s3_min_upload_part_size", "fslib_s3_min_upload_part_size"},
-        {"starlet_fslib_gs_max_single_part_size", "fslib_gs_max_single_part_size"},
+        {"starlet_fslib_gcs_max_single_part_size", "fslib_gs_max_single_part_size"},
         {"starlet_fslib_azure_storage_max_single_part_size", "fslib_azure_storage_max_single_part_size"},
         {"starlet_fslib_azure_storage_min_upload_part_size", "fslib_azure_storage_min_upload_part_size"},
 };
@@ -534,7 +534,7 @@ TEST_F(StarOSWorkerTest, upload_threshold_configs_applied_at_startup) {
     gflags::FlagSaver flag_saver;
     SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_max_single_part_size, 11L << 20);
     SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_min_upload_part_size, 12L << 20);
-    SCOPED_UPDATE(int64_t, config::starlet_fslib_gs_max_single_part_size, 13L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_gcs_max_single_part_size, 13L << 20);
     SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_max_single_part_size, 14L << 20);
     SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_min_upload_part_size, 15L << 20);
 
@@ -560,7 +560,7 @@ TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup
     {
         SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_max_single_part_size, 0);
         SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_min_upload_part_size, -1);
-        SCOPED_UPDATE(int64_t, config::starlet_fslib_gs_max_single_part_size, 0);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_gcs_max_single_part_size, 0);
         SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_max_single_part_size, -1);
         SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_min_upload_part_size, 0);
         apply_starlet_upload_threshold_configs();

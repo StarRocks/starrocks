@@ -334,7 +334,7 @@ This topic introduces the following types of BE configurations:
 - Description: In a shared-data cluster, the block size used for multipart uploads to Azure Blob Storage or ADLS Gen2. Both Azure filesystems share this item. BE buffers up to this many bytes in memory per output stream between block uploads, so raising it raises memory usage, multiplied by the number of concurrent output streams. Setting it very low increases request count and can exceed the block limits of the storage service. Changing it takes effect on uploads already in progress. The value must be greater than 0; a non-positive value is rejected. A valid value here overrides an equivalent `--fslib_*` gflag passed on the BE command line. A value rejected at BE startup is not applied at all: BE keeps the previously effective value and logs a warning, so this item can report a value that is not the one in effect.
 - Introduced in: v4.1.5, v4.2
 
-### starlet_fslib_gs_max_single_part_size
+### starlet_fslib_gcs_max_single_part_size
 
 - Default: 104857600
 - Type: Int64
