@@ -1110,6 +1110,76 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
     }
 }
 
+// The cancel RPC records a reason before aborting the channel. A sender whose eos races with the
+// abort must report that reason -- it carries the root cause of the load failure -- instead of the
+// generic "AsyncDeltaWriter has been closed" error.
+TEST_F(LakeTabletsChannelTest, test_finish_after_cancel_and_abort) {
+    constexpr const char* kCancelReason = "Cancelled by pipeline engine, reason: Division by zero";
+
+    auto open_request = _open_request;
+    open_request.set_num_senders(2);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    {
+        constexpr int kChunkSize = 128;
+        constexpr int kChunkSizePerTablet = kChunkSize / 4;
+        auto chunk = generate_data(kChunkSize);
+
+        PTabletWriterAddChunkRequest add_chunk_request;
+        PTabletWriterAddBatchResult add_chunk_response;
+        add_chunk_request.set_index_id(kIndexId);
+        add_chunk_request.set_sender_id(0);
+        add_chunk_request.set_eos(true);
+        add_chunk_request.set_packet_seq(0);
+        add_chunk_request.set_timeout_ms(60000);
+
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+            add_chunk_request.add_tablet_ids(tablet_id);
+            add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+        bool close_channel;
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+        ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+        ASSERT_FALSE(close_channel);
+
+        _tablets_channel->cancel(kCancelReason);
+        _tablets_channel->abort();
+
+        _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, add_chunk_response.status().status_code());
+        ASSERT_FALSE(close_channel);
+    }
+    {
+        PTabletWriterAddChunkRequest finish_request;
+        PTabletWriterAddBatchResult finish_response;
+        finish_request.set_index_id(kIndexId);
+        finish_request.set_sender_id(1);
+        finish_request.set_eos(true);
+        finish_request.set_packet_seq(0);
+        finish_request.set_timeout_ms(60000);
+
+        bool close_channel;
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
+        ASSERT_EQ(TStatusCode::CANCELLED, finish_response.status().status_code());
+        ASSERT_GE(finish_response.status().error_msgs_size(), 1);
+        const auto& message = finish_response.status().error_msgs(0);
+        ASSERT_TRUE(message.find(kCancelReason) != std::string::npos) << message;
+        ASSERT_TRUE(message.find("AsyncDeltaWriter has been closed") == std::string::npos) << message;
+        ASSERT_TRUE(close_channel);
+
+        PTabletWriterAddBatchResult finish_response2;
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response2, &close_channel);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, finish_response2.status().status_code());
+        ASSERT_FALSE(close_channel);
+    }
+}
+
 TEST_F(LakeTabletsChannelTest, test_profile) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
