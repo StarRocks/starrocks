@@ -16,6 +16,7 @@
 
 #include <functional>
 
+#include "column/vectorized_fwd.h"
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
@@ -28,6 +29,8 @@ namespace starrocks {
 class TxnLogPB;
 class TxnLogPB_OpCompaction;
 class ParallelUpsertContext;
+class ThreadPoolToken;
+struct ParallelPublishSlot;
 
 namespace sstable {
 class Iterator;
@@ -36,6 +39,14 @@ class Iterator;
 namespace lake {
 
 class MetaFileBuilder;
+class SegmentPKIterator;
+struct SegmentPKChunkRef;
+
+// Absolute source-segment rowids of the rows SegmentPKChunkRef::owned marks as this tablet's, in
+// chunk order. Read it off the mask BEFORE filtering the column; filtering renumbers the survivors
+// and the correspondence is lost. Empty mask -- an ordinary, non-cross publish -- yields nothing,
+// because every row already belongs here.
+std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current);
 class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
@@ -198,6 +209,59 @@ public:
     }
     int32_t publish_sst_flush_count() const { return _publish_sst_flush_count; }
     int64_t publish_sst_flush_bytes() const { return _publish_sst_flush_bytes; }
+
+    // ---- Row-oriented publish API --------------------------------------------------------------
+    //
+    // The batch methods above take encoded keys as a Slice array; these take a rowset's primary-key
+    // Column plus the (rssid, rowid) coordinates its rows occupy, and encode the keys themselves.
+    // Overloading is safe -- no Column-based signature is convertible to a Slice-based one -- and
+    // keeps one name per operation regardless of how the caller holds its keys.
+
+    Status get(const Column& pks, std::vector<uint64_t>* rowids);
+
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes);
+
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx);
+
+    // Each key keyed to its own rowid rather than to rowid_start + position. Cross publish only:
+    // the rows a child owns are scattered through the source segment, so they are not contiguous.
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx);
+
+    Status erase(const Column& pks, DeletesMap* deletes, uint32_t del_rssid);
+
+    Status bulk_erase(const Column& pks, DeletesMap* deletes, uint32_t del_rssid, const FileMetaPB& del_sst_meta,
+                      const PersistentIndexSstableRangePB& del_sst_range, int64_t version);
+
+    Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                   const Column& pks);
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
+                       std::vector<uint32_t>* failed);
+
+    // ---- Parallel publish, across chunks ---------------------------------------------------------
+    //
+    // Spread a rowset's chunks over |token|, which the publish supplies. This is the caller-driven
+    // fan-out axis; the internal one (parallel_reverse_lookup, _open_sstables_parallel) splits a
+    // single batch across key subsets and sstable files on pk_index_execution_thread_pool. A task
+    // running on |token| must not enter the internal axis, or the two pools wait on each other.
+
+    Status parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator, DeletesMap* new_deletes);
+
+    // Retrieve rss_rowids for all segments at once, submitting every segment's chunks to one shared
+    // token so the fan-out crosses segments rather than restarting per segment.
+    Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
+                                         std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
+                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                         std::vector<Filter>* owned_per_segment);
+
+    Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
+                           DeletesMap* new_deletes);
+
+    Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
+                        ParallelUpsertContext* ctx);
 
 private:
     // Open all SSTables in parallel using thread pool.

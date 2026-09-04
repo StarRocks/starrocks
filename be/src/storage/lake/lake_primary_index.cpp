@@ -19,36 +19,12 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "gutil/strings/substitute.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/parallel_task_runner.h"
-#include "storage/lake/rowset_update_state.h"
-#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
-#include "storage/parallel_upsert_context.h"
 
 namespace starrocks::lake {
-
-// A cross-published chunk carries this tablet's rows AND its siblings'. SegmentPKChunkRef::owned
-// marks which are ours, as a mask over the chunk rather than a filtered copy, so row i keeps its
-// source-segment rowid physical_rowid_offset + i. These two turn that mask into the shapes the
-// primary index takes, and neither is entered at all on an ordinary publish, where `owned` is empty
-// and every row belongs here.
-
-// Absolute source-segment rowids of the owned rows, in chunk order. Must be read off the mask BEFORE
-// the column is filtered -- filtering renumbers the survivors and the correspondence is lost.
-std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current) {
-    std::vector<uint32_t> rowids;
-    rowids.reserve(current.owned.size());
-    for (size_t i = 0; i < current.owned.size(); ++i) {
-        if (current.owned[i]) {
-            rowids.push_back(current.physical_rowid_offset + static_cast<uint32_t>(i));
-        }
-    }
-    return rowids;
-}
 
 LakePrimaryIndex::~LakePrimaryIndex() = default;
 
@@ -158,49 +134,6 @@ Status LakePrimaryIndex::sync_flush_persistent_index(int64_t wait_timeout_us) {
     return index->sync_flush_all_memtables(wait_timeout_us);
 }
 
-static void old_values_to_deletes(const std::vector<uint64_t>& old_values, DeletesMap* deletes) {
-    for (uint64_t old : old_values) {
-        if (old != NullIndexValue) {
-            (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-        }
-    }
-}
-
-Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
-                               uint32_t del_rssid) {
-    auto* index = _index.get();
-    if (index == nullptr) {
-        return Status::InternalError("erase on an unloaded lake primary index");
-    }
-    Buffer<Slice> keys;
-    std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
-    // Cloud native index needs the delete's rssid as the rebuild point when erasing.
-    RETURN_IF_ERROR(index->erase(pks.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()), del_rssid));
-    old_values_to_deletes(old_values, deletes);
-    return Status::OK();
-}
-
-Status LakePrimaryIndex::bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
-                                    uint32_t del_rssid, const FileMetaPB& del_sst_meta,
-                                    const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
-    // Unlike erase(), there is no in-memory fallback: a pre-built tombstone sstable can only be
-    // ingested by the cloud-native index, so an unloaded index is a broken invariant, not a fallback.
-    auto* index = _index.get();
-    if (index == nullptr) {
-        return Status::InternalError("bulk_erase requires a cloud-native LakePersistentIndex.");
-    }
-    Buffer<Slice> keys;
-    std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
-    RETURN_IF_ERROR(index->bulk_erase(pks.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()), del_rssid,
-                                      del_sst_meta, del_sst_range, version));
-    old_values_to_deletes(old_values, deletes);
-    return Status::OK();
-}
-
 int32_t LakePrimaryIndex::current_fileset_index() const {
     auto* index = _index.get();
     return index != nullptr ? index->current_fileset_index() : -1;
@@ -239,239 +172,18 @@ int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
     return index != nullptr ? index->publish_sst_flush_bytes() : 0;
 }
 
-// Upsert only the rows this tablet owns, each keyed to the rowid it has in the SOURCE segment
-// rather than its position among the survivors. Cross publish only -- an ordinary publish carries an
-// empty mask and takes the plain overload in parallel_upsert.
-Status LakePrimaryIndex::upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
-                                      ParallelUpsertContext* context) {
-    DCHECK(!current.owned.empty());
-    // Off the mask before filtering: filtering renumbers what survives, and these have to stay the
-    // rows' positions in the source segment.
-    auto owned_rowids = owned_rowids_of(current);
-    slot->pk_column->filter(current.owned);
-    if (owned_rowids.empty()) {
-        return Status::OK();
-    }
-    // One call for the whole chunk, never one per contiguous run of owned rows: ownership of a
-    // segment ordered by a separate sort key is scattered row by row, so runs degenerate towards one
-    // per row and each call redoes the inactive-memtable and SST lookup and the flush check.
-    // Whether the replaced rowids reach `context` from here or from the deferred lookup task is
-    // LakePersistentIndex::upsert's business, keyed on ParallelUpsertContext::defers_lookup().
-    return upsert(rssid, owned_rowids, *slot->pk_column, slot, context);
-}
-
-Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
-                                      DeletesMap* new_deletes) {
-    ParallelTaskRunner runner(token);
-    // Drained into `new_deletes` under this mutex as each task finishes; the tasks themselves touch
-    // disjoint slots, so this is the only shared state.
-    std::mutex deletes_mutex;
-    // One slot per chunk, owned here so the encoded key bytes outlive the task that reads them.
-    std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
-
-    for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
-        auto current = segment_pk_iterator->current();
-        slots.push_back(std::make_unique<ParallelPublishSlot>());
-        auto* slot = slots.back().get();
-
-        runner.run([this, current, slot, segment_pk_iterator, new_deletes, &deletes_mutex]() -> Status {
-            ASSIGN_OR_RETURN(slot->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
-            // Drop the siblings' keys first. Their old locations would otherwise reach
-            // old_values_to_deletes below and be marked deleted in THIS child's delvec, and the
-            // parent view ORs the children's delvecs -- so a sibling's lookup would erase a row
-            // its owner kept. Only the values matter downstream, never their positions, so
-            // filtering in place needs no index mapping.
-            if (!current.owned.empty()) {
-                slot->pk_column->filter(current.owned);
-            }
-            if (slot->pk_column->empty()) {
-                return Status::OK();
-            }
-            slot->old_values.resize(slot->pk_column->size(), NullIndexValue);
-            RETURN_IF_ERROR(get(*slot->pk_column, &slot->old_values));
-            std::lock_guard<std::mutex> l(deletes_mutex);
-            old_values_to_deletes(slot->old_values, new_deletes);
-            return Status::OK();
-        });
-        if (token != nullptr) {
-            TRACE_COUNTER_INCREMENT("parallel_get_cnt", 1);
-        }
-    }
-
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_wait_us");
-        RETURN_IF_ERROR(runner.join());
-    }
-    return segment_pk_iterator->status();
-}
-
-// Parallel query of PK index to retrieve rss_rowids for all segments at once.
-// Submits chunks from all segments to a single shared thread pool token, enabling
-// cross-segment parallelism.
-Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
-                                                       std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
-                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
-                                                       std::vector<Filter>* owned_per_segment) {
-    const uint32_t num_segments = pk_iters.size();
-    rss_rowids_per_segment->resize(num_segments);
-    if (owned_per_segment != nullptr) {
-        owned_per_segment->assign(num_segments, Filter{});
-    }
-
-    struct RssRowidSlot {
-        size_t begin_rowid = 0;
-        size_t count = 0;
-        std::vector<uint64_t> values;
-        // Moved off the chunk ref before the lookup task runs, so the merge below can concatenate the
-        // segment's mask in chunk order. Empty when this chunk carried none.
-        Filter owned;
-    };
-
-    ParallelTaskRunner runner(token);
-    std::vector<std::vector<std::unique_ptr<RssRowidSlot>>> per_segment_slots(num_segments);
-
-    // Iterate all segments' chunks on the main thread and submit them all to the shared pool.
-    // begin_rowid is each chunk's logical offset (rows emitted before it within the segment),
-    // i.e. its index into this segment's flat result array.
-    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
-        auto* pk_iter = pk_iters[seg_idx].get();
-        size_t segment_logical_offset = 0;
-        for (; !pk_iter->done(); pk_iter->next()) {
-            auto current = pk_iter->current();
-            auto slot = std::make_unique<RssRowidSlot>();
-            slot->begin_rowid = segment_logical_offset;
-            slot->count = current.chunk->num_rows();
-            slot->owned = current.owned;
-            segment_logical_offset += slot->count;
-            per_segment_slots[seg_idx].push_back(std::move(slot));
-            auto* slot_ptr = per_segment_slots[seg_idx].back().get();
-
-            // Each task writes only its own slot, so there is no shared state to guard.
-            runner.run([this, slot_ptr, current = std::move(current), pk_iter]() -> Status {
-                ASSIGN_OR_RETURN(auto pk_column, pk_iter->encoded_pk_column(current.chunk.get()));
-                slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
-                return get(*pk_column, &slot_ptr->values);
-            });
-            if (token != nullptr) {
-                TRACE_COUNTER_INCREMENT("batch_parallel_get_rss_rowids_cnt", 1);
-            }
-        }
-    }
-
-    {
-        TRACE_COUNTER_SCOPE_LATENCY_US("batch_parallel_get_rss_rowids_wait_us");
-        RETURN_IF_ERROR(runner.join());
-    }
-
-    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
-        RETURN_IF_ERROR(pk_iters[seg_idx]->status());
-    }
-
-    // Merge per-chunk results into per-segment output vectors.
-    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
-        auto& slots = per_segment_slots[seg_idx];
-        size_t total = 0;
-        if (!slots.empty()) {
-            auto& last = slots.back();
-            total = last->begin_rowid + last->count;
-        }
-        auto& output = (*rss_rowids_per_segment)[seg_idx];
-        output.resize(total);
-        for (auto& slot : slots) {
-            memcpy(output.data() + slot->begin_rowid, slot->values.data(), slot->count * sizeof(uint64_t));
-        }
-        if (owned_per_segment == nullptr) {
-            continue;
-        }
-        // Only materialize a mask for a segment that actually has one; leaving it empty is what tells
-        // the consumer "own every row", and is what every non-cross publish produces.
-        const bool has_mask =
-                std::any_of(slots.begin(), slots.end(), [](const auto& slot) { return !slot->owned.empty(); });
-        if (!has_mask) {
-            continue;
-        }
-        auto& owned_output = (*owned_per_segment)[seg_idx];
-        owned_output.assign(total, 1);
-        for (auto& slot : slots) {
-            if (slot->owned.empty()) {
-                continue;
-            }
-            memcpy(owned_output.data() + slot->begin_rowid, slot->owned.data(), slot->count * sizeof(uint8_t));
-        }
-    }
-
-    return Status::OK();
-}
-
-// Insert or update this rowset's primary keys, collecting the rowids they replace into
-// `new_deletes`. Used by every non-read-only publish.
+// ---- Forwards to the loaded index --------------------------------------------------------------
 //
-// Unlike parallel_get this writes to the index memtable, so the two halves split: the memtable write
-// stays on this thread (it is not safe for concurrent writes, and it fixes the upsert's order
-// against the deletes around it), and only the read half -- resolving what those keys previously
-// mapped to -- is deferred. See LakePersistentIndex::upsert.
-Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
-                                         DeletesMap* new_deletes) {
-    // A null token means no runner in the context, which makes each upsert resolve and flush inline.
-    // That is deliberate: a large serial upsert would otherwise grow the memtable unbounded, since
-    // nobody would be joining and flushing at the end.
-    ParallelTaskRunner runner(token);
-    ParallelUpsertContext context(token != nullptr ? &runner : nullptr, new_deletes);
-    // One slot per chunk. The slot owns the encoded key bytes the index keeps referencing until the
-    // deferred lookup has run, so they all stay alive until the join below.
-    std::vector<std::unique_ptr<ParallelPublishSlot>> slots;
-
-    // Every exit from this function has to join first. The deferred lookups hold pointers into
-    // `slots` and `context`, and those are destroyed BEFORE `runner` on scope exit -- reverse
-    // declaration order -- so the runner destructor's own join would come too late. `context` needs
-    // `runner` to exist before it, so the cycle is broken here instead: declared last, this runs
-    // first. Covers the RETURN_IF_ERROR paths inside the loop below.
-    DeferOp join_before_unwind([&] { (void)runner.join(); });
-
-    // Each chunk's absolute physical rowid is current.physical_rowid_offset + i_in_chunk (see
-    // SegmentPKChunkRef).
-    for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
-        auto current = segment_pk_iterator->current();
-        slots.push_back(std::make_unique<ParallelPublishSlot>());
-        auto* slot = slots.back().get();
-        ASSIGN_OR_RETURN(slot->pk_column, segment_pk_iterator->encoded_pk_column(current.chunk.get()));
-
-        if (current.owned.empty()) {
-            RETURN_IF_ERROR(upsert(rssid, current.physical_rowid_offset, *slot->pk_column, slot, &context));
-        } else {
-            RETURN_IF_ERROR(upsert_owned(rssid, current, slot, &context));
-        }
-        if (token != nullptr) {
-            TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
-        }
-    }
-
-    if (context.defers_lookup()) {
-        {
-            TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
-            RETURN_IF_ERROR(runner.join());
-        }
-        // Batched: one flush for the whole rowset instead of one per chunk.
-        RETURN_IF_ERROR(flush_memtable());
-    }
-    return segment_pk_iterator->status();
-}
-
-// ---- Surface the publish path shares with the shared-nothing index -----------------------------
-//
-// These bodies used to live in PrimaryIndex, which marshalled the encoded keys into a Buffer<Slice>
-// and then dispatched on whether a persistent index was present. A lake tablet always has one, so
-// what is left is the marshalling plus a direct call.
+// The bodies live on LakePersistentIndex, next to the batch key/value API they marshal into and the
+// encoded key size they need. What is left here is this class's one remaining job: turning "no index
+// is loaded" into a status, which the index itself has no way to express.
 
 Status LakePrimaryIndex::get(const Column& pks, std::vector<uint64_t>* rowids) const {
     auto* index = _index.get();
     if (index == nullptr) {
         return Status::InternalError("get on an unloaded lake primary index");
     }
-    Buffer<Slice> keys;
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
-    return index->get(pks.size(), vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
+    return index->get(pks, rowids);
 }
 
 Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
@@ -480,57 +192,7 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Colu
     if (index == nullptr) {
         return Status::InternalError("upsert on an unloaded lake primary index");
     }
-    // No runner, so the lookup of the replaced rowids completes inside index->upsert(), which
-    // appends them to the context. See ParallelUpsertContext.
-    ParallelPublishSlot slot;
-    ParallelUpsertContext ctx(/*runner=*/nullptr, deletes);
-    const uint32_t n = idx_end - idx_begin;
-    slot.values.reserve(n);
-    slot.old_values.resize(n, NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), idx_begin, idx_end, &slot.keys));
-    const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-    for (uint32_t i = idx_begin; i < idx_end; i++) {
-        slot.values.emplace_back(base + i);
-    }
-    return index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot.values.data()),
-                         reinterpret_cast<IndexValue*>(slot.old_values.data()), /*stat=*/nullptr, &ctx);
-}
-
-Status LakePrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
-                                 const Column& pks) {
-    auto* index = _index.get();
-    if (index == nullptr) {
-        return Status::InternalError("replace on an unloaded lake primary index");
-    }
-    Buffer<Slice> keys;
-    std::vector<uint64_t> values;
-    values.reserve(pks.size());
-    const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-    for (size_t i = 0; i < pks.size(); i++) {
-        values.emplace_back(base + i);
-    }
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
-    return index->replace(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), replace_indexes);
-}
-
-Status LakePrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
-                                     std::vector<uint32_t>* failed) {
-    auto* index = _index.get();
-    if (index == nullptr) {
-        return Status::InternalError("try_replace on an unloaded lake primary index");
-    }
-    Buffer<Slice> keys;
-    std::vector<uint64_t> values;
-    values.reserve(pks.size());
-    const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-    for (size_t i = 0; i < pks.size(); i++) {
-        values.emplace_back(base + i);
-    }
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, pks.size(), &keys));
-    return index->try_replace(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, failed);
+    return index->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
 }
 
 Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
@@ -539,17 +201,7 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Colu
     if (index == nullptr) {
         return Status::InternalError("upsert on an unloaded lake primary index");
     }
-    const uint32_t n = pks.size();
-    slot->values.reserve(n);
-    slot->old_values.resize(n, NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, n, &slot->keys));
-    const uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
-    for (uint32_t i = 0; i < n; i++) {
-        slot->values.emplace_back(base + i);
-    }
-    return index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
-                         reinterpret_cast<IndexValue*>(slot->old_values.data()), /*stat=*/nullptr, ctx);
+    return index->upsert(rssid, rowid_start, pks, slot, ctx);
 }
 
 Status LakePrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks,
@@ -558,18 +210,75 @@ Status LakePrimaryIndex::upsert(uint32_t rssid, const std::vector<uint32_t>& row
     if (index == nullptr) {
         return Status::InternalError("upsert on an unloaded lake primary index");
     }
-    const uint32_t n = pks.size();
-    DCHECK_EQ(rowids.size(), n);
-    slot->values.reserve(n);
-    slot->old_values.resize(n, NullIndexValue);
-    ASSIGN_OR_RETURN(const Slice* vkeys,
-                     PrimaryIndex::build_persistent_keys(pks, index->key_size(), 0, n, &slot->keys));
-    const uint64_t base = ((uint64_t)rssid) << 32;
-    for (uint32_t i = 0; i < n; i++) {
-        slot->values.emplace_back(base + rowids[i]);
+    return index->upsert(rssid, rowids, pks, slot, ctx);
+}
+
+Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
+                               uint32_t del_rssid) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("erase on an unloaded lake primary index");
     }
-    return index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
-                         reinterpret_cast<IndexValue*>(slot->old_values.data()), /*stat=*/nullptr, ctx);
+    return index->erase(pks, deletes, del_rssid);
+}
+
+Status LakePrimaryIndex::bulk_erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
+                                    uint32_t del_rssid, const FileMetaPB& del_sst_meta,
+                                    const PersistentIndexSstableRangePB& del_sst_range, int64_t version) {
+    // Unlike erase(), there is no in-memory fallback: a pre-built tombstone sstable can only be
+    // ingested by the cloud-native index, so an unloaded index is a broken invariant, not a fallback.
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("bulk_erase requires a cloud-native LakePersistentIndex.");
+    }
+    return index->bulk_erase(pks, deletes, del_rssid, del_sst_meta, del_sst_range, version);
+}
+
+Status LakePrimaryIndex::replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                                 const Column& pks) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("replace on an unloaded lake primary index");
+    }
+    return index->replace(rssid, rowid_start, replace_indexes, pks);
+}
+
+Status LakePrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
+                                     std::vector<uint32_t>* failed) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("try_replace on an unloaded lake primary index");
+    }
+    return index->try_replace(rssid, rowid_start, pks, max_src_rssid, failed);
+}
+
+Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
+                                      DeletesMap* new_deletes) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("parallel_get on an unloaded lake primary index");
+    }
+    return index->parallel_get(token, segment_pk_iterator, new_deletes);
+}
+
+Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
+                                                       std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
+                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                                       std::vector<Filter>* owned_per_segment) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("batch_parallel_get_rss_rowids on an unloaded lake primary index");
+    }
+    return index->batch_parallel_get_rss_rowids(token, pk_iters, rss_rowids_per_segment, owned_per_segment);
+}
+
+Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
+                                         DeletesMap* new_deletes) {
+    auto* index = _index.get();
+    if (index == nullptr) {
+        return Status::InternalError("parallel_upsert on an unloaded lake primary index");
+    }
+    return index->parallel_upsert(token, rssid, segment_pk_iterator, new_deletes);
 }
 
 std::string LakePrimaryIndex::to_string() const {

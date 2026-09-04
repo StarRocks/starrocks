@@ -43,13 +43,6 @@ class SegmentPKIterator;
 
 struct SegmentPKChunkRef;
 
-// Turn SegmentPKChunkRef::owned -- the mask a cross publish puts on a chunk -- into the two shapes
-// PrimaryIndex::upsert accepts. Both are no-ops on an ordinary publish, where the mask is empty.
-//
-// owned_rowids_of: absolute source-segment rowids of the owned rows, in chunk order. Read it off the
-// mask BEFORE filtering the column; filtering renumbers the survivors.
-std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current);
-
 // The tablet-level primary-key index of a shared-data tablet: owns the load state, the reader/writer
 // lock the publish path serializes on, and the one LakePersistentIndex that does the work.
 //

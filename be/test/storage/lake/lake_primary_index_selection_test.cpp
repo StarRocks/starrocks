@@ -16,7 +16,7 @@
 
 #include <vector>
 
-#include "storage/lake/lake_primary_index.h"
+#include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/segment_pk_iterator.h"
 
 namespace starrocks::lake {
