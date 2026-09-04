@@ -253,25 +253,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
     /**
-     * Shared-data only. Number of compute nodes that may write a SINGLE tablet in parallel within one
-     * load transaction. 1 (default) keeps today's behaviour: a tablet is written only by the compute
-     * node it is assigned to. A value > 1 lets FE hand the sink several nodes per tablet and the sink
-     * round-robins rows across them, decoupling write parallelism from the bucket count.
-     * Only takes effect while a partition has fewer tablets than the warehouse has alive CNs.
-     * -1 means every alive compute node, which is what {@link #TABLET_WRITE_LOCAL_FIRST} needs to keep
-     * all of a sink instance's rows on its own machine.
+     * Shared-data only. When on, a load writes each row into a delta writer on the compute node its
+     * sink instance already runs on, instead of sending it to the single node the tablet is assigned
+     * to. That both spreads a single tablet's write across the cluster and removes the network hop.
+     * <p>
+     * Only takes effect while a partition has fewer tablets than the warehouse has alive compute
+     * nodes: above that, bucket-level parallelism already fills the cluster, and writing locally
+     * would give up read-side cache locality (a tablet has one owner and scans are scheduled to it)
+     * for nothing.
+     * <p>
+     * The caller takes on one precondition: rows sharing a key land on different nodes with no order
+     * between them, so a load whose result depends on the arrival order of repeated keys -- an
+     * aggregate REPLACE, a primary-key upsert-then-delete inside ONE transaction -- gets an undefined
+     * winner. Ordering between transactions is unaffected.
      */
-    public static final String TABLET_WRITE_PARALLELISM = "tablet_write_parallelism";
-
-    /**
-     * Shared-data only, and only meaningful while {@link #TABLET_WRITE_PARALLELISM} spreads a tablet over
-     * several nodes. true (default) routes a chunk's rows to the sink instance's OWN compute node whenever
-     * that node is in the tablet's node list and its channel is not backpressured, which removes the
-     * shuffle hop entirely; rows spill to the round-robin spread only while the local channel is full,
-     * so a single-instance load (stream load) still fans out instead of collapsing onto one machine.
-     * false keeps the plain round-robin spread, and exists to A/B the two policies on one binary.
-     */
-    public static final String TABLET_WRITE_LOCAL_FIRST = "tablet_write_local_first";
+    public static final String ENABLE_LOCAL_FIRST_TABLET_WRITE = "enable_local_first_tablet_write";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -1412,11 +1408,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
     private long loadMemLimit = 0L;
 
-    @VariableMgr.VarAttr(name = TABLET_WRITE_PARALLELISM)
-    private int tabletWriteParallelism = 1;
-
-    @VariableMgr.VarAttr(name = TABLET_WRITE_LOCAL_FIRST)
-    private boolean tabletWriteLocalFirst = true;
+    @VariableMgr.VarAttr(name = ENABLE_LOCAL_FIRST_TABLET_WRITE)
+    private boolean enableLocalFirstTabletWrite = false;
 
     @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
     private long queryMemLimit = 0L;
@@ -4153,20 +4146,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadMemLimit;
     }
 
-    public int getTabletWriteParallelism() {
-        return tabletWriteParallelism;
+    public boolean isEnableLocalFirstTabletWrite() {
+        return enableLocalFirstTabletWrite;
     }
 
-    public void setTabletWriteParallelism(int tabletWriteParallelism) {
-        this.tabletWriteParallelism = tabletWriteParallelism;
-    }
-
-    public boolean isTabletWriteLocalFirst() {
-        return tabletWriteLocalFirst;
-    }
-
-    public void setTabletWriteLocalFirst(boolean tabletWriteLocalFirst) {
-        this.tabletWriteLocalFirst = tabletWriteLocalFirst;
+    public void setEnableLocalFirstTabletWrite(boolean enableLocalFirstTabletWrite) {
+        this.enableLocalFirstTabletWrite = enableLocalFirstTabletWrite;
     }
 
     public int getQueryTimeoutS() {

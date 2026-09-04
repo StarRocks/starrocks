@@ -273,9 +273,6 @@ public class OlapTableSink extends DataSink {
     // `shardWriteParallelism` value that keeps the historical behaviour: one node per tablet.
     public static final int NO_SHARD_WRITE = 1;
 
-    // `tablet_write_parallelism` value asking for every alive compute node in the warehouse.
-    public static final int ALL_ALIVE_NODES = -1;
-
     // Resolve the effective single-tablet write parallelism for this sink. Returns NO_SHARD_WRITE
     // whenever any precondition of the feature is not met.
     private int shardWriteParallelism(TOlapTableSink tSink, TransactionState txnState) {
@@ -286,7 +283,7 @@ public class OlapTableSink extends DataSink {
         // whose result depends on the arrival order of rows sharing a key gets an undefined winner:
         // an aggregate table's REPLACE, and a primary-key table's upsert-then-delete of the same key,
         // both do. That is a documented precondition the session opts into by raising
-        // tablet_write_parallelism -- the system cannot see whether the data repeats a key -- and it
+        // enable_local_first_tablet_write -- the system cannot see whether the data repeats a key -- and it
         // is not gated on here. DUPLICATE KEY has no such semantics at all: its rowset is the union
         // of the segments, so the fold is exact regardless.
         // Bundled data files are what make the fold safe to widen across nodes: each node opens its
@@ -342,18 +339,13 @@ public class OlapTableSink extends DataSink {
             return NO_SHARD_WRITE;
         }
         ConnectContext context = ConnectContext.get();
-        if (context == null) {
+        if (context == null || !context.getSessionVariable().isEnableLocalFirstTabletWrite()) {
             return NO_SHARD_WRITE;
         }
-        int parallelism = context.getSessionVariable().getTabletWriteParallelism();
-        // -1 asks for every alive compute node. That is what local-first routing needs: a sink instance
-        // can only keep its rows on its own machine if that machine is in the tablet's node list, and
-        // any node left out would silently push its share back over the network. createLocation clamps
-        // the value to the number of alive nodes.
-        if (parallelism == ALL_ALIVE_NODES) {
-            return Integer.MAX_VALUE;
-        }
-        return Math.max(NO_SHARD_WRITE, parallelism);
+        // Every alive compute node. A sink instance can only keep its rows on its own machine if that
+        // machine is in the tablet's node list, so any node left out would silently push its share
+        // back over the network; createLocation clamps this to the number of alive nodes.
+        return Integer.MAX_VALUE;
     }
 
     // Mirror of DeltaWriterImpl::init_write_schema: BE counts the sink's slots, drops a trailing `__op`,
@@ -580,9 +572,6 @@ public class OlapTableSink extends DataSink {
             // what BE actually received: if no partition turned out eligible, BE stays on the old path.
             if (dstTable.isCloudNativeTableOrMaterializedView() && hasMultiNodeTablet(location)) {
                 tSink.setEnable_shard_write(true);
-                ConnectContext context = ConnectContext.get();
-                tSink.setShard_write_local_first(
-                        context == null || context.getSessionVariable().isTabletWriteLocalFirst());
             }
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
             // A column-mode partial update writes the new values into a DCG beside the segment it

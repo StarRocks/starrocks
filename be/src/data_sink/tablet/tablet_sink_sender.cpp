@@ -93,15 +93,12 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
     return Status::OK();
 }
 
-void TabletSinkSender::set_enable_shard_write(bool enable, bool local_first) {
+void TabletSinkSender::set_enable_shard_write(bool enable) {
     _enable_shard_write = enable;
-    _shard_write_local_first = enable && local_first;
     if (_enable_shard_write) {
         // Resolved once: the backend id comes from the FE heartbeat and does not change while the
-        // process runs. Absent (a CN that has not been assigned one yet) simply leaves local-first
-        // off for this load -- the round-robin spread is always a correct fallback. Resolved under
-        // round-robin too, where it is not used for routing but makes the local/remote row counters
-        // in the profile mean the same thing under both policies.
+        // process runs. Absent (a CN that has not been assigned one yet) leaves every row on the
+        // round-robin fallback, which is always correct, just not local.
         _local_node_id = get_backend_id().value_or(-1);
     }
 }
@@ -124,11 +121,9 @@ Status TabletSinkSender::_assign_shard_write_targets(
     int64_t last_tablet_id = -1;
     const std::vector<int64_t>* last_be_ids = nullptr;
     uint64_t* last_counter = nullptr;
-    // Whether this tablet's rows in THIS chunk stay on the local node, and the spread to use when
-    // they do not. Both are decided once per (chunk, tablet): is_full() is a coarse backpressure
-    // signal and re-probing it per row would only add noise to the split.
+    // Decided once per (chunk, tablet), not per row: whether this node writes this tablet does not
+    // change within a chunk.
     bool keep_local = false;
-    const std::vector<int64_t>* spread = nullptr;
     for (unsigned short selection : selection_idx) {
         const int64_t tablet_id = _tablet_ids[selection];
         if (tablet_id != last_tablet_id) {
@@ -140,36 +135,23 @@ Status TabletSinkSender::_assign_shard_write_targets(
             last_tablet_id = tablet_id;
             last_be_ids = &iter->second;
             last_counter = &_shard_write_counters[tablet_id];
-            keep_local = _shard_write_local_first && _can_keep_rows_local(channel, *last_be_ids);
-            // Spilling: spread over the OTHER nodes. Leaving the full local node in the rotation
-            // would send 1/N of the spilled rows straight back into the channel that is already
-            // backpressured, which is the thing spilling exists to avoid.
-            if (keep_local) {
-                spread = nullptr;
-            } else if (_shard_write_local_first && _local_node_id >= 0 && last_be_ids->size() > 1) {
-                _shard_write_spill_targets.clear();
-                for (int64_t node_id : *last_be_ids) {
-                    if (node_id != _local_node_id) {
-                        _shard_write_spill_targets.emplace_back(node_id);
-                    }
-                }
-                spread = _shard_write_spill_targets.empty() ? last_be_ids : &_shard_write_spill_targets;
-            } else {
-                spread = last_be_ids;
-            }
+            keep_local = _can_keep_rows_local(channel, *last_be_ids);
         }
         DCHECK(!last_be_ids->empty());
-        const int64_t target = keep_local ? _local_node_id : (*spread)[((*last_counter)++ / stride) % spread->size()];
+        // Local when this node is one of the tablet's writers; otherwise round-robin over the list.
+        // The location carries every alive CN, so the fallback is unreachable in practice -- it is
+        // what keeps an unexpected list (a node that just left the warehouse) routing somewhere
+        // valid rather than nowhere.
+        const int64_t target =
+                keep_local ? _local_node_id : (*last_be_ids)[((*last_counter)++ / stride) % last_be_ids->size()];
         _row_target_node[selection] = target;
         ++(target == _local_node_id ? _shard_write_local_rows : _shard_write_remote_rows);
     }
     return Status::OK();
 }
 
-// Local-first is on, this instance knows its own node, that node is one of the tablet's writers, and
-// its channel is neither failed nor backpressured. is_full() is what keeps a load whose sink runs on
-// a SINGLE instance (a stream load) from collapsing onto one machine: once the local channel fills,
-// the rows spill to the other nodes and the fan-out is recovered.
+// This instance knows its own node, that node is one of the tablet's writers, and its channel is
+// open and not failed.
 bool TabletSinkSender::_can_keep_rows_local(IndexChannel* channel, const std::vector<int64_t>& be_ids) const {
     if (_local_node_id < 0) {
         return false;
@@ -181,8 +163,7 @@ bool TabletSinkSender::_can_keep_rows_local(IndexChannel* channel, const std::ve
     if (iter == channel->_node_channels.end() || iter->second == nullptr) {
         return false;
     }
-    NodeChannel* local = iter->second.get();
-    return !channel->is_failed_channel(local) && !local->is_full();
+    return !channel->is_failed_channel(iter->second.get());
 }
 
 Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel,
@@ -409,9 +390,8 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                                     bool write_txn_log) {
     Status status = std::move(close_status);
     if (_enable_shard_write && ts_profile != nullptr && ts_profile->runtime_profile != nullptr) {
-        // How this instance's rows were split. Under local-first a non-zero remote count means the
-        // local channel was backpressured (or this node is not one of the tablet's writers); under
-        // round-robin the split is the expected ~(N-1)/N.
+        // How this instance's rows were split. A non-zero remote count means this node was not one
+        // of the tablet's writers -- the location normally carries every alive CN, so it should be 0.
         COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteLocalRows", TUnit::UNIT),
                        _shard_write_local_rows);
         COUNTER_UPDATE(ADD_COUNTER(ts_profile->runtime_profile, "ShardWriteRemoteRows", TUnit::UNIT),

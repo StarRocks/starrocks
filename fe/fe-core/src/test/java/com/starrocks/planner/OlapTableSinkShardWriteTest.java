@@ -42,7 +42,7 @@ public class OlapTableSinkShardWriteTest {
 
     @Test
     public void testClampedToAliveNodes() {
-        // ALL_ALIVE_NODES reaches createLocation as Integer.MAX_VALUE; the list must clamp rather
+        // "every alive node" reaches createLocation as Integer.MAX_VALUE; the list must clamp rather
         // than repeat a node, which would make one node write the tablet twice.
         List<Long> nodeIds = OlapTableSink.buildShardWriteNodeIds(12L, NODES, Integer.MAX_VALUE, 100L);
         Assertions.assertEquals(NODES.size(), nodeIds.size());
