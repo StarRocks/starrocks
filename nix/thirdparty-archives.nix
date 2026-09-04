@@ -309,10 +309,10 @@ let
       md5 = "bdc1dfcb2a89dc0c09e8370808a946f5";
       sha256 = "0byazknlr5x941n9ba3j14prf29yk2dw7nwh3a4wbqd11zh3pwcv";
     };
-    "simdutf-5.2.8.tar.gz" = {
-      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz";
-      md5 = "731c78ab5a10c6073942dc93d5c4b04c";
-      sha256 = "0xwdx99qn4ckv4bd9ib5w3i00l8wiy2d7vrdz2c8avasz2zg21i7";
+    "simdutf-9.1.0.tar.gz" = {
+      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz";
+      md5 = "e55123960edadb8d9987fa30f877e588";
+      sha256 = "14yihiaalw4nxmjbbn6b64r7f4qdcpm7x8ml1zmydacm9h553qr4";
     };
     "snappy-1.1.8.tar.gz" = {
       url = "https://github.com/google/snappy/archive/1.1.8.tar.gz";
@@ -513,7 +513,7 @@ let
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
@@ -582,7 +582,7 @@ let
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
@@ -651,7 +651,7 @@ let
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
