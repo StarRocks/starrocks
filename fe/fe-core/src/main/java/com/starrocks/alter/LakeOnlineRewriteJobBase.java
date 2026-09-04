@@ -20,6 +20,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
@@ -287,6 +289,18 @@ public abstract class LakeOnlineRewriteJobBase
      *  AlterCancelException if the rewrite config is incomplete. Called once at the top of runPendingJob,
      *  before stage 1 — the base cannot see subclass config fields. */
     protected abstract void validateRewriteConfig() throws AlterCancelException;
+
+    protected int selectRequestedTabletCount(PendingPartitionPlan plan, int activeComputeNodeCount) {
+        if (Config.tablet_reshard_target_size == 0) {
+            int tabletCount = Math.max(1, plan.baseIndex.getTablets().size());
+            LOG.debug("online rewrite job {} preserves {} tablets for partition {} "
+                            + "because automatic resharding is disabled",
+                    jobId, tabletCount, plan.physicalPartitionId);
+            return tabletCount;
+        }
+        Estimates estimates = new Estimates(plan.partitionDataSize, 0L);
+        return TabletPreSplitCoordinator.selectTabletCount(estimates, activeComputeNodeCount);
+    }
 
     // ---- Overridable defaults: the range rewrite keeps these; a sibling job may override -----------
 

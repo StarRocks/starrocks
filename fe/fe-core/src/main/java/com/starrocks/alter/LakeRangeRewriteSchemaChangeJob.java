@@ -22,13 +22,11 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
 import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
 import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
-import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
-import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -215,9 +213,11 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
     protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
             throws AlterCancelException {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        int requestedTabletCount = chooseTabletCount(plan.partitionDataSize, activeComputeNodeCount);
-        List<Tuple> boundaries = planBoundaries(table, dbName, plan.tableName, plan.partitionName,
-                plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
+        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
+        List<Tuple> boundaries = requestedTabletCount == 1
+                ? List.of()
+                : planBoundaries(table, dbName, plan.tableName, plan.partitionName,
+                        plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
         // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
         int shadowTabletCount = boundaries.size() + 1;
         List<TabletRange> ranges = buildTabletRanges(boundaries);
@@ -286,17 +286,6 @@ public class LakeRangeRewriteSchemaChangeJob extends LakeOnlineRewriteJobBase {
         // out of the user namespace until the flip strips it. No-op for a same-column-set shadow (reorder /
         // keyness flip / drop). Mirrors addShadowIndexToCatalog.
         table.rebuildFullSchema();
-    }
-
-    /**
-     * Choose {@code K} from the partition's base data size and the active compute-node count.
-     * {@link TabletPreSplitCoordinator#selectTabletCount} clamps to {@code [2, maxSplitCount]}, so the
-     * requested count is always {@code >= 2}; the actual effective K may still collapse to 1 in
-     * {@link #planBoundaries} when the sample shows no useful distinction.
-     */
-    private int chooseTabletCount(long partitionDataSize, int activeComputeNodeCount) {
-        Estimates estimates = new Estimates(partitionDataSize, 0L);
-        return TabletPreSplitCoordinator.selectTabletCount(estimates, activeComputeNodeCount);
     }
 
     /**
