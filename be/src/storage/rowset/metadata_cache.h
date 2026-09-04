@@ -42,6 +42,10 @@ public:
     // will be called after rowset load metadata.
     void cache_rowset(Rowset* ptr);
 
+    // Update the cache charge after the rowset loads more segment metadata.
+    // |charge| must be a stable snapshot captured by the caller.
+    void update_rowset_charge(Rowset* ptr, size_t charge);
+
     // evict this rowset manually, will be called before rowset destroy.
     void evict_rowset(Rowset* ptr);
 

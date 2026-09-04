@@ -40,6 +40,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/config_rowset_fwd.h"
 #include "common/statusor.h"
 #include "common/storage_define.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -339,21 +340,47 @@ public:
         // if the refs by reader is 0 and the rowset is closed, should release the resouce
         uint64_t current_refs = --_refs_by_reader;
         if (current_refs == 0) {
+            bool should_update_charge = false;
+            size_t metadata_cache_charge = 0;
             {
                 std::lock_guard<std::mutex> release_lock(_lock);
                 // rejudge _refs_by_reader because we do not add lock in create reader
-                if (_refs_by_reader == 0 && _rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
-                    // first do close, then change state
-                    do_close();
-                    WARN_IF_ERROR(_rowset_state_machine.on_release(),
-                                  strings::Substitute("rowset state on_release error, $0",
-                                                      _rowset_state_machine.rowset_state()));
+                if (_refs_by_reader == 0) {
+                    if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
+                        // first do close, then change state
+                        do_close();
+                        WARN_IF_ERROR(_rowset_state_machine.on_release(),
+                                      strings::Substitute("rowset state on_release error, $0",
+                                                          _rowset_state_machine.rowset_state()));
+                    } else if (_rowset_state_machine.rowset_state() == ROWSET_LOADED &&
+                               config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+                        bool has_lazy_mem_update = false;
+                        for (const auto& segment : _segments) {
+                            has_lazy_mem_update |= segment->consume_lazy_mem_update();
+                        }
+                        if (has_lazy_mem_update) {
+                            // Consume dirty flags before taking the snapshot, so a concurrent update remains dirty
+                            // for the next last-reader release instead of being cleared after this snapshot.
+                            metadata_cache_charge = segment_memory_usage();
+                            should_update_charge = true;
+                        }
+                    }
                 }
             }
             if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {
                 VLOG(3) << "close the rowset. rowset state from ROWSET_UNLOADING to ROWSET_UNLOADED"
                         << ", version:" << start_version() << "-" << end_version()
                         << ", tabletid:" << _rowset_meta->tablet_id();
+            }
+            // Compute the charge under |_lock|, but update MetadataCache after releasing it,
+            // because releasing the cache handle may evict this rowset and call Rowset::close().
+            //
+            // The snapshot and cache update are intentionally not atomic. Concurrent reader
+            // cycles may apply charge updates out of order, so the cached charge is best-effort
+            // and may remain stale until another update. This affects cache eviction decisions
+            // only and is not used for object lifetime or query/data correctness.
+            if (should_update_charge) {
+                _update_metadata_cache_charge(metadata_cache_charge);
             }
         }
     }
@@ -443,6 +470,8 @@ protected:
 
 private:
     int64_t _mem_usage() const { return sizeof(Rowset) + _rowset_path.length(); }
+
+    void _update_metadata_cache_charge(size_t charge);
 
     Status _remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs);
 

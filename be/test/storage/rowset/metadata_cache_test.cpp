@@ -18,7 +18,10 @@
 #include "storage/rowset/metadata_cache.h"
 #undef private
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
+#include "common/config_rowset_fwd.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -59,6 +62,8 @@ public:
     }
 
     void release(Handle* /*handle*/) override { ++release_calls; }
+
+    bool update_charge(Handle* /*handle*/, size_t /*value_size*/) override { return false; }
 
     void touch(const CacheKey& key) override {
         ++touch_calls;
@@ -144,14 +149,15 @@ public:
         return *writer->build();
     }
 
-    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
+    TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash,
+                                  TKeysType::type keys_type = TKeysType::DUP_KEYS) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 1;
-        request.tablet_schema.keys_type = TKeysType::DUP_KEYS;
+        request.tablet_schema.keys_type = keys_type;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 
         TColumn k1;
@@ -271,6 +277,112 @@ TEST_F(MetadataCacheTest, test_warmup_uses_touch_without_releasing_handle) {
     ASSERT_EQ("rowset_warmup_key", recording_cache->last_touch_key);
     ASSERT_EQ(0, recording_cache->lookup_calls);
     ASSERT_EQ(0, recording_cache->release_calls);
+}
+
+TEST_F(MetadataCacheTest, update_charge_on_last_reader_release) {
+    constexpr size_t kMetadataCacheCapacity = 10 * 1024 * 1024;
+    const size_t num_rows = 1000;
+    vector<int64_t> keys;
+    keys.reserve(num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        keys.push_back(i);
+    }
+
+    auto metadata_cache = std::make_unique<MetadataCache>(kMetadataCacheCapacity);
+    auto tablet = create_tablet(1003, 10006);
+    auto rowset = create_rowset(tablet, keys);
+    ASSERT_TRUE(rowset->load().ok());
+    metadata_cache->cache_rowset(rowset.get());
+
+    const size_t initial_rowset_size = rowset->segment_memory_usage();
+    const size_t initial_cache_usage = metadata_cache->get_memory_usage();
+
+    int update_charge_calls = 0;
+    size_t captured_charge = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::_update_metadata_cache_charge", [&](void* arg) {
+        ++update_charge_calls;
+        captured_charge = *static_cast<size_t*>(arg);
+        metadata_cache->update_rowset_charge(rowset.get(), captured_charge);
+    });
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::_update_metadata_cache_charge");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Consume the initial dirty flag set by Segment::open(). This intentionally pays for one
+    // redundant refresh per Rowset load in exchange for keeping update_cache_size() uniform.
+    rowset->acquire();
+    rowset->release();
+    ASSERT_EQ(1, update_charge_calls);
+    ASSERT_EQ(initial_rowset_size, captured_charge);
+    ASSERT_EQ(initial_cache_usage, metadata_cache->get_memory_usage());
+
+    rowset->acquire();
+    rowset->acquire();
+
+    std::vector<std::string> short_keys;
+    ASSERT_TRUE(rowset->get_segment_sk_index(&short_keys).ok());
+    const size_t loaded_rowset_size = rowset->segment_memory_usage();
+    ASSERT_GT(loaded_rowset_size, initial_rowset_size);
+    ASSERT_EQ(initial_cache_usage, metadata_cache->get_memory_usage());
+
+    rowset->release();
+    ASSERT_EQ(1, update_charge_calls);
+    ASSERT_EQ(initial_cache_usage, metadata_cache->get_memory_usage());
+
+    rowset->release();
+    ASSERT_EQ(2, update_charge_calls);
+    ASSERT_EQ(loaded_rowset_size, captured_charge);
+    ASSERT_EQ(loaded_rowset_size - initial_rowset_size,
+              metadata_cache->get_memory_usage() - initial_cache_usage);
+    ASSERT_GT(rowset->segment_memory_usage(), 0);
+
+    const size_t updated_cache_usage = metadata_cache->get_memory_usage();
+    rowset->acquire();
+    rowset->release();
+    ASSERT_EQ(2, update_charge_calls);
+    ASSERT_EQ(updated_cache_usage, metadata_cache->get_memory_usage());
+}
+
+TEST_F(MetadataCacheTest, skip_charge_calculation_for_ineligible_rowsets) {
+    const std::vector<int64_t> keys{1, 2, 3};
+    auto dup_tablet = create_tablet(1004, 10007);
+    auto pk_tablet = create_tablet(1005, 10008, TKeysType::PRIMARY_KEYS);
+    auto dup_rowset = create_rowset(dup_tablet, keys);
+    auto pk_rowset = create_rowset(pk_tablet, keys);
+    ASSERT_TRUE(dup_rowset->load().ok());
+    ASSERT_TRUE(pk_rowset->load().ok());
+
+    int segment_memory_usage_calls = 0;
+    const int32_t old_metadata_cache_memory_limit_percent = config::metadata_cache_memory_limit_percent;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::segment_memory_usage",
+                                         [&](void*) { ++segment_memory_usage_calls; });
+    DeferOp defer([old_metadata_cache_memory_limit_percent] {
+        config::metadata_cache_memory_limit_percent = old_metadata_cache_memory_limit_percent;
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::segment_memory_usage");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    config::metadata_cache_memory_limit_percent = 30;
+    pk_rowset->acquire();
+    pk_rowset->release();
+    ASSERT_EQ(0, segment_memory_usage_calls);
+
+    config::metadata_cache_memory_limit_percent = 0;
+    dup_rowset->acquire();
+    dup_rowset->release();
+    ASSERT_EQ(0, segment_memory_usage_calls);
+
+    config::metadata_cache_memory_limit_percent = 30;
+    dup_rowset->acquire();
+    dup_rowset->release();
+    ASSERT_EQ(1, segment_memory_usage_calls);
+
+    dup_rowset->acquire();
+    dup_rowset->release();
+    ASSERT_EQ(1, segment_memory_usage_calls);
 }
 
 TEST_F(MetadataCacheTest, test_concurrency_issue) {
