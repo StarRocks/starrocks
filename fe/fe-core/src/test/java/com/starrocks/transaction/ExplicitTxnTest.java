@@ -56,11 +56,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TUniqueId;
-<<<<<<< HEAD
-=======
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
->>>>>>> e105e1d ([BugFix] Keep explicit transactions on one tablet layout during reshard (#78625))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -94,9 +90,6 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 public class ExplicitTxnTest {
-<<<<<<< HEAD
-=======
-
     private TransactionState addExplicitState(GlobalTransactionMgr mgr, long txnId, String label, long timeoutMs) {
         TransactionState state = new TransactionState(
                 txnId, label, null, TransactionState.LoadJobSourceType.INSERT_STREAMING,
@@ -137,12 +130,7 @@ public class ExplicitTxnTest {
         }
     }
 
-    @AfterAll
-    public static void tearDownPersistJournal() {
-        UtFrameUtils.tearDownForPersisTest();
-    }
 
->>>>>>> e105e1d ([BugFix] Keep explicit transactions on one tablet layout during reshard (#78625))
     @BeforeAll
     public static void init() throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -767,85 +755,6 @@ public class ExplicitTxnTest {
         Assertions.assertEquals((long) queryTimeoutS * 1000L, capturedTimeoutMs[0],
                 "query_timeout (" + queryTimeoutS + "s) must be passed to retryCommitOnRateLimitExceeded "
                         + "as milliseconds, got " + capturedTimeoutMs[0]);
-    }
-
-    @Test
-<<<<<<< HEAD
-=======
-    public void testCommitWithLostTransactionState() {
-        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
-        // commitStmt should report an error instead of silently succeeding.
-        ConnectContext context = new ConnectContext();
-        context.setTxnId(99999);
-
-        TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-
-        Assertions.assertEquals(0, context.getTxnId());
-        Assertions.assertTrue(context.getState().isError());
-        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
-    }
-
-    @Test
-    public void testRollbackWithLostTransactionState() {
-        // When txnId is set but explicitTxnState is null (e.g., FE leader switch),
-        // rollbackStmt should report an error instead of silently succeeding.
-        ConnectContext context = new ConnectContext();
-        context.setTxnId(99998);
-
-        TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
-
-        Assertions.assertEquals(0, context.getTxnId());
-        Assertions.assertTrue(context.getState().isError());
-        Assertions.assertTrue(context.getState().getErrorMessage().contains("Transaction state not found"));
-    }
-
-    @Test
-    public void testBeginWithLostTransactionState() {
-        // When txnId is set but explicitTxnState was cleared (e.g., timeout cleanup),
-        // beginStmt should reset and create a new transaction instead of NPE.
-        ConnectContext context = new ConnectContext();
-        context.setThreadLocalInfo();
-        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-
-        TUniqueId queryId = new TUniqueId(900, 901);
-        context.setExecutionId(queryId);
-
-        // Simulate stale txnId without matching explicitTxnState
-        context.setTxnId(88888);
-
-        // BEGIN should recover by creating a new transaction
-        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "recovery_label"));
-        Assertions.assertFalse(context.getState().isError());
-        Assertions.assertNotEquals(88888, context.getTxnId());
-        Assertions.assertTrue(context.getState().getInfoMessage().contains("'label':'recovery_label'"));
-
-        // Cleanup
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
-        context.setTxnId(0);
-    }
-
-    @Test
-    public void testCleanupClearsExplicitTxnState() {
-        // Test that ConnectContext.cleanup() properly clears explicitTxnStateMap entries
-        ConnectContext context = new ConnectContext();
-        context.setThreadLocalInfo();
-        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-
-        TUniqueId queryId = new TUniqueId(950, 951);
-        context.setExecutionId(queryId);
-
-        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "cleanup_test_label"));
-        long txnId = context.getTxnId();
-        Assertions.assertNotEquals(0, txnId);
-        Assertions.assertNotNull(
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
-
-        // Simulate connection disconnect
-        context.cleanup();
-
-        // Verify explicitTxnState was cleaned up
-        Assertions.assertNull(
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId));
     }
 
     @Test
@@ -1498,61 +1407,8 @@ public class ExplicitTxnTest {
         }
     }
 
-    @Test
-    public void testAbortTimeoutTxnsCleanupOrphanedNullState() {
-        // Test that abortTimeoutTxns() also cleans up entries where transactionState is null
-        // (orphaned entries from lost state, e.g., after FE leader switch)
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-
-        long orphanTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
-        ExplicitTxnState orphanState = new ExplicitTxnState();
-        // transactionState is null by default - simulates orphaned entry
-        globalTransactionMgr.addTransactionState(orphanTxnId, orphanState);
-
-        Assertions.assertNotNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
-
-        // Run timeout cleanup
-        globalTransactionMgr.abortTimeoutTxns();
-
-        // Verify the orphaned null-state entry was cleaned up
-        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(orphanTxnId));
-    }
 
     @Test
-    public void testBeginWithStaleExplicitTxnStateClearsEntry() {
-        // Test that beginStmt clears the stale map entry when explicitTxnState exists
-        // but transactionState is null
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        ConnectContext context = new ConnectContext();
-        context.setThreadLocalInfo();
-        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-
-        TUniqueId queryId = new TUniqueId(960, 961);
-        context.setExecutionId(queryId);
-
-        // Add a stale entry with null transactionState
-        long staleTxnId = globalTransactionMgr.getTransactionIDGenerator().getNextTransactionId();
-        ExplicitTxnState staleState = new ExplicitTxnState();
-        globalTransactionMgr.addTransactionState(staleTxnId, staleState);
-        context.setTxnId(staleTxnId);
-
-        // beginStmt should detect the lost state, clean up stale entry, and start fresh
-        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "stale_cleanup_label"));
-
-        // Stale entry should be removed from the map
-        Assertions.assertNull(globalTransactionMgr.getExplicitTxnState(staleTxnId));
-        // A new transaction should have been started
-        Assertions.assertNotEquals(0, context.getTxnId());
-        Assertions.assertNotEquals(staleTxnId, context.getTxnId());
-        Assertions.assertFalse(context.getState().isError());
-
-        // Cleanup
-        globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
-        context.setTxnId(0);
-    }
-
-    @Test
->>>>>>> e105e1d ([BugFix] Keep explicit transactions on one tablet layout during reshard (#78625))
     public void testBeginWithLabelAlreadyUsedByAnotherSession() {
         // BEGIN WITH LABEL must be rejected when another session already holds an explicit transaction
         // with the same label

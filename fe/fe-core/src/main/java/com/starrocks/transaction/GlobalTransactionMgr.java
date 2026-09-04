@@ -908,8 +908,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.abortTimeoutTxns(currentMillis);
         }
-<<<<<<< HEAD
-=======
         // Clean up orphaned explicit transaction states:
         // 1. txnState == null: orphaned entry (e.g., state lost after FE leader switch)
         // 2. txnState != null && isTimeout: BEGIN executed but no DML followed, timed out
@@ -919,7 +917,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                 return txnState == null || txnState.isTimeout(currentMillis);
             });
         }
->>>>>>> e105e1d ([BugFix] Keep explicit transactions on one tablet layout during reshard (#78625))
     }
 
     public void removeExpiredTxns() {
