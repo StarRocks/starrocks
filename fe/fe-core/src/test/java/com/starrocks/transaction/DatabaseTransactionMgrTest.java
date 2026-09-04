@@ -105,6 +105,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -732,6 +733,34 @@ public class DatabaseTransactionMgrTest {
         // sentinel commit time.
         assertEquals(TransactionStatus.PREPARE, txnState.getTransactionStatus());
         assertEquals(0L, row.getPending_publish_ms());
+    }
+
+    @Test
+    public void getRunningTransactionsNeverReportsAFabricatedTableIdTest() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // The table id list is a plain ArrayList that an explicit transaction grows without a lock, and the
+        // snapshot taken for this column reads the backing array and the size separately. If a grow lands
+        // between those two reads the copy is padded with nulls, which would otherwise be rendered as a
+        // literal "null" table id. A diagnostic column may omit an id that was mid-attach, but it must never
+        // invent one, so no row may carry an empty or "null" entry in either id or name form.
+        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "label_no_fabricated_table_id",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterDbTransMgr.getTransactionState(txnId).addTableIdList(GlobalStateMgrTestUtil.testTableId1 + 1);
+
+        for (TRunningTxnInfo row : masterDbTransMgr.getRunningTransactions()) {
+            String ids = row.getTable_ids();
+            assertNotNull(ids);
+            for (String one : ids.split(",")) {
+                assertNotEquals("null", one, "TABLE_IDS must never contain a fabricated null id");
+                assertTrue(one.isEmpty() || one.chars().allMatch(Character::isDigit),
+                        "every TABLE_IDS entry must be a real numeric id, got: " + one);
+            }
+        }
     }
 
     @Test
