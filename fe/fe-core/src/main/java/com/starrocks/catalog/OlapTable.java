@@ -117,12 +117,6 @@ import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-<<<<<<< HEAD
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
-=======
-import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
->>>>>>> 2bda1db ([BugFix] Skip dead nodes when dropping the auto-increment map (#78561))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
