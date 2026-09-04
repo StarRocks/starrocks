@@ -85,10 +85,14 @@ TEST_F(SegmentRewriterTest, rewrite_owned_only_drops_the_unowned_rows) {
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
+    // Encrypted, like rewrite_test: the owned-only rewrite has to unwrap the source's key and carry the
+    // meta onto its output, and that is a branch a plain-file test never enters.
+    auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
     std::string src_name = kSegmentDir + "/owned_only_src";
-    ASSIGN_OR_ABORT(
-            auto wfile,
-            _fs->new_writable_file(WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE}, src_name));
+    ASSIGN_OR_ABORT(auto wfile,
+                    _fs->new_writable_file(WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                                               .encryption_info = encryption_pair.info},
+                                           src_name));
     SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema, opts);
     ASSERT_OK(writer.init());
     auto partial_schema = ChunkHelper::convert_schema(partial_tablet_schema);
@@ -106,7 +110,7 @@ TEST_F(SegmentRewriterTest, rewrite_owned_only_drops_the_unowned_rows) {
     FooterPointerPB partial_rowset_footer;
     partial_rowset_footer.set_position(footer_position);
     partial_rowset_footer.set_size(file_size - footer_position);
-    FileInfo src_file_info{.path = src_name};
+    FileInfo src_file_info{.path = src_name, .encryption_meta = encryption_pair.encryption_meta};
 
     // Own every third row of the emitted run, so ownership is scattered rather than a prefix -- the
     // shape a segment ordered by a separate sort key actually produces.
@@ -138,7 +142,11 @@ TEST_F(SegmentRewriterTest, rewrite_owned_only_drops_the_unowned_rows) {
                                                                  resolved_column_ids, resolved_columns, owned,
                                                                  kEmittedBase, 0, partial_rowset_footer));
 
-    ASSIGN_OR_ABORT(auto segment, Segment::open(_fs, FileInfo{.path = dst_name}, 0, tablet_schema));
+    EXPECT_EQ(encryption_pair.encryption_meta, dst_file_info.encryption_meta)
+            << "the output must be readable with the source's key";
+    ASSIGN_OR_ABORT(auto segment,
+                    Segment::open(_fs, FileInfo{.path = dst_name, .encryption_meta = dst_file_info.encryption_meta}, 0,
+                                  tablet_schema));
     ASSERT_EQ(expected_keys.size(), segment->num_rows()) << "the output must hold the owned rows and nothing else";
 
     SegmentReadOptions seg_options;
