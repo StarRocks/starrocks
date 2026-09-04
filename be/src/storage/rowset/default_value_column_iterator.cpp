@@ -725,6 +725,12 @@ bool DefaultValueColumnIterator::_build_constant_zone_map(ZoneMapDetail* detail)
         // ColumnReader::_parse_zone_map()'s get_type_info(delegate_type(...)): a persisted decimal
         // zone map holds the already-scaled integer, whereas `_default_value` is a human decimal
         // literal that only DecimalTypeInfo::from_string() scales correctly.
+        // The failure branch below is a safety net that the current allow-list cannot reach: every
+        // type it admits is handled by datum_from_string's switch, and init() already parsed the same
+        // string through the same TypeInfo::from_string(), so a parse failure would have failed init()
+        // and this iterator would not exist. Keep it anyway -- it is what stops the allow-list and
+        // that switch drifting apart from turning into a wrong fold. (This is why those lines show as
+        // uncovered.)
         Status st = datum_from_string(_type_info.get(), &value, _default_value, /*type_info_allocator=*/nullptr);
         if (!st.ok()) {
             VLOG(2) << "cannot fold default value '" << _default_value << "' of type " << _type_info->type()
@@ -802,8 +808,13 @@ Status DefaultValueColumnIterator::get_row_ranges_by_zone_map(const std::vector<
 
     // The delete predicate never prunes the row range -- exactly as in ColumnReader::_zone_map_filter,
     // it only decides whether the data has to be re-checked against the delete condition row by row.
-    // On a constant column that answer is exact: the delete condition either matches every row or no
-    // row, so DEL_PARTIAL_SATISFIED is impossible.
+    // On a constant column that answer is exact: the delete condition matches every row or none, so
+    // the batch is never genuinely "partially" deleted. next_batch() nevertheless stamps
+    // DEL_PARTIAL_SATISFIED for the matching case rather than DEL_SATISFIED, because every consumer
+    // aggregates as `may_has_del_row |= (state != DEL_NOT_SATISFIED)` (segment_iterator.cpp) and so
+    // cannot tell the two apart -- emitting DEL_SATISFIED would buy nothing. What this exactness buys
+    // is the other branch: proving the condition cannot match lets the flag stay false, which is what
+    // lets the per-chunk delete re-check be skipped.
     //
     // Neither branch below ever clears the flag; one iterator instance is re-entered several times
     // per scan (the page-level zone map pass, the delete-only column pass,
