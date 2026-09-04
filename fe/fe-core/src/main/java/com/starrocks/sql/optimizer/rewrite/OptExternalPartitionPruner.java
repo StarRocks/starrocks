@@ -380,7 +380,11 @@ public class OptExternalPartitionPruner {
                 partitionKeys.add(new Pair<>(new PartitionKey(), 0L));
             }
 
-            partitionKeys.stream().parallel().forEach(entry -> {
+            // NOTE: keep this loop sequential. A parallel stream here runs on the JVM-wide
+            // ForkJoinPool.commonPool(), so query planning would depend on a pool the FE neither
+            // owns nor can interrupt; on the whole-phase-lock path the database lock is then held
+            // for the entire wait. A stalled common pool has already caused an FE-wide outage.
+            for (Pair<PartitionKey, Long> entry : partitionKeys) {
                 PartitionKey key = entry.first;
                 long partitionId = entry.second;
                 List<LiteralExpr> literals = key.getKeys();
@@ -396,11 +400,6 @@ public class OptExternalPartitionPruner {
                             .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet());
                     partitions.add(partitionId);
                 }
-            });
-
-            for (Pair<PartitionKey, Long> entry : partitionKeys) {
-                PartitionKey key = entry.first;
-                long partitionId = entry.second;
                 operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
             }
         } else if (table instanceof FlussTable) {
@@ -472,7 +471,11 @@ public class OptExternalPartitionPruner {
             partitionKeys.add(new Pair<>(new PartitionKey(), 0L));
         }
 
-        partitionKeys.stream().parallel().forEach(entry -> {
+        // NOTE: keep this loop sequential. A parallel stream here runs on the JVM-wide
+        // ForkJoinPool.commonPool(), so query planning would depend on a pool the FE neither
+        // owns nor can interrupt; on the whole-phase-lock path the database lock is then held
+        // for the entire wait. A stalled common pool has already caused an FE-wide outage.
+        for (Pair<PartitionKey, Long> entry : partitionKeys) {
             PartitionKey key = entry.first;
             long partitionId = entry.second;
             List<LiteralExpr> literals = key.getKeys();
@@ -488,10 +491,7 @@ public class OptExternalPartitionPruner {
                         .computeIfAbsent(literal, k -> Sets.newConcurrentHashSet());
                 partitions.add(partitionId);
             }
-        });
-
-        for (Pair<PartitionKey, Long> entry : partitionKeys) {
-            operator.getScanOperatorPredicates().getIdToPartitionKey().put(entry.second, entry.first);
+            operator.getScanOperatorPredicates().getIdToPartitionKey().put(partitionId, key);
         }
     }
 
