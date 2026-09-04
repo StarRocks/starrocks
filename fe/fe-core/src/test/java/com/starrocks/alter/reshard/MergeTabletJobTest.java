@@ -393,7 +393,8 @@ public class MergeTabletJobTest {
 
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) {
                 return false;
             }
@@ -415,7 +416,8 @@ public class MergeTabletJobTest {
 
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) throws AnalysisException {
                 throw new AnalysisException("mock");
             }
@@ -457,7 +459,8 @@ public class MergeTabletJobTest {
         };
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) {
                 excludeTxnIdsArg.set(excludeTransactionIds);
                 return waitFinished[0];
@@ -794,7 +797,7 @@ public class MergeTabletJobTest {
             };
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                public boolean isPreviousTransactionsFinishedForReshard(long endTransactionId, long dbId,
                         List<Long> tableIds, Set<Long> excludeTransactionIds) {
                     return true;
                 }
