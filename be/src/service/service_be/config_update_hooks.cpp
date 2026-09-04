@@ -15,7 +15,6 @@
 #include "service/service_be/config_update_hooks.h"
 
 #include <algorithm>
-#include <limits>
 #include <string>
 #include <vector>
 
@@ -572,21 +571,26 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor, fslib_s3client_nonread_retry_scale_factor);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
-    if (config::object_storage_request_timeout_ms >= 0 &&
-        config::object_storage_request_timeout_ms <= std::numeric_limits<int32_t>::max()) {
-        UPDATE_STARLET_CONFIG(object_storage_request_timeout_ms, fslib_s3client_request_timeout_ms);
-    }
+    registry->register_callback("object_storage_request_timeout_ms", []() {
+        auto timeout = starlet_request_timeout_ms(config::object_storage_request_timeout_ms,
+                                                  config::enable_poco_client_for_aws_sdk);
+        if (!timeout) {
+            return Status::InvalidArgument("object_storage_request_timeout_ms exceeds Starlet's int32 range.");
+        }
+        auto val = std::to_string(*timeout);
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_request_timeout_ms", val).empty()) {
+            LOG(WARNING) << "Failed to update fslib_s3client_request_timeout_ms";
+            return Status::InvalidArgument("Failed to update object_storage_request_timeout_ms.");
+        }
+        return Status::OK();
+    });
     UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
     UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
-<<<<<<< HEAD
-=======
-    UPDATE_STARLET_CONFIG(starlet_cache_replication_timeout_ms, write_cache_rpc_timeout_ms);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_gs_max_single_part_size, fslib_gs_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
->>>>>>> a16411accce ([Enhancement] Make starlet object-store upload thresholds configurable at runtime (#60610))
 #undef UPDATE_STARLET_CONFIG
 
 #ifndef BUILD_FORMAT_LIB

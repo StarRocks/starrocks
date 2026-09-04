@@ -135,6 +135,10 @@ Usage: $0 <options>
      --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
+     --without-paimon-cpp
+                        build Backend without the paimon-cpp native reader and its
+                        shared libraries (default with paimon-cpp; forced off on macOS,
+                        where thirdparty does not build paimon-cpp)
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -195,6 +199,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-thin-archive' \
   -l 'without-pch' \
   -l 'without-starcache' \
+  -l 'without-paimon-cpp' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -238,6 +243,7 @@ else
     WITH_STARCACHE=ON
 fi
 WITH_PCH=ON
+WITH_PAIMON_CPP=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -363,6 +369,7 @@ else
             --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --configure-only) CONFIGURE_ONLY=ON; shift ;;
@@ -384,6 +391,11 @@ fi
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
 fi
 
 if [[ ${HELP} -eq 1 ]]; then
@@ -428,6 +440,7 @@ echo "Get params:
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
+    WITH_PAIMON_CPP             -- $WITH_PAIMON_CPP
     WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
@@ -582,6 +595,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+                  -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP}                  \
                   -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
@@ -763,6 +777,17 @@ if [ ${BUILD_BE} -eq 1 ]; then
     elif [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ]]; then
         mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     fi
+    if [ "${WITH_PAIMON_CPP}" == "ON" ]; then
+        # All paimon-cpp libraries live in be/lib/paimon-cpp-lib
+        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib/libpaimon*.so*)
+        if (( ${#paimon_cpp_libs[@]} == 0 )); then
+            echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp, run thirdparty/build-thirdparty.sh paimon_cpp first"
+            exit 1
+        fi
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib
+        cp -r -p ${STARROCKS_HOME}/be/output/lib/paimon-cpp-lib/. ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+        cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+    fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     fi
@@ -807,6 +832,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
         objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
         strip --strip-debug $BE_BIN
         objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
+        # The thirdparty libpaimon*.so ship with debug info (>1 GB unstripped); strip them in place.
+        for so in paimon-cpp-lib/libpaimon*.so; do
+            [[ -f ${so} ]] || continue
+            echo "Strip $so debug symbol ..."
+            strip --strip-debug $so
+        done
         popd &>/dev/null
     fi
 

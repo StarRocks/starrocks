@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -67,6 +68,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -529,6 +531,29 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
+    }
+
+    @Override
+    public Void visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, ConnectContext context) {
+        // Pure FE metadata change: add/remove columns from the persisted no-dict forbid set. Canonicalize
+        // each name to the column's stored spelling (table column lookup is case-insensitive) so the
+        // persisted set matches the later case-sensitive isNoDictColumn(getId()) checks, and so ENABLE
+        // fully clears a differently cased DISABLE (e.g. DISABLE (C1) then ENABLE (c1)).
+        Set<String> cols = new java.util.HashSet<>();
+        for (String c : clause.getColumns()) {
+            Column col = table.getColumn(c);
+            cols.add(col != null ? col.getName() : c);
+        }
+        long dbId = db.getId();
+        long tableId = table.getId();
+        if (clause.isEnable()) {
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .updateNoDictColumns(dbId, tableId, java.util.Collections.emptySet(), cols);
+        } else {
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .updateNoDictColumns(dbId, tableId, cols, java.util.Collections.emptySet());
+        }
+        return null;
     }
 
     @Override

@@ -40,6 +40,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -82,6 +83,19 @@ public:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
+
+namespace {
+
+class MappedCacheKeyLocationProvider final : public lake::LocationProvider {
+public:
+    std::string root_location(int64_t tablet_id) const override { return fmt::format("virtual://{}", tablet_id); }
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override {
+        return fmt::format("physical/{}", virtual_path);
+    }
+};
+
+} // namespace
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, tablet_meta_write_and_read) {
@@ -1114,6 +1128,42 @@ TEST_F(LakeTabletManagerTest, cache_tablet_metadata) {
     ASSERT_TRUE(_tablet_manager->get_latest_cached_tablet_metadata(tablet_id) != nullptr);
 }
 
+TEST_F(LakeTabletManagerTest, bundled_metadata_partition_marker_uses_real_location) {
+    auto location_provider = std::make_shared<MappedCacheKeyLocationProvider>();
+    auto old_location_provider = _tablet_manager->TEST_set_location_provider(location_provider);
+    DeferOp restore_location_provider(
+            [&]() { _tablet_manager->TEST_set_location_provider(std::move(old_location_provider)); });
+
+    auto tablet_id = next_id();
+    auto virtual_key = location_provider->metadata_root_location(tablet_id);
+    ASSIGN_OR_ABORT(auto real_key, location_provider->real_location(virtual_key));
+
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    EXPECT_TRUE(_tablet_manager->lookup_cached_bundled_metadata_partition_marker(tablet_id));
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(real_key));
+    EXPECT_FALSE(_tablet_manager->metacache()->lookup_bundled_metadata_marker(virtual_key));
+}
+
+TEST_F(LakeTabletManagerTest, bundled_metadata_not_found_reads_bundle_once) {
+    auto tablet_id = next_id();
+    _tablet_manager->cache_bundled_metadata_partition_marker(tablet_id);
+
+    int bundle_read_attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_single_tablet_metadata",
+                                          [&](void*) { ++bundle_read_attempts; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_single_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto metadata = _tablet_manager->get_tablet_metadata(tablet_id, 2, false);
+
+    EXPECT_TRUE(metadata.status().is_not_found()) << metadata.status();
+    EXPECT_EQ(1, bundle_read_attempts);
+}
+
 TEST_F(LakeTabletManagerTest, get_tablet_metadata_cache_options) {
     auto metadata = std::make_shared<TabletMetadata>();
     auto tablet_id = next_id();
@@ -1161,6 +1211,39 @@ TEST_F(LakeTabletManagerTest, get_tablet_metadata_skip_meta_cache_cache_only) {
     // Same contract on the single-tablet (bundle) read path.
     res = _tablet_manager->get_single_tablet_metadata(tablet_id, 2, skip_cache_opts);
     EXPECT_TRUE(res.status().is_not_found()) << res.status();
+}
+
+// Each remote metadata read that returns NotFound is counted, including
+// fallback reads; hits must leave the metric alone.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    // A missing version 2 probes both the per-tablet metadata object and the
+    // bundled metadata fallback in remote storage.
+    auto res = _tablet_manager->get_tablet_metadata(next_id(), 2);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+
+    auto metadata = std::make_shared<TabletMetadata>();
+    auto tablet_id = next_id();
+    metadata->set_id(tablet_id);
+    metadata->set_version(2);
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    EXPECT_OK(_tablet_manager->get_tablet_metadata(tablet_id, 2).status());
+    EXPECT_EQ(not_found_before + 2, not_found_metric.value());
+}
+
+// The bundle file is the other location a tablet's metadata can live in, so the
+// bulk bundle reader used by vacuum shares the same accounting.
+TEST_F(LakeTabletManagerTest, get_metas_from_bundle_tablet_metadata_not_found_metric) {
+    auto& not_found_metric = StorageMetrics::instance()->lake_tablet_metadata_get_not_found_total;
+    auto not_found_before = not_found_metric.value();
+
+    auto missing_bundle = _tablet_manager->bundle_tablet_metadata_location(next_id(), 2);
+    auto res = lake::TabletManager::get_metas_from_bundle_tablet_metadata(missing_bundle);
+    ASSERT_TRUE(res.status().is_not_found()) << res.status();
+    EXPECT_EQ(not_found_before + 1, not_found_metric.value());
 }
 
 // With a durable copy present, skip_meta_cache reads it from storage (not the

@@ -1,4 +1,4 @@
--- name: test_global_dict_with_union
+-- name: test_global_dict_with_union @sequential
 
 -- test_union_filter_after_union
 -- expect: Filter -> Union -> Scan

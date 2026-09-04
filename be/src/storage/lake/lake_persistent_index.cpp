@@ -47,7 +47,7 @@
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
-#include "storage/persistent_index_parallel_publish_context.h"
+#include "storage/parallel_upsert_context.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
@@ -58,7 +58,7 @@
 namespace starrocks::lake {
 
 LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id)
-        : PersistentIndex(""), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
+        : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
 
 LakePersistentIndex::~LakePersistentIndex() {
     if (_memtable) {
@@ -414,42 +414,38 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                   IOStat* stat, ParallelPublishContext* ctx) {
+                                   IOStat* stat, ParallelUpsertContext* ctx) {
+    // The active-memtable write stays on the caller thread: the memtable is not safe for concurrent
+    // writes, and this is also what fixes the order of an upsert against the deletes around it.
     std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
     size_t num_found;
-    RETURN_IF_ERROR(
-            _memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _version.major_number()));
-    if (ctx == nullptr || ctx->token == nullptr) {
+    RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _publish_version));
+
+    // Resolving what those keys previously mapped to is the expensive remote-IO half, and it is
+    // read-only, so it is the part that can be deferred.
+    auto resolve_old_values = [this, n, keys, old_values, not_founds]() -> Status {
         RETURN_IF_ERROR(get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1));
-        RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, not_founds.get(), -1));
-        RETURN_IF_ERROR(flush_memtable());
-    } else {
-        Trace* trace = Trace::CurrentTrace();
-        auto st = ctx->token->submit_func([this, n, keys, old_values, not_founds, ctx, trace]() {
-            ADOPT_TRACE(trace);
-            auto st = get_from_inactive_memtables(n, keys, old_values, not_founds.get(), -1);
-            if (st.ok()) {
-                st = get_from_sstables(n, keys, old_values, not_founds.get(), -1);
-            }
-            if (st.ok()) {
-                std::lock_guard<std::mutex> lg(*ctx->mutex);
-                for (int i = 0; i < n; ++i) {
-                    auto old = old_values[i].get_value();
-                    if (old != NullIndexValue) {
-                        (*ctx->deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
-                    }
-                }
-            } else {
-                std::lock_guard<std::mutex> lg(*ctx->mutex);
-                ctx->status->update(st);
-            }
-        });
-        if (!st.ok()) {
-            std::lock_guard<std::mutex> lg(*ctx->mutex);
-            ctx->status->update(st);
+        return get_from_sstables(n, keys, old_values, not_founds.get(), -1);
+    };
+
+    if (ctx == nullptr || !ctx->defers_lookup()) {
+        RETURN_IF_ERROR(resolve_old_values());
+        if (ctx != nullptr) {
+            ctx->add_replaced(old_values, n);
         }
+        // Flushed per call on this path: nobody is going to join and flush on our behalf, and a large
+        // serial upsert would otherwise let the memtable grow unbounded.
+        return flush_memtable();
     }
 
+    // Deferred. The task appends the replaced rowids itself, because `old_values` is not complete
+    // until it has run -- see ParallelUpsertContext::defers_lookup() for the other half of that rule.
+    // The caller joins the runner and flushes once every chunk has been submitted.
+    ctx->runner()->run([resolve_old_values, ctx, old_values, n]() -> Status {
+        RETURN_IF_ERROR(resolve_old_values());
+        ctx->add_replaced(old_values, n);
+        return Status::OK();
+    });
     return Status::OK();
 }
 
@@ -502,7 +498,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // memtable (not safe for concurrent writes) and preserves the in-transaction upsert/delete order.
     // `not_founds` collects the keys the active memtable could not resolve; their previous rss_rowid
     // still has to be read back from the inactive memtables and sstables to build the delete vector.
-    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), del_rssid));
+    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _publish_version, del_rssid));
 
     // The reverse lookup above is the expensive remote-IO part of a delete publish. For a large delete
     // it dominates, so parallelise it across disjoint key-index subsets when worthwhile, mirroring
@@ -637,7 +633,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
-    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
@@ -645,7 +641,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
 Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
                                     const std::vector<uint32_t>& replace_indexes) {
     std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
-    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _version.major_number()));
+    RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }

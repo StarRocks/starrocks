@@ -152,6 +152,7 @@ set(EXEC_FILES
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
+        ./service/service_be/backend_service_test.cpp
         ./service/service_be/http_auth_response_test.cpp
         ./service/service_be/internal_service_test.cpp
         )
@@ -291,6 +292,7 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/lake_merged_del_op_offset_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
@@ -442,12 +444,22 @@ if (APPLE)
     target_sources(compaction_task_test PRIVATE ${CMAKE_SOURCE_DIR}/test/base/macos_link_stubs.cpp)
 endif()
 
-# paimon-cpp smoke test, a standalone binary that exists only with
-# --with-paimon-cpp, so starrocks_test never depends on libpaimon.so.
+# paimon-cpp tests live in a standalone binary that is skipped with
+# --without-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
+# The production sources are compiled directly into this binary: they ship in
+# the dlopen()ed libstarrocks_paimon.so shim and are no longer part of
+# ConnectorHive, while tests link paimon the ordinary build-time way.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
+    target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_predicate_converter_test.cpp
+        connector/paimon/paimon_file_system_test.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
+    )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()
 

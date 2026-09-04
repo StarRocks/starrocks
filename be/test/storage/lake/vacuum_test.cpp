@@ -5056,7 +5056,9 @@ TEST_P(LakeVacuumTest, test_vacuum_bundle_metadata) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        // The grace period stopped every tablet from advancing, so the partition-level version range is
+        // empty and vacuum must not speculatively delete each tablet's version-1 metadata.
+        EXPECT_EQ(0, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -5345,7 +5347,9 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(2, response.vacuumed_files());
+        // The grace period stopped every tablet from advancing, so the partition-level version range is
+        // empty and vacuum must not speculatively delete each tablet's version-1 metadata.
+        EXPECT_EQ(0, response.vacuumed_files());
         // The size of deleted metadata files is not counted in vacuumed_file_size.
         EXPECT_EQ(0, response.vacuumed_file_size());
 
@@ -6967,6 +6971,247 @@ TEST_P(LakeVacuumTest, test_vacuum_min_retain_below_min_version) {
     }
     SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// The grace period stops a round from deleting anything, but a walk that ran off the bottom of the
+// prev_garbage_version chain still proved where that bottom is. That floor must be handed back to the
+// FE, otherwise every following round re-walks the same versions and re-pays the same NotFound read.
+TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_records_chain_bottom) {
+    // Tablet 5300's only surviving metadata is version 10; its prev_garbage_version points at version 6,
+    // which an earlier vacuum already removed. commit_time 2000 is at/after the grace timestamp used
+    // below, so the grace period blocks every deletion this round.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5300,
+            "version": 10,
+            "prev_garbage_version": 6,
+            "commit_time": 2000
+        }
+        )DEL")));
+
+    int64_t total_reads = 0;
+    int64_t not_found_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        ++total_reads;
+        if (res->status().is_not_found()) {
+            ++not_found_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    int64_t next_min_version = 0;
+    // Round 1: read version 10, follow its prev_garbage_version to the missing version 6, stop there.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5300);
+        info->set_min_version(1);
+        request.set_min_retain_version(10);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(2, total_reads);
+        EXPECT_EQ(1, not_found_reads);
+        // Inside the grace window nothing may be deleted, and version 10 stays retained.
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5300, 10)));
+        EXPECT_EQ(9, response.vacuumed_version());
+        // The only bound the walk established: nothing exists at or below version 6. NOT
+        // final_retain_version (10) -- version 10 was not deleted and its garbage is still to collect.
+        ASSERT_EQ(1, response.tablet_infos_size());
+        EXPECT_EQ(7, response.tablet_infos(0).min_version());
+        next_min_version = response.tablet_infos(0).min_version();
+    }
+
+    // Round 2: the FE replays the floor the BE reported. The walk stops at it instead of re-reading --
+    // and re-paying the NotFound on -- version 6. Before the fix this round repeated both reads.
+    total_reads = 0;
+    not_found_reads = 0;
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5300);
+        info->set_min_version(next_min_version);
+        request.set_min_retain_version(10);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(1, total_reads);
+        EXPECT_EQ(0, not_found_reads);
+        EXPECT_EQ(0, response.vacuumed_files());
+        // Nothing new was proved, so the floor is echoed back unchanged -- never lowered either.
+        ASSERT_EQ(1, response.tablet_infos_size());
+        EXPECT_EQ(7, response.tablet_infos(0).min_version());
+    }
+}
+
+// The counterpart of the test above: a NotFound on the very FIRST read is not proof of a chain bottom.
+// min_retain_version can be lowered to a bookmark fence version that this tablet never materialized
+// (batch publish folds a run of txns into a single snapshot at the batch's final version), so treating
+// that hole as the bottom would strand every version below it. The floor must stay put.
+TEST_P(LakeVacuumTest, test_vacuum_grace_blocked_keeps_floor_on_unanchored_miss) {
+    // Version 8 is a hole for this tablet; versions 5 and 12 are materialized. Both are inside the
+    // grace window.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5301,
+            "version": 5,
+            "commit_time": 2000
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 5301,
+            "version": 12,
+            "prev_garbage_version": 5,
+            "commit_time": 2000
+        }
+        )DEL")));
+
+    int64_t total_reads = 0;
+    int64_t not_found_reads = 0;
+    SyncPoint::GetInstance()->SetCallBack("collect_files_to_vacuum:get_tablet_metadata", [&](void* arg) {
+        auto* res = reinterpret_cast<StatusOr<TabletMetadataPtr>*>(arg);
+        ++total_reads;
+        if (res->status().is_not_found()) {
+            ++not_found_reads;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("collect_files_to_vacuum:get_tablet_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Round 1: the retain boundary is the hole at version 8, so the very first read misses.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5301);
+        info->set_min_version(1);
+        request.set_min_retain_version(8);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(1, total_reads);
+        EXPECT_EQ(1, not_found_reads);
+        ASSERT_EQ(1, response.tablet_infos_size());
+        // The floor must NOT advance to 9: version 5 is still down there and still has to be walked.
+        EXPECT_EQ(1, response.tablet_infos(0).min_version());
+    }
+
+    // Round 2: the retain boundary lands on a materialized version again. Version 5 is still reachable,
+    // which it would not be had round 1 pushed the floor above it.
+    total_reads = 0;
+    not_found_reads = 0;
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        auto* info = request.add_tablet_infos();
+        info->set_tablet_id(5301);
+        info->set_min_version(1);
+        request.set_min_retain_version(5);
+        request.set_grace_timestamp(1000);
+        request.set_min_active_txn_id(99999);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(1, total_reads);
+        EXPECT_EQ(0, not_found_reads);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(5301, 5)));
+    }
+}
+
+// With file bundling on, vacuum also deletes each tablet's own version-1 metadata -- the initial file
+// create_tablet writes under the tablet id rather than into a bundle. That delete is only legal when
+// version 1 falls inside the partition-level deletable range; an empty range means nothing at all may
+// be deleted this round.
+TEST_P(LakeVacuumTest, test_vacuum_bundle_keeps_v1_metadata_when_range_empty) {
+    for (int64_t tablet_id : {700, 701}) {
+        auto v1 = json_to_pb<TabletMetadataPB>(R"DEL(
+            {
+                "version": 1,
+                "commit_time": 2000
+            }
+            )DEL");
+        v1->set_id(tablet_id);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(v1));
+        auto v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+            {
+                "version": 2,
+                "prev_garbage_version": 1,
+                "commit_time": 2000
+            }
+            )DEL");
+        v2->set_id(tablet_id);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(v2));
+    }
+    ASSERT_TRUE(file_exist(tablet_metadata_filename(700, 1)));
+    ASSERT_TRUE(file_exist(tablet_metadata_filename(701, 1)));
+
+    auto make_request = [](VacuumRequest* request, int64_t grace_timestamp) {
+        request->set_delete_txn_log(false);
+        for (int64_t tablet_id : {700, 701}) {
+            auto* info = request->add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(1);
+        }
+        request->set_min_retain_version(2);
+        request->set_grace_timestamp(grace_timestamp);
+        request->set_min_active_txn_id(99999);
+        request->set_enable_file_bundling(true);
+        request->set_enable_shared_file_cleanup(true);
+    };
+
+    // Both versions were committed inside the grace window, so no tablet contributes a deletable range
+    // and the partition range stays empty. Before the fix the empty range still satisfied
+    // `min_version <= 1` and vacuum deleted both tablets' version-1 metadata, reporting 2 vacuumed files.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        make_request(&request, 1000);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 1)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(701, 1)));
+    }
+
+    // Once the grace timestamp moves past the commit time the range becomes [1, 2), which does contain
+    // version 1: the special case still applies and both files go away.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        make_request(&request, 3000);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        // Two per-tablet version-1 files plus the (absent) bundle file for version 1.
+        EXPECT_EQ(3, response.vacuumed_files());
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(700, 1)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 1)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(701, 2)));
+    }
 }
 
 } // namespace starrocks::lake

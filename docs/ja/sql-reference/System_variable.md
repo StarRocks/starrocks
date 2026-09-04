@@ -1211,6 +1211,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: バイト
 * **データ型**: Int
 
+### max_array_length
+
+* **スコープ**: Session
+* **説明**: 配列関数が生成する配列に含まれる要素の最大数です。関数がこの上限を超える配列を生成した場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。この上限は配列を生成するすべての関数を対象としていますが、現時点では [array_agg](sql-functions/array-functions/array_agg.md) のみがチェックします。
+* **デフォルト**: 0
+* **タイプ**: Long
+* **導入バージョン**: v4.2
+
 ### max_pipeline_dop
 
 * **スコープ**: Session
@@ -1285,6 +1293,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: StarRocks が Hive から ORC ファイルを読み取る際に列がどのように一致するかを指定するために使用されます。デフォルト値は `false` で、ORC ファイル内の列は Hive テーブル定義内の順序位置に基づいて読み取られます。この変数が `true` に設定されている場合、列は名前に基づいて読み取られます。
 * **デフォルト**: false
 * **導入バージョン**: v3.1.10
+
+### paimon_reader_mode
+
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
+* **デフォルト**: AUTO
+* **データ型**: String
+* **導入バージョン**: v4.2
 
 ### parallel_exchange_instance_num
 

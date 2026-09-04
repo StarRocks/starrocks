@@ -699,6 +699,12 @@ struct TPaimonTable {
 
     // reuse iceberg schema here, used to support schema evolution
     4: optional TIcebergSchema paimon_schema
+
+    // Paimon table base path used by the C++ native reader
+    5: optional string paimon_table_path
+
+    // Paimon TableSchema serialized as JSON at planning time
+    6: optional string paimon_table_schema_json
 }
 
 struct TFlussTable {
