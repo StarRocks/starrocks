@@ -1019,14 +1019,18 @@ public class DatabaseTransactionMgr {
     }
 
     // tableIdList is a plain ArrayList that an explicit BEGIN...INSERT can grow lock-free (addTableIdList),
-    // so this snapshot races with a concurrent add. That is safe here without extra synchronization:
-    // new ArrayList<>(list) copies via Arrays.copyOf, which does not check modCount (so it cannot throw
-    // ConcurrentModificationException) and copies min(array length, size) elements (so it cannot overrun).
-    // The worst case under a concurrent add is a slightly stale id set on this best-effort diagnostic
-    // column, never an exception; explicit-transaction rows are documented as best-effort.
+    // so this snapshot races with a concurrent add. Copying first is what keeps that race benign: the copy
+    // constructor goes through toArray, which does not check modCount, so it cannot throw
+    // ConcurrentModificationException the way streaming the live list could.
+    //
+    // The copy is not automatically null-free though. toArray reads the backing array and the size as two
+    // separate steps, so if the writer grows the array in between, Arrays.copyOf allocates for the newer
+    // size and pads the tail with nulls rather than truncating. String.valueOf would then render a literal
+    // "null" into TABLE_IDS, and resolveTableNames would carry it into TABLE_NAMES. Drop the padding so a
+    // diagnostic column can under-report an id that was mid-attach but can never invent one.
     private static String joinTableIds(TransactionState txnState) {
         List<Long> copy = new ArrayList<>(txnState.getTableIdList());
-        return copy.stream().map(String::valueOf).collect(Collectors.joining(","));
+        return copy.stream().filter(Objects::nonNull).map(String::valueOf).collect(Collectors.joining(","));
     }
 
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
