@@ -254,7 +254,8 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     Status run_st = runner.wait();
     if (const auto skipped = _skipped_pairs.load(std::memory_order_relaxed); skipped > 0 && run_st.ok()) {
         // One line per tablet, not per segment. Says the alter succeeded with
-        // partial index coverage, which is otherwise only visible in a metric.
+        // partial index coverage, which is otherwise invisible: the alter reports
+        // FINISHED and queries stay correct, so nothing else signals it.
         LOG(INFO) << "ADD INDEX fast path: tablet=" << _new_tablet.id() << " txn_id=" << _txn_id << " skipped "
                   << skipped << " (segment, index) pair(s) whose column is absent from the segment; those rows "
                   << "read as the column default and carry no index until rewritten under a schema that has one. "
