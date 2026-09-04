@@ -17,6 +17,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "schema_scanner/builtin_schema_scanner_factory.h"
 #include "schema_scanner/schema_dummy_scanner.h"
+#include "schema_scanner/schema_running_transactions_scanner.h"
 #include "schema_scanner/schema_tables_scanner.h"
 #include "schema_scanner/schema_tablet_reshard_jobs_scanner.h"
 
@@ -37,6 +38,15 @@ TEST_F(SchemaScannerTest, test_create) {
         auto scanner = factory->create(TSchemaTableType::SCH_TABLES);
         ASSERT_NE(scanner, nullptr);
         ASSERT_NE(dynamic_cast<SchemaTablesScanner*>(scanner.get()), nullptr);
+    }
+    {
+        // information_schema.running_transactions must resolve to its own scanner. Without the factory case
+        // the type falls through to the dummy scanner, and the view returns no rows with no error, which is
+        // the worst failure mode for a diagnostic table.
+        auto scanner = factory->create(TSchemaTableType::SCH_RUNNING_TRANSACTIONS);
+        ASSERT_NE(scanner, nullptr);
+        ASSERT_NE(dynamic_cast<SchemaRunningTransactionsScanner*>(scanner.get()), nullptr);
+        ASSERT_EQ(dynamic_cast<SchemaDummyScanner*>(scanner.get()), nullptr);
     }
     {
         // Test default case
