@@ -1082,7 +1082,10 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     const uint32_t rowset_id = metadata->next_rowset_id();
     uint32_t new_del_rebuild_rssid = rowset_id; // default value if no insert rows
 
-    auto& index = dynamic_cast<LakePersistentIndex&>(index_entry->value());
+    // No cast: the index cache is DynamicCache<uint64_t, LakePersistentIndex>, so value() already
+    // returns one. This was a dynamic_cast to the cache's own value type from back when it held a
+    // base class, and stayed a no-op through both of the index's de-inheritance changes.
+    auto& index = index_entry->value();
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
     RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
