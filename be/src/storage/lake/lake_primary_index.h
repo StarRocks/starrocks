@@ -221,7 +221,7 @@ public:
 
     // Stamp the version every memtable entry written by this publish carries. Called once, before
     // any upsert/erase, by UpdateManager::prepare_primary_index.
-    Status prepare(const EditVersion& version);
+    Status prepare(int64_t version);
 
     // Drop the loaded index, so the next lake_load() rebuilds it. [thread-safe]
     void unload();
@@ -229,17 +229,11 @@ public:
     bool is_loaded() const;
     Status get_load_status() const;
     std::size_t memory_usage() const;
-    size_t key_size() const { return _key_size; }
-
     std::string to_string() const;
 
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);
-
-    // Derive the encoded-key layout from the tablet's primary-key columns. Replaces
-    // PrimaryIndex::_set_schema(), minus the in-memory hash index it also allocated.
-    void _set_pk_schema(const TabletMetadataPtr& metadata);
 
     void _unload_without_lock();
 
@@ -255,9 +249,6 @@ private:
     Status _status;
 
     int64_t _tablet_id = 0;
-    // Encoded primary-key layout, set by _set_pk_schema() at load time.
-    Schema _pk_schema;
-    size_t _key_size = 0;
 
     // We don't support multi version yet, but we record the latest data version for some checking
     int64_t _data_version = 0;
