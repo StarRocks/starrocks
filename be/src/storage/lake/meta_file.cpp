@@ -493,76 +493,59 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
                     "apply_add_index: refusing to install schema version $0 over newer version $1. tablet=$2",
                     target_version, schema->schema_version(), _tablet_meta->id()));
         }
-        // Install FE's schema, then restore the parts of the tablet schema FE's
-        // converted schema cannot express.
+        // Replace only what the column set drags along: the columns themselves and
+        // the fields that index INTO them by ordinal. ADD INDEX changes no key
+        // type, no compression, no bookkeeping, so everything else the tablet
+        // already holds stays correct.
         //
-        // Why install wholesale rather than just the columns: several fields index
-        // INTO the column list -- sort_key_idxes and num_short_key_columns are
-        // column ordinals. ADD COLUMN does not always append (FE's
+        // sort_key_idxes / num_short_key_columns must move WITH the columns because
+        // they are column ordinals, and ADD COLUMN does not always append -- FE's
         // checkAndAddColumn inserts at a position for ... AFTER c / FIRST, and puts
-        // a new KEY column right after the last key), so replacing the columns
-        // while keeping the old ordinals would silently misalign the sort key.
-        // Those fields have to move together with the columns.
+        // a new KEY column right after the last key -- so keeping old ordinals
+        // beside new columns would silently misalign the sort key.
         //
-        // Why restore afterwards: convert_t_schema_to_pb_schema() produces a schema
-        // shaped by what FE knows, not a complete TabletSchemaPB.
-        //   - dropped_table_indices: FE never emits it. It is the tombstone a
-        //     metadata-only DROP INDEX leaves so readers do not reinterpret the
-        //     footer payload the drop could not erase. Losing it makes
-        //     ColumnReader::has_original_bloom_filter_index() accept a footer
-        //     holding an NGRAM bloom as if it were a plain one, pruning away
-        //     matching rows. This is the one that silently corrupts results.
-        //   - table_indices: FE emits no entry for a PLAIN bloom filter, which
-        //     lives in the table-level bloom_filter_columns property rather than as
-        //     an FE Index object (LakeTableAddIndexJob.applyCatalogMutation). A
-        //     wholesale copy would drop entries an earlier fast-path ADD INDEX
-        //     appended. Keep the old list; step 2 appends this alter's own.
-        //   - next_column_unique_id: a monotonic allocation high-water mark, which
-        //     FE recomputes from its CURRENT column set -- so on a table that has
-        //     dropped columns FE's value can be lower than ids already handed out.
-        //     Taken as max() rather than restored outright: FE's is the higher one
-        //     right after an ADD COLUMN, and letting the mark move backwards risks
-        //     handing the same unique id to two different columns.
-        //   - num_rows_per_row_block: FE fills this from a BE config default, not
-        //     from the value the table was created with.
-        //   - bf_fpp: FE only sets it once the table has bloom-filter columns, so
-        //     the very first BF add would otherwise reset a configured fpp.
+        // Everything outside that set is preserved by DEFAULT, which is the safe
+        // direction: op.new_schema() comes from convert_t_schema_to_pb_schema(),
+        // shaped by what FE knows rather than a complete TabletSchemaPB. It never
+        // emits dropped_table_indices -- the tombstone a metadata-only DROP INDEX
+        // leaves so readers do not reinterpret the footer payload it could not
+        // erase; dropping that makes has_original_bloom_filter_index() accept an
+        // NGRAM bloom as a plain one and prune away matching rows. It also emits no
+        // table_indices entry for a plain bloom filter (that lives in the
+        // table-level property, not as an FE Index object) and recomputes
+        // num_rows_per_row_block / bf_fpp from its own view. Copying the whole
+        // message and rescuing those by hand is one omission away from the same
+        // corruption, so the narrow replace is both shorter and safer.
         //
         // Per-column index flags merge one-way (set, never cleared): they are what
         // SegmentWriter gates index construction on, so a flag bumped by an earlier
         // fast-path ADD INDEX whose FE-side catalog mutation has not landed must
         // survive. An extra flag only costs work; a missing one loses the index.
         //
-        // MetaFileTest.test_apply_add_index_preserves_be_only_schema_fields pins
-        // this, including a guard on TabletSchemaPB's field count so a new field
-        // forces a decision here rather than being silently inherited from FE.
-        TabletSchemaPB preserved;
-        preserved.mutable_dropped_table_indices()->CopyFrom(schema->dropped_table_indices());
-        preserved.mutable_table_indices()->CopyFrom(schema->table_indices());
-        const bool had_next_uid = schema->has_next_column_unique_id();
-        const uint32_t old_next_uid = schema->next_column_unique_id();
-        const bool had_rows_per_block = schema->has_num_rows_per_row_block();
-        const int32_t old_rows_per_block = schema->num_rows_per_row_block();
-        const bool had_bf_fpp = schema->has_bf_fpp();
-        const double old_bf_fpp = schema->bf_fpp();
+        // Pinned by MetaFileTest.test_apply_add_index_preserves_be_only_schema_fields,
+        // with a guard on TabletSchemaPB's field count so a newly added field forces
+        // a decision on whether it belongs to the column-layout set.
         std::unordered_map<int32_t, std::pair<bool, bool>> prior_index_flags;
         for (const auto& col : schema->column()) {
             prior_index_flags.emplace(col.unique_id(), std::make_pair(col.has_bitmap_index(), col.is_bf_column()));
         }
 
-        schema->CopyFrom(op.new_schema());
+        schema->mutable_column()->CopyFrom(op.new_schema().column());
+        schema->mutable_sort_key_idxes()->CopyFrom(op.new_schema().sort_key_idxes());
+        schema->mutable_sort_key_unique_ids()->CopyFrom(op.new_schema().sort_key_unique_ids());
+        if (op.new_schema().has_num_short_key_columns()) {
+            schema->set_num_short_key_columns(op.new_schema().num_short_key_columns());
+        }
+        // The allocation high-water mark belongs to the column set too -- FE just
+        // handed out the added column's unique id, so its value leads. Taken as
+        // max() because FE recomputes it from its CURRENT columns, which on a table
+        // that has dropped columns can sit below ids already issued; letting the
+        // mark move backwards risks handing the same id out twice.
+        if (op.new_schema().has_next_column_unique_id()) {
+            schema->set_next_column_unique_id(
+                    std::max(schema->next_column_unique_id(), op.new_schema().next_column_unique_id()));
+        }
 
-        schema->mutable_dropped_table_indices()->CopyFrom(preserved.dropped_table_indices());
-        schema->mutable_table_indices()->CopyFrom(preserved.table_indices());
-        if (had_next_uid) {
-            schema->set_next_column_unique_id(std::max(old_next_uid, schema->next_column_unique_id()));
-        }
-        if (had_rows_per_block) {
-            schema->set_num_rows_per_row_block(old_rows_per_block);
-        }
-        if (had_bf_fpp && !op.new_schema().has_bf_fpp()) {
-            schema->set_bf_fpp(old_bf_fpp);
-        }
         for (auto& col : *schema->mutable_column()) {
             auto it = prior_index_flags.find(col.unique_id());
             if (it == prior_index_flags.end()) {

@@ -254,11 +254,6 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
 
-## `lake_add_index_segments_skipped_total`
-
-- 单位: 个
-- 描述: 存算分离 `ADD INDEX` 快速路径因索引列在该 segment 中物理不存在而未能构建的 (segment, index) 对的计数。对于通过 `ALTER TABLE ... ADD COLUMN` 新增的列，这是正常结果：该操作只更新元数据、不重写历史 segment，这些行读取该列的默认值，因此查询结果依然正确，只是无法利用索引进行裁剪。当后续重写（例如 compaction）解析到带有该索引的 schema 时，对应 segment 才会获得索引。该指标是 BE 生命周期内跳过事件的单调累计计数，而非当前覆盖状态的 gauge —— 重写补齐后不会递减，跳过后失败的 alter 也会计入。可用它观察该情况是否发生以及发生的频率，但它无法回答"当前索引覆盖是否完整"。
-
 ## `lake_compaction_failed`
 
 - 单位：计数

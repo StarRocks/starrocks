@@ -3650,12 +3650,13 @@ TEST_F(MetaFileTest, test_apply_add_index_accepts_legacy_standalone_schema_id) {
     EXPECT_TRUE(schema->column(0).has_bitmap_index());
 }
 
-// Guard: apply_add_index() decides, field by field, whether TabletSchemaPB content
-// comes from FE's converted schema or is preserved from tablet metadata. A newly
-// added field silently inherits the FE side, which is wrong for anything BE-only
-// (see dropped_table_indices, whose loss corrupts read results). If this trips,
-// classify the new field and update the install block in apply_add_index, then
-// bump the expected count here.
+// Guard: apply_add_index() replaces only the column-layout fields of
+// TabletSchemaPB (columns plus what indexes into them by ordinal) and preserves
+// everything else. A newly added field is therefore preserved by default, which is
+// the safe direction -- but if the new field belongs to the column-layout set it
+// must be added to the replace list, or it will drift out of sync with the columns
+// exactly the way sort_key_idxes would. If this trips, classify the new field,
+// update the install block in apply_add_index if needed, then bump the count.
 TEST_F(MetaFileTest, test_tablet_schema_pb_field_count_guard) {
     EXPECT_EQ(17, TabletSchemaPB::descriptor()->field_count())
             << "TabletSchemaPB gained or lost a field. Decide whether apply_add_index must preserve it "

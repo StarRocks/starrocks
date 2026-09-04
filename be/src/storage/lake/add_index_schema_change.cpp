@@ -47,7 +47,6 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
-#include "storage/storage_metrics.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
@@ -430,8 +429,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
             // for every historical segment of a table whose indexed column was added
             // by ALTER, so an INFO line here means one line per (segment, index) --
             // potentially millions during a single alter on a large table, for a
-            // benign condition. run() logs one aggregate line per tablet instead,
-            // and lake_add_index_segments_skipped_total carries the count.
+            // benign condition. run() logs one aggregate line per tablet instead.
             VLOG(2) << "ADD INDEX fast path: skipping index type " << static_cast<int>(ix.index_type()) << " on column "
                     << column->name() << " (unique_id " << column->unique_id() << "): absent from segment " << seg_name
                     << ". tablet=" << _new_tablet.id() << " txn_id=" << _txn_id;
@@ -440,7 +438,6 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
         to_build.emplace_back(&ix, column);
     }
     if (skipped > 0) {
-        StorageMetrics::instance()->lake_add_index_segments_skipped_total.increment(skipped);
         _skipped_pairs.fetch_add(skipped, std::memory_order_relaxed);
     }
     if (to_build.empty()) {

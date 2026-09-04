@@ -55,7 +55,6 @@
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
-#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage_primitive/column_predicate.h"
@@ -1571,7 +1570,6 @@ TEST_F(AddIndexSchemaChangeTest, run_plain_bloom_on_alter_added_column_skips_abs
 
     auto authoritative = schema_with_added_column(*base_metadata, /*nullable=*/true, /*default_value=*/"0");
     const size_t idx_before = count_idx_files();
-    const auto skipped_before = StorageMetrics::instance()->lake_add_index_segments_skipped_total.value();
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c5_uid)};
@@ -1586,7 +1584,6 @@ TEST_F(AddIndexSchemaChangeTest, run_plain_bloom_on_alter_added_column_skips_abs
     // No .idx file, not even an empty one: allocation happens only after at
     // least one index is known to be buildable on the segment.
     EXPECT_EQ(idx_before, count_idx_files());
-    EXPECT_EQ(skipped_before + 1, StorageMetrics::instance()->lake_add_index_segments_skipped_total.value());
 }
 
 TEST_F(AddIndexSchemaChangeTest, run_bitmap_on_alter_added_column_skips_absent_segment) {
