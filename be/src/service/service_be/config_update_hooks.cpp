@@ -1,0 +1,611 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "service/service_be/config_update_hooks.h"
+
+#include <algorithm>
+#include <string>
+#include <vector>
+
+#include "agent/agent_common.h"
+#include "agent/agent_server.h"
+#include "base/statusor.h"
+#include "base/string/parse_util.h"
+#include "cache/datacache.h"
+#include "cache/datacache_utils.h"
+#include "cache/mem_cache/page_cache.h"
+#include "common/compiler_util.h"
+#include "common/config_agent_fwd.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_env_fwd.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_llm_fwd.h"
+#include "common/config_memory_allocator_fwd.h"
+#include "common/config_merge_commit_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_runtime_fwd.h"
+#include "common/config_staros_worker_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/config_update_registry.h"
+#include "common/config_vector_index_fwd.h"
+#include "common/logging.h"
+#include "common/status.h"
+#include "common/system/cpu_info.h"
+#include "common/thread/priority_thread_pool.hpp"
+#include "common/util/bthreads/executor.h"
+#include "compute_env/ai/ai_executor.h"
+#include "compute_env/compute_env.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "data_workflows/load/batch_write/batch_write_mgr.h"
+#include "data_workflows/load/tablet_writer/load_channel_mgr.h"
+#include "exec/exec_env.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
+#include "runtime/runtime_env.h"
+#include "service/core_dump_resource_releaser.h"
+#include "storage/compaction_manager.h"
+#include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
+#include "storage/memtable_flush_executor.h"
+#include "storage/persistent_index_compaction_manager.h"
+#include "storage/persistent_index_load_executor.h"
+#include "storage/segment_flush_executor.h"
+#include "storage/segment_replicate_executor.h"
+#include "storage/storage_engine.h"
+#include "storage/storage_env.h"
+#include "storage/update_manager.h"
+
+#ifdef USE_STAROS
+#include "common/gflags_utils.h"
+#include "compute_env/staros/staros_starcache.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
+#endif // USE_STAROS
+
+namespace starrocks {
+namespace {
+
+StatusOr<AIExecutor*> resolve_ai_executor(ExecEnv* exec_env) {
+    if (exec_env == nullptr) {
+        return Status::InternalError("AI config update requires an ExecEnv");
+    }
+    auto* compute_env = exec_env->compute_env();
+    if (compute_env == nullptr) {
+        return Status::InternalError("AI config update requires an initialized ComputeEnv");
+    }
+    auto* ai_executor = compute_env->ai_executor();
+    if (ai_executor == nullptr) {
+        return Status::InternalError("AI config update requires an initialized AIExecutor");
+    }
+    return ai_executor;
+}
+
+} // namespace
+
+void register_ai_config_update_hooks(ExecEnv* exec_env) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    registry->register_callback("ai_function_request_timeout_ms", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_request_timeout_ms(config::ai_function_request_timeout_ms);
+    });
+    registry->register_callback("ai_function_connect_timeout_ms", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_connect_timeout_ms(config::ai_function_connect_timeout_ms);
+    });
+    registry->register_callback("ai_function_max_response_bytes", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_response_bytes(config::ai_function_max_response_bytes);
+    });
+    registry->register_callback("ai_function_worker_thread_num", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_worker_thread_num(config::ai_function_worker_thread_num);
+    });
+    registry->register_callback("ai_function_sub_chunk_size", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_sub_chunk_size(config::ai_function_sub_chunk_size);
+    });
+    registry->register_callback("ai_function_max_retries", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_retries(config::ai_function_max_retries);
+    });
+    registry->register_callback("ai_function_max_retries_on_throttle", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_retries_on_throttle(config::ai_function_max_retries_on_throttle);
+    });
+    registry->register_callback("ai_function_on_error", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_on_error(config::ai_function_on_error.value());
+    });
+    registry->register_callback("ai_function_rate_limit_qps_chat", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_rate_limit_qps_chat(config::ai_function_rate_limit_qps_chat);
+    });
+    registry->register_callback("ai_function_max_inflight", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_inflight(config::ai_function_max_inflight);
+    });
+}
+
+void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_env, LoadChannelMgr* load_channel_mgr,
+                                  BatchWriteMgr* batch_write_mgr) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    const auto* runtime_env_ptr = &runtime_env;
+
+    register_ai_config_update_hooks(exec_env);
+
+    registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
+        refresh_core_dump_resource_releaser_config();
+        return Status::OK();
+    });
+
+    // jemalloc has already read JEMALLOC_CONF by the time we get here. init() takes the
+    // option string that actually took effect as the baseline, and republishes it as
+    // `jemalloc_conf` when the config claims something else.
+    JemallocConfUpdater::instance().init(config::jemalloc_conf.value());
+    registry->register_callback("jemalloc_conf", []() -> Status {
+        return JemallocConfUpdater::instance().update(config::jemalloc_conf.value());
+    });
+
+    registry->register_callback("scanner_thread_pool_thread_num", [=]() -> Status {
+        LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
+        runtime_env_ptr->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
+        return Status::OK();
+    });
+#ifndef __APPLE__
+    registry->register_callback("storage_page_cache_limit", [=]() -> Status {
+        StoragePageCache* cache = DataCache::GetInstance()->page_cache();
+        if (cache == nullptr || !cache->is_initialized()) {
+            return Status::InternalError("Page cache is not initialized");
+        }
+
+        ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_datacache_limit());
+        cache_limit = DataCache::GetInstance()->check_datacache_limit(cache_limit);
+        cache->set_capacity(cache_limit);
+        return Status::OK();
+    });
+#ifdef WITH_TENANN
+    registry->register_callback("vector_query_cache_capacity", [=]() -> Status {
+        auto* cache = StorageEnv::GetInstance()->vector_index_cache();
+        if (cache == nullptr) {
+            return Status::InternalError("Vector index cache is not initialized");
+        }
+        const int64_t proc_mem = RuntimeEnv::GetInstance()->process_mem_limit();
+        ASSIGN_OR_RETURN(int64_t limit, ParseUtil::parse_mem_spec(config::vector_query_cache_capacity, proc_mem));
+        if (limit < 0) limit = 0;
+        if (static_cast<size_t>(limit) == cache->capacity()) {
+            return Status::OK();
+        }
+        cache->SetCapacity(static_cast<size_t>(limit));
+        LOG(INFO) << "vector_query_cache_capacity updated: " << config::vector_query_cache_capacity << " => " << limit
+                  << " bytes";
+        return Status::OK();
+    });
+#endif // WITH_TENANN
+#endif
+#ifndef __APPLE__
+    registry->register_callback("disable_storage_page_cache", [=]() -> Status {
+        StoragePageCache* cache = DataCache::GetInstance()->page_cache();
+        if (cache == nullptr || !cache->is_initialized()) {
+            return Status::InternalError("Page cache is not initialized");
+        }
+        if (config::disable_storage_page_cache) {
+            cache->set_capacity(0);
+        } else {
+            ASSIGN_OR_RETURN(int64_t cache_limit, DataCache::GetInstance()->get_datacache_limit());
+            cache_limit = DataCache::GetInstance()->check_datacache_limit(cache_limit);
+            cache->set_capacity(cache_limit);
+        }
+        return Status::OK();
+    });
+#endif
+#ifndef __APPLE__
+    registry->register_callback("datacache_mem_size", [=]() -> Status {
+        LocalMemCacheEngine* cache = DataCache::GetInstance()->local_mem_cache();
+        if (cache == nullptr || !cache->is_initialized()) {
+            return Status::InternalError("Local cache is not initialized");
+        }
+
+        size_t mem_size = 0;
+        Status st = DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size,
+                                                                  runtime_env_ptr->process_mem_limit(), &mem_size);
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to update datacache mem size";
+            return st;
+        }
+        return cache->update_mem_quota(mem_size);
+    });
+    registry->register_callback("datacache_disk_size", [=]() -> Status {
+        LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
+        if (cache == nullptr || !cache->is_initialized()) {
+            return Status::InternalError("Local cache is not initialized");
+        }
+
+        std::vector<DirSpace> spaces;
+        cache->disk_spaces(&spaces);
+        for (auto& space : spaces) {
+            ASSIGN_OR_RETURN(int64_t disk_size, DataCacheUtils::parse_conf_datacache_disk_size(
+                                                        space.path, config::datacache_disk_size, -1));
+            if (disk_size < 0) {
+                LOG(WARNING) << "Failed to update datacache disk spaces for the invalid disk_size: " << disk_size;
+                return Status::InternalError("Fail to update datacache disk spaces");
+            }
+            space.size = disk_size;
+        }
+        return cache->update_disk_spaces(spaces);
+    });
+    registry->register_callback("datacache_inline_item_count_limit", [=]() -> Status {
+        LocalDiskCacheEngine* cache = DataCache::GetInstance()->local_disk_cache();
+        if (cache == nullptr || !cache->is_initialized()) {
+            return Status::InternalError("Local cache is not initialized");
+        }
+        return cache->update_inline_cache_count_limit(config::datacache_inline_item_count_limit);
+    });
+#endif
+    registry->register_callback("max_compaction_concurrency", [=]() -> Status {
+        if (!config::enable_event_based_compaction_framework) {
+            return Status::InvalidArgument(
+                    "This parameter is mutable when the Event-based Compaction Framework is enabled.");
+        }
+        return StorageEngine::instance()->compaction_manager()->update_max_threads(config::max_compaction_concurrency);
+    });
+    registry->register_callback("flush_thread_num_per_store", [=]() -> Status {
+        const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
+        Status st1 = StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
+                config::flush_thread_num_per_store * dir_cnt);
+        Status st2 = StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
+                config::flush_thread_num_per_store * dir_cnt);
+        Status st3 = StorageEngine::instance()->segment_flush_executor()->update_max_threads(
+                config::flush_thread_num_per_store * dir_cnt);
+        if (!st1.ok() || !st2.ok() || !st3.ok()) {
+            return Status::InvalidArgument("Failed to update flush_thread_num_per_store.");
+        }
+        return st1;
+    });
+    registry->register_callback("lake_flush_thread_num_per_store", [=]() -> Status {
+        return StorageEngine::instance()->lake_memtable_flush_executor()->update_max_threads(
+                MemTableFlushExecutor::calc_max_threads_for_lake_table(StorageEngine::instance()->get_stores()));
+    });
+    registry->register_callback("update_compaction_num_threads_per_disk", [=]() -> Status {
+        StorageEngine::instance()->increase_update_compaction_thread(config::update_compaction_num_threads_per_disk);
+        return Status::OK();
+    });
+    registry->register_callback("pindex_major_compaction_num_threads", [=]() -> Status {
+        PersistentIndexCompactionManager* mgr =
+                StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
+        if (mgr != nullptr) {
+            const int max_pk_index_compaction_thread_cnt = std::max(1, config::pindex_major_compaction_num_threads);
+            return mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
+        }
+        return Status::OK();
+    });
+    registry->register_callback("pindex_load_thread_pool_num_max", [=]() -> Status {
+        LOG(INFO) << "Set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
+        return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
+    });
+    registry->register_callback("update_memory_limit_percent", [=]() -> Status {
+        Status st = StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
+                config::update_memory_limit_percent);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+        st = StorageEnv::GetInstance()->lake_update_manager()->update_primary_index_memory_limit(
+                config::update_memory_limit_percent);
+#endif
+        return st;
+    });
+    registry->register_callback("dictionary_cache_refresh_threadpool_size", [=]() -> Status {
+        auto* thread_pool = runtime_env_ptr->dictionary_cache_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(config::dictionary_cache_refresh_threadpool_size);
+        }
+        return Status::OK();
+    });
+    registry->register_callback("transaction_publish_version_worker_count", [=]() -> Status {
+        Status st1 = ExecEnv::GetInstance()
+                             ->agent_server()
+                             ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                             ->update_max_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                           config::transaction_publish_version_worker_count));
+        Status st2 = runtime_env_ptr->put_aggregate_metadata_thread_pool()->update_max_threads(
+                std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
+        if (!st1.ok() || !st2.ok()) {
+            return Status::InvalidArgument("Failed to update transaction_publish_version_worker_count.");
+        }
+        return st1;
+    });
+    registry->register_callback("transaction_publish_version_thread_pool_num_min", [=]() -> Status {
+        auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+        return thread_pool->update_min_threads(std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                                        config::transaction_publish_version_thread_pool_num_min));
+    });
+    registry->register_callback("lake_metadata_fetch_thread_count", [=]() -> Status {
+        auto* thread_pool = runtime_env_ptr->lake_metadata_fetch_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(std::max(1, config::lake_metadata_fetch_thread_count));
+        }
+        return Status::OK();
+    });
+    registry->register_callback("parallel_clone_task_per_path", [=]() -> Status {
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE, config::parallel_clone_task_per_path);
+        return Status::OK();
+    });
+    registry->register_callback("make_snapshot_worker_count", [=]() -> Status {
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::MAKE_SNAPSHOT,
+                                                            config::make_snapshot_worker_count);
+        return Status::OK();
+    });
+    registry->register_callback("release_snapshot_worker_count", [=]() -> Status {
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::RELEASE_SNAPSHOT,
+                                                            config::release_snapshot_worker_count);
+        return Status::OK();
+    });
+    registry->register_callback("upload_worker_count", [=]() -> Status {
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::UPLOAD, config::upload_worker_count);
+        return Status::OK();
+    });
+    registry->register_callback("download_worker_count", [=]() -> Status {
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::DOWNLOAD, config::download_worker_count);
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::MOVE, config::download_worker_count);
+        return Status::OK();
+    });
+    registry->register_callback("replication_threads", [=]() -> Status {
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::REMOTE_SNAPSHOT, config::replication_threads);
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::REPLICATE_SNAPSHOT, config::replication_threads);
+        return Status::OK();
+    });
+    registry->register_callback("alter_tablet_worker_count", [=]() -> Status {
+        // alter_tablet_worker_count is one of the inputs into the lake_schema_change
+        // inner pool capacity:
+        //   alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+        // Keep the outer ALTER pool and storage-owned inner pool sized in sync.
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
+        return StorageEngine::instance()->update_lake_schema_change_thread_pool_max();
+    });
+    registry->register_callback("lake_schema_change_per_tablet_parallelism", [=]() -> Status {
+        return StorageEngine::instance()->update_lake_schema_change_thread_pool_max();
+    });
+    registry->register_callback("update_tablet_meta_info_worker_count", [=]() -> Status {
+        exec_env->agent_server()->update_max_thread_by_type(TTaskType::UPDATE_TABLET_META_INFO,
+                                                            std::max(1, config::update_tablet_meta_info_worker_count));
+        return Status::OK();
+    });
+    registry->register_callback("lake_metadata_cache_limit", [=]() -> Status {
+        auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+        return Status::OK();
+    });
+    registry->register_callback("pk_index_parallel_execution_threadpool_max_threads", [=]() -> Status {
+        auto thread_pool = runtime_env_ptr->pk_index_execution_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_partial_update_thread_pool_max_threads", [=]() -> Status {
+        auto thread_pool = runtime_env_ptr->lake_partial_update_thread_pool();
+        if (thread_pool != nullptr) {
+            int max_thread_count = config::lake_partial_update_thread_pool_max_threads;
+            if (max_thread_count <= 0) {
+                max_thread_count = CpuInfo::num_cores() / 2;
+            }
+            return thread_pool->update_max_threads(std::max(1, max_thread_count));
+        }
+        return Status::OK();
+    });
+    registry->register_callback("pk_index_memtable_flush_threadpool_max_threads", [=]() -> Status {
+        auto thread_pool = runtime_env_ptr->pk_index_memtable_flush_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(config::pk_index_memtable_flush_threadpool_max_threads);
+        }
+        return Status::OK();
+    });
+    registry->register_callback("pk_index_parallel_compaction_threadpool_max_threads", [=]() -> Status {
+        auto mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+        if (mgr != nullptr) {
+            return mgr->update_max_threads(config::pk_index_parallel_compaction_threadpool_max_threads);
+        }
+        return Status::OK();
+    });
+#ifdef USE_STAROS
+    registry->register_callback("starlet_use_star_cache", [=]() -> Status {
+        update_staros_starcache();
+        return Status::OK();
+    });
+    registry->register_callback("starlet_star_cache_mem_size_percent", [=]() -> Status {
+        update_staros_starcache();
+        return Status::OK();
+    });
+    registry->register_callback("starlet_star_cache_mem_size_bytes", [=]() -> Status {
+        update_staros_starcache();
+        return Status::OK();
+    });
+#endif
+    registry->register_callback("transaction_apply_worker_count", [=]() -> Status {
+        int max_thread_cnt = CpuInfo::num_cores();
+        if (config::transaction_apply_worker_count > 0) {
+            max_thread_cnt = config::transaction_apply_worker_count;
+        }
+        return StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+    });
+    registry->register_callback("transaction_apply_thread_pool_num_min", [=]() -> Status {
+        int min_thread_cnt = config::transaction_apply_thread_pool_num_min;
+        return StorageEngine::instance()->update_manager()->apply_thread_pool()->update_min_threads(min_thread_cnt);
+    });
+    registry->register_callback("get_pindex_worker_count", [=]() -> Status {
+        int max_thread_cnt = CpuInfo::num_cores();
+        if (config::get_pindex_worker_count > 0) {
+            max_thread_cnt = config::get_pindex_worker_count;
+        }
+        return StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
+                max_thread_cnt);
+    });
+    registry->register_callback("drop_tablet_worker_count", [=]() -> Status {
+        int max_thread_cnt = std::max((int)CpuInfo::num_cores() / 2, (int)1);
+        if (config::drop_tablet_worker_count > 0) {
+            max_thread_cnt = config::drop_tablet_worker_count;
+        }
+        auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+        return thread_pool->update_max_threads(max_thread_cnt);
+    });
+    registry->register_callback("storage_cleanup_worker_count", [=]() -> Status {
+        return StorageEngine::instance()->update_storage_cleanup_thread_pool_max();
+    });
+    registry->register_callback("make_snapshot_worker_count", [=]() -> Status {
+        auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
+        return thread_pool->update_max_threads(config::make_snapshot_worker_count);
+    });
+    registry->register_callback("release_snapshot_worker_count", [=]() -> Status {
+        auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
+        return thread_pool->update_max_threads(config::release_snapshot_worker_count);
+    });
+    registry->register_callback("pipeline_connector_scan_thread_num_per_cpu", [=]() -> Status {
+        LOG(INFO) << "set pipeline_connector_scan_thread_num_per_cpu:"
+                  << config::pipeline_connector_scan_thread_num_per_cpu;
+        if (config::pipeline_connector_scan_thread_num_per_cpu > 0) {
+            ExecEnv::GetInstance()->workgroup_manager()->change_num_connector_scan_threads(
+                    config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+        }
+        return Status::OK();
+    });
+    registry->register_callback("enable_resource_group_cpu_borrowing", [=]() -> Status {
+        LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;
+        ExecEnv::GetInstance()->workgroup_manager()->change_enable_resource_group_cpu_borrowing(
+                config::enable_resource_group_cpu_borrowing);
+        return Status::OK();
+    });
+    registry->register_callback("create_tablet_worker_count", [=]() -> Status {
+        LOG(INFO) << "set create_tablet_worker_count:" << config::create_tablet_worker_count;
+        auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CREATE);
+        return thread_pool->update_max_threads(config::create_tablet_worker_count);
+    });
+    registry->register_callback("check_consistency_worker_count", [=]() -> Status {
+        auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CHECK_CONSISTENCY);
+        return thread_pool->update_max_threads(std::max(1, config::check_consistency_worker_count));
+    });
+    registry->register_callback("load_channel_rpc_thread_pool_num", [=]() -> Status {
+        LOG(INFO) << "set load_channel_rpc_thread_pool_num:" << config::load_channel_rpc_thread_pool_num;
+        if (load_channel_mgr == nullptr) {
+            return Status::InternalError("LoadChannelMgr is not initialized");
+        }
+        return load_channel_mgr->async_rpc_pool()->update_max_threads(config::load_channel_rpc_thread_pool_num);
+    });
+    registry->register_callback("exec_state_report_max_threads", [=]() -> Status {
+        LOG(INFO) << "set exec_state_report_max_threads:" << config::exec_state_report_max_threads;
+        ExecEnv::GetInstance()->workgroup_manager()->change_exec_state_report_max_threads(
+                config::exec_state_report_max_threads);
+        return Status::OK();
+    });
+    registry->register_callback("priority_exec_state_report_max_threads", [=]() -> Status {
+        LOG(INFO) << "set priority_exec_state_report_max_threads:" << config::priority_exec_state_report_max_threads;
+        ExecEnv::GetInstance()->workgroup_manager()->change_priority_exec_state_report_max_threads(
+                config::priority_exec_state_report_max_threads);
+        return Status::OK();
+    });
+    registry->register_callback("number_tablet_writer_threads", [=]() -> Status {
+        int max_delta_writer_thread_num = caculate_delta_writer_thread_num(config::number_tablet_writer_threads);
+        LOG(INFO) << "set max delta writer thread num: " << max_delta_writer_thread_num;
+        bthreads::ThreadPoolExecutor* executor =
+                static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());
+        return executor->get_thread_pool()->update_max_threads(max_delta_writer_thread_num);
+    });
+    registry->register_callback("compact_threads", [=]() -> Status {
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
+        if (tablet_manager != nullptr) {
+            tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+        }
+        return Status::OK();
+    });
+    auto refresh_load_spill_block_merge_executor = [=]() -> Status {
+        // The change of load spill merge memory will be reflected in the max thread cnt of load spill merge pool.
+        if (UNLIKELY(exec_env->compute_env() == nullptr)) {
+            return Status::InternalError("ComputeEnv is NULL");
+        }
+        auto* executor = exec_env->compute_env()->load_spill_block_merge_executor();
+        if (UNLIKELY(executor == nullptr)) {
+            return Status::InternalError("LoadSpillBlockMergeExecutor init failed");
+        }
+        return executor->refresh_max_thread_num();
+    };
+    registry->register_callback("load_spill_merge_memory_limit_percent", refresh_load_spill_block_merge_executor);
+    registry->register_callback("load_spill_merge_max_thread", refresh_load_spill_block_merge_executor);
+    registry->register_callback("load_spill_memory_usage_per_merge", refresh_load_spill_block_merge_executor);
+    registry->register_callback("merge_commit_txn_state_cache_capacity", [=]() -> Status {
+        LOG(INFO) << "set merge_commit_txn_state_cache_capacity: " << config::merge_commit_txn_state_cache_capacity;
+        if (batch_write_mgr) {
+            batch_write_mgr->set_txn_state_cache_capacity(config::merge_commit_txn_state_cache_capacity);
+        }
+        return Status::OK();
+    });
+
+#ifdef USE_STAROS
+#define UPDATE_STARLET_CONFIG(BE_CONFIG, STARLET_CONFIG)                                           \
+    registry->register_callback(#BE_CONFIG, [=]() {                                                \
+        auto val = std::to_string(config::BE_CONFIG);                                              \
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue(#STARLET_CONFIG, val).empty()) { \
+            LOG(WARNING) << "Failed to update " << #STARLET_CONFIG;                                \
+            return Status::InvalidArgument("Failed to update " + std::string(#BE_CONFIG) + ".");   \
+        }                                                                                          \
+        return Status::OK();                                                                       \
+    });
+
+    UPDATE_STARLET_CONFIG(starlet_cache_thread_num, cachemgr_threadpool_size);
+    UPDATE_STARLET_CONFIG(starlet_fs_stream_buffer_size_bytes, fs_stream_buffer_size_bytes);
+    UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_enable, fs_enable_buffer_prefetch);
+    UPDATE_STARLET_CONFIG(starlet_fs_read_prefetch_threadpool_size, fs_buffer_prefetch_threadpool_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_max_retries, fslib_s3client_nonread_max_retries);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3client_nonread_retry_scale_factor, fslib_s3client_nonread_retry_scale_factor);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3client_connect_timeout_ms, fslib_s3client_connect_timeout_ms);
+    registry->register_callback("object_storage_request_timeout_ms", []() {
+        auto timeout = starlet_request_timeout_ms(config::object_storage_request_timeout_ms,
+                                                  config::enable_poco_client_for_aws_sdk);
+        if (!timeout) {
+            return Status::InvalidArgument("object_storage_request_timeout_ms exceeds Starlet's int32 range.");
+        }
+        auto val = std::to_string(*timeout);
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_request_timeout_ms", val).empty()) {
+            LOG(WARNING) << "Failed to update fslib_s3client_request_timeout_ms";
+            return Status::InvalidArgument("Failed to update object_storage_request_timeout_ms.");
+        }
+        return Status::OK();
+    });
+    UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
+    UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_gs_max_single_part_size, fslib_gs_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
+    UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
+#undef UPDATE_STARLET_CONFIG
+
+#ifndef BUILD_FORMAT_LIB
+    registry->register_callback("starlet_filesystem_instance_cache_capacity", [=]() -> Status {
+        LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
+                  << config::starlet_filesystem_instance_cache_capacity;
+        auto worker = get_staros_worker();
+        if (worker) {
+            worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
+        }
+        return Status::OK();
+    });
+#endif
+
+#endif // USE_STAROS
+}
+
+} // namespace starrocks
