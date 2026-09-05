@@ -600,6 +600,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：過去のタブレット SPLIT/MERGE ジョブの最大保持期間。
 - 導入時期：v4.1.0
 
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- デフォルト：1000
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：共有データクラスタにおいて、range-colocate チェッカーが 1 回の `getShardInfo` メンバーシップ読み取りバッチ RPC で StarOS に送信するタブレットの最大数。`1` 未満の値は `1` として扱われます。
+- 導入時期：v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- デフォルト：64
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：range-colocate チェッカーが 1 回の `queryShardGroupStable` 配置収束バッチ RPC で StarOS に送信する PACK シャードグループの最大数。各グループの安定性チェックはサーバー側で計算されるため、バッチを小さくすると RPC 1 回あたりのレイテンシを抑えられ、完全な結果は複数回の呼び出しにわたって組み立てられます。`1` 未満の値は `1` として扱われます。
+- 導入時期：v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：Milliseconds
+- 変更可能：Yes
+- 説明：range-colocate チェッカーの配置収束ネガティブキャッシュの TTL。このウィンドウ内では、StarOS が直前に「未収束」と報告した PACK シャードグループは再問い合わせされず、そのグループが移行中である間の 1 ティックあたりの `queryShardGroupStable` 負荷を抑えます。キャッシュされるのは未収束の結果のみであるため、古いエントリはグループが安定状態に切り替わるのを最大このウィンドウ分だけ遅らせるだけで、早すぎる切り替えを引き起こすことはありません。`0` 以下の値はキャッシュを無効にします。
+- 導入時期：v4.1.3
+
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - デフォルト：true

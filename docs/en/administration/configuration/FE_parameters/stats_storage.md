@@ -600,6 +600,33 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum retention time of historical tablet SPLIT/MERGE jobs.
 - Introduced in: v4.1.0
 
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablets that the range-colocate checker sends to StarOS in a single `getShardInfo` membership-read batch RPC on shared-data clusters. Values less than `1` are treated as `1`.
+- Introduced in: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of PACK shard groups that the range-colocate checker sends to StarOS in a single `queryShardGroupStable` placement-convergence batch RPC. Each group's stability check is computed server-side, so a smaller batch bounds per-RPC latency, and the full result is assembled across repeated calls. Values less than `1` are treated as `1`.
+- Introduced in: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The TTL of the range-colocate checker's placement-convergence negative cache. Within this window, a PACK shard group that StarOS last reported as not yet converged is not re-queried, which throttles the per-tick `queryShardGroupStable` load while the group is still migrating. Only not-converged results are cached, so a stale entry can only delay the group's flip to stable by up to this window, never cause a premature flip. Values less than or equal to `0` disable the cache.
+- Introduced in: v4.1.3
+
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - Default: true

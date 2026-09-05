@@ -246,6 +246,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
 - Introduced in: v3.4.4
 
+### `s3_use_native_sdk_for_glob`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native AWS S3 SDK to resolve glob paths in the FILES() table function for S3 and S3-compatible object stores (`s3`, `s3a`, `s3n`, `oss`, `cosn`, `ks3`, `obs`, and `tos`). When this item is set to `true`, the longest literal prefix of a wildcard is pushed down to S3 `ListObjectsV2` instead of listing the whole parent prefix through Hadoop `globStatus`, which is much faster when the prefix holds many objects but few of them match. Set this item to `false` to fall back to the Hadoop `globStatus` path.
+- Introduced in: v4.1.4
+
 ### `cloud_native_hdfs_url`
 
 - Default: Empty string
