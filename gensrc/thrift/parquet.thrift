@@ -313,6 +313,42 @@ struct JsonType {
 struct BsonType {
 }
 
+// Apache Parquet geospatial annotations. Wire ordinals match parquet-format.
+enum EdgeInterpolationAlgorithm {
+  SPHERICAL = 0;
+  VINCENTY = 1;
+  THOMAS = 2;
+  ANDOYER = 3;
+  KARNEY = 4;
+}
+
+// ISO/OGC WKB in BYTE_ARRAY; absent CRS means OGC:CRS84.
+struct GeometryType {
+  1: optional string crs;
+}
+
+struct GeographyType {
+  1: optional string crs;
+  2: optional EdgeInterpolationAlgorithm algorithm;
+}
+
+// Retained as metadata only. Spatial pruning is not enabled.
+struct BoundingBox {
+  1: optional double xmin;
+  2: optional double xmax;
+  3: optional double ymin;
+  4: optional double ymax;
+  5: optional double zmin;
+  6: optional double zmax;
+  7: optional double mmin;
+  8: optional double mmax;
+}
+
+struct GeospatialStatistics {
+  1: optional BoundingBox bbox;
+  2: optional list<i32> geospatial_types;
+}
+
 /**
  * LogicalType annotations to replace ConvertedType.
  *
@@ -342,6 +378,9 @@ union LogicalType {
   12: JsonType JSON           // use ConvertedType JSON
   13: BsonType BSON           // use ConvertedType BSON
   14: UUIDType UUID           // no compatible ConvertedType
+  // 15 and 16 belong to FLOAT16 and VARIANT in upstream parquet-format.
+  17: GeometryType GEOMETRY
+  18: GeographyType GEOGRAPHY
 }
 
 /**
@@ -759,6 +798,8 @@ struct ColumnMetaData {
   14: optional i64 bloom_filter_offset;
 
   15: optional i32 bloom_filter_length;
+  // 16 is reserved for upstream SizeStatistics.
+  17: optional GeospatialStatistics geospatial_statistics;
 }
 
 struct EncryptionWithFooterKey {
