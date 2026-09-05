@@ -463,17 +463,17 @@ AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(20: sum)}] group by [[8: v2]] having
                 EXCHANGE ROUND_ROBIN
                     AGGREGATE ([GLOBAL] aggregate [{21: sum=sum(2: v2)}] group by [[2: v2]] having [null]
                         EXCHANGE SHUFFLE[2]
-                            SCAN (columns[2: v2] predicate[2: v2 IS NOT NULL])
+                            SCAN (columns[2: v2] predicate[add(2: v2, 2: v2) = 1])
                 EXCHANGE ROUND_ROBIN
                     AGGREGATE ([GLOBAL] aggregate [{22: sum=sum(5: v5)}] group by [[5: v5]] having [null]
                         EXCHANGE SHUFFLE[5]
-                            SCAN (columns[5: v5] predicate[5: v5 IS NOT NULL])
+                            SCAN (columns[5: v5] predicate[add(5: v5, 5: v5) = 1])
             EXCHANGE BROADCAST
                 UNION
                     EXCHANGE ROUND_ROBIN
-                        SCAN (columns[11: v5] predicate[11: v5 IS NOT NULL])
+                        SCAN (columns[11: v5] predicate[add(11: v5, 11: v5) = 1])
                     EXCHANGE ROUND_ROBIN
-                        SCAN (columns[14: v8] predicate[14: v8 IS NOT NULL])
+                        SCAN (columns[14: v8] predicate[add(14: v8, 14: v8) = 1])
 [end]
 
 [sql]

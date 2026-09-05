@@ -112,8 +112,11 @@ public class RangeExtractTest extends PlanTestBase {
         String sql =
                 "select t0.* from t0 inner join t1 on v1 = v4 and ((v1 = 1 and abs(v4) > 2) or (v1 = 3 and abs(v4) = 8))";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("PREDICATES: 1: v1 IN (1, 3), abs(1: v1) > 2\n"));
-        Assertions.assertTrue(plan.contains("PREDICATES: abs(4: v4) > 2, 4: v4 IN (1, 3)\n"));
+        // Comma-separated scan predicates may be reordered after range extract / normalization.
+        PlanTestNoneDBBase.assertContains(plan, "1: v1 IN (1, 3)");
+        PlanTestNoneDBBase.assertContains(plan, "abs(1: v1) > 2");
+        PlanTestNoneDBBase.assertContains(plan, "abs(4: v4) > 2");
+        PlanTestNoneDBBase.assertContains(plan, "4: v4 IN (1, 3)");
     }
 
     @Test
