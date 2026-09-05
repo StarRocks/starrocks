@@ -64,7 +64,7 @@ StarRocks クラスターのメンテナンスを容易にするために、Star
 | HEAD/GET                | `/api/_download_load`                                           | |
 | HEAD/GET                | `/api/_tablet/_download`                                        | |
 | HEAD/GET                | `/api/_load_error_log`                                          | |
-| GET                     | `/api/health`                                                   | |
+| GET                     | `/api/health`                                                   | BE プロセスのヘルス状態を返します。プロセスが正常な間は HTTP 200 を返し、致命的シグナルハンドラーがプロセスを crashing とマークした後は HTTP 503 を返します。これにより、オーケストレーターのヘルスチェック (例: Kubernetes の liveness probe) が、クラッシュハンドラーがハングしたノードを再起動できます。 |
 | GET                     | `/api/_stop_be`                                                 | |
 | GET                     | `/pprof/heap`                                                   | |
 | GET                     | `/pprof/growth`                                                 | |
@@ -95,7 +95,7 @@ StarRocks クラスターのメンテナンスを容易にするために、Star
 
 | リクエストメソッド | リクエストパス                                                    | 説明                                                                                                                 |
 |---------------------|-----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| GET                 | `/api/health`                                                   | |
+| GET                 | `/api/health`                                                   | CN プロセスのヘルス状態を返します。プロセスが正常な間は HTTP 200 を返し、致命的シグナルハンドラーがプロセスを crashing とマークした後は HTTP 503 を返します。これにより、オーケストレーターのヘルスチェック (例: Kubernetes の liveness probe) が、クラッシュハンドラーがハングしたノードを再起動できます。 |
 | GET                 | `/pprof/heap`                                                   | |
 | GET                 | `/pprof/growth`                                                 | |
 | GET                 | `/pprof/profile`                                                | |
