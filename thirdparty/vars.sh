@@ -261,6 +261,13 @@ S2_NAME=s2geometry-0.9.0.tar.gz
 S2_SOURCE=s2geometry-0.9.0
 S2_MD5SUM="293552c7646193b8b4a01556808fe155"
 
+# H3
+# MD5: wget https://github.com/uber/h3/archive/refs/tags/v4.1.0.tar.gz -O h3-4.1.0.tar.gz && md5sum h3-4.1.0.tar.gz
+H3_DOWNLOAD="https://github.com/uber/h3/archive/refs/tags/v4.1.0.tar.gz"
+H3_NAME=h3-4.1.0.tar.gz
+H3_SOURCE=h3-4.1.0
+H3_MD5SUM="544a2a2d0e1191a8d8073f51c22421f6"
+
 # BITSHUFFLE
 BITSHUFFLE_DOWNLOAD="https://github.com/kiyo-masui/bitshuffle/archive/0.5.1.tar.gz"
 BITSHUFFLE_NAME=bitshuffle-0.5.1.tar.gz

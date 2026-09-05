@@ -217,6 +217,48 @@ public class FunctionSet {
     public static final String ST_X = "st_x";
     public static final String ST_Y = "st_y";
 
+    // H3 functions:
+    public static final String GEO_TO_H3 = "geotoh3";
+    public static final String H3_TO_GEO_LAT = "h3togeolat";
+    public static final String H3_TO_GEO_LNG = "h3togeolong";
+    public static final String H3_IS_VALID = "h3isvalid";
+    public static final String H3_GET_RESOLUTION = "h3getresolution";
+    public static final String H3_EDGE_ANGLE = "h3edgeangle";
+    public static final String H3_EDGE_LENGTH_M = "h3edgelengthm";
+    public static final String H3_EDGE_LENGTH_KM = "h3edgelengthkm";
+    public static final String H3_GET_BASE_CELL = "h3getbasecell";
+    public static final String H3_HEX_AREA_M2 = "h3hexaream2";
+    public static final String H3_HEX_AREA_KM2 = "h3hexareakm2";
+    public static final String H3_INDEXES_ARE_NEIGHBORS = "h3indexesareneighbors";
+    public static final String H3_TO_PARENT = "h3toparent";
+    public static final String H3_TO_STRING = "h3tostring";
+    public static final String STRING_TO_H3 = "stringtoh3";
+    public static final String H3_IS_RES_CLASS_III = "h3isresclassiii";
+    public static final String H3_IS_PENTAGON = "h3ispentagon";
+    public static final String H3_CELL_AREA_M2 = "h3cellaream2";
+    public static final String H3_CELL_AREA_RADS2 = "h3cellarearads2";
+    public static final String H3_TO_CENTER_CHILD = "h3tocenterchild";
+    public static final String H3_EXACT_EDGE_LENGTH_M = "h3exactedgelengthm";
+    public static final String H3_EXACT_EDGE_LENGTH_KM = "h3exactedgelengthkm";
+    public static final String H3_EXACT_EDGE_LENGTH_RADS = "h3exactedgelengthrads";
+    public static final String H3_NUM_HEXAGONS = "h3numhexagons";
+    public static final String H3_POINT_DIST_M = "h3pointdistm";
+    public static final String H3_POINT_DIST_KM = "h3pointdistkm";
+    public static final String H3_POINT_DIST_RADS = "h3pointdistrads";
+    public static final String H3_DISTANCE = "h3distance";
+    public static final String H3_GET_UNIDIRECTIONAL_EDGE = "h3getunidirectionaledge";
+    public static final String H3_UNIDIRECTIONAL_EDGE_IS_VALID = "h3unidirectionaledgeisvalid";
+    public static final String H3_GET_ORIGIN_INDEX_FROM_UNIDIRECTIONAL_EDGE = "h3getoriginindexfromunidirectionaledge";
+    public static final String H3_GET_DESTINATION_INDEX_FROM_UNIDIRECTIONAL_EDGE = "h3getdestinationindexfromunidirectionaledge";
+    public static final String H3K_RING = "h3kring";
+    public static final String H3_TO_CHILDREN = "h3tochildren";
+    public static final String H3_GET_FACES = "h3getfaces";
+    public static final String H3_GET_RES0_INDEXES = "h3getres0indexes";
+    public static final String H3_GET_PENTAGON_INDEXES = "h3getpentagonindexes";
+    public static final String H3_LINE = "h3line";
+    public static final String H3_HEX_RING = "h3hexring";
+    public static final String H3_GET_UNIDIRECTIONAL_EDGES_FROM_HEXAGON = "h3getunidirectionaledgesfromhexagon";
+
     // String functions
     public static final String APPEND_TRAILING_CHAR_IF_ABSENT = "append_trailing_char_if_absent";
     public static final String ASCII = "ascii";
