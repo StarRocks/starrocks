@@ -31,6 +31,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.connector.share.credential.AwsSseCUtil;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -122,6 +123,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.comment = comment;
         this.enabled = enabled;
         this.params = new HashMap<>(params);
+        // Reject SSE-C before building the cloud configuration so the user gets the clear
+        // "not supported on storage volumes" message rather than a key-validation error.
+        rejectSseCForStorageVolume(params);
         Map<String, String> configurationParams = new HashMap<>(params);
         preprocessAuthenticationIfNeeded(configurationParams);
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
@@ -145,7 +149,21 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         validateStorageVolumeConstraints();
     }
 
+    // SSE-C is a per-object read-path feature meant for external catalogs. A storage volume would parse the
+    // key through the shared credential factory but never apply it (StarRocks would write its own data
+    // unencrypted), so reject it explicitly instead of silently accepting a no-op key.
+    private static void rejectSseCForStorageVolume(Map<String, String> params) throws DdlException {
+        String sseType = params.get(CloudConfigurationConstants.AWS_S3_SSE_TYPE);
+        if (sseType != null && !sseType.trim().isEmpty()
+                && !CloudConfigurationConstants.AWS_S3_SSE_TYPE_NONE.equalsIgnoreCase(sseType.trim())) {
+            throw new DdlException(String.format(
+                    "'%s' is only supported on external catalogs, not on storage volumes.",
+                    CloudConfigurationConstants.AWS_S3_SSE_TYPE));
+        }
+    }
+
     private void validateStorageVolumeConstraints() throws DdlException {
+        rejectSseCForStorageVolume(params);
         if (svt == StorageVolumeType.S3) {
             boolean enablePartitionedPrefix = Boolean.parseBoolean(
                     params.getOrDefault(CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX, "false"));
@@ -166,6 +184,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public void setCloudConfiguration(Map<String, String> params) {
         Map<String, String> newParams = new HashMap<>(this.params);
         newParams.putAll(params);
+        // ALTER path: validateStorageVolumeConstraints() is not invoked here, so guard SSE-C directly.
+        if (AwsSseCUtil.isSseCEnabled(newParams)) {
+            throw new SemanticException(String.format(
+                    "'%s' is only supported on external catalogs, not on storage volumes.",
+                    CloudConfigurationConstants.AWS_S3_SSE_TYPE));
+        }
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
         if (!isValidCloudConfiguration()) {
             throw new SemanticException("Storage params is not valid " + dumpMaskedParams(newParams));

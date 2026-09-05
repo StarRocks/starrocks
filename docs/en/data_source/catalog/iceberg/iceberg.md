@@ -559,6 +559,21 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
 - Required: No
 - Description:  The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
 
+###### aws.s3.sse.type
+
+- Required: No
+- Description: The S3 Server-Side Encryption type used by the objects of the Iceberg table. Valid values: `none` (default) and `sse-c` (Server-Side Encryption with Customer-provided keys). Set this to `sse-c` to read tables whose data and metadata files are encrypted with SSE-C. Supported from v4.1 onwards.
+
+###### aws.s3.sse.customer_key
+
+- Required: No
+- Description: The base64-encoded 256-bit AES key used to encrypt the objects. Required when `aws.s3.sse.type` is `sse-c`. The same key must have been used to write the objects, otherwise the read fails. This value is masked in `SHOW CREATE CATALOG`.
+
+###### aws.s3.sse.customer_key_md5
+
+- Required: No
+- Description: The base64-encoded MD5 digest of the customer key. Optional; StarRocks computes it from `aws.s3.sse.customer_key` when omitted.
+
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 </TabItem>

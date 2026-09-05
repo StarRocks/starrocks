@@ -15,9 +15,11 @@
 package com.starrocks.credential;
 
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.share.credential.AwsSseCUtil;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
+import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
@@ -32,6 +34,8 @@ import software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsPr
 import software.amazon.awssdk.core.exception.SdkClientException;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -251,6 +255,86 @@ public class AwsCloudConfigurationTest {
             AwsCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assertions.assertNotNull(credential);
         }
+    }
+
+    // A valid SSE-C key is a base64-encoded 256-bit (32-byte) value.
+    private static final String VALID_SSE_C_KEY =
+            Base64.getEncoder().encodeToString("0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.UTF_8));
+
+    @Test
+    public void testSseCApplyToConfigurationAndThrift() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.sse.type", "sse-c");
+        properties.put("aws.s3.sse.customer_key", VALID_SSE_C_KEY);
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assertions.assertNotNull(cloudConfiguration);
+
+        // FE metadata / S3A path: Hadoop S3A SSE-C keys are set.
+        Configuration configuration = new Configuration();
+        cloudConfiguration.applyToConfiguration(configuration);
+        Assertions.assertEquals("SSE-C", configuration.get("fs.s3a.encryption.algorithm"));
+        Assertions.assertEquals(VALID_SSE_C_KEY, configuration.get("fs.s3a.encryption.key"));
+
+        // BE data path: SSE-C material is carried in the thrift cloud_properties, with a computed MD5.
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        Map<String, String> thriftProperties = tCloudConfiguration.getCloud_properties();
+        Assertions.assertEquals("sse-c", thriftProperties.get("aws.s3.sse.type"));
+        Assertions.assertEquals(VALID_SSE_C_KEY, thriftProperties.get("aws.s3.sse.customer_key"));
+        String expectedMd5 = AwsSseCUtil.computeMd5(Base64.getDecoder().decode(VALID_SSE_C_KEY));
+        Assertions.assertEquals(expectedMd5, thriftProperties.get("aws.s3.sse.customer_key_md5"));
+    }
+
+    @Test
+    public void testNoSseCByDefault() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Configuration configuration = new Configuration();
+        cloudConfiguration.applyToConfiguration(configuration);
+        Assertions.assertNull(configuration.get("fs.s3a.encryption.algorithm"));
+        Assertions.assertNull(configuration.get("fs.s3a.encryption.key"));
+
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        Assertions.assertFalse(tCloudConfiguration.getCloud_properties().containsKey("aws.s3.sse.type"));
+        Assertions.assertFalse(tCloudConfiguration.getCloud_properties().containsKey("aws.s3.sse.customer_key"));
+    }
+
+    @Test
+    public void testSseCInvalidKeyRejected() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.sse.type", "sse-c");
+        // Decodes to fewer than 32 bytes.
+        properties.put("aws.s3.sse.customer_key", Base64.getEncoder().encodeToString("short".getBytes()));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
+    }
+
+    @Test
+    public void testSseCMissingKeyRejected() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.sse.type", "sse-c");
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
+    }
+
+    @Test
+    public void testSseCUnknownTypeRejected() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.sse.type", "sse-kms");
+        properties.put("aws.s3.sse.customer_key", VALID_SSE_C_KEY);
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> CloudConfigurationFactory.buildCloudConfigurationForStorage(properties));
     }
 
     @Test

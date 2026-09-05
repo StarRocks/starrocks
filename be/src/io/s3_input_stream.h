@@ -38,6 +38,26 @@ public:
 
     ~S3InputStream() override = default;
 
+    // Enable SSE-C (Server-Side Encryption with Customer-provided key) for every subsequent
+    // GetObject/HeadObject request. `key` and `key_md5` are base64-encoded, as required by the
+    // x-amz-server-side-encryption-customer-key[-MD5] headers. A no-op when `key` is empty.
+    void set_sse_customer_key(std::string key, std::string key_md5) {
+        _sse_customer_key = std::move(key);
+        _sse_customer_key_md5 = std::move(key_md5);
+    }
+
+    // Sets the SSE-C headers on an AWS SDK request when a customer key is configured. Templated so it
+    // works for both GetObjectRequest and HeadObjectRequest; only instantiated in the .cpp where the
+    // concrete request types are visible.
+    template <typename Request>
+    void apply_sse_customer_key(Request& request) const {
+        if (!_sse_customer_key.empty()) {
+            request.SetSSECustomerAlgorithm("AES256");
+            request.SetSSECustomerKey(_sse_customer_key);
+            request.SetSSECustomerKeyMD5(_sse_customer_key_md5);
+        }
+    }
+
     // Disallow copy and assignment
     S3InputStream(const S3InputStream&) = delete;
     void operator=(const S3InputStream&) = delete;
@@ -65,6 +85,9 @@ private:
     std::shared_ptr<Aws::S3::S3Client> _s3client;
     std::string _bucket;
     std::string _object;
+    // SSE-C material (base64-encoded); empty when SSE-C is disabled.
+    std::string _sse_customer_key;
+    std::string _sse_customer_key_md5;
     int64_t _offset{0};
     int64_t _size{-1};
     int64_t _read_ahead_size{-1};
