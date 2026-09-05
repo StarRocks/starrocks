@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.CaseSensibility;
@@ -244,9 +243,7 @@ public class MaterializedViewsSystemTable extends SystemTable {
         if (params.isSetCurrent_user_ident()) {
             UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.user, params.user_ip);
         }
         Preconditions.checkState(params.isSetType() && MATERIALIZED_VIEW.equals(params.getType()));
         return listMaterializedViewStatus(limit, matcher, context, params);
