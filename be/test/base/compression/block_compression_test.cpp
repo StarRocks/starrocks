@@ -295,6 +295,233 @@ TEST_F(BlockCompressionTest, multi) {
     test_multi_slices(starrocks::CompressionTypePB::GZIP);
 }
 
+TEST_F(BlockCompressionTest, snappy_empty_and_small_payload) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::SNAPPY, &codec).ok());
+
+    std::vector<std::string> inputs = {"", "a", "hello", "starrocks-snappy-1.2.1-test", generate_str(63)};
+    for (const auto& input : inputs) {
+        size_t max_len = codec->max_compressed_len(input.size());
+        std::string compressed;
+        compressed.resize(max_len);
+        Slice compressed_slice(compressed);
+        ASSERT_TRUE(codec->compress(Slice(input), &compressed_slice).ok());
+        compressed.resize(compressed_slice.size);
+
+        std::string uncompressed;
+        uncompressed.resize(input.size());
+        Slice uncompressed_slice(uncompressed);
+        ASSERT_TRUE(codec->decompress(Slice(compressed), &uncompressed_slice).ok());
+        uncompressed.resize(uncompressed_slice.size);
+        ASSERT_EQ(input, uncompressed);
+    }
+}
+
+TEST_F(BlockCompressionTest, snappy_large_payload_roundtrip) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::SNAPPY, &codec).ok());
+
+    std::vector<size_t> sizes = {1024 * 1024, 4 * 1024 * 1024, 16 * 1024 * 1024};
+    for (size_t size : sizes) {
+        std::string input;
+        input.reserve(size);
+        while (input.size() < size) {
+            input.append(
+                    R"({"table":"lineitem","l_orderkey":1234567,"l_partkey":89012,"l_quantity":24.50,"l_extendedprice":12345.67})");
+        }
+        input.resize(size);
+
+        size_t max_len = codec->max_compressed_len(input.size());
+        std::string compressed;
+        compressed.resize(max_len);
+        Slice compressed_slice(compressed);
+        ASSERT_TRUE(codec->compress(Slice(input), &compressed_slice).ok());
+        compressed.resize(compressed_slice.size);
+
+        // Verify that structured JSON achieves significant compression
+        ASSERT_LT(compressed.size(), input.size() / 2);
+
+        std::string uncompressed;
+        uncompressed.resize(input.size());
+        Slice uncompressed_slice(uncompressed);
+        ASSERT_TRUE(codec->decompress(Slice(compressed), &uncompressed_slice).ok());
+        uncompressed.resize(uncompressed_slice.size);
+        ASSERT_EQ(input.size(), uncompressed.size());
+        ASSERT_EQ(input, uncompressed);
+    }
+}
+
+TEST_F(BlockCompressionTest, snappy_corrupted_payload_error_handling) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::SNAPPY, &codec).ok());
+
+    std::string orig = generate_str(1024 * 32);
+    size_t max_len = codec->max_compressed_len(orig.size());
+    std::string compressed;
+    compressed.resize(max_len);
+    Slice compressed_slice(compressed);
+    ASSERT_TRUE(codec->compress(Slice(orig), &compressed_slice).ok());
+    compressed.resize(compressed_slice.size);
+
+    std::string uncompressed;
+    uncompressed.resize(orig.size());
+    Slice uncompressed_slice(uncompressed);
+
+    // 1. Test truncated payload (too short)
+    Slice truncated_slice(compressed.data(), 1);
+    Status st_truncated = codec->decompress(truncated_slice, &uncompressed_slice);
+    ASSERT_FALSE(st_truncated.ok());
+
+    // 2. Test invalid varint header (uncompressed length varint overflow)
+    std::string bad_varint = "\xff\xff\xff\xff\xff\xff\x01\x00\x00\x00";
+    Slice bad_varint_slice(bad_varint);
+    Status st_bad_varint = codec->decompress(bad_varint_slice, &uncompressed_slice);
+    ASSERT_FALSE(st_bad_varint.ok());
+
+    // 3. Test invalid copy offset (copy tag pointing outside buffer)
+    // 0x20 = 32 bytes uncompressed length varint, followed by copy tag 0x02 (2-byte copy) with invalid offset 0xffff
+    std::string bad_copy = "\x20\x02\xff\xff\x00\x00";
+    Slice bad_copy_slice(bad_copy);
+    Status st_bad_copy = codec->decompress(bad_copy_slice, &uncompressed_slice);
+    ASSERT_FALSE(st_bad_copy.ok());
+
+    // 4. Test empty compressed slice
+    Slice empty_slice("", 0);
+    Status st_empty = codec->decompress(empty_slice, &uncompressed_slice);
+    ASSERT_FALSE(st_empty.ok());
+}
+
+TEST_F(BlockCompressionTest, snappy_multi_slice_roundtrip) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::SNAPPY, &codec).ok());
+
+    std::vector<std::string> chunks;
+    std::vector<Slice> slices;
+    std::string expected;
+    for (int i = 0; i < 8; ++i) {
+        chunks.push_back(generate_str(16 * 1024));
+        slices.emplace_back(chunks.back());
+        expected.append(chunks.back());
+    }
+
+    size_t max_len = codec->max_compressed_len(expected.size());
+    std::string compressed;
+    compressed.resize(max_len);
+    Slice compressed_slice(compressed);
+    ASSERT_TRUE(codec->compress(slices, &compressed_slice).ok());
+    compressed.resize(compressed_slice.size);
+
+    std::string uncompressed;
+    uncompressed.resize(expected.size());
+    Slice uncompressed_slice(uncompressed);
+    ASSERT_TRUE(codec->decompress(Slice(compressed), &uncompressed_slice).ok());
+    uncompressed.resize(uncompressed_slice.size);
+    ASSERT_EQ(expected, uncompressed);
+}
+
+TEST_F(BlockCompressionTest, snappy_thread_safety_concurrent_compression) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::SNAPPY, &codec).ok());
+
+    std::vector<std::thread> workers;
+    std::atomic<bool> failed{false};
+    for (int t = 0; t < 16; ++t) {
+        workers.emplace_back([codec, &failed]() {
+            for (int iter = 0; iter < 20; ++iter) {
+                std::string data = generate_str(32 * 1024);
+                size_t max_len = codec->max_compressed_len(data.size());
+                std::string comp;
+                comp.resize(max_len);
+                Slice comp_slice(comp);
+                if (!codec->compress(Slice(data), &comp_slice).ok()) {
+                    failed = true;
+                    return;
+                }
+                comp.resize(comp_slice.size);
+
+                std::string decomp;
+                decomp.resize(data.size());
+                Slice decomp_slice(decomp);
+                if (!codec->decompress(Slice(comp), &decomp_slice).ok()) {
+                    failed = true;
+                    return;
+                }
+                if (data != decomp) {
+                    failed = true;
+                    return;
+                }
+            }
+        });
+    }
+    for (auto& w : workers) {
+        w.join();
+    }
+    ASSERT_FALSE(failed.load());
+}
+
+TEST_F(BlockCompressionTest, benchmark_snappy_throughput) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(CompressionTypePB::SNAPPY, &codec).ok());
+
+    std::string sample;
+    sample.reserve(128 * 1024);
+    while (sample.size() < 128 * 1024) {
+        sample.append(
+                R"({"order_id":987654321,"customer_id":"CUST_00998877","amount":450.75,"status":"COMPLETED","items":[{"sku":"SKU_12345","price":225.375,"qty":2}]})");
+    }
+    sample.resize(128 * 1024);
+
+    size_t max_len = codec->max_compressed_len(sample.size());
+    std::string compressed;
+    compressed.resize(max_len);
+    Slice comp_slice(compressed);
+    ASSERT_TRUE(codec->compress(Slice(sample), &comp_slice).ok());
+    size_t compressed_size = comp_slice.size;
+
+    std::string decomp;
+    decomp.resize(sample.size());
+    Slice decomp_slice(decomp);
+
+    const int iterations = 1000;
+    const double total_mb = (static_cast<double>(sample.size()) * iterations) / (1024.0 * 1024.0);
+
+    // Warmup
+    for (int i = 0; i < 50; ++i) {
+        comp_slice = Slice(compressed);
+        ASSERT_TRUE(codec->compress(Slice(sample), &comp_slice).ok());
+        compressed_size = comp_slice.size;
+        decomp_slice = Slice(decomp);
+        ASSERT_TRUE(codec->decompress(Slice(compressed.data(), compressed_size), &decomp_slice).ok());
+    }
+
+    // Benchmark Compression
+    auto t0 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < iterations; ++i) {
+        comp_slice = Slice(compressed);
+        ASSERT_TRUE(codec->compress(Slice(sample), &comp_slice).ok());
+    }
+    auto t1 = std::chrono::high_resolution_clock::now();
+    double comp_sec = std::chrono::duration<double>(t1 - t0).count();
+    double comp_throughput = total_mb / comp_sec;
+
+    // Benchmark Decompression
+    auto t2 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < iterations; ++i) {
+        decomp_slice = Slice(decomp);
+        ASSERT_TRUE(codec->decompress(Slice(compressed.data(), compressed_size), &decomp_slice).ok());
+    }
+    auto t3 = std::chrono::high_resolution_clock::now();
+    double decomp_sec = std::chrono::duration<double>(t3 - t2).count();
+    double decomp_throughput = total_mb / decomp_sec;
+
+    std::cout << "[ SNAPPY BENCHMARK ] Payload: " << sample.size() / 1024 << " KB x " << iterations << " iterations ("
+              << total_mb << " MB total)\n";
+    std::cout << "[ SNAPPY BENCHMARK ] Compression Throughput:   " << comp_throughput << " MB/s (" << comp_sec * 1000.0
+              << " ms)\n";
+    std::cout << "[ SNAPPY BENCHMARK ] Decompression Throughput: " << decomp_throughput << " MB/s ("
+              << decomp_sec * 1000.0 << " ms)\n";
+}
+
 TEST_F(BlockCompressionTest, test_issue_10721) {
     std::string str = random_string(1024);
     const BlockCompressionCodec* codec = nullptr;
