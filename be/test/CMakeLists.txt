@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
+        ./exec/pipeline/exchange_compression_strategy_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
