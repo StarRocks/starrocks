@@ -255,6 +255,70 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+    public void testAzureBlobEndpointSchemeIsExcludedFromHadoopCredentialKeys() {
+        Map<String, String> sharedKeyProperties = new HashMap<>();
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "https://account.blob.core.windows.net");
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "shared-key");
+
+        CloudConfiguration sharedKeyConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sharedKeyProperties);
+        Configuration sharedKeyHadoopConfiguration = new Configuration();
+        sharedKeyConfiguration.applyToConfiguration(sharedKeyHadoopConfiguration);
+        Assertions.assertEquals("shared-key", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.blob.core.windows.net"));
+        Assertions.assertNull(sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.https://account.blob.core.windows.net"));
+
+        Map<String, String> sasProperties = new HashMap<>();
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "http://account.blob.core.windows.net");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "container");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "sas-token");
+
+        CloudConfiguration sasConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sasProperties);
+        Configuration sasHadoopConfiguration = new Configuration();
+        sasConfiguration.applyToConfiguration(sasHadoopConfiguration);
+        Assertions.assertEquals("sas-token", sasHadoopConfiguration.get(
+                "fs.azure.sas.container.account.blob.core.windows.net"));
+        Assertions.assertNull(sasHadoopConfiguration.get(
+                "fs.azure.sas.container.http://account.blob.core.windows.net"));
+    }
+
+    @Test
+    public void testAzureBlobEndpointAuthorityIsUsedInHadoopCredentialKeys() {
+        Map<String, String> sharedKeyProperties = new HashMap<>();
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "https://account.blob.core.windows.net:8443/");
+        sharedKeyProperties.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "shared-key");
+
+        CloudConfiguration sharedKeyConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sharedKeyProperties);
+        Configuration sharedKeyHadoopConfiguration = new Configuration();
+        sharedKeyConfiguration.applyToConfiguration(sharedKeyHadoopConfiguration);
+        Assertions.assertEquals("shared-key", sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.blob.core.windows.net:8443"));
+        Assertions.assertNull(sharedKeyHadoopConfiguration.get(
+                "fs.azure.account.key.account.blob.core.windows.net:8443/"));
+
+        Map<String, String> sasProperties = new HashMap<>();
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT,
+                "http://account.blob.core.windows.net:10000/");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, "container");
+        sasProperties.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, "sas-token");
+
+        CloudConfiguration sasConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(sasProperties);
+        Configuration sasHadoopConfiguration = new Configuration();
+        sasConfiguration.applyToConfiguration(sasHadoopConfiguration);
+        Assertions.assertEquals("sas-token", sasHadoopConfiguration.get(
+                "fs.azure.sas.container.account.blob.core.windows.net:10000"));
+        Assertions.assertNull(sasHadoopConfiguration.get(
+                "fs.azure.sas.container.account.blob.core.windows.net:10000/"));
+    }
+
+    @Test
     public void testAzureASLS1eCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
