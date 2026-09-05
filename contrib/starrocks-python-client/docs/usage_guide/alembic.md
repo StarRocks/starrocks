@@ -543,11 +543,89 @@ alembic upgrade head
 >
 > **Time-Consuming Operations:** StarRocks schema change operations (like `ALTER TABLE ... MODIFY COLUMN`) can be time-consuming. Because one table can have only one ongoing schema change operation at a time, StarRocks does not allow other schema change jobs to be submitted for the same table.
 >
-> **Recommendation:** For potentially slow `ALTER TABLE` operations, it is recommended to modify only **one column or one table property at a time**. After `autogenerate` creates a migration script, review it. If you see multiple `ALTER` operations for the same table that you suspect might be slow, you should split them into separate migration scripts. (We will try to optimize it in the future.)
+> **Adding/dropping several columns at once:** Because each `ALTER TABLE ... ADD/DROP COLUMN` submits an *asynchronous* schema-change job and only one job may run per table at a time, emitting one statement per column fails as soon as the second statement is submitted while the first job is still running. Enable [coalescing of column changes](#44-coalescing-column-changes-into-a-single-alter-table) so all `ADD`/`DROP COLUMN` for a table are combined into a **single** `ALTER TABLE` (a single job), and optionally have Alembic [wait for each schema change to finish](#44-coalescing-column-changes-into-a-single-alter-table) so the migration stays in lock-step with the cluster.
+>
+> **Recommendation:** For potentially slow `ALTER TABLE` operations that are *not* automatically coalesced (e.g. `MODIFY COLUMN`, or property/distribution changes), it is still recommended to modify only **one column or one table property at a time**. After `autogenerate` creates a migration script, review it. If you see multiple such `ALTER` operations for the same table, either enable the wait option below or split them into separate migration scripts.
 >
 > For more detailed information on StarRocks table attributes and modification limitations, please refer to the [Tables Usage Guide](docs/usage_guide/tables.md).
 
-### 4.4 Verifying No Further Changes (optional)
+### 4.4 Coalescing column changes into a single ALTER TABLE
+
+StarRocks runs each `ALTER TABLE ... ADD/DROP COLUMN` as an **asynchronous** schema-change job and allows only **one in-flight job per table**. A migration that emits one statement per column therefore fails as soon as the second statement is submitted while the first job is still running:
+
+```sql
+ALTER TABLE t ADD COLUMN a INT;    -- submits job #1 (async, returns immediately)
+ALTER TABLE t DROP COLUMN c;       -- ERROR: table already has a running schema change
+ALTER TABLE t ADD COLUMN b INT;    -- never reached
+```
+
+StarRocks supports combining all column changes into a **single** statement (hence a single job):
+
+```sql
+ALTER TABLE t ADD COLUMN a INT, DROP COLUMN c, ADD COLUMN b INT;
+```
+
+The dialect provides a `combine_column_alters` autogenerate rewriter that does this for you. Wire it into `context.configure(...)` in **both** `run_migrations_offline()` and `run_migrations_online()`:
+
+```python
+# alembic/env.py
+from starrocks.alembic import (
+    render_column_type,
+    include_object_for_view_mv,
+    combine_column_alters,   # <-- add this
+)
+
+context.configure(
+    # ... other parameters ...
+    render_item=render_column_type,
+    include_object=include_object_for_view_mv,
+    process_revision_directives=combine_column_alters,   # <-- add this
+)
+```
+
+With the rewriter enabled, autogenerate emits a single combined operation for each table instead of one `op.add_column`/`op.drop_column` per column:
+
+```python
+# inside versions/<revision_id>_...py
+def upgrade():
+    op.starrocks_alter_columns(
+        'my_table',
+        adds=[sa.Column('a', INTEGER(), nullable=True),
+              sa.Column('b', VARCHAR(50), nullable=True)],
+        drops=[sa.Column('c')],
+    )
+
+def downgrade():
+    op.starrocks_alter_columns(
+        'my_table',
+        adds=[sa.Column('c', INTEGER(), nullable=True)],
+        drops=[sa.Column('a'), sa.Column('b')],
+    )
+```
+
+**Notes and limitations:**
+
+- Only `ADD COLUMN` and `DROP COLUMN` are coalesced. `MODIFY COLUMN` (type/nullability changes) and property/distribution changes remain separate statements. If a table has both a combined add/drop *and* a modify in the same revision, they are still two schema-change jobs — enable the wait option below, or split them into separate revisions.
+- The combined operation compiles to a single `ALTER TABLE`, so its column ordering within one statement does not matter to StarRocks.
+- Already-generated migration scripts are not rewritten retroactively; the rewriter only affects new `--autogenerate` runs. You can also call `op.starrocks_alter_columns(...)` by hand.
+
+#### Waiting for schema changes to reach a terminal state (opt-in)
+
+Even with coalescing, `ALTER TABLE` returns *before* the async job finishes, so a later operation on the same table (in the same `alembic upgrade` run) can still collide. To make your migration pipeline stay 100% in sync with the cluster, opt in to blocking until each column schema change reaches a terminal state (`FINISHED`/`CANCELLED`):
+
+```python
+context.configure(
+    # ... other parameters ...
+    process_revision_directives=combine_column_alters,
+    starrocks_wait_for_schema_change=True,             # default: False
+    starrocks_schema_change_poll_interval=2.0,         # seconds between polls (default: 2.0)
+    starrocks_schema_change_timeout=None,              # seconds; None waits indefinitely
+)
+```
+
+When enabled, after each column-altering statement the dialect polls `SHOW ALTER TABLE COLUMN` until the job finishes. A `CANCELLED` job or an elapsed timeout raises an error so the migration stops instead of silently drifting from the cluster state. This only applies to online mode (`alembic upgrade`); it is a no-op in offline `--sql` mode.
+
+### 4.5 Verifying No Further Changes (optional)
 
 After you have applied all migrations and your database schema is in sync with your models, running the `autogenerate` command again should produce an empty migration script. This is a good way to verify that your schema is up-to-date.
 
@@ -559,7 +637,7 @@ If there are no differences between your models and the database, Alembic will r
 
 > Delete the generated empty script after you have checked.
 
-### 4.5 Downgrade the Migration (optional)
+### 4.6 Downgrade the Migration (optional)
 
 If you discover an issue after applying a migration, you can revert it using the `alembic downgrade` command. To revert the most recent migration, you can use `-1`:
 

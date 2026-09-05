@@ -17,8 +17,9 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from alembic.autogenerate.rewriter import Rewriter
 from alembic.operations import Operations, ops
-from sqlalchemy import MetaData, Table
+from sqlalchemy import Column, MetaData, Table
 
 from starrocks.common.params import (
     SRKwargsPrefix,
@@ -989,3 +990,129 @@ class AlterTablePropertiesOp(ops.AlterTableOp):
     def to_diff_tuple(self) -> Tuple[Any, ...]:
         """Return Alembic diff tuple."""
         return ("alter_table_properties", self.schema, self.table_name, self.properties)
+
+
+@Operations.register_operation("starrocks_alter_columns")
+class StarRocksAlterColumnsOp(ops.AlterTableOp):
+    """Represent a combined ALTER TABLE ADD/DROP COLUMN operation for StarRocks.
+
+    A single StarRocks table can only have one in-flight schema-change job at a
+    time, so emitting one ``ALTER TABLE ... ADD/DROP COLUMN`` per column fails
+    when the second statement is submitted while the first job is still
+    running. This operation collapses several column changes on the same table
+    into a single ``ALTER TABLE`` statement (a single schema-change job).
+
+    It is produced automatically by the :data:`combine_column_alters` rewriter
+    during autogenerate; it can also be used directly in a migration script.
+    """
+
+    def __init__(
+        self,
+        table_name: str,
+        adds: Optional[List[Column]] = None,
+        drops: Optional[List[Column]] = None,
+        schema: Optional[str] = None,
+    ):
+        """Invoke a combined ALTER TABLE ADD/DROP COLUMN operation.
+
+        Args:
+            table_name: The name of the table.
+            adds: Column objects to add.
+            drops: Column objects to drop (only the name is used to render the
+                statement; the full Column is retained so the operation is
+                reversible).
+            schema: The schema (StarRocks database) of the table.
+        """
+        super().__init__(table_name, schema=schema)
+        self.adds: List[Column] = list(adds or [])
+        self.drops: List[Column] = list(drops or [])
+
+    @classmethod
+    def starrocks_alter_columns(
+        cls,
+        operations: Operations,
+        table_name: str,
+        adds: Optional[List[Column]] = None,
+        drops: Optional[List[Column]] = None,
+        schema: Optional[str] = None,
+    ):
+        """Invoke a combined ALTER TABLE ADD/DROP COLUMN operation for StarRocks."""
+        op = cls(table_name, adds=adds, drops=drops, schema=schema)
+        return operations.invoke(op)
+
+    def reverse(self) -> "StarRocksAlterColumnsOp":
+        """Reverse the operation: drop what was added and re-add what was dropped."""
+        return StarRocksAlterColumnsOp(
+            table_name=self.table_name,
+            adds=list(self.drops),
+            drops=list(self.adds),
+            schema=self.schema,
+        )
+
+    def __str__(self) -> str:
+        return (f"StarRocksAlterColumnsOp(table_name={self.table_name!r}, "
+                f"adds={[c.name for c in self.adds]!r}, "
+                f"drops={[c.name for c in self.drops]!r}, schema={self.schema!r})")
+
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return (
+            "starrocks_alter_columns",
+            self.schema,
+            self.table_name,
+            [c.name for c in self.adds],
+            [c.name for c in self.drops],
+        )
+
+
+# Rewriter that coalesces multiple per-column ALTER TABLE operations on the same
+# table into a single StarRocksAlterColumnsOp, so autogenerate emits one
+# ``ALTER TABLE ... ADD/DROP COLUMN`` statement (one schema-change job) instead
+# of one statement per column. Wire it into ``env.py`` via
+# ``context.configure(process_revision_directives=combine_column_alters)``.
+combine_column_alters = Rewriter()
+
+
+@combine_column_alters.rewrites(ops.ModifyTableOps)
+def _combine_column_alters(context, revision, op: ops.ModifyTableOps):
+    """Fold contiguous AddColumnOp/DropColumnOp on the same table into one op.
+
+    Only ``ADD COLUMN`` and ``DROP COLUMN`` are coalesced. Other operations
+    (comment changes, type/nullable modifications, distribution/property
+    alters, etc.) are left untouched and keep their original relative order.
+    When fewer than two column changes are present, the container is returned
+    unchanged so simple migrations are unaffected.
+    """
+    adds: List[Column] = []
+    drops: List[Column] = []
+    new_ops: List[Any] = []
+    combined_pos = -1  # index of the combined-op placeholder in new_ops; -1 until seen
+
+    for inner in op.ops:
+        if isinstance(inner, ops.AddColumnOp):
+            adds.append(inner.column)
+            if combined_pos == -1:
+                combined_pos = len(new_ops)
+                new_ops.append(None)  # placeholder for the combined op
+        elif isinstance(inner, ops.DropColumnOp):
+            drops.append(inner.to_column())
+            if combined_pos == -1:
+                combined_pos = len(new_ops)
+                new_ops.append(None)  # placeholder for the combined op
+        else:
+            new_ops.append(inner)
+
+    # Nothing to combine (0 or 1 column change): leave the container as-is.
+    if len(adds) + len(drops) < 2:
+        return op
+
+    # Drop the combined op into the placeholder slot, preserving the position of
+    # any non-column operations relative to the column changes.
+    new_ops[combined_pos] = StarRocksAlterColumnsOp(
+        table_name=op.table_name,
+        adds=adds,
+        drops=drops,
+        schema=op.schema,
+    )
+    op.ops = new_ops
+    return op
