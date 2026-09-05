@@ -344,7 +344,11 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `partition_refresh_strategy`：The refresh strategy for a materialized view during a single refresh operation. When set to `adaptive`, the number of partitions to refresh will be automatically determined based on the data volume in the base table partitions, significantly improving refresh efficiency. If this property is not specified, the default strategy is `strict`, meaning the number of partitions refreshed in a single operation is strictly controlled by `partition_refresh_number`.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
 
-- `excluded_refresh_tables`: The base tables listed in this property will not be updated to the materialized view when their data changes. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any base table data change will trigger the corresponding materialized view refresh.
+- `excluded_refresh_tables`: The base tables/views listed in this property will not be updated to the materialized view when their data changes. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any base table data change will trigger the corresponding materialized view refresh.
+
+  :::note
+  A base table or view listed in `excluded_refresh_tables` also does **not** force a refresh of the materialized view when that table or view is rebuilt (for example, via `CREATE OR REPLACE VIEW` or `DROP` + `CREATE`). The materialized view still becomes inactive, but its visible version map is preserved so that the next refresh does not rewrite all partitions. To refresh the materialized view regardless of `excluded_refresh_tables`, use `REFRESH MATERIALIZED VIEW <mv_name> FORCE`.
+  :::
 
   :::tip
   The difference between `excluded_trigger_tables` and `excluded_refresh_tables` is:
