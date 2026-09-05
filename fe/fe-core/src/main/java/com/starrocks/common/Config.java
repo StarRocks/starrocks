@@ -4800,6 +4800,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int group_provider_refresh_thread_num = 4;
 
+    /**
+     * Page size of the RFC 2696 simple paged results control used when an ldap group provider enumerates
+     * group entries. Without paging, a directory whose MaxPageSize (1000 on Active Directory) is smaller
+     * than the number of matching groups answers with sizeLimitExceeded and the refresh yields nothing.
+     * <p>Set to 0 to stop sending the control altogether - the emergency switch back to the single
+     * unpaged search, available at runtime via ADMIN SET FRONTEND CONFIG.
+     */
+    @ConfField(mutable = true)
+    public static int ldap_group_provider_search_page_size = 1000;
+
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
 

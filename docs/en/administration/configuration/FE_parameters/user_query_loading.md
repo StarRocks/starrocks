@@ -63,6 +63,15 @@ This topic introduces the following types of FE configurations:
 - Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
 - Introduced in: v3.5.6
 
+### `ldap_group_provider_search_page_size`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Page size of the RFC 2696 simple paged results control that an LDAP group provider uses when it enumerates group entries. Without paging, a directory whose server-side result limit (`MaxPageSize`, 1000 on Active Directory) is smaller than the number of groups matching `ldap_group_filter` answers with `sizeLimitExceeded`, and the refresh collects no group at all. The control is sent as non-critical, so a directory that does not implement RFC 2696 ignores it and returns the full result set. Set this to `0` to stop sending the control altogether and fall back to a single unpaged search.
+- Introduced in: v4.1.5, v4.2.0
+
 ### `privilege_max_role_depth`
 
 - Default: 16
