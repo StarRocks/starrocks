@@ -20,6 +20,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
@@ -533,6 +534,121 @@ public class TableFunctionTableTest {
                     "csv.escape must be a single-byte ASCII character",
                     () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
         }
+    }
+
+    @Test
+    public void testJsonFormatAccepted() {
+        // json is now in SUPPORTED_FORMATS — must not throw
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "fake://bucket/data/*.json");
+        properties.put("format", "json");
+        ExceptionChecker.expectThrowsNoException(() -> new TableFunctionTable(properties));
+
+        // case-insensitive
+        properties.put("format", "JSON");
+        ExceptionChecker.expectThrowsNoException(() -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testJsonFormatProperties() {
+        // All JSON options parsed correctly
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("path", "fake://bucket/data/*.json");
+            properties.put("format", "json");
+            properties.put("jsonpaths", "[\"$.id\", \"$.name\", \"$.ts\"]");
+            properties.put("json_root", "$.data");
+            properties.put("strip_outer_array", "true");
+
+            TableFunctionTable table = new TableFunctionTable(properties);
+
+            Assertions.assertEquals("[\"$.id\", \"$.name\", \"$.ts\"]",
+                    Deencapsulation.getField(table, "jsonPaths"));
+            Assertions.assertEquals("$.data",
+                    Deencapsulation.getField(table, "jsonRoot"));
+            Assertions.assertEquals(true,
+                    Deencapsulation.getField(table, "stripOuterArray"));
+        });
+    }
+
+    @Test
+    public void testJsonFormatDefaults() {
+        // JSON format with no optional properties — defaults should apply
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("path", "fake://bucket/data/*.json");
+            properties.put("format", "json");
+
+            TableFunctionTable table = new TableFunctionTable(properties);
+
+            Assertions.assertEquals("", Deencapsulation.getField(table, "jsonPaths"));
+            Assertions.assertEquals("", Deencapsulation.getField(table, "jsonRoot"));
+            Assertions.assertEquals(false, Deencapsulation.getField(table, "stripOuterArray"));
+        });
+    }
+
+    @Test
+    public void testGetJsonOptions() {
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("path", "fake://bucket/data/*.json");
+            properties.put("format", "json");
+            properties.put("jsonpaths", "[\"$.k1\", \"$.k2\"]");
+            properties.put("json_root", "$.root");
+            properties.put("strip_outer_array", "true");
+
+            TableFunctionTable table = new TableFunctionTable(properties);
+            LoadJob.JSONOptions opts = table.getJsonOptions();
+
+            Assertions.assertEquals("[\"$.k1\", \"$.k2\"]", opts.jsonPaths);
+            Assertions.assertEquals("$.root", opts.jsonRoot);
+            Assertions.assertTrue(opts.stripOuterArray);
+        });
+    }
+
+    @Test
+    public void testGetJsonOptionsDefaults() {
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("path", "fake://bucket/data/*.json");
+            properties.put("format", "json");
+
+            TableFunctionTable table = new TableFunctionTable(properties);
+            LoadJob.JSONOptions opts = table.getJsonOptions();
+
+            Assertions.assertEquals("", opts.jsonPaths);
+            Assertions.assertEquals("", opts.jsonRoot);
+            Assertions.assertFalse(opts.stripOuterArray);
+        });
+    }
+
+    @Test
+    public void testJsonStripOuterArrayInvalidValue() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "fake://bucket/data/*.json");
+        properties.put("format", "json");
+        properties.put("strip_outer_array", "notaboolean");
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "strip_outer_array",
+                () -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testJsonOptionsIgnoredForNonJsonFormat() {
+        // json-specific properties set on a CSV table — they are parsed but
+        // JSON fields remain at defaults since the JSON block is guarded by format check
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = new HashMap<>();
+            properties.put("path", "fake://bucket/data/*.csv");
+            properties.put("format", "csv");
+            properties.put("jsonpaths", "[\"$.id\"]");
+
+            TableFunctionTable table = new TableFunctionTable(properties);
+            // JSON fields stay at defaults
+            Assertions.assertEquals("", Deencapsulation.getField(table, "jsonPaths"));
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "stripOuterArray"));
+        });
     }
 
     @Test

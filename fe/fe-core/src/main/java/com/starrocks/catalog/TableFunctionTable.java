@@ -28,6 +28,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.fs.FileSystem;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
@@ -96,6 +97,7 @@ public class TableFunctionTable extends Table {
     private static final String ORC = "orc";
     private static final String CSV = "csv";
     private static final String AVRO = "avro";
+    private static final String JSON = "json";
 
     private static final Set<String> SUPPORTED_FORMATS;
     static {
@@ -104,6 +106,7 @@ public class TableFunctionTable extends Table {
         SUPPORTED_FORMATS.add(ORC);
         SUPPORTED_FORMATS.add(CSV);
         SUPPORTED_FORMATS.add(AVRO);
+        SUPPORTED_FORMATS.add(JSON);
     }
 
     private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
@@ -144,6 +147,10 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
     private static final Set<String> SUPPORTED_PARQUET_VERSIONS = Sets.newHashSet("1.0", "2.4", "2.6");
     private static final String PROPERTY_PARQUET_VERSION = "parquet.version";
+
+    private static final String PROPERTY_JSON_PATHS = LoadStmt.JSONPATHS;
+    private static final String PROPERTY_JSON_ROOT = LoadStmt.JSONROOT;
+    private static final String PROPERTY_STRIP_OUTER_ARRAY = LoadStmt.STRIP_OUTER_ARRAY;
 
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
     private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
@@ -214,6 +221,11 @@ public class TableFunctionTable extends Table {
     private boolean parquetUseLegacyEncoding = false;
     // default 2.6
     private String parquetVersion = "2.6";
+
+    // JSON format options
+    private String jsonPaths = "";
+    private String jsonRoot = "";
+    private boolean stripOuterArray = false;
 
     // for list files
     private boolean listFilesOnly = false;
@@ -425,6 +437,14 @@ public class TableFunctionTable extends Table {
         return format;
     }
 
+    public LoadJob.JSONOptions getJsonOptions() {
+        LoadJob.JSONOptions opts = new LoadJob.JSONOptions();
+        opts.jsonPaths = jsonPaths;
+        opts.jsonRoot = jsonRoot;
+        opts.stripOuterArray = stripOuterArray;
+        return opts;
+    }
+
     public String getPath() {
         return path;
     }
@@ -610,6 +630,19 @@ public class TableFunctionTable extends Table {
                 throw new DdlException("illegal value of csv.trim_space: " + property + ", only true/false allowed");
             }
         }
+
+        if (JSON.equalsIgnoreCase(format)) {
+            if (properties.containsKey(PROPERTY_JSON_PATHS)) {
+                jsonPaths = properties.get(PROPERTY_JSON_PATHS);
+            }
+            if (properties.containsKey(PROPERTY_JSON_ROOT)) {
+                jsonRoot = properties.get(PROPERTY_JSON_ROOT);
+            }
+            if (properties.containsKey(PROPERTY_STRIP_OUTER_ARRAY)) {
+                stripOuterArray = ParseUtil.parseBooleanValue(
+                        properties.get(PROPERTY_STRIP_OUTER_ARRAY), PROPERTY_STRIP_OUTER_ARRAY);
+            }
+        }
     }
 
     private void parseFilesForLoadAndQuery() throws DdlException {
@@ -699,6 +732,15 @@ public class TableFunctionTable extends Table {
             rangeDesc.setSize(filelist.get(i).size);
             rangeDesc.setNum_of_columns_from_file(0);
             rangeDesc.setColumns_from_path(new ArrayList<>());
+            if (JSON.equalsIgnoreCase(format)) {
+                rangeDesc.setStrip_outer_array(stripOuterArray);
+                if (!Strings.isNullOrEmpty(jsonPaths)) {
+                    rangeDesc.setJsonpaths(jsonPaths);
+                }
+                if (!Strings.isNullOrEmpty(jsonRoot)) {
+                    rangeDesc.setJson_root(jsonRoot);
+                }
+            }
             brokerScanRange.addToRanges(rangeDesc);
         }
 
