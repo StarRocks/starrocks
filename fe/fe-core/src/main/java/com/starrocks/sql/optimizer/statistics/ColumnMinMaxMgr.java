@@ -101,7 +101,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     }
 
     @Override
-    public void removeStats(ColumnIdentifier identifier, StatsVersion version) {
+    public void removeStats(ColumnIdentifier identifier) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -110,10 +110,7 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
             // If the identifier is already in the cache, we do not need to update it.
             return;
         }
-        Optional<ColumnMinMax> minMax = getStats(identifier, version);
-        if (minMax.isPresent()) {
-            cache.synchronous().invalidate(identifier);
-        }
+        cache.synchronous().invalidate(identifier);
     }
 
     @Override
