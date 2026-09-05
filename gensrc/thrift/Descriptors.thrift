@@ -580,10 +580,16 @@ struct TTableFunctionTable {
     14: optional i8 csv_escape
 }
 
-// External schema metadata only; this does not declare a native SQL type.
-// Strings preserve the source vocabulary without coupling it to native enums.
+// External Iceberg schema identity, not a native StarRocks SQL type.
+enum TIcebergGeoKind {
+    UNKNOWN = 0,
+    GEOGRAPHY = 1,
+    GEOMETRY = 2
+}
+
+// CRS and edge algorithm retain the source vocabulary as strings.
 struct TIcebergGeoMetadata {
-    1: optional string kind
+    1: optional TIcebergGeoKind kind
     2: optional string crs
     3: optional string edge_algorithm
 }
@@ -599,13 +605,13 @@ struct TIcebergSchemaField {
     // NOT NULL without an explicit signal from the Iceberg schema.
     3: optional bool is_optional
 
+    // You can fill other field properties here if you needed
+    // .......
+
     4: optional TIcebergGeoMetadata geo_metadata
 
     // Source schema identity, not a StarRocks SQL primitive. Absent on older FEs.
     5: optional string iceberg_type
-
-    // You can fill other field properties here if you needed
-    // .......
 
     // Children fields for struct, map and list(array)
     100: optional list<TIcebergSchemaField> children

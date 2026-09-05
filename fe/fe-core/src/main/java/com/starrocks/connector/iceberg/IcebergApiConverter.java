@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TIcebergGeoKind;
 import com.starrocks.thrift.TIcebergGeoMetadata;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
@@ -576,12 +577,12 @@ public class IcebergApiConverter {
         if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOGRAPHY) {
             Types.GeographyType geography = (Types.GeographyType) nestedField.type();
             tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
-                    .setKind("GEOGRAPHY").setCrs(geography.crs() == null ? "OGC:CRS84" : geography.crs())
+                    .setKind(TIcebergGeoKind.GEOGRAPHY).setCrs(geography.crs() == null ? "OGC:CRS84" : geography.crs())
                     .setEdge_algorithm(geography.algorithm() == null ? "SPHERICAL" : geography.algorithm().name()));
         } else if (nestedField.type().typeId() == org.apache.iceberg.types.Type.TypeID.GEOMETRY) {
             Types.GeometryType geometry = (Types.GeometryType) nestedField.type();
             tIcebergSchemaField.setGeo_metadata(new TIcebergGeoMetadata()
-                    .setKind("GEOMETRY").setCrs(geometry.crs() == null ? "OGC:CRS84" : geometry.crs())
+                    .setKind(TIcebergGeoKind.GEOMETRY).setCrs(geometry.crs() == null ? "OGC:CRS84" : geometry.crs())
                     .setEdge_algorithm("PLANAR"));
         }
         if (nestedField.type().isNestedType()) {

@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.thrift.TIcebergGeoKind;
 import com.starrocks.thrift.TIcebergGeoMetadata;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.type.IntegerType;
@@ -26,6 +27,9 @@ import org.apache.iceberg.types.Types;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.protocol.TField;
+import org.apache.thrift.protocol.TType;
+import org.apache.thrift.transport.TMemoryInputTransport;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -43,7 +47,7 @@ public class IcebergGeoMetadataTest {
                         new TSerializer(new TCompactProtocol.Factory()).serialize(wire));
                 Assertions.assertEquals(wire, decoded);
                 TIcebergGeoMetadata geo = decoded.getFields().get(0).getGeo_metadata();
-                Assertions.assertEquals("GEOGRAPHY", geo.getKind());
+                Assertions.assertEquals(TIcebergGeoKind.GEOGRAPHY, geo.getKind());
                 Assertions.assertEquals(crs, geo.getCrs());
                 Assertions.assertEquals(edge.name(), geo.getEdge_algorithm());
                 Assertions.assertTrue(ColumnTypeConverter.fromIcebergType(type).isUnknown());
@@ -61,7 +65,7 @@ public class IcebergGeoMetadataTest {
         TIcebergSchema wire = IcebergApiConverter.getTIcebergSchema(schema);
         Assertions.assertEquals("OGC:CRS84", wire.getFields().get(0).getGeo_metadata().getCrs());
         Assertions.assertEquals("SPHERICAL", wire.getFields().get(0).getGeo_metadata().getEdge_algorithm());
-        Assertions.assertEquals("GEOMETRY", wire.getFields().get(1).getGeo_metadata().getKind());
+        Assertions.assertEquals(TIcebergGeoKind.GEOMETRY, wire.getFields().get(1).getGeo_metadata().getKind());
         Assertions.assertEquals("EPSG:3857", wire.getFields().get(1).getGeo_metadata().getCrs());
         Assertions.assertEquals("PLANAR", wire.getFields().get(1).getGeo_metadata().getEdge_algorithm());
         Assertions.assertFalse(wire.getFields().get(2).isSetGeo_metadata());
@@ -78,7 +82,32 @@ public class IcebergGeoMetadataTest {
                 Types.ListType.ofOptional(2, Types.GeometryType.crs84())));
         TIcebergSchema wire = IcebergApiConverter.getTIcebergSchema(schema);
         Assertions.assertFalse(wire.getFields().get(0).isSetGeo_metadata());
-        Assertions.assertEquals("GEOMETRY",
+        Assertions.assertEquals(TIcebergGeoKind.GEOMETRY,
                 wire.getFields().get(0).getChildren().get(0).getGeo_metadata().getKind());
+    }
+
+    @Test
+    public void geoKindUsesStableEnumWireValues() throws Exception {
+        Assertions.assertEquals(0, TIcebergGeoKind.UNKNOWN.getValue());
+        Assertions.assertEquals(1, TIcebergGeoKind.GEOGRAPHY.getValue());
+        Assertions.assertEquals(2, TIcebergGeoKind.GEOMETRY.getValue());
+        for (TIcebergGeoKind kind : TIcebergGeoKind.values()) {
+            TIcebergGeoMetadata metadata = new TIcebergGeoMetadata().setKind(kind);
+            byte[] bytes = new TSerializer(new TCompactProtocol.Factory()).serialize(metadata);
+            TCompactProtocol protocol = new TCompactProtocol(new TMemoryInputTransport(bytes));
+            protocol.readStructBegin();
+            TField field = protocol.readFieldBegin();
+            Assertions.assertEquals(1, field.id);
+            Assertions.assertEquals(TType.I32, field.type);
+            Assertions.assertEquals(kind.getValue(), protocol.readI32());
+            TIcebergGeoMetadata decoded = new TIcebergGeoMetadata();
+            new TDeserializer(new TCompactProtocol.Factory()).deserialize(decoded, bytes);
+            Assertions.assertEquals(kind, decoded.getKind());
+        }
+        TIcebergGeoMetadata absent = new TIcebergGeoMetadata();
+        byte[] bytes = new TSerializer(new TCompactProtocol.Factory()).serialize(absent);
+        TIcebergGeoMetadata decoded = new TIcebergGeoMetadata();
+        new TDeserializer(new TCompactProtocol.Factory()).deserialize(decoded, bytes);
+        Assertions.assertFalse(decoded.isSetKind());
     }
 }
