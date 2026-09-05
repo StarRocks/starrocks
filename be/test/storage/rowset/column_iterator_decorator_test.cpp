@@ -16,12 +16,88 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #include "base/testutil/assert.h"
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "storage/rowset/array_column_iterator.h"
+#include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/series_column_iterator.h"
 
 namespace starrocks {
+
+namespace {
+
+constexpr ordinal_t kLargeElementOrdinal = static_cast<ordinal_t>(std::numeric_limits<rowid_t>::max()) + 17;
+
+class CollectionSizeIterator final : public ColumnIterator {
+public:
+    Status seek_to_first() override {
+        _ordinal = 0;
+        return Status::OK();
+    }
+
+    Status seek_to_ordinal(ordinal_t ordinal) override {
+        _ordinal = ordinal;
+        return Status::OK();
+    }
+
+    Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ordinal) override {
+        _ordinal = ordinal;
+        _element_ordinal = kLargeElementOrdinal + ordinal * kElementsPerRow;
+        return Status::OK();
+    }
+
+    int64_t element_ordinal() const override { return _element_ordinal; }
+
+    Status next_batch(size_t* n, Column* dst) override {
+        for (size_t i = 0; i < *n; ++i) {
+            dst->append_datum(static_cast<uint32_t>(kElementsPerRow));
+        }
+        _ordinal += *n;
+        return Status::OK();
+    }
+
+    ordinal_t get_current_ordinal() const override { return _ordinal; }
+    ordinal_t num_rows() const override { return 2; }
+
+private:
+    static constexpr ordinal_t kElementsPerRow = 3;
+    ordinal_t _ordinal = 0;
+    ordinal_t _element_ordinal = 0;
+};
+
+class OrdinalEchoIterator final : public ColumnIterator {
+public:
+    Status seek_to_first() override {
+        _ordinal = 0;
+        return Status::OK();
+    }
+
+    Status seek_to_ordinal(ordinal_t ordinal) override {
+        _ordinal = ordinal;
+        return Status::OK();
+    }
+
+    Status next_batch(size_t* n, Column* dst) override {
+        for (size_t i = 0; i < *n; ++i) {
+            dst->append_datum(static_cast<int64_t>(_ordinal++));
+        }
+        return Status::OK();
+    }
+
+    ordinal_t get_current_ordinal() const override { return _ordinal; }
+    ordinal_t num_rows() const override { return kLargeElementOrdinal + 16; }
+
+private:
+    ordinal_t _ordinal = 0;
+};
+
+} // namespace
 
 TEST(ColumnIteratorDecoratorTest, test) {
     auto iter = SeriesColumnIterator<int32_t>{0, 100};
@@ -73,6 +149,43 @@ TEST(ColumnIteratorDecoratorTest, test) {
     ASSERT_EQ(2, column.size());
     ASSERT_EQ(1, column.get(0).get_int32());
     ASSERT_EQ(2, column.get(1).get_int32());
+}
+
+TEST(ColumnIteratorDecoratorTest, ArraySparseReadPreservesLargeElementOrdinal) {
+    auto iterator = ArrayColumnIterator(nullptr, nullptr, std::make_unique<CollectionSizeIterator>(),
+                                        std::make_unique<OrdinalEchoIterator>(), nullptr);
+    ASSERT_OK(iterator.init(ColumnIteratorOptions{}));
+
+    auto elements = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto array = ArrayColumn::create(std::move(elements), UInt32Column::create());
+    auto range = SparseRange<>({0, 1});
+
+    ASSERT_OK(iterator.next_batch(range, array.get()));
+    ASSERT_EQ(1, array->size());
+    ASSERT_EQ(3, array->elements_column()->size());
+    EXPECT_EQ(kLargeElementOrdinal, array->elements_column()->get(0).get_int64());
+    EXPECT_EQ(kLargeElementOrdinal + 1, array->elements_column()->get(1).get_int64());
+    EXPECT_EQ(kLargeElementOrdinal + 2, array->elements_column()->get(2).get_int64());
+}
+
+TEST(ColumnIteratorDecoratorTest, MapSparseReadPreservesLargeElementOrdinal) {
+    auto iterator = MapColumnIterator(nullptr, nullptr, std::make_unique<CollectionSizeIterator>(),
+                                      std::make_unique<OrdinalEchoIterator>(), std::make_unique<OrdinalEchoIterator>(),
+                                      nullptr);
+    ASSERT_OK(iterator.init(ColumnIteratorOptions{}));
+
+    auto keys = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto values = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto map = MapColumn::create(std::move(keys), std::move(values), UInt32Column::create());
+    auto range = SparseRange<>({0, 1});
+
+    ASSERT_OK(iterator.next_batch(range, map.get()));
+    ASSERT_EQ(1, map->size());
+    ASSERT_EQ(3, map->keys_column()->size());
+    EXPECT_EQ(kLargeElementOrdinal, map->keys_column()->get(0).get_int64());
+    EXPECT_EQ(kLargeElementOrdinal + 2, map->keys_column()->get(2).get_int64());
+    EXPECT_EQ(kLargeElementOrdinal, map->values_column()->get(0).get_int64());
+    EXPECT_EQ(kLargeElementOrdinal + 2, map->values_column()->get(2).get_int64());
 }
 
 } // namespace starrocks

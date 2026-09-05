@@ -889,8 +889,9 @@ bool ScalarColumnIterator::_contains_deleted_row(uint32_t page_index) const {
     return true;
 }
 
-StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_range_vec(const SparseRange<>& range,
-                                                                                          Column* dst) {
+template <typename RangeType>
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::_get_io_range_vec(const RangeType& range,
+                                                                                           Column* dst) {
     (void)dst;
     std::vector<std::pair<int64_t, int64_t>> res;
     auto reader = get_column_reader();
@@ -930,6 +931,16 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
     }
 
     return res;
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_range_vec(const SparseRange<>& range,
+                                                                                          Column* dst) {
+    return _get_io_range_vec(range, dst);
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_range_vec_by_ordinal(
+        const OrdinalSparseRange& range, Column* dst) {
+    return _get_io_range_vec(range, dst);
 }
 
 bool ScalarColumnIterator::support_push_down_predicate(
