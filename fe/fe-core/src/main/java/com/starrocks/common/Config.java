@@ -4069,6 +4069,18 @@ public class Config extends ConfigBase {
     public static String ssl_keystore_location = "";
 
     /**
+     * the keystore type. Empty means auto detection.
+     */
+    @ConfField
+    public static String ssl_keystore_type = "";
+
+    /**
+     * the keystore security provider
+     */
+    @ConfField
+    public static String ssl_keystore_provider = "";
+
+    /**
      * the password of keystore file
      */
     @ConfField
@@ -4087,10 +4099,40 @@ public class Config extends ConfigBase {
     public static String ssl_truststore_location = "";
 
     /**
+     * the truststore type. Empty means auto detection.
+     */
+    @ConfField
+    public static String ssl_truststore_type = "";
+
+    /**
+     * the truststore security provider
+     */
+    @ConfField
+    public static String ssl_truststore_provider = "";
+
+    /**
      * the password of truststore file
      */
     @ConfField
     public static String ssl_truststore_password = "";
+
+    /**
+     * the security provider class for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_class = "";
+
+    /**
+     * the security provider name for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_name = "";
+
+    /**
+     * the security provider jar path for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_path = "";
 
     /**
      * Allow only secure transport from clients

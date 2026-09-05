@@ -990,6 +990,69 @@ This topic introduces the following types of FE configurations:
 - Description: The port on which the HTTPS server in the FE node listens.
 - Introduced in: v4.0
 
+### `ssl_keystore_type`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The keystore type used by FE SSL and HTTPS. If this value is empty, StarRocks automatically tries the JVM default keystore type, JKS, and PKCS12. Set this value explicitly for other keystore formats, such as BCFKS.
+- Introduced in: -
+
+### `ssl_keystore_provider`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider used to load the SSL keystore. Leave it empty to use the provider selected by the JVM. Set this value when the configured keystore type must be loaded by a specific provider, such as `BCFIPS`.
+- Introduced in: -
+
+### `ssl_truststore_type`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The truststore type used by MySQL SSL. If this value is empty, StarRocks automatically tries the JVM default keystore type, JKS, and PKCS12. Set this value explicitly for other truststore formats, such as BCFKS.
+- Introduced in: -
+
+### `ssl_truststore_provider`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider used to load the SSL truststore for MySQL SSL. Leave it empty to use the provider selected by the JVM. Set this value when the configured truststore type must be loaded by a specific provider, such as `BCFIPS`.
+- Introduced in: -
+
+### `ssl_security_provider_class`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The security provider class registered before StarRocks loads the SSL keystore or truststore. Leave it empty if the required provider is already registered by the JVM.
+- Introduced in: -
+
+### `ssl_security_provider_name`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The expected security provider name. If this value is set and a provider with the same name already exists, StarRocks reuses it. If StarRocks registers `ssl_security_provider_class`, the registered provider name must match this value.
+- Introduced in: -
+
+### `ssl_security_provider_path`
+
+- Default: `""`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The path of the security provider JAR. Multiple paths can be separated by the system path separator. Leave it empty if the provider class is already available in the FE classpath.
+- Introduced in: -
+
 ### `max_mysql_service_task_threads_num`
 
 - Default: 4096
