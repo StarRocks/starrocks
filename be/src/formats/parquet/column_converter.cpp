@@ -27,7 +27,9 @@
 #include <vector>
 
 #include "base/bit/bit_util.h"
+#include "base/container/raw_container.h"
 #include "base/decimal_types.h"
+#include "base/simd/simd.h"
 #include "base/time/timezone_utils.h"
 #include "base/types/int96.h"
 #include "column/binary_column.h"
@@ -263,6 +265,15 @@ private:
 // This class is to convert *fixed length* binary to decimal
 // and for fixed length binary in parquet, string data is contiguous,
 // and that's why we can do memcpy 8 bytes without accessing invalid address.
+//
+// "Contiguous" means every non-NULL row occupies exactly `_type_length` bytes and NULL rows
+// occupy none, so `t_convert` can walk the source bytes with a fixed stride instead of loading an
+// offset per row. Every FLBA decoder produces that layout on its own, but a dictionary decoder
+// with a filter pushed into it appends zero-length placeholders for the rows the filter excludes
+// (see DictDecoder<Slice>::_next_batch_value): those rows are not marked NULL, so a fixed stride
+// would consume `_type_length` bytes for them, shift every following row onto a misaligned offset
+// and finally read past the end of the buffer. `convert` therefore verifies the layout once per
+// batch and repacks it when it does not hold.
 template <LogicalType DestType>
 class BinaryToDecimalConverter final : public ColumnConverter {
 public:
@@ -347,16 +358,27 @@ public:
 
         bool has_null = src_nullable_column->has_null();
 
+        // Verify the fixed-stride layout `t_convert` relies on, and repack when a decoder left
+        // rows of a different width behind. `has_null()` may be a false positive, so count the
+        // NULLs instead of trusting it.
+        const size_t num_nulls = has_null ? SIMD::count_nonzero(src_null_data.data(), size) : 0;
+        const size_t packed_bytes = (size - num_nulls) * static_cast<size_t>(_type_length);
+        const uint8_t* src_bytes = src_data.data();
+        if (UNLIKELY(src_data.size() != packed_bytes)) {
+            _repack(*src_column, size, num_nulls > 0 ? src_null_data.data() : nullptr, packed_bytes);
+            src_bytes = _packed.data();
+        }
+
         // For calling `src_data.get_bytes().data()` , we don't need to call `build_slices` underneath.
         // And notice bytes are allocated by `RawVectorPad16`, there will be extra 16 bytes.
 #define M(SZ, K, T)                                                                                            \
     case SZ:                                                                                                   \
         if (has_null) {                                                                                        \
             t_convert<SZ, K, T, true>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data.data()),  \
-                                      dst_data.data(), src_data.data());                                       \
+                                      dst_data.data(), src_bytes);                                             \
         } else {                                                                                               \
             t_convert<SZ, K, T, false>(size, dst_null_data.data(), const_cast<uint8_t*>(src_null_data.data()), \
-                                       dst_data.data(), src_data.data());                                      \
+                                       dst_data.data(), src_bytes);                                            \
         }                                                                                                      \
         break;
 
@@ -397,9 +419,37 @@ public:
     }
 
 private:
+    // Copy the source rows into `_packed` so that every non-NULL row occupies exactly
+    // `_type_length` bytes, which is the layout `t_convert` walks. A row whose byte length does
+    // not match the declared FLBA length is a placeholder for a row a pushed-down filter already
+    // excluded; it becomes a zero slot, because the only thing that matters about such a row is
+    // that it must not shift the rows that do survive the filter. `_packed` is padded, so the
+    // 8/16-byte load `t_convert` does on the last slot stays inside the allocation.
+    void _repack(const BinaryColumn& src, size_t size, const uint8_t* null_data, size_t packed_bytes) {
+        const size_t stride = static_cast<size_t>(_type_length);
+        _packed.clear();
+        _packed.resize(packed_bytes, 0);
+
+        size_t offset = 0;
+        for (size_t i = 0; i < size; i++) {
+            if (null_data != nullptr && null_data[i]) {
+                continue;
+            }
+            Slice slice = src.get_slice(i);
+            if (LIKELY(slice.size == stride)) {
+                memcpy(_packed.data() + offset, slice.data, stride);
+            }
+            offset += stride;
+        }
+        DCHECK_EQ(offset, packed_bytes);
+    }
+
     DecimalScaleType _scale_type = DecimalScaleType::kNoScale;
     DestPrimitiveType _scale_factor = 1;
     int32_t _type_length = 0;
+    // Reused across batches: the repack path is taken for every batch of a column that has a
+    // filter pushed into its decoder, not just once.
+    raw::RawVectorPad16<uint8_t> _packed;
 };
 
 // UUID is stored as 16 raw bytes; the canonical string form is 36 characters:
