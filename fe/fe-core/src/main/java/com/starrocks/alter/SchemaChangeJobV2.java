@@ -88,6 +88,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -842,11 +843,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          */
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+        Set<String> statsInvalidatedColumns = Sets.newHashSet();
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
             // Before schema change, collect modified columns for related mvs.
             Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(tbl);
+            // Collect the columns whose type change invalidates their statistics
+            statsInvalidatedColumns = AlterHelper.collectStatsInvalidatedColumns(tbl, indexMetaIdToSchema, indexMetaIdMap);
 
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = tbl.getPhysicalPartition(physicalPartitionId);
@@ -904,6 +908,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         if (jobState == JobState.FINISHED) {
             AlterMetricRegistry.getInstance().updateAlterDuration(
                     AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
+            // Runs on the leader only, outside the edit-log applier and after the table lock is
+            // released (it issues internal DML, writes its own edit log entry, and submits an async
+            // re-collection). Followers converge via the replayed OP_ADD_BASIC_STATS_META entries.
+            StatisticUtils.dropStatisticsAfterTypeChange(dbId, tbl, statsInvalidatedColumns);
         }
 
         LOG.info("schema change job finished: {}", jobId);

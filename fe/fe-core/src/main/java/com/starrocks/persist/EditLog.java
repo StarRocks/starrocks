@@ -918,11 +918,22 @@ public class EditLog {
                 }
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.data();
+                    BasicStatsMeta previousMeta =
+                            globalStateMgr.getAnalyzeMgr().getTableBasicStatsMeta(basicStatsMeta.getTableId());
                     globalStateMgr.getAnalyzeMgr().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should refresh cache here.
                     // We don't need to refresh statistics when checkpointing
                     if (!GlobalStateMgr.isCheckpointThread()) {
+                        // Columns removed from the meta (e.g. their statistics were invalidated by a
+                        // column type change) are not covered by the refresh below, which only reloads
+                        // the columns still listed; expire them explicitly, otherwise this FE would keep
+                        // serving their stale cached statistics until eviction.
+                        List<String> removedColumns = BasicStatsMeta.removedColumns(previousMeta, basicStatsMeta);
+                        if (!removedColumns.isEmpty()) {
+                            globalStateMgr.getAnalyzeMgr().expireTableAndColumnStatistics(basicStatsMeta.getDbId(),
+                                    basicStatsMeta.getTableId(), removedColumns);
+                        }
                         globalStateMgr.getAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
                                 basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
                     }

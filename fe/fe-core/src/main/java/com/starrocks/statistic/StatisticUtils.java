@@ -662,6 +662,98 @@ public class StatisticUtils {
     }
 
     /**
+     * Clean up the statistics of columns whose previously collected values became semantically invalid
+     * after a schema change, and submit an asynchronous FULL re-collection over all partitions for
+     * the columns that had been analyzed.
+     * <p>
+     * Without the cleanup, the stale rows in {@code _statistics_} keep min/max strings computed under the
+     * OLD type ordering which the statistics loader then casts to the NEW type: depending on the data
+     * this yields silently wrong estimates or, under ERROR_IF_OVERFLOW, a cast failure on every cache load.
+     * <p>
+     * Leader-only, must be called outside any edit-log applier and without holding the db/table lock.
+     * The actual work runs asynchronously on the analyze thread pool so an unhealthy statistics table
+     * can never stall the alter daemon. Best-effort: failures are logged and the loader-side
+     * robustness remains the safety net.
+     */
+    public static void dropStatisticsAfterTypeChange(long dbId, Table table, Set<String> columns) {
+        if (columns == null || columns.isEmpty()) {
+            return;
+        }
+        List<String> columnList = new ArrayList<>(columns);
+        try {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(
+                    () -> dropStatisticsAfterTypeChangeInternal(dbId, table, columnList));
+        } catch (Throwable e) {
+            LOG.warn("failed to submit statistics cleanup after column type change, table: {}, columns: {}",
+                    table.getId(), columnList, e);
+        }
+    }
+
+    private static void dropStatisticsAfterTypeChangeInternal(long dbId, Table table, List<String> columnList) {
+        try {
+            AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+            // snapshot what the affected columns currently carry before the cleanup wipes the meta:
+            // only previously analyzed columns are worth re-collecting, and histograms must be
+            // rebuilt with their original collection properties
+            BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
+            List<String> analyzedColumns = basicStatsMeta == null ? List.of() :
+                    basicStatsMeta.getColumns().stream()
+                            .filter(c -> columnList.stream().anyMatch(c::equalsIgnoreCase))
+                            .collect(Collectors.toList());
+            List<HistogramStatsMeta> histogramMetas = analyzeMgr.getHistogramMetaByTable(table.getId()).stream()
+                    .filter(m -> columnList.stream().anyMatch(c -> c.equalsIgnoreCase(m.getColumn())))
+                    .collect(Collectors.toList());
+
+            ConnectContext statsConnectCtx = buildConnectContext();
+            statsConnectCtx.setStatisticsConnection(true);
+            if (analyzeMgr.dropColumnStatsMetaAndData(statsConnectCtx, dbId, table.getId(), columnList)) {
+                LOG.info("dropped stale statistics after column type change, table: {}, columns: {}",
+                        table.getId(), columnList);
+            } else {
+                LOG.warn("failed to drop stale statistics after type change, table: {}, columns: {}",
+                        table.getId(), columnList);
+                return;
+            }
+
+            // a stale histogram is worse than stale basic statistics: the optimizer prefers it over
+            // the (re-collected) min/max for selectivity, so it must be dropped and rebuilt as well
+            if (analyzeMgr.dropColumnHistogramMetaAndData(statsConnectCtx, dbId, table.getId(), columnList)) {
+                LOG.info("dropped stale histogram after column type change, table: {}, columns: {}",
+                        table.getId(), columnList);
+            } else {
+                LOG.warn("failed to drop stale histogram after type change, table: {}, columns: {}",
+                        table.getId(), columnList);
+                // don't rebuild on top of rows that could not be deleted
+                histogramMetas = List.of();
+            }
+
+            if (analyzedColumns.isEmpty() && histogramMetas.isEmpty()) {
+                return;
+            }
+            // Cheap staleness short-circuit, not a race-free guard
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db == null
+                    || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, table.getId()) == null) {
+                return;
+            }
+            if (!analyzedColumns.isEmpty()) {
+                StatisticsCollectionTrigger.triggerOnSchemaChange(db, table, analyzedColumns);
+            }
+            for (HistogramStatsMeta histogramMeta : histogramMetas) {
+                Column column = table.getColumn(histogramMeta.getColumn());
+                if (column == null || isUnsupportedHistogramColumnType(column.getType())) {
+                    // the new type cannot carry a histogram: deletion alone is the correct end state
+                    continue;
+                }
+                StatisticsCollectionTrigger.triggerHistogramOnSchemaChange(db, table,
+                        List.of(histogramMeta.getColumn()), histogramMeta.getProperties());
+            }
+        } catch (Throwable e) {
+            LOG.warn("failed to clean up statistics after column type change, table: {}", table.getId(), e);
+        }
+    }
+
+    /**
      * Change the replication_num of system table according to cluster status
      * 1. When scale-out to greater than 3 nodes, change the replication_num to 3
      * 3. When scale-in to less than 3 node, change it to retainedBackendNum
