@@ -14,11 +14,99 @@
 
 #pragma once
 
+#include <bit>
+#include <cmath>
+
 #include "base/phmap/phmap.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_table_descriptor.h"
 
 namespace starrocks {
+
+// IEEE-754 canonical quiet NaN values (same as Java's Float/Double.floatToIntBits for NaN)
+constexpr uint32_t CANONICAL_FLOAT_NAN_BITS = 0x7FC00000u;
+constexpr uint64_t CANONICAL_DOUBLE_NAN_BITS = 0x7FF8000000000000ULL;
+
+// Normalize NaN values in a float/double column for Iceberg equality delete semantics.
+// In Iceberg, NaN == NaN must be true for equality deletes.
+// This function replaces all NaN values with a canonical NaN so they hash and compare equal.
+template <typename T>
+ColumnPtr normalize_nan_in_column(const ColumnPtr& col) {
+    static_assert(std::is_floating_point_v<T>, "T must be float or double");
+
+    constexpr LogicalType kLogicalType = std::is_same_v<T, float> ? TYPE_FLOAT : TYPE_DOUBLE;
+    using ColumnType = typename RunTimeTypeTraits<kLogicalType>::ColumnType;
+
+    bool is_nullable = col->is_nullable();
+    const Column* data_col = is_nullable ? down_cast<const NullableColumn*>(col.get())->data_column().get() : col.get();
+
+    const auto* typed_col = down_cast<const ColumnType*>(data_col);
+    const auto& src_data = typed_col->get_data();
+
+    // For nullable columns the payload at null positions is uninitialized
+    // (NullableColumn::append_nulls uses resize_uninitialized), so reading it with std::isnan is UB.
+    // Skip null-marked rows in every scan of the payload.
+    const uint8_t* null_flags =
+            is_nullable ? down_cast<const NullableColumn*>(col.get())->null_column()->get_data().data() : nullptr;
+
+    // Check if there are any NaN values
+    bool has_nan = false;
+    for (size_t i = 0; i < src_data.size(); i++) {
+        if (null_flags != nullptr && null_flags[i]) {
+            continue;
+        }
+        if (std::isnan(src_data[i])) {
+            has_nan = true;
+            break;
+        }
+    }
+
+    if (!has_nan) {
+        return col;
+    }
+
+    // C++20 std::bit_cast — constexpr-safe; the older reinterpret_cast-via-pointer form
+    // was UB in a constexpr context and failed to compile.
+    constexpr T canonical_nan = []() {
+        if constexpr (std::is_same_v<T, float>) {
+            return std::bit_cast<float>(CANONICAL_FLOAT_NAN_BITS);
+        } else {
+            return std::bit_cast<double>(CANONICAL_DOUBLE_NAN_BITS);
+        }
+    }();
+
+    auto new_data_col = typed_col->clone_empty();
+    auto* new_typed_col = down_cast<ColumnType*>(new_data_col.get());
+    auto& dest_data = new_typed_col->get_data();
+    dest_data.resize(src_data.size());
+    for (size_t i = 0; i < src_data.size(); i++) {
+        if (null_flags != nullptr && null_flags[i]) {
+            // Null payload is uninitialized and masked out; write a deterministic value
+            // instead of reading src_data[i].
+            dest_data[i] = canonical_nan;
+            continue;
+        }
+        dest_data[i] = std::isnan(src_data[i]) ? canonical_nan : src_data[i];
+    }
+
+    if (is_nullable) {
+        const auto* nullable = down_cast<const NullableColumn*>(col.get());
+        return NullableColumn::create(std::move(new_data_col), nullable->null_column());
+    }
+    return new_data_col;
+}
+
+// Normalize NaN values based on column type
+inline ColumnPtr normalize_float_nan(const ColumnPtr& col, LogicalType type) {
+    if (type == TYPE_FLOAT) {
+        return normalize_nan_in_column<float>(col);
+    } else if (type == TYPE_DOUBLE) {
+        return normalize_nan_in_column<double>(col);
+    }
+    return col;
+}
 
 template <class T, size_t Size = sizeof(T)>
 struct JoinKeyHash {
