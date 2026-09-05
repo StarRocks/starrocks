@@ -100,6 +100,19 @@ public:
         _index_writer->setMaxFieldLength(MAX_FIELD_LEN);
         _index_writer->setMergeFactor(MERGE_FACTOR);
         _index_writer->setUseCompoundFile(false);
+
+        // Control whether term positions (the .prx file) are written. We only emit positions when:
+        //   1. the field is tokenized (positions are meaningless on untokenized fields), and
+        //   2. the DDL explicitly set `support_phrase = true` on the GIN index.
+        // The FE-side validator already forbids `support_phrase = true` together with `parser = none`,
+        // so the two conditions normally collapse, but we keep the parser guard as defense in depth.
+        // When either condition is false we set omit_positions=true to preserve the pre-feature
+        // on-disk layout (no .prx file), which keeps newly-created indexes byte-compatible with old
+        // ones unless the user opts in.
+        const bool support_phrase = get_support_phrase_from_properties(_inverted_index->index_properties());
+        const bool tokenized = (_parser_type != InvertedIndexParserType::PARSER_NONE);
+        _index_writer->setOmitPositions(!(support_phrase && tokenized));
+
         _doc->clear();
 
         int field_config = int(lucene::document::Field::STORE_NO);

@@ -48,6 +48,12 @@ const std::string INVERTED_INDEX_DICT_GRAM_NUM_KEY = "dict_gram_num";
 const std::string INVERTED_INDEX_TOKENIZED_KEY = "tokenized";
 const std::string INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
 
+// Whether the GIN (CLucene) index keeps term positions on disk (the prx file). When set to
+// "true" at DDL time the CLucene writer emits positions so that MATCH_PHRASE can be answered
+// from the index; when "false" (or absent, for backward compatibility) positions are omitted
+// to save storage. See InvertedIndexParams.SUPPORT_PHRASE on the FE side.
+const std::string INVERTED_INDEX_SUPPORT_PHRASE_KEY = "support_phrase";
+
 enum class InvertedIndexReaderType {
     UNKNOWN = -1,
     TEXT = 0,

@@ -64,6 +64,32 @@ PROPERTIES (
   - `chinese`: Chinese tokenization. This tokenization method uses the [CJK Analyzer](https://lucene.apache.org/core/6_6_1/analyzers-common/org/apache/lucene/analysis/cjk/package-summary.html) in CLucene for tokenization.
   - `standard`: Multilingual tokenization. This tokenization method provides grammar based tokenization (based on the [Unicode Text Segmentation algorithm](https://unicode.org/reports/tr29/)) and works well for most languages and cases of mixed languages, such as Chinese and English. For example, this tokenization method can distinguishes between Chinese and English when these two languages coexist. After tokenizing English, it converts uppercase English letters to lowercase. Therefore, keywords in the query conditions need to be lowercase English rather than uppercase English to leverage the full-text inverted index to locate data rows.
 - The data type of the indexed column must be CHAR, VARCHAR, or STRING.
+- The `support_phrase` parameter (default `false`) controls whether term positions are written to disk (the `.prx` file in CLucene), which is required to serve `MATCH_PHRASE` queries from the index. It must be set to `true` at index creation time if you want to run `MATCH_PHRASE` on the column. Note the following restrictions:
+  - Only supported when `imp_lib = clucene` (the default). It cannot be combined with `imp_lib = builtin`.
+  - Cannot be combined with `parser = none`; you must use one of `english`, `chinese`, or `standard`.
+  - Enabling `support_phrase` increases on-disk index size and write throughput overhead. Only enable it for columns that actually need phrase search.
+
+  Example:
+
+  ```SQL
+  CREATE TABLE `docs` (
+      `id` INT NOT NULL,
+      `content` VARCHAR(200) NOT NULL,
+      INDEX idx_content (`content`)
+          USING GIN("imp_lib" = "clucene", "parser" = "english", "support_phrase" = "true")
+  )
+  DUPLICATE KEY(`id`)
+  DISTRIBUTED BY HASH(`id`)
+  PROPERTIES ("replicated_storage" = "false");
+  ```
+
+  After the index is created, you can issue `MATCH_PHRASE` queries:
+
+  ```SQL
+  SELECT * FROM docs WHERE content MATCH_PHRASE 'inverted index';
+  ```
+
+  If the column does not have a GIN index, or the GIN index was not created with `support_phrase = "true"`, `MATCH_PHRASE` is rejected by the FE analyzer with an error. Older indexes created before this property existed are treated as `support_phrase = false` for backward compatibility; rebuild them with `support_phrase = "true"` if you need phrase queries.
 
 #### Add full-text inverted index after table creation
 

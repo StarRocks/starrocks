@@ -62,8 +62,14 @@ public class InvertedIndexParams {
          * Whether to lowercase tokens.
          * Only effective for imp_lib=builtin & parser=english.
          */
-        LOWER_CASE("true");
+        LOWER_CASE("true"),
 
+        /**
+         * Whether to write term positions (the prx file in CLucene) so that
+         * MATCH_PHRASE queries can be served by the index. Only effective when
+         * imp_lib = clucene and the column is tokenized. Default: false.
+         */
+        SUPPORT_PHRASE("false");
 
         private final String defaultValue;
         private boolean needDefault = false;

@@ -66,6 +66,7 @@ public final class ExprOpcodeRegistry {
         MATCH_OPCODES.put(MatchExpr.MatchOperator.MATCH, TExprOpcode.MATCH);
         MATCH_OPCODES.put(MatchExpr.MatchOperator.MATCH_ANY, TExprOpcode.MATCH_ANY);
         MATCH_OPCODES.put(MatchExpr.MatchOperator.MATCH_ALL, TExprOpcode.MATCH_ALL);
+        MATCH_OPCODES.put(MatchExpr.MatchOperator.MATCH_PHRASE, TExprOpcode.MATCH_PHRASE);
     }
 
     private ExprOpcodeRegistry() {

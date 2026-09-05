@@ -30,6 +30,7 @@ import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarFunction;
@@ -45,6 +46,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.UserVariable;
@@ -989,7 +991,108 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
             }
 
+            if (node.getMatchOperator() == MatchExpr.MatchOperator.MATCH_PHRASE) {
+                checkMatchPhraseSupported((SlotRef) node.getChild(0), scope);
+            }
+
             return null;
+        }
+
+        /**
+         * Validate that MATCH_PHRASE is issued against a column carrying a GIN index whose
+         * {@code support_phrase} property is {@code true}, the underlying implementation is
+         * {@code clucene} and a tokenizing parser is configured. When the slot cannot be
+         * resolved to a base OlapTable column (e.g. CTE/subquery/view-derived column), we
+         * silently skip the check; the storage layer will then fall back to a row scan or
+         * return a clear error from BE if the rewrite still routes it to inverted index.
+         *
+         * <p>Implementation note: at this point in analyzer pipeline a {@link SlotRef} has
+         * <em>not</em> been bound to a {@link com.starrocks.analysis.SlotDescriptor} yet, so we
+         * cannot rely on {@code slot.getDesc()} to reach the underlying table/column. Instead
+         * we resolve the slot through the current {@link Scope}, obtain the source
+         * {@link TableName} from the matched {@link Field}, and look up the
+         * {@link OlapTable} via the catalog metadata manager.
+         */
+        private void checkMatchPhraseSupported(SlotRef slot, Scope scope) {
+            Optional<ResolvedField> resolved = scope.tryResolveField(slot);
+            if (!resolved.isPresent()) {
+                return;
+            }
+            Field field = resolved.get().getField();
+            TableName relName = field.getRelationAlias();
+            if (relName == null || relName.getTbl() == null) {
+                return;
+            }
+            String catalog = relName.getCatalog() != null ? relName.getCatalog()
+                    : (session != null ? session.getCurrentCatalog() : null);
+            String db = relName.getDb() != null ? relName.getDb()
+                    : (session != null ? session.getDatabase() : null);
+            if (catalog == null || db == null) {
+                return;
+            }
+            Table table;
+            try {
+                table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getTable(session, catalog, db, relName.getTbl());
+            } catch (Exception e) {
+                return;
+            }
+            if (!(table instanceof OlapTable)) {
+                return;
+            }
+            OlapTable olap = (OlapTable) table;
+            Column col = olap.getColumn(field.getName());
+            if (col == null) {
+                return;
+            }
+
+            Index ginIndex = null;
+            for (Index idx : olap.getIndexes()) {
+                if (idx.getIndexType() != IndexDef.IndexType.GIN) {
+                    continue;
+                }
+                List<com.starrocks.catalog.ColumnId> idxCols = idx.getColumns();
+                if (idxCols == null) {
+                    continue;
+                }
+                for (com.starrocks.catalog.ColumnId cid : idxCols) {
+                    if (cid != null && cid.equalsIgnoreCase(col.getColumnId())) {
+                        ginIndex = idx;
+                        break;
+                    }
+                }
+                if (ginIndex != null) {
+                    break;
+                }
+            }
+            if (ginIndex == null) {
+                throw new SemanticException(
+                        "MATCH_PHRASE requires a GIN index on column '" + col.getName() + "'");
+            }
+
+            Map<String, String> props = ginIndex.getProperties();
+            String impLib = props == null ? null : props.get(IndexAnalyzer.INVERTED_INDEX_IMP_LIB_KEY);
+            if (impLib != null && !"clucene".equalsIgnoreCase(impLib)) {
+                throw new SemanticException(
+                        "MATCH_PHRASE on column '" + col.getName()
+                                + "' is only supported when imp_lib = 'clucene'");
+            }
+
+            String parser = props == null ? null : props.get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY);
+            if (parser != null && IndexAnalyzer.INVERTED_INDEX_PARSER_NONE.equalsIgnoreCase(parser)) {
+                throw new SemanticException(
+                        "MATCH_PHRASE on column '" + col.getName()
+                                + "' requires a tokenizing parser (standard/english/chinese); "
+                                + "parser=none is not supported");
+            }
+
+            String supportPhrase = props == null ? null
+                    : props.get(IndexAnalyzer.INVERTED_INDEX_SUPPORT_PHRASE_KEY);
+            if (!"true".equalsIgnoreCase(supportPhrase)) {
+                throw new SemanticException(
+                        "MATCH_PHRASE on column '" + col.getName()
+                                + "' requires the GIN index to be created with 'support_phrase' = 'true'");
+            }
         }
 
         // 1. set type = Type.BOOLEAN

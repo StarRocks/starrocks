@@ -104,6 +104,11 @@ public class IndexParams {
                 false, false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION,
                 false, false, null, null);
+        // Intentionally `needDefault=false`: do not inject `support_phrase=false` into properties of newly created
+        // indexes. We treat the absence of the key as `false` everywhere (FE getter + BE getter), so old metadata
+        // and new metadata behave identically.
+        register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.SUPPORT_PHRASE,
+                false, false, null, null);
         register(builder, IndexType.GIN, IndexParamType.INDEX, InvertedIndexParams.IndexParamsKey.LOWER_CASE,
                 false, false, null, null);
 
