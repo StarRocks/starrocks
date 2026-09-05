@@ -92,7 +92,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk,
     for (size_t i = 0; i < slots_in_sort_exprs.size(); ++i, ++slot_iter) {
         const SlotDescriptor* slot = *slot_iter;
         ExprContext* expr_ctx = slots_in_sort_exprs[i];
-        ColumnPtr col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), chunk);
+        ASSIGN_OR_RETURN(ColumnPtr col, expr_ctx->evaluate(chunk));
         if (col->is_constant()) {
             if (col->is_nullable()) {
                 // Constant null column doesn't have original column data type information,

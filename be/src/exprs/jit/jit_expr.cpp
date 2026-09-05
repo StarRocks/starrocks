@@ -116,7 +116,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     };
     size_t num_rows = 0;
     for (Expr* child : _children) {
-        ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
+        ASSIGN_OR_RETURN(ColumnPtr column, context->evaluate(child, ptr));
         num_rows = std::max<size_t>(num_rows, column->size());
         args.emplace_back(column);
     }

@@ -76,3 +76,7 @@ insert into dict values(3, 'hello world 3', default, 3 * 10);
 insert into dict values(4, 'hello world 4', default, 4 * 10);
 select count(*) from t where int0 <> dict_mapping("dict", int0, "col_4", true);
 select count(*) from t where int0 = dict_mapping("dict", int0, "col_4", true);
+-- A dict_mapping() that fails is an uncompilable child of a JIT-compiled parent. Its error must
+-- surface; it used to be swallowed into NULL rows, or reported as the misleading
+-- "[JIT] an expression comes out unexpected null values ... set jit_level = 0".
+select dict_mapping("dict", nint0, "col_4") + 1 from t order by 1;

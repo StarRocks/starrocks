@@ -172,9 +172,20 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     VLOG_FILE << "stripe = " << _current_stripe_index << ", row_group = " << rowGroupIdx
               << ", min_chunk = " << min_chunk->debug_row(0) << ", max_chunk = " << max_chunk->debug_row(0);
     for (auto& min_max_conjunct_ctx : _scanner_ctx.format_scan_context.conjuncts.min_max_ctxs) {
-        // TODO: add a warning log here
-        auto min_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), min_chunk.get());
-        auto max_col = EVALUATE_NULL_IF_ERROR(min_max_conjunct_ctx, min_max_conjunct_ctx->root(), max_chunk.get());
+        // These chunks hold synthesized statistics values, not real rows, so a failure here does not
+        // mean the query is wrong. Skip pruning on this conjunct, exactly like the decode failure
+        // above does -- propagating would fail a query that can otherwise be answered.
+        auto min_or = min_max_conjunct_ctx->evaluate(min_chunk.get());
+        auto max_or = min_max_conjunct_ctx->evaluate(max_chunk.get());
+        if (!min_or.ok() || !max_or.ok()) {
+            // Rate-limited: this runs per min/max conjunct per row group, and a conjunct that fails
+            // once usually fails for every row group in the file.
+            LOG_EVERY_N(INFO, 100) << "min/max conjunct evaluation failed, skip row-group pruning. min="
+                                   << min_or.status() << ", max=" << (max_or.ok() ? Status::OK() : max_or.status());
+            continue;
+        }
+        const ColumnPtr& min_col = min_or.value();
+        const ColumnPtr& max_col = max_or.value();
         if (min_col->get(0).is_null() || max_col->get(0).is_null()) {
             continue;
         }

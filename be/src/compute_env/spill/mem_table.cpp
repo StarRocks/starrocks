@@ -206,7 +206,8 @@ void OrderedMemTable::reset() {
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
     RETURN_IF_ERROR(chunk->upgrade_if_overflow());
-    DataSegment segment(_sort_exprs, chunk);
+    DataSegment segment;
+    RETURN_IF_ERROR(segment.init(_sort_exprs, chunk));
     _permutation.resize(0);
 
     auto& order_bys = segment.order_by_columns;

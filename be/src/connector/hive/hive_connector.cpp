@@ -378,7 +378,8 @@ Status HiveDataSource::_init_partition_values() {
 
     if (_scanner_ctx.format_scan_context.options.enable_dynamic_prune_scan_range && _runtime_filters) {
         _init_runtime_filter_counters();
-        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_membership_filter_eval_context);
+        RETURN_IF_ERROR(_runtime_filters->evaluate_partial_chunk(partition_chunk.get(),
+                                                                 runtime_membership_filter_eval_context));
         if (!partition_chunk->has_rows()) {
             _partition_filter.filter_by_eval = true;
             return Status::OK();

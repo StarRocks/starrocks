@@ -74,7 +74,13 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
         }
         auto chunk = next();
         *eos = is_eos();
-        if (!chunk.ok() || !chunk.value()) {
+        if (!chunk.ok()) {
+            // The provider contract cannot report this; latch it so the cascade does not mistake a
+            // failed level for an exhausted one.
+            _status.update(chunk.status());
+            return false;
+        }
+        if (!chunk.value()) {
             return false;
         } else {
             *output = std::move(chunk.value());
@@ -85,9 +91,14 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
 
 // Consume all inputs and produce output through the callback function
 Status MergeTwoCursor::consume_all(const ChunkConsumer& output) {
-    for (auto chunk = next(); chunk.ok() && !is_eos(); chunk = next()) {
+    while (true) {
+        auto chunk = next();
+        RETURN_IF_ERROR(chunk.status());
+        if (is_eos()) {
+            break;
+        }
         if (chunk.value()) {
-            RETURN_IF_ERROR(output(std::move(chunk.value())));
+            RETURN_IF_ERROR(output(std::move(chunk).value()));
         }
     }
 
@@ -111,26 +122,27 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
         return ChunkUniquePtr();
     }
 
-    if (move_cursor()) {
+    ASSIGN_OR_RETURN(bool eos, move_cursor());
+    if (eos) {
         return ChunkUniquePtr();
     }
     return merge_sorted_cursor_two_way();
 }
 
-bool MergeTwoCursor::move_cursor() {
+StatusOr<bool> MergeTwoCursor::move_cursor() {
     DCHECK(is_data_ready());
     DCHECK(!is_eos());
 
     bool eos = _left_run.empty() || _right_run.empty();
 
     if (_left_run.empty() && !_left_cursor->is_eos()) {
-        auto chunk = _left_cursor->try_get_next();
+        ASSIGN_OR_RETURN(auto chunk, _left_cursor->try_get_next());
         if (chunk.first) {
             _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
         }
     }
     if (_right_run.empty() && !_right_cursor->is_eos()) {
-        auto chunk = _right_cursor->try_get_next();
+        ASSIGN_OR_RETURN(auto chunk, _right_cursor->try_get_next());
         if (chunk.first) {
             _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
         }
@@ -209,11 +221,13 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_intersected_cursor(SortedR
     ChunkUniquePtr left_merged = run2.chunk->clone_empty(left_rows);
     materialize_by_permutation(left_merged.get(), {run1.chunk, run2.chunk}, perm_view);
 
+    ChunkPtr left_merged_chunk(left_merged.release());
+    ASSIGN_OR_RETURN(auto left_merged_run, SortedRun::create(left_merged_chunk, _left_cursor->get_sort_exprs()));
     if (tail_cmp <= 0) {
         run1.reset();
-        run2 = SortedRun(std::move(left_merged), _left_cursor->get_sort_exprs());
+        run2 = std::move(left_merged_run);
     } else {
-        run1 = SortedRun(std::move(left_merged), _left_cursor->get_sort_exprs());
+        run1 = std::move(left_merged_run);
         run2.reset();
     }
     DCHECK_EQ(merged_rows + left_rows, permutation.size());
@@ -258,23 +272,32 @@ bool MergeCursorsCascade::is_eos() {
     return _root_cursor->is_eos();
 }
 
-ChunkUniquePtr MergeCursorsCascade::try_get_next() {
-    return _root_cursor->try_get_next().first;
-}
-
-Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
-    while (!is_eos()) {
-        ChunkUniquePtr chunk = try_get_next();
-        if (!!chunk) {
-            RETURN_IF_ERROR(consumer(std::move(chunk)));
-        }
+Status MergeCursorsCascade::_collect_merger_status() const {
+    for (const auto& merger : _mergers) {
+        RETURN_IF_ERROR(merger->status());
     }
     return Status::OK();
 }
 
+StatusOr<ChunkUniquePtr> MergeCursorsCascade::try_get_next() {
+    ASSIGN_OR_RETURN(auto chunk, _root_cursor->try_get_next());
+    RETURN_IF_ERROR(_collect_merger_status());
+    return std::move(chunk.first);
+}
+
+Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
+    while (!is_eos()) {
+        ASSIGN_OR_RETURN(ChunkUniquePtr chunk, try_get_next());
+        if (!!chunk) {
+            RETURN_IF_ERROR(consumer(std::move(chunk)));
+        }
+    }
+    return _collect_merger_status();
+}
+
 Status MergeCursorsCascade::consume_all_with_limit(const ChunkConsumer& consumer, size_t limit) {
     while (!is_eos() && limit) {
-        ChunkUniquePtr chunk = try_get_next();
+        ASSIGN_OR_RETURN(ChunkUniquePtr chunk, try_get_next());
         if (!!chunk) {
             size_t num_rows = chunk->num_rows();
             if (limit >= num_rows) {
@@ -286,7 +309,7 @@ Status MergeCursorsCascade::consume_all_with_limit(const ChunkConsumer& consumer
             RETURN_IF_ERROR(consumer(std::move(chunk)));
         }
     }
-    return Status::OK();
+    return _collect_merger_status();
 }
 
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,

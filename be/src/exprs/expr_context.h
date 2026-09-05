@@ -160,14 +160,4 @@ private:
         }                                          \
     } while (false)
 
-#define EVALUATE_NULL_IF_ERROR(ctx, expr, chunk)                                                      \
-    [](ExprContext* c, Expr* e, Chunk* ptr) {                                                         \
-        auto st = c->evaluate(e, ptr);                                                                \
-        if (st.ok()) {                                                                                \
-            return st.value();                                                                        \
-        }                                                                                             \
-        ColumnPtr res = ColumnHelper::create_const_null_column(ptr == nullptr ? 1 : ptr->num_rows()); \
-        return res;                                                                                   \
-    }(ctx, expr, chunk)
-
 } // namespace starrocks
