@@ -5,6 +5,7 @@ Use this directory for repo-local execution plans that agents can read, update, 
 ## Active Plans
 
 - [Harness Engineering Roadmap](active/2026-03-27-harness-engineering-roadmap.md)
+- [Native Geo Contract](active/2026-09-04-native-geo-contract.md)
 
 ## Templates
 
