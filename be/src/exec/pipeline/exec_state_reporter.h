@@ -43,7 +43,7 @@ public:
 
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done);
 
-    void submit(std::function<void()>&& report_task, bool priority = false);
+    void submit(std::function<void()>&& report_task, bool priority = false, bool is_done_report = false);
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids) const;
 
