@@ -273,6 +273,16 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return preferComputeNode;
     }
 
+    /**
+     * Shared-nothing workers are bound to their replicas: a tablet cannot be served by an
+     * arbitrary worker, so neither backup-node fallback nor features that rely on worker
+     * fungibility (e.g. incremental OLAP scan-range delivery) are available.
+     */
+    @Override
+    public boolean allowUsingBackupNode() {
+        return false;
+    }
+
     @Override
     public void selectWorkerUnchecked(long workerId) {
         selectedWorkerIds.add(workerId);
