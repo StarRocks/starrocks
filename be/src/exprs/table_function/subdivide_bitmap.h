@@ -89,7 +89,43 @@ public:
         const auto* src_size_col = ColumnHelper::cast_to_raw<Type>(ColumnHelper::get_data_column(c1.get()));
         const auto src_bitmap_data = src_bitmap_col->immutable_data();
         const auto src_size_data = src_size_col->immutable_data();
+<<<<<<< HEAD
         bool has_null = c0->has_null() || c1->has_null();
+=======
+        const bool has_null = c0->has_null() || c1->has_null();
+
+        size_t cur_row = subdivide_state->processed_rows();
+        auto move_to_next_row = [&]() {
+            cur_row++;
+            subdivide_state->set_processed_rows(cur_row);
+            subdivide_state->set_offset(0);
+        };
+
+        // Reused across pieces and across rows. Capped rather than sized by the piece: a piece holds
+        // `batch_size` values and `batch_size` is the caller's, so sizing the buffer by it would make
+        // subdivide_bitmap(b, 50000000) ask for 400MB of uint64 scratch to build a piece whose Roaring
+        // representation is a fraction of that - an allocation the value-at-a-time iterator this
+        // replaced never made, and one that counts against the query's memory limit. next_batch() can
+        // be called repeatedly against the same cursor, so a larger piece is filled in several passes.
+        //
+        // Deliberately its own constant rather than `chunk_size`, which happens to have the same
+        // default: chunk_size bounds output *rows* per call and is a session variable, so tying the
+        // buffer to it would make `SET chunk_size = 2` - which the sibling batching case does set -
+        // fill a piece two values at a time.
+        constexpr uint64_t kValueBatchSize = 4096;
+        std::vector<uint64_t> values;
+        uint32_t emitted = 0;
+        while (emitted < chunk_size && cur_row < rows) {
+            // One bracket per input row touched by this batch: bracket k belongs to input row
+            // (processed_rows() on entry) + k, which is how the operator picks the outer-column row.
+            dst_offset_col->append(emitted);
+
+            const SrcSizeCppType batch_size = src_size_data[cur_row];
+            if (batch_size <= 0 || (has_null && (c0->is_null(cur_row) || c1->is_null(cur_row)))) {
+                move_to_next_row();
+                continue;
+            }
+>>>>>>> c37d12543bf... [BugFix] Cap subdivide_bitmap's scratch buffer so it stops scaling with the caller's split size (#62066)
 
         if (has_null) {
             for (size_t i = 0; i < rows; i++) {
@@ -100,11 +136,50 @@ public:
                 process_row(src_bitmap_data, src_size_data[i], i, dst_bitmap_col.get(), dst_offset_col.get(),
                             &compact_offset);
             }
+<<<<<<< HEAD
         } else {
             for (size_t i = 0; i < rows; i++) {
                 if (src_size_data[i] <= 0) {
                     dst_offset_col->append(compact_offset);
                     continue;
+=======
+
+            // Past that branch the split size is strictly smaller than the cardinality - either this
+            // call just checked it, or an earlier call did before leaving `consumed` non-zero, which
+            // only the general path can do - so it fits in a uint64 and the narrowing is exact.
+            // Spelled as DCHECK rather than DCHECK_LT: glog cannot stream an __int128 operand.
+            DCHECK(static_cast<int128_t>(batch_size) < static_cast<int128_t>(cardinality));
+            const auto split_size = static_cast<uint64_t>(batch_size);
+            const uint64_t remain = cardinality - consumed;
+            // Written as a division rather than `(remain + split_size - 1) / split_size`, whose
+            // numerator can wrap when both operands are near the top of the uint64 range.
+            const uint64_t pieces_left = remain / split_size + (remain % split_size != 0);
+            const auto pieces = static_cast<uint32_t>(std::min<uint64_t>(pieces_left, chunk_size - emitted));
+
+            if (required) {
+                values.resize(std::min({split_size, remain, kValueBatchSize}));
+                for (uint32_t k = 0; k < pieces; ++k) {
+                    // A piece is a full split_size, except for the row's last one, which is whatever
+                    // the iterator still holds - the same truncation next_batch() applied when it was
+                    // asked for a whole piece at once.
+                    uint64_t left = std::min<uint64_t>(split_size, subdivide_state->iter.remain_rows());
+                    BitmapValue sub_bitmap;
+                    while (left > 0) {
+                        const uint64_t taken = subdivide_state->iter.next_batch(
+                                values.data(), std::min<uint64_t>(left, values.size()));
+                        if (taken == 0) {
+                            break;
+                        }
+                        for (uint64_t j = 0; j < taken; ++j) {
+                            sub_bitmap.add(values[j]);
+                        }
+                        left -= taken;
+                    }
+                    // append() copies the value into the column's pool, so the temporary above is the
+                    // only extra materialization - one piece at a time, against the whole row's worth
+                    // of sub-bitmaps that split_bitmap() used to hold alongside the result column.
+                    dst_bitmap_col->append_datum(Datum(&sub_bitmap));
+>>>>>>> c37d12543bf... [BugFix] Cap subdivide_bitmap's scratch buffer so it stops scaling with the caller's split size (#62066)
                 }
                 process_row(src_bitmap_data, src_size_data[i], i, dst_bitmap_col.get(), dst_offset_col.get(),
                             &compact_offset);
