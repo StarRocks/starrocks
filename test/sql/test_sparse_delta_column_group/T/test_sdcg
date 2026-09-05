@@ -1,0 +1,151 @@
+-- name: test_sdcg_column_mode_sparse @cloud
+create database test_sdcg_col;
+use test_sdcg_col;
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_base.csv ${url}/api/test_sdcg_col/t/_stream_load
+sync;
+-- column-mode partial update of c1 only; c2/c3 must be preserved (SDCG sparse write + overlay read)
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_col/t/_stream_load
+sync;
+select * from t order by pk;
+drop database test_sdcg_col force;
+
+-- name: test_sdcg_auto_mode @cloud
+create database test_sdcg_auto;
+use test_sdcg_auto;
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_base.csv ${url}/api/test_sdcg_auto/t/_stream_load
+sync;
+-- partial_update_mode=auto: StarRocks picks the write mode; result must be correct either way
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:auto" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_auto/t/_stream_load
+sync;
+select * from t order by pk;
+drop database test_sdcg_auto force;
+
+-- name: test_sdcg_flexible @cloud
+create database test_sdcg_flex;
+use test_sdcg_flex;
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_base.csv ${url}/api/test_sdcg_flex/t/_stream_load
+sync;
+-- flexible: each JSON row updates a DIFFERENT subset; omitted columns keep their existing values
+-- row pk=1 -> c1=999 (c2,c3 kept); pk=2 -> c2=888 (c1,c3 kept); pk=3 -> c1=777,c3=777 (c2 kept)
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:flexible" -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_flex.json ${url}/api/test_sdcg_flex/t/_stream_load
+sync;
+select * from t order by pk;
+drop database test_sdcg_flex force;
+
+-- name: test_sdcg_flexible_reject_merge_condition @cloud
+create database test_sdcg_flex_mc;
+use test_sdcg_flex_mc;
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- flexible + merge_condition has no flexible-aware apply path -> rejected at plan time
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:flexible" -H "merge_condition:c1" -H "columns:pk,c1,c2,c3" -T ${root_path}/lib/../common/data/stream_load/sdcg_flex_one.json ${url}/api/test_sdcg_flex_mc/t/_stream_load
+drop database test_sdcg_flex_mc force;
+
+-- name: test_sdcg_flexible_reject_auto_increment @cloud
+create database test_sdcg_flex_ai;
+use test_sdcg_flex_ai;
+CREATE TABLE t (pk BIGINT NOT NULL, ai BIGINT NOT NULL AUTO_INCREMENT, c1 BIGINT, c2 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- flexible on a table with an AUTO_INCREMENT column is rejected at plan time (v1 limitation)
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:flexible" -H "columns:pk,c1,c2" -T ${root_path}/lib/../common/data/stream_load/sdcg_flex_one.json ${url}/api/test_sdcg_flex_ai/t/_stream_load
+drop database test_sdcg_flex_ai force;
+
+-- name: test_sdcg_reject_unknown_mode @cloud
+create database test_sdcg_badmode;
+use test_sdcg_badmode;
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- an UNKNOWN partial_update_mode must be rejected (never silently degrade to a full upsert)
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:colunm" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
+-- case is NOT a reason to reject: the mode is matched case-insensitively (boost::iequals on BE,
+-- toLowerCase(Locale.ROOT) on FE), like the format/compression headers. Both sides normalize the
+-- same way, so a miscased value cannot be read as flexible by one side and non-flexible by the other.
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:Column" -H "columns:pk,c1" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_col.csv ${url}/api/test_sdcg_badmode/t/_stream_load
+drop database test_sdcg_badmode force;
+
+-- name: test_sdcg_gin_column_forces_row @cloud
+create database test_sdcg_gin;
+use test_sdcg_gin;
+admin set frontend config ("enable_experimental_gin" = "true");
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+CREATE TABLE t (pk BIGINT NOT NULL, g VARCHAR(32) NOT NULL DEFAULT "",
+  INDEX gin_g (g) USING GIN ("parser" = "english"))
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "columns:pk,g" -T ${root_path}/lib/../common/data/stream_load/sdcg_gin_base.csv ${url}/api/test_sdcg_gin/t/_stream_load
+sync;
+-- column-mode partial update of the GIN-indexed column: forced to ROW so the inverted index is rebuilt,
+-- keeping MATCH correct (pk 1,2 -> 'zulu'; pk 3 stays 'bravo').
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "column_separator:," -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,g" -T ${root_path}/lib/../common/data/stream_load/sdcg_gin_upd.csv ${url}/api/test_sdcg_gin/t/_stream_load
+sync;
+select pk, g from t order by pk;
+select pk from t where g match 'zulu' order by pk;
+select pk from t where g match 'bravo' order by pk;
+select pk from t where g match 'alpha' order by pk;
+drop database test_sdcg_gin force;
+
+-- name: test_sdcg_complex_type_forced_dense @cloud
+create database test_sdcg_ctype;
+use test_sdcg_ctype;
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+-- 70000 base rows keeps the sparse decision reachable under the DEFAULT thresholds
+-- (M >= sdcg_sparse_min_segment_rows 65536, K/M < sdcg_dense_threshold 0.3, K < sdcg_sparse_max_rows),
+-- so this case does not have to mutate cluster-global tuning knobs -- knobs that a mid-case abort
+-- would leave skewed for every later case.
+CREATE TABLE t (pk BIGINT NOT NULL, a ARRAY<INT>, j JSON, c2 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t select generate_series, [1,2,3], parse_json('{"x":1}'), generate_series from table(generate_series(1, 70000));
+sync;
+-- ARRAY: the sparse overlay reader materializes value columns with
+-- ChunkFactory::column_from_field_type(), which aborts the process on ARRAY/MAP/STRUCT. The write path
+-- must fall back to dense; before the guard this load was accepted and the SELECT below killed every BE.
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,a" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_array.json ${url}/api/test_sdcg_ctype/t/_stream_load
+sync;
+-- projected to scalars so the assertion does not depend on ARRAY display formatting
+select pk, array_length(a), a[1], c2 from t where pk <= 3 order by pk;
+-- JSON: a flat JSON destination keeps its rows in _flat_columns with the ObjectColumn pool empty, and
+-- JsonColumn does not override update_rows, so the overlay scatter wrote through an empty pool (SIGSEGV).
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "strip_outer_array:true" -H "partial_update:true" -H "partial_update_mode:column" -H "columns:pk,j" -T ${root_path}/lib/../common/data/stream_load/sdcg_upd_json.json ${url}/api/test_sdcg_ctype/t/_stream_load
+sync;
+-- Session-scoped, so nothing leaks to later cases. It is required: with the default rewrite the planner
+-- answers from a path that never reads the overlay, which both hides the crash and returns stale values.
+set cbo_json_v2_rewrite = false;
+select pk, get_json_int(j, '$.x'), c2 from t where pk <= 3 order by pk;
+drop database test_sdcg_ctype force;
+
+-- name: test_sdcg_shared_dense_base_two_columns @cloud
+create database test_sdcg_share;
+use test_sdcg_share;
+update information_schema.be_configs set value = "true" where name = "enable_sparse_dcg";
+CREATE TABLE t (pk BIGINT NOT NULL, c1 BIGINT, c2 BIGINT, c3 BIGINT)
+PRIMARY KEY(pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+insert into t select generate_series, generate_series*10, generate_series*100, generate_series*1000 from table(generate_series(1, 70000));
+sync;
+-- One dense `.cols` file carrying BOTH c1 and c2: K/M = 40000/70000 = 0.57 is above
+-- sdcg_dense_threshold, so this multi-column update takes the dense path.
+set partial_update_mode = 'column';
+insert into t (pk, c1, c2) select generate_series, generate_series*10+1, generate_series*100+1 from table(generate_series(1, 40000));
+sync;
+-- A sparse overlay on the HIGHER-cid column of that pair. The cid order matters: column iterators are
+-- built in cid order, so c1 (no overlay) is built first from the shared dense segment, and c2's
+-- overlay path then used to open a SECOND segment for the same file and overwrite the map entry that
+-- owned the first -- freeing it while c1's iterator still held a raw ColumnReader* into it.
+insert into t (pk, c2) select generate_series, generate_series*100+2 from table(generate_series(1, 300));
+sync;
+-- The discriminating read: touching BOTH columns at once. Reading either column ALONE succeeds even
+-- on a broken build, because only one iterator exists; it is the pair that exposes the dangling one.
+-- Before the fix this failed with "Bad page: checksum mismatch" on the .cols file.
+select count(*) from t where pk <= 40000 and c1 is not null and c2 is not null;
+select count(*) from t where pk <= 40000 and c1 = pk*10+1;
+select count(*) from t where pk <= 300 and c2 = pk*100+2;
+select count(*) from t where pk between 301 and 40000 and c2 = pk*100+1;
+select count(*) from t where c3 = pk*1000;
+drop database test_sdcg_share force;

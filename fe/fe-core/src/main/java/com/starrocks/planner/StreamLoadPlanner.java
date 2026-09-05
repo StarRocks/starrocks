@@ -161,9 +161,22 @@ public class StreamLoadPlanner {
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
         List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
+        // Shared guard (cloud-native-only, merge_condition, auto-increment, column expressions). Kept in
+        // Load so the transactional-stream-load/batch-write planner (LoadPlanner) enforces the SAME rules --
+        // a guard on only one planner would leave the other silently NULL-clobbering data. An explicit
+        // flexible mode that fails the guard is rejected; `auto` degrades to the homogeneous plan it always
+        // produced before flexible existed (see Load.resolveFlexiblePartialUpdate).
+        boolean flexible = Load.resolveFlexiblePartialUpdate(destTable, streamLoadInfo.getPartialUpdateMode(),
+                isPrimaryKey && streamLoadInfo.isPartialUpdate() && streamLoadInfo.isFlexiblePartialUpdate(),
+                streamLoadInfo.getMergeConditionStr(), streamLoadInfo.getColumnExprDescs());
+        if (!flexible && streamLoadInfo.isFlexiblePartialUpdate()) {
+            // StreamLoadScanNode reads this same flag to declare the hidden "__cset__" source slot and to
+            // key the BE set-id dictionary by txn_id; it must see the planner's decision, not the request's.
+            streamLoadInfo.setFlexiblePartialUpdate(false);
+        }
         if (streamLoadInfo.isPartialUpdate()) {
             destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(),
-                    missAutoIncrementColumn);
+                    missAutoIncrementColumn, flexible, streamLoadInfo.getMergeConditionStr());
         } else {
             destColumns = destTable.getFullSchema();
         }
@@ -184,6 +197,15 @@ public class StreamLoadPlanner {
             }
         }
         if (isPrimaryKey) {
+            // SDCG flexible partial update: inject the hidden per-row column-set id slot
+            // IMMEDIATELY BEFORE the __op slot so __op stays the last column (BE reads
+            // __op positionally as num_columns()-1).
+            if (flexible) {
+                SlotDescriptor csetSlot = descTable.addSlotDescriptor(tupleDesc);
+                csetSlot.setIsMaterialized(true);
+                csetSlot.setColumn(new Column(Load.LOAD_CSET_COLUMN, IntegerType.SMALLINT));
+                csetSlot.setIsNullable(false);
+            }
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
@@ -224,7 +246,14 @@ public class StreamLoadPlanner {
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
                 olapTableSink.missAutoIncrementColumn());
-        olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+        TPartialUpdateMode partialUpdateMode = streamLoadInfo.getPartialUpdateMode();
+        if (streamLoadInfo.isPartialUpdate()) {
+            // A GIN-indexed column cannot be answered from a column-mode overlay -> force ROW so the
+            // rewritten segment rebuilds the index and MATCH stays correct. Shared with LoadPlanner.
+            partialUpdateMode = Load.forceRowModeForInvertedIndexedColumn(destTable, destColumns, partialUpdateMode);
+        }
+        olapTableSink.setPartialUpdateMode(partialUpdateMode);
+        olapTableSink.setFlexiblePartialUpdate(flexible);
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.

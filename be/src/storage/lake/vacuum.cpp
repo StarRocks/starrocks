@@ -1582,6 +1582,17 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
             }
         }
     }
+    // SDCG overlay-chain merge: the merged `.spcols` is written to the segment directory before the txn log
+    // is put, and until the log is published nothing else references it. A merge whose tablet is dropped
+    // (or whose txn is never published) must delete it here, or the file is unreachable forever: it is not
+    // in any tablet metadata, so neither the orphan-file sweep nor a metadata-driven vacuum ever sees it.
+    if (log.has_op_dcg_compaction()) {
+        for (const auto& entry : log.op_dcg_compaction().entries()) {
+            if (entry.has_merged_file() && !entry.merged_file().name().empty()) {
+                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, entry.merged_file().name())));
+            }
+        }
+    }
     return Status::OK();
 }
 

@@ -77,6 +77,40 @@ CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 // This config defines the maximum percentage of data allowed per compaction
 CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 
+// WIDE-chain aggressive-fold trigger. A WIDE sparse overlay chain (per-layer value bytes/row >=
+// SDCG_WIDE_BYTES_PER_ROW) read-amplifies ~30ms/layer (a wide value column is re-decoded per layer per
+// read), vs a narrow chain's ~negligible per-layer cost. So background convergence folds a WIDE chain at
+// this MUCH lower depth than the default SDCG_COMPACTION_TRIGGER_DEPTH (10) used for narrow chains, to
+// keep wide reads near depth-1. The compaction SCORE is renormalized so a wide chain at this trigger
+// still crosses the FE min_score on its own. Set >= 10 to disable the wide fast-fold (treat wide like
+// narrow). Folding still reuses the SAME validated background fold path (no write-path change).
+CONF_mInt64(sdcg_compaction_trigger_depth_wide, "2");
+
+// UNIFIED single user knob — per-column allowed READ-AMP BUDGET R_max (= max sparse overlay layers a
+// read must merge). Collapses the read-amp control into ONE number, mapped internally to the dense/sparse
+// gate + the fold trigger:
+//   <0 (default -1) = AUTO: per-column-WIDTH defaults (wide cols fold near depth-1 via
+//                    sdcg_compaction_trigger_depth_wide, narrow at the default depth) — the validated behavior.
+//   0  = force DENSE (no sparse overlay ever): write-time merge via column-dense (supersede) / row;
+//        zero sparse read-amp. (Fixed-column path in this first version; flexible-path budget TBD.)
+//   N>0 = allow sparse, fold the chain when it would exceed N layers (uniform trigger = N+1), overriding
+//        the per-width auto defaults. Larger N = more write throughput, more read-amp.
+// Design: handbook/plans/active/2026-06-01-partial-update-sdcg-design.md §5.2.4.
+CONF_mInt64(sdcg_read_amp_budget, "-1");
+
+// SDCG compaction-conflict REPLAY (A-family, PK-keyed). When a full lake PK compaction is about to be
+// discarded because concurrent column-mode partial updates wrote racing SPARSE_PERCOL `.spcols` overlays
+// (version > compact_version) on its input segments, instead KEEP the compaction output and re-apply
+// those racing column values onto the new output segments keyed by PK: read the base PK at each racing
+// source_rowid, look the PK up in the (already-updated-to-output) primary index to get its new
+// (output_rssid, output_rowid), and emit an equivalent `.spcols` overlay on the output segment. This
+// gives the full compaction a forward-progress guarantee under sustained ingest (it no longer starves on
+// a hot segment) without blocking writes. Bounded to the strictly-replayable case: pure homogeneous
+// SPARSE_PERCOL races with a uniform updated-column set and NO racing delete (delvec advance); any
+// dense/flexible/inline/IDG race, a non-uniform column set, or a racing delvec still falls back to the
+// historical discard. Requires enable_sparse_dcg. EXPERIMENTAL, default OFF.
+CONF_mBool(enable_sdcg_compaction_conflict_replay, "false");
+
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
 // if compaction of a tablet failed, this tablet should not be chosen to

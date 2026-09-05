@@ -77,6 +77,28 @@ public:
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_hit_cache, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(primary_key_table_error_state_total, MetricUnit::REQUESTS);
+    // SDCG (sparse delta column group) observability: lightweight overlay-chain merge + conflict handling.
+    METRIC_DEFINE_INT_COUNTER(sdcg_overlay_merge_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_overlay_merge_layers_folded_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(sdcg_compaction_conflict_replayable_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_compaction_conflict_discard_total, MetricUnit::OPERATIONS);
+    // Outcome of conflict replay (distinct from *_replayable_total, which counts classified-replayable
+    // conflicts INCLUDING those discarded because replay is disabled / preconditions unmet). *_executed_total
+    // counts conflicts whose racing overlays were actually re-applied onto the kept compaction output;
+    // *_overlay_bytes_total is the space the discard path would have orphaned (the space-reclaim proof).
+    METRIC_DEFINE_INT_COUNTER(sdcg_compaction_conflict_replay_executed_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_compaction_conflict_replay_winner_rows_total, MetricUnit::ROWS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_compaction_conflict_replay_skipped_rows_total, MetricUnit::ROWS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_compaction_conflict_replay_overlay_bytes_total, MetricUnit::BYTES);
+    // partial_update_mode=auto: which write mode the adaptive selector actually resolved to, per
+    // (load for row, or per-segment for the column formats). Lets prod observe the auto decision mix
+    // without VLOG. row = level-1 masked full-row rewrite; dense/sparse = level-2 column format;
+    // packed/masked = flexible (heterogeneous) column formats.
+    METRIC_DEFINE_INT_COUNTER(sdcg_write_mode_row_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_write_mode_dense_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_write_mode_sparse_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_write_mode_packed_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(sdcg_write_mode_masked_dense_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_duration_ms, MetricUnit::MILLISECONDS);
     METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(pk_index_sst_read_error_total, MetricUnit::REQUESTS);

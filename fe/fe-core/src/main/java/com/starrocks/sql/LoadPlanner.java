@@ -135,6 +135,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+    // SDCG flexible partial update: per-row heterogeneous column sets.
+    private boolean flexiblePartialUpdate = false;
 
     private final ComputeResource computeResource;
 
@@ -238,6 +240,8 @@ public class LoadPlanner {
         this.sessionVariables = sessionVariables;
         this.computeResource = streamLoadInfo.getComputeResource();
         this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
+        this.flexiblePartialUpdate = this.isPrimaryKey && partialUpdate
+                && streamLoadInfo.isFlexiblePartialUpdate();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
@@ -285,6 +289,10 @@ public class LoadPlanner {
         this.partialUpdateMode = mode;
     }
 
+    public void setFlexiblePartialUpdate(boolean flexiblePartialUpdate) {
+        this.flexiblePartialUpdate = flexiblePartialUpdate;
+    }
+
     public void setMergeConditionStr(String mergeConditionStr) {
         this.mergeConditionStr = mergeConditionStr;
     }
@@ -320,14 +328,61 @@ public class LoadPlanner {
         }
         List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
         if (partialUpdate) {
+            if (flexiblePartialUpdate) {
+                // Same guard StreamLoadPlanner enforces. This planner serves the transactional
+                // stream-load (/api/transaction/load -> StreamLoadTask) and batch-write paths, which
+                // can ALSO build a flexible plan; without this a flexible load on a local (shared-
+                // nothing) table -- or flexible + merge_condition -- would inject "__cset__" and reach
+                // BE apply with no flexible-aware path, silently NULL-clobbering undeclared columns.
+                // An explicit flexible mode that fails the guard is rejected; `auto` degrades to the
+                // homogeneous plan it always produced (Load.resolveFlexiblePartialUpdate).
+                TPartialUpdateMode requestedMode =
+                        streamLoadInfo != null ? streamLoadInfo.getPartialUpdateMode() : partialUpdateMode;
+                List<ImportColumnDesc> flexibleColumnDescs = this.etlJobType == EtlJobType.BROKER
+                        ? fileGroups.get(0).getColumnExprList() : columnDescs;
+                flexiblePartialUpdate = Load.resolveFlexiblePartialUpdate(destTable, requestedMode, true,
+                        mergeConditionStr, flexibleColumnDescs);
+                // Merge commit fans the scan out over every BE that buffered data for this window. The BE
+                // json scanner interns each row's column set into a per-process dictionary keyed by txn_id
+                // and set-ids are assigned in first-seen order, so two scanner BEs assign DIFFERENT ids to
+                // the same set; the writers keep only the first dictionary that arrives on an eos request
+                // (ColumnSetDict::populate_from_snapshot is a no-op once populated) and decode every other
+                // BE's rows against it -- the wrong columns get applied, silently. Until the dictionary is
+                // made global, flexible needs a single scanner BE.
+                if (flexiblePartialUpdate && batchWriteBackendIds != null && batchWriteBackendIds.size() > 1) {
+                    if (requestedMode == TPartialUpdateMode.AUTO_MODE) {
+                        LOG.info("partial_update_mode=auto with merge commit over {} backends on table {}: "
+                                + "per-row column sets need a single scanner backend; planning the homogeneous "
+                                + "partial update instead", batchWriteBackendIds.size(), destTable.getName());
+                        flexiblePartialUpdate = false;
+                    } else {
+                        throw new DdlException("Flexible partial update with merge commit is only supported when "
+                                + "the load is scanned on a single backend (" + batchWriteBackendIds.size()
+                                + " backends buffered data for this window)");
+                    }
+                }
+                if (!flexiblePartialUpdate && streamLoadInfo != null) {
+                    // StreamLoadScanNode reads this flag to declare the hidden "__cset__" source slot and to
+                    // key the BE set-id dictionary by txn_id; it must see the planner's decision.
+                    streamLoadInfo.setFlexiblePartialUpdate(false);
+                }
+            }
             if (this.etlJobType == EtlJobType.BROKER) {
                 destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList(),
-                        isMissAutoIncrementColumn);
+                        isMissAutoIncrementColumn, flexiblePartialUpdate, mergeConditionStr);
             } else {
-                destColumns = Load.getPartialUpateColumns(destTable, columnDescs, isMissAutoIncrementColumn);
+                destColumns = Load.getPartialUpateColumns(destTable, columnDescs, isMissAutoIncrementColumn,
+                        flexiblePartialUpdate, mergeConditionStr);
             }
         } else {
             destColumns = destTable.getFullSchema();
+        }
+
+        if (partialUpdate) {
+            // A GIN-indexed column cannot be answered from a column-mode overlay -> force ROW so the
+            // rewritten segment rebuilds the index and MATCH stays correct. Mutates the field used to
+            // set the sink mode below. Shared with StreamLoadPlanner (every partial-update planner).
+            partialUpdateMode = Load.forceRowModeForInvertedIndexedColumn(destTable, destColumns, partialUpdateMode);
         }
 
         if (isMissAutoIncrementColumn.size() != 0) {
@@ -434,6 +489,15 @@ public class LoadPlanner {
         }
         // Add op type slotdesc for primary tabale
         if (isPrimaryKey) {
+            // SDCG flexible partial update: inject the hidden per-row column-set id slot
+            // IMMEDIATELY BEFORE the __op slot so __op stays the last column (BE reads
+            // __op positionally as num_columns()-1).
+            if (flexiblePartialUpdate) {
+                SlotDescriptor csetSlot = descTable.addSlotDescriptor(tupleDesc);
+                csetSlot.setIsMaterialized(true);
+                csetSlot.setColumn(new Column(Load.LOAD_CSET_COLUMN, IntegerType.SMALLINT));
+                csetSlot.setIsNullable(false);
+            }
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
@@ -525,6 +589,7 @@ public class LoadPlanner {
             if (olapTable.getAutomaticBucketSize() > 0) {
                 ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
             }
+            ((OlapTableSink) dataSink).setFlexiblePartialUpdate(flexiblePartialUpdate);
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
@@ -548,6 +613,7 @@ public class LoadPlanner {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);
             dataSink.setPartialUpdateMode(partialUpdateMode);
+            dataSink.setFlexiblePartialUpdate(flexiblePartialUpdate);
             dataSink.complete(mergeConditionStr);
         }
         this.txnId = txnId;

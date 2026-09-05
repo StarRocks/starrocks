@@ -78,6 +78,26 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(delta_column_group_get_non_pk_total);
     REGISTER_STORAGE_METRIC(delta_column_group_get_non_pk_hit_cache);
     REGISTER_STORAGE_METRIC(primary_key_table_error_state_total);
+    REGISTER_STORAGE_METRIC(sdcg_overlay_merge_total);
+    REGISTER_STORAGE_METRIC(sdcg_overlay_merge_layers_folded_total);
+    registry->register_metric("sdcg_compaction_conflict_total", MetricLabels().add("kind", "replayable_dcg"),
+                              &sdcg_compaction_conflict_replayable_total);
+    registry->register_metric("sdcg_compaction_conflict_total", MetricLabels().add("kind", "discard"),
+                              &sdcg_compaction_conflict_discard_total);
+    registry->register_metric("sdcg_compaction_conflict_total", MetricLabels().add("kind", "replay_executed"),
+                              &sdcg_compaction_conflict_replay_executed_total);
+    REGISTER_STORAGE_METRIC(sdcg_compaction_conflict_replay_winner_rows_total);
+    REGISTER_STORAGE_METRIC(sdcg_compaction_conflict_replay_skipped_rows_total);
+    REGISTER_STORAGE_METRIC(sdcg_compaction_conflict_replay_overlay_bytes_total);
+    registry->register_metric("sdcg_write_mode_total", MetricLabels().add("mode", "row"), &sdcg_write_mode_row_total);
+    registry->register_metric("sdcg_write_mode_total", MetricLabels().add("mode", "dense"),
+                              &sdcg_write_mode_dense_total);
+    registry->register_metric("sdcg_write_mode_total", MetricLabels().add("mode", "sparse"),
+                              &sdcg_write_mode_sparse_total);
+    registry->register_metric("sdcg_write_mode_total", MetricLabels().add("mode", "packed"),
+                              &sdcg_write_mode_packed_total);
+    registry->register_metric("sdcg_write_mode_total", MetricLabels().add("mode", "masked_dense"),
+                              &sdcg_write_mode_masked_dense_total);
     REGISTER_STORAGE_METRIC(primary_key_wait_apply_done_duration_ms);
     REGISTER_STORAGE_METRIC(primary_key_wait_apply_done_total);
     REGISTER_STORAGE_METRIC(pk_index_sst_read_error_total);

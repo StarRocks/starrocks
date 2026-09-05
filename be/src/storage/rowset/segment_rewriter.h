@@ -61,6 +61,21 @@ public:
             const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
             const starrocks::lake::Tablet* tablet, RewriteVectorIndexOptions vector_index_opts = {},
             std::vector<int64_t>* out_vector_index_ids = nullptr);
+
+    // FLEXIBLE-on-ROW masked full-row rewrite (lake / shared-data). Unlike rewrite_partial_update,
+    // which raw-copies the .upt modified-column footer bytes (and would propagate NULL placeholders
+    // for cells a row did NOT touch -> silent data loss), this writes a COMPLETE fresh segment over
+    // every tablet_schema column. The caller has already produced |value_columns|: the per-row
+    // MASKED merge of base values with the .upt union value columns, one column per id in
+    // |value_column_ids| (the non-key value-column complement, schema order). The KEY columns are
+    // read from the |src| .upt segment (partial update always writes the full PK), so each row's key
+    // is carried unchanged. The synthetic "__cset__" column is naturally DROPPED: its reserved uid is
+    // not in tschema, so it is neither read here nor written. Modeled on rewrite_auto_increment_lake.
+    static Status rewrite_full_row_lake(const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
+                                        const std::vector<uint32_t>& value_column_ids, MutableColumns& value_columns,
+                                        uint32_t segment_id, const starrocks::lake::Tablet* tablet,
+                                        RewriteVectorIndexOptions vector_index_opts = {},
+                                        std::vector<int64_t>* out_vector_index_ids = nullptr);
 };
 
 } // namespace starrocks

@@ -187,6 +187,13 @@ private:
 protected:
     void _check_global_dict(SegmentWriter* segment_writer);
 
+    // SDCG flexible partial update: fold the per-load set-id dictionary (interned by the
+    // JSON scanner, looked up from FlexiblePartialUpdateRegistry by _context.txn_id) into
+    // _rowset_txn_meta_pb->distinct_column_sets, mapping each set's value-column NAMES to
+    // tablet-column unique-ids via the full tablet schema. No-op unless the load is
+    // flexible and a non-empty dictionary exists for this txn.
+    void _populate_flexible_column_sets();
+
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<RowsetMetaPB> _rowset_meta_pb;
