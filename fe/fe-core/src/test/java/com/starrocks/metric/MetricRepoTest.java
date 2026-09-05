@@ -23,6 +23,7 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
+import com.starrocks.common.Version;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.journal.JournalType;
@@ -261,6 +262,33 @@ public class MetricRepoTest extends PlanTestBase {
             MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0);
             MetricRepo.GAUGE_LAKE_COMPACTION_PARTITION_MAX_CONSECUTIVE_ABNORMAL_COUNT.setValue(0);
         }
+    }
+
+    @Test
+    public void testBuildInfoMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("build_info");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        Assertions.assertEquals(1L, metric.getValue());
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("starrocks_fe");
+        visitor.visit(metric);
+        String output = visitor.build();
+
+        Assertions.assertTrue(
+                output.contains("# HELP starrocks_fe_build_info StarRocks FE build information"), output);
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_build_info gauge"), output);
+
+        String buildInfoLine = output.lines()
+                .filter(line -> line.startsWith("starrocks_fe_build_info{"))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertTrue(
+                buildInfoLine.contains("version=\"" + Version.STARROCKS_VERSION + "\""), buildInfoLine);
+        Assertions.assertTrue(
+                buildInfoLine.contains("commit_hash=\"" + Version.STARROCKS_COMMIT_HASH + "\""), buildInfoLine);
+        Assertions.assertTrue(buildInfoLine.endsWith("} 1"), buildInfoLine);
     }
 
     private static String scrapeMetrics() {
