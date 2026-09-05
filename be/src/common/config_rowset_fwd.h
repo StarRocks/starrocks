@@ -128,6 +128,16 @@ CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
 
+// Read-time rollback valve for constant-folding the zone map of a column that is physically
+// absent from a segment (the normal outcome of fast schema evolution `ALTER TABLE ADD COLUMN`).
+// Such a column reads through DefaultValueColumnIterator, where every row holds the same value,
+// so predicates can be evaluated exactly against a synthetic min==max zone map. Turning this off
+// restores the legacy behaviour: keep every row and mark every batch delete-partial-satisfied.
+// It is deliberately separate from enable_index_page_level_zonemap_filter, which only guards
+// SegmentIterator::_get_row_ranges_by_zone_map() and therefore cannot switch off the runtime
+// filter path (SegmentIterator::_try_to_update_ranges_by_runtime_filter).
+CONF_mBool(enable_default_value_column_zonemap_filter, "true");
+
 CONF_mBool(enable_index_bloom_filter, "true");
 
 CONF_mBool(enable_index_bitmap_filter, "true");

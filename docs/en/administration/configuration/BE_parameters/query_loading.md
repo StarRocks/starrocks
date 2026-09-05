@@ -207,6 +207,16 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
 
+### enable_default_value_column_zonemap_filter
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Valid values: `true`, `false`
+- Is mutable: Yes
+- Description: Whether to prune data by constant-folding the value of a column that is physically absent from a segment. A column added by fast schema evolution (`ALTER TABLE ... ADD COLUMN`) is not written into pre-existing segments, so every row of it holds the column default (or `NULL`). When this is `true`, a predicate on such a column is evaluated against that constant and the segment is skipped entirely when nothing can match. When set to `false`, those segments are read in full and every batch is re-checked against the delete condition, which is the behavior before this option existed. Set it to `false` to roll back if a query returns unexpected results on a table that has had columns added. This option is deliberately separate from `enable_index_page_level_zonemap_filter`, which does not cover the runtime filter path.
+- Introduced in: -
+
 ### enable_json_flat
 
 - Default: true
