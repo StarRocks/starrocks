@@ -417,30 +417,48 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
     return status;
 }
 
+// Resolve the schema that an alter request must treat as authoritative.
+//
+// Under fast schema evolution v2 the FE catalog schema can be NEWER than the one
+// in tablet metadata: ADD COLUMN there only updates the FE catalog, and tablet
+// metadata catches up lazily, on the next write whose schema_key names a newer
+// schema. A table that is not being written to can sit in that state
+// indefinitely. FE therefore attaches its catalog schema to the alter request as
+// base_tablet_read_schema; prefer it, and fall back to tablet metadata only for
+// a request that carries none (pre-FSE-v2 FE).
+//
+// Resolution goes through the by-id schema cache so repeated alters against the
+// same catalog schema share one TabletSchema instance.
+static StatusOr<TabletSchemaPtr> resolve_authoritative_schema(TabletManager* tablet_manager,
+                                                              const TAlterTabletReqV2& request,
+                                                              const VersionedTablet& base_tablet) {
+    if (!request.__isset.base_tablet_read_schema) {
+        auto schema = base_tablet.get_schema();
+        if (schema == nullptr) {
+            return Status::InternalError("tablet has null schema and request carries no base_tablet_read_schema");
+        }
+        return schema;
+    }
+    if (auto cached = tablet_manager->get_cached_schema(request.base_tablet_read_schema.id); cached != nullptr) {
+        return cached;
+    }
+    TabletSchemaPB schema_pb;
+    RETURN_IF_ERROR(convert_t_schema_to_pb_schema(request.base_tablet_read_schema, &schema_pb));
+    auto schema = TabletSchema::create(schema_pb);
+    tablet_manager->cache_schema(schema);
+    return schema;
+}
+
 Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& request) {
     // get base tablet and new tablet
     const auto alter_version = request.alter_version;
     ASSIGN_OR_RETURN(auto base_tablet, _tablet_manager->get_tablet(request.base_tablet_id, alter_version));
     ASSIGN_OR_RETURN(auto new_tablet, _tablet_manager->get_tablet(request.new_tablet_id, 1));
 
-    // Determine the schema to use for reading data from base tablet.
-    // In Fast Schema Evolution v2, FE may send base_tablet_read_schema which is newer than the schema stored in tablet metadata.
-    // We must use the FE catalog schema (request.base_tablet_read_schema) if provided, otherwise fallback to tablet metadata schema.
-    TabletSchemaCSPtr base_tablet_read_schema;
-    if (request.__isset.base_tablet_read_schema) {
-        // Use schema from FE catalog (may be newer than tablet metadata schema).
-        auto schema_id = request.base_tablet_read_schema.id;
-        base_tablet_read_schema = _tablet_manager->get_cached_schema(schema_id);
-        if (base_tablet_read_schema == nullptr) {
-            TabletSchemaPB schema_pb;
-            RETURN_IF_ERROR(convert_t_schema_to_pb_schema(request.base_tablet_read_schema, &schema_pb));
-            base_tablet_read_schema = TabletSchema::create(schema_pb);
-            _tablet_manager->cache_schema(base_tablet_read_schema);
-        }
-    } else {
-        // Fallback to schema from tablet metadata (old behavior before Fast Schema Evolution v2).
-        base_tablet_read_schema = base_tablet.get_schema();
-    }
+    // Determine the schema to use for reading data from base tablet: the FE
+    // catalog schema when the request carries one, else tablet metadata.
+    ASSIGN_OR_RETURN(TabletSchemaCSPtr base_tablet_read_schema,
+                     resolve_authoritative_schema(_tablet_manager, request, base_tablet));
     auto new_schema = new_tablet.get_schema();
     auto has_delete_predicates = base_tablet.has_delete_predicates();
 
@@ -724,15 +742,20 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     // Fast path: shadow tablet == origin tablet (FE sends tabletId for both
     // base_tablet_id and new_tablet_id). Reuse base_tablet; do NOT read the
     // initial metadata at version 1 — on a long-running partition that file
-    // has been vacuumed and lookups will 404 on object storage. The schema
-    // used below resolves column names → unique_ids; since ADD INDEX does
-    // not change the column set, base_tablet's schema is authoritative.
+    // has been vacuumed and lookups will 404 on object storage.
     auto& new_tablet = base_tablet;
 
-    auto new_schema = new_tablet.get_schema();
-    if (new_schema == nullptr) {
-        return Status::InternalError("new tablet has null schema");
-    }
+    // This schema resolves index column names → unique ids and drives every
+    // per-segment build below, so it must be the schema FE attached to the
+    // request whenever there is one. base_tablet's metadata schema is NOT a safe
+    // substitute: ADD INDEX does not change the column set, but the column set
+    // can already have changed without tablet metadata knowing, because a
+    // metadata-only ADD COLUMN under fast schema evolution v2 updates only the FE
+    // catalog and tablet metadata catches up lazily on the next write. Resolving
+    // names against tablet metadata in that window fails every ADD INDEX on an
+    // ALTER-added column — deterministically, and on an empty table too, since
+    // with no writes there is nothing to trigger the catch-up.
+    ASSIGN_OR_RETURN(auto new_schema, resolve_authoritative_schema(_tablet_manager, request, base_tablet));
 
     // Translate each TOlapTableIndex into TabletIndexPB. TOlapTableIndex
     // carries column *names* (driven by FE catalog), and TabletIndexPB uses
@@ -787,15 +810,48 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
     // onto the tablet metadata schema — this invalidates every by-id schema cache
     // so data loaded after the index (and compaction output) build the new index
     // instead of reusing the cached pre-index schema.
-    if (request.__isset.new_index_schema_id) {
-        op_add_index->set_new_schema_id(request.new_index_schema_id);
-    }
-    if (request.__isset.new_index_schema_version) {
-        op_add_index->set_new_schema_version(request.new_index_schema_version);
+
+    // Publish the authoritative column definitions, carrying the FE-allocated
+    // schema id/version INSIDE them rather than in the standalone new_schema_id /
+    // new_schema_version fields.
+    //
+    // Sending only an id would let apply_add_index stamp FE's new schema id onto
+    // tablet-metadata content that still lacks the indexed column;
+    // update_metadata_schema() then short-circuits on the matching id and the
+    // tablet never fetches the real schema again, freezing a transient FE/BE
+    // schema gap into a permanent silent one.
+    //
+    // Keeping the id out of the standalone fields is what makes this safe across
+    // a rolling upgrade. The alter runs on the worker FE assigned at RUNNING, but
+    // publish resolves its worker separately at FINISHED_REWRITING, so a log
+    // written by an upgraded worker can be applied by one that predates this
+    // change. Such a worker ignores new_schema (an unknown field) but would still
+    // honour new_schema_id -- and would then perform exactly the id-onto-stale-
+    // content stamping described above. With the id reachable only through
+    // new_schema, its `op.has_new_schema_id()` gate is false, so it skips schema
+    // mutation entirely: the IDG entries still publish, the schema keeps its old
+    // id, and the next write's update_metadata_schema() resyncs it from FE. The
+    // index is delayed, never permanently mis-bound.
+    //
+    // apply_add_index composes this with new_indexes above into the final schema,
+    // so the compose logic lives in exactly one place.
+    //
+    // Emitted only when FE allocated an id for this alter. Without one there is no
+    // id to invalidate the by-id schema caches with, and to_schema_pb() would leave
+    // FE's *catalog* schema id in place -- installing content under that id would
+    // bind it to a schema the caches may already hold. Publishing nothing instead
+    // keeps the pre-existing behaviour for such a request.
+    if (request.__isset.new_index_schema_id && request.new_index_schema_id > 0) {
+        auto* target_schema_pb = op_add_index->mutable_new_schema();
+        new_schema->to_schema_pb(target_schema_pb);
+        target_schema_pb->set_id(request.new_index_schema_id);
+        if (request.__isset.new_index_schema_version) {
+            target_schema_pb->set_schema_version(static_cast<int32_t>(request.new_index_schema_version));
+        }
     }
 
     AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
-                            alter_version, _lake_schema_change_pool);
+                            alter_version, new_schema, _lake_schema_change_pool);
     auto run_st = sc.run(op_add_index);
     if (!run_st.ok()) {
         // Do NOT fall back to do_process_alter_tablet here. The fast-path

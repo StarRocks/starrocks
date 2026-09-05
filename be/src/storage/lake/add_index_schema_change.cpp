@@ -15,6 +15,7 @@
 #include "storage/lake/add_index_schema_change.h"
 
 #include <memory>
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -165,19 +166,27 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
 
 AddIndexSchemaChange::AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
                                            VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build,
-                                           int64_t alter_version, ThreadPool* lake_schema_change_pool)
+                                           int64_t alter_version, TabletSchemaPtr authoritative_schema,
+                                           ThreadPool* lake_schema_change_pool)
         : _tablet_mgr(tablet_mgr),
           _lake_schema_change_pool(lake_schema_change_pool),
           _txn_id(txn_id),
           _base_tablet(std::move(base_tablet)),
           _new_tablet(std::move(new_tablet)),
           _indexes_to_build(std::move(indexes_to_build)),
-          _alter_version(alter_version) {}
+          _alter_version(alter_version),
+          _authoritative_schema(std::move(authoritative_schema)) {}
 
 AddIndexSchemaChange::~AddIndexSchemaChange() = default;
 
 Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     DCHECK(op_add_index != nullptr);
+    if (_authoritative_schema == nullptr) {
+        // Not defensive boilerplate: every column-set decision below reads this
+        // schema, and silently substituting the tablet metadata schema is exactly
+        // the bug this parameter exists to prevent.
+        return Status::InternalError("AddIndexSchemaChange: authoritative schema is null");
+    }
     op_add_index->set_alter_version(_alter_version);
     for (const auto& ix : _indexes_to_build) {
         op_add_index->add_new_indexes()->CopyFrom(ix);
@@ -219,6 +228,13 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
                 IndexDeltaGroupEntryPB entry;
                 RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
+                if (entry.keys_size() == 0) {
+                    // Every index was skipped on this segment because its column
+                    // is physically absent (see classify_index_for_segment). No
+                    // .idx file was written, so publishing an entry would point
+                    // readers at payloads that do not exist.
+                    return Status::OK();
+                }
                 std::lock_guard<std::mutex> lg(_op_mtx);
                 auto* se = op_add_index->add_segment_entries();
                 se->set_segment_id(rssid);
@@ -236,6 +252,15 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         }
     }
     Status run_st = runner.wait();
+    if (const auto skipped = _skipped_pairs.load(std::memory_order_relaxed); skipped > 0 && run_st.ok()) {
+        // One line per tablet, not per segment. Says the alter succeeded with
+        // partial index coverage, which is otherwise invisible: the alter reports
+        // FINISHED and queries stay correct, so nothing else signals it.
+        LOG(INFO) << "ADD INDEX fast path: tablet=" << _new_tablet.id() << " txn_id=" << _txn_id << " skipped "
+                  << skipped << " (segment, index) pair(s) whose column is absent from the segment; those rows "
+                  << "read as the column default and carry no index until rewritten under a schema that has one. "
+                  << "Per-segment detail at VLOG(2).";
+    }
     if (!run_st.ok()) {
         // Best-effort remove any .idx files already written by tasks that
         // succeeded before the first failure. The caller (schema_change.cpp)
@@ -265,6 +290,86 @@ void AddIndexSchemaChange::cleanup_written_idx_files() {
             LOG(WARNING) << "AddIndexSchemaChange cleanup: failed to delete orphan .idx " << p << ": " << st;
         }
     }
+}
+
+StatusOr<AddIndexSchemaChange::IndexDisposition> AddIndexSchemaChange::classify_index_for_segment(
+        Segment* segment, const TabletIndexPB& ix, const TabletColumn** out_column) const {
+    DCHECK(segment != nullptr);
+    DCHECK(out_column != nullptr);
+    *out_column = nullptr;
+
+    if (ix.col_unique_id_size() == 0) {
+        return Status::InternalError("TabletIndex has no columns");
+    }
+    // Multi-column indexes (GIN, VECTOR) aren't supported in this initial
+    // slice. BITMAP / NGRAMBF / bloom are single-column only.
+    if (ix.col_unique_id_size() > 1 && ix.index_type() != IndexType::GIN) {
+        return Status::NotSupported("multi-column non-GIN index unsupported");
+    }
+    const int col_uid = ix.col_unique_id(0);
+    const int32_t col_ordinal = _authoritative_schema->field_index(col_uid);
+    if (col_ordinal < 0) {
+        // FE asked us to index a column that is missing from the schema FE itself
+        // attached to the request. FE and BE disagree about the column set; that
+        // is not a legitimate absence, so fail instead of skipping.
+        return Status::InternalError(strings::Substitute("column with unique_id $0 not found in schema", col_uid));
+    }
+    const auto& column = _authoritative_schema->column(static_cast<size_t>(col_ordinal));
+    *out_column = &column;
+
+    if (segment->column_with_uid(column.unique_id()) != nullptr) {
+        return IndexDisposition::kBuild;
+    }
+
+    // The column is in the schema but has no bytes in this segment - the normal
+    // outcome of a metadata-only ADD COLUMN, which rewrites no historical
+    // segment. Reads synthesize such a column from its default (or null) through
+    // Segment::new_column_iterator_or_default().
+    //
+    // Skipping the index on this segment is both safe and the only option.
+    //
+    // Safe: a query reading an absent column gets a DefaultValueColumnIterator,
+    // which reports has_original_bloom_filter_index() / has_ngram_bloom_filter_index()
+    // false, and Segment::new_bitmap_index_iterator() yields no iterator when the
+    // column has no reader. No index of this segment is ever consulted for that
+    // column, so the skip costs pruning and never correctness.
+    //
+    // How long the gap lasts depends on which schema a later rewrite resolves, and
+    // it is NOT always temporary:
+    //   - PRIMARY KEY table: TabletManager::get_output_rowset_schema short-circuits
+    //     on keys_type and always resolves metadata->schema(), so coverage always
+    //     converges.
+    //   - Rowset not pinned in rowset_to_schema (table never fast-evolved, or no
+    //     write followed the ADD COLUMN): compaction resolves metadata->schema(),
+    //     which carries the index flag, and SegmentWriter builds the index inline.
+    //     Coverage converges.
+    //   - Non-PK rowset pinned to an OLDER historical schema (the next write after
+    //     the ADD COLUMN archived the then-current schema and pinned every existing
+    //     rowset to it): apply_add_index deliberately leaves those pins alone, and
+    //     get_output_rowset_schema resolves the pinned schema, which has neither the
+    //     added column nor its index flag. Compacting such a rowset ON ITS OWN does
+    //     not advance anything -- the output rowset is pinned to that same resolved
+    //     schema (txn_log_applier.cpp -> meta_file.cpp), so the state is a fixed
+    //     point. It converges only once such a rowset is compacted TOGETHER with one
+    //     pinned to the indexed schema (any write after this alter), because
+    //     get_output_rowset_schema takes the highest schema_version among its
+    //     inputs. Size-tiered compaction picks rowsets by level, so a large old
+    //     rowset and the small new ones start in different levels and only meet as
+    //     levels merge; a partition that stops receiving writes can stay
+    //     index-free indefinitely.
+    // See MetaFileTest.test_apply_add_index_old_pin_is_a_compaction_fixed_point.
+    //
+    // Only option: a bloom filter must carry exactly one filter per data page of
+    // the source column, because ColumnReader::bloom_filter addresses them by
+    // page id. A column with no reader has no data pages to align to, so there is
+    // no well-formed payload to fabricate.
+    if (!column.has_default_value() && !column.is_nullable()) {
+        return Status::Corruption(strings::Substitute(
+                "ADD INDEX fast path: column $0 (unique_id $1) is absent from segment $2 but has neither a default "
+                "value nor nullability to read it as. tablet=$3",
+                column.name(), col_uid, segment->file_name(), _new_tablet.id()));
+    }
+    return IndexDisposition::kSkip;
 }
 
 Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset,
@@ -298,10 +403,50 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     }
     size_t footer_size_hint = 16 * 1024;
     LakeIOOptions read_opts{.fill_data_cache = false};
-    auto tablet_schema = _new_tablet.get_schema();
+    // Open under the authoritative schema, not the tablet metadata schema.
+    // Segment::_create_column_readers() walks the schema it is given rather than
+    // the footer, so a column missing from that schema gets no ColumnReader even
+    // when the segment physically contains it - and with fill_meta_cache this
+    // Segment is what later readers reuse. A subset schema here would leave those
+    // readers unable to see the column at all.
     ASSIGN_OR_RETURN(auto segment,
                      _tablet_mgr->load_segment(seg_fileinfo, seg_idx_in_rowset, &footer_size_hint, read_opts,
-                                               /*fill_meta_cache*/ true, tablet_schema));
+                                               /*fill_meta_cache*/ true, _authoritative_schema));
+
+    // 1b. Decide, per index, whether this segment can carry it. A column added by
+    //     a metadata-only ALTER has no bytes in segments written before the ALTER,
+    //     so those segments legitimately carry no index for it. Classify BEFORE
+    //     allocating the .idx file: when nothing can be built here we must leave
+    //     no file behind and no IDG entry for the caller to publish.
+    std::vector<std::pair<const TabletIndexPB*, const TabletColumn*>> to_build;
+    to_build.reserve(_indexes_to_build.size());
+    int64_t skipped = 0;
+    for (const auto& ix : _indexes_to_build) {
+        const TabletColumn* column = nullptr;
+        ASSIGN_OR_RETURN(auto disposition, classify_index_for_segment(segment.get(), ix, &column));
+        if (disposition == IndexDisposition::kSkip) {
+            ++skipped;
+            // Deliberately VLOG, not LOG(INFO): this branch is the EXPECTED outcome
+            // for every historical segment of a table whose indexed column was added
+            // by ALTER, so an INFO line here means one line per (segment, index) --
+            // potentially millions during a single alter on a large table, for a
+            // benign condition. run() logs one aggregate line per tablet instead.
+            VLOG(2) << "ADD INDEX fast path: skipping index type " << static_cast<int>(ix.index_type()) << " on column "
+                    << column->name() << " (unique_id " << column->unique_id() << "): absent from segment " << seg_name
+                    << ". tablet=" << _new_tablet.id() << " txn_id=" << _txn_id;
+            continue;
+        }
+        to_build.emplace_back(&ix, column);
+    }
+    if (skipped > 0) {
+        _skipped_pairs.fetch_add(skipped, std::memory_order_relaxed);
+    }
+    if (to_build.empty()) {
+        // Nothing to write for this segment. Leave `out_entry` untouched so the
+        // caller drops it instead of publishing an entry that promises index
+        // payloads no .idx file holds.
+        return Status::OK();
+    }
 
     // 2. Allocate the .idx file. Default WritableFileOptions leave
     //    skip_fill_local_cache=false so writes populate local cache,
@@ -332,21 +477,10 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     //    IndexFileWriter. Unsupported types are a soft failure at this
     //    phase (NotSupported); the caller will abort the txn log and the
     //    .idx file will be garbage-collected as an orphan.
-    for (const auto& ix : _indexes_to_build) {
-        if (ix.col_unique_id_size() == 0) {
-            return Status::InternalError("TabletIndex has no columns");
-        }
-        // Multi-column indexes (GIN, VECTOR) aren't supported in this
-        // initial slice. BITMAP / NGRAMBF / bloom are single-column only.
-        if (ix.col_unique_id_size() > 1 && ix.index_type() != IndexType::GIN) {
-            return Status::NotSupported("multi-column non-GIN index unsupported");
-        }
-        int col_uid = ix.col_unique_id(0);
-        int32_t col_ordinal = tablet_schema->field_index(col_uid);
-        if (col_ordinal < 0) {
-            return Status::InternalError(strings::Substitute("column with unique_id $0 not found in schema", col_uid));
-        }
-        const auto& column = tablet_schema->column(static_cast<size_t>(col_ordinal));
+    for (const auto& [ix_ptr, column_ptr] : to_build) {
+        const auto& ix = *ix_ptr;
+        const auto& column = *column_ptr;
+        const int col_uid = ix.col_unique_id(0);
 
         ColumnIndexMetaPB meta;
         switch (ix.index_type()) {
@@ -381,11 +515,15 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
 
     RETURN_IF_ERROR(idx_writer.finalize());
 
-    // 4. Populate the IDG entry that the caller will hang off OpAddIndex.
-    for (const auto& ix : _indexes_to_build) {
+    // 4. Populate the IDG entry that the caller will hang off OpAddIndex. Keys
+    //    describe what this .idx file actually holds, so they come from the
+    //    classified set - not from _indexes_to_build. Advertising a key whose
+    //    payload was skipped would move the failure from this alter to every
+    //    later reader that looks the key up.
+    for (const auto& built : to_build) {
         auto* k = out_entry->add_keys();
-        k->set_col_unique_id(ix.col_unique_id(0));
-        k->set_index_type(ix.index_type());
+        k->set_col_unique_id(built.first->col_unique_id(0));
+        k->set_index_type(built.first->index_type());
     }
     out_entry->set_index_file(idx_filename);
     out_entry->set_version(_alter_version);
@@ -410,6 +548,12 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     // is cheap to open, and sharing would complicate the add_values /
     // add_nulls run accounting when multiple builders consume from the same
     // source.
+    // Deliberately the NON-defaulting iterator. classify_index_for_segment() has
+    // already established that this segment physically holds the column, so a
+    // NotFound here means that check and reality diverged and we want to hear
+    // about it. Falling back to new_column_iterator_or_default() would instead
+    // build an index over synthesized default values -- an index describing rows
+    // the segment does not contain.
     ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(column, /*path=*/nullptr));
 
     // Open a RandomAccessFile over the segment data for the column iterator.
@@ -551,6 +695,7 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     std::unique_ptr<BloomFilterIndexWriter> bf_writer;
     RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_opts, type_info, &bf_writer));
 
+    // Non-defaulting iterator on purpose; see the note in build_bitmap_for_column.
     ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(column, /*path=*/nullptr));
 
     // Mirror build_bitmap_for_column: bundled rowsets pack multiple logical

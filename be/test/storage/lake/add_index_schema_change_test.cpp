@@ -221,6 +221,94 @@ protected:
         return *vt_or;
     }
 
+    // Simulate a metadata-only ADD COLUMN: return the base schema plus one extra
+    // INT column that no segment on disk physically contains. Tablet metadata is
+    // deliberately NOT updated -- that is the state fast schema evolution v2
+    // leaves behind between the FE catalog change and the next write, and the
+    // state the ADD INDEX fast path used to fail in.
+    std::shared_ptr<TabletSchema> schema_with_added_column(const TabletMetadata& base_metadata, bool nullable,
+                                                           const char* default_value) {
+        TabletSchemaPB pb = base_metadata.schema();
+        auto* c = pb.add_column();
+        c->set_unique_id(_c5_uid);
+        c->set_name("c5");
+        c->set_type("INT");
+        c->set_is_key(false);
+        c->set_is_nullable(nullable);
+        c->set_aggregation("NONE");
+        if (default_value != nullptr) {
+            c->set_default_value(default_value);
+        }
+        return TabletSchema::create(pb);
+    }
+
+    // The TTabletSchema FE attaches to the alter request (base_tablet_read_schema):
+    // the fixture's c0..c4 plus the ALTER-added c5 INT NULL DEFAULT '0'. Mirrors
+    // the real dispatch, where FE's catalog already carries the added column but
+    // tablet metadata does not yet -- and where FE has not yet recorded this
+    // alter's index, since it mutates its catalog only after publish.
+    TTabletSchema read_schema_with_c5(const TabletMetadata& base_metadata, int64_t schema_id) {
+        TTabletSchema t_schema;
+        t_schema.__set_id(schema_id);
+        t_schema.__set_schema_version(base_metadata.schema().schema_version() + 1);
+        t_schema.__set_short_key_column_count(base_metadata.schema().num_short_key_columns());
+        t_schema.__set_keys_type(TKeysType::DUP_KEYS);
+
+        auto add_col = [&](const char* name, int32_t uid, TPrimitiveType::type ptype, bool is_key, bool nullable,
+                           int32_t len, const char* default_value) {
+            TColumn c;
+            c.__set_column_name(name);
+            TTypeNode type_node;
+            type_node.__set_type(TTypeNodeType::SCALAR);
+            TScalarType scalar;
+            scalar.__set_type(ptype);
+            if (len > 0) {
+                scalar.__set_len(len);
+            }
+            type_node.__set_scalar_type(scalar);
+            c.__set_type_desc(TTypeDesc());
+            c.type_desc.__set_types({type_node});
+            c.__set_col_unique_id(uid);
+            c.__set_is_key(is_key);
+            c.__set_is_allow_null(nullable);
+            if (!is_key) {
+                c.__set_aggregation_type(TAggregationType::NONE);
+            }
+            if (len > 0) {
+                c.__set_index_len(len);
+            }
+            if (default_value != nullptr) {
+                c.__set_default_value(default_value);
+            }
+            t_schema.columns.push_back(c);
+        };
+
+        add_col("c0", _c0_uid, TPrimitiveType::INT, /*is_key=*/true, /*nullable=*/false, /*len=*/0, nullptr);
+        add_col("c1", _c1_uid, TPrimitiveType::INT, false, false, 0, nullptr);
+        add_col("c2", _c2_uid, TPrimitiveType::VARCHAR, false, false, 64, nullptr);
+        add_col("c3", _c3_uid, TPrimitiveType::INT, false, true, 0, nullptr);
+        add_col("c4", _c4_uid, TPrimitiveType::CHAR, false, false, 16, nullptr);
+        add_col("c5", _c5_uid, TPrimitiveType::INT, false, true, 0, "0");
+        return t_schema;
+    }
+
+    // Count .idx files currently in the tablet's segment directory. Used to prove
+    // a fully-skipped segment leaves no file behind, not even an empty one.
+    size_t count_idx_files() {
+        const std::string dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+        auto fs_or = FileSystemFactory::CreateSharedFromString(dir);
+        CHECK(fs_or.ok()) << fs_or.status();
+        size_t n = 0;
+        auto st = (*fs_or)->iterate_dir(dir, [&](std::string_view name) {
+            if (name.size() > 4 && name.substr(name.size() - 4) == ".idx") {
+                ++n;
+            }
+            return true;
+        });
+        CHECK(st.ok()) << st;
+        return n;
+    }
+
     constexpr static const char* const kTestGroupPath = "test_lake_add_index_schema_change";
 
     // Stable column unique-ids (matches the ones generated for c0/c1/c2/c3).
@@ -229,6 +317,7 @@ protected:
     const int32_t _c2_uid = 102;
     const int32_t _c3_uid = 103;
     const int32_t _c4_uid = 104; // CHAR column, exercises feed_index_from_column's repad path
+    const int32_t _c5_uid = 105; // never written to any segment; stands in for an ALTER-added column
 
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<FixedLocationProvider> _location_provider;
@@ -249,7 +338,8 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_single_segment_happy_path) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -280,7 +370,8 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_char_column_repads) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c4_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -302,7 +393,8 @@ TEST_F(AddIndexSchemaChangeTest, run_bloom_char_column_repads) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c4_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -328,7 +420,7 @@ TEST_F(AddIndexSchemaChangeTest, run_ngrambf_with_index_properties) {
     const std::string props = R"({"properties":{"bloom_filter_fpp":"0.05","gram_num":"3","case_sensitive":"true"}})";
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -348,7 +440,7 @@ TEST_F(AddIndexSchemaChangeTest, run_plain_bloom_filter) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -369,7 +461,7 @@ TEST_F(AddIndexSchemaChangeTest, run_multi_segment_emits_per_segment_entry) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -389,7 +481,7 @@ TEST_F(AddIndexSchemaChangeTest, run_empty_tablet_noop) {
 
     auto vt = versioned_at(base_tablet_id, /*version=*/1);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/1);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/1, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -410,7 +502,7 @@ TEST_F(AddIndexSchemaChangeTest, run_gin_returns_not_supported) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::GIN, _c2_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     Status st = sc.run(&op);
@@ -430,7 +522,7 @@ TEST_F(AddIndexSchemaChangeTest, run_unknown_column_unique_id) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, /*col_uid=*/999999)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     Status st = sc.run(&op);
@@ -449,7 +541,7 @@ TEST_F(AddIndexSchemaChangeTest, run_carries_index_id_through_to_entry) {
     const int64_t kIndexId = 7777;
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid, kIndexId)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -468,7 +560,7 @@ TEST_F(AddIndexSchemaChangeTest, run_vector_index_returns_not_supported) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::VECTOR, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     Status st = sc.run(&op);
@@ -486,7 +578,7 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_nullable_column_handles_nulls) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c3_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -538,6 +630,18 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_happy_path) {
 // apply_add_index can stamp them onto the tablet metadata schema (durability fix
 // — invalidates every by-id schema cache so post-index loads / compaction build
 // the index instead of reusing the cached pre-index schema).
+//
+// They now travel INSIDE new_schema rather than in the standalone new_schema_id /
+// new_schema_version fields. The contract is unchanged -- the id still reaches the
+// log and still drives the stamp -- but the transport matters for rolling
+// upgrades: the alter runs on the worker FE assigned at RUNNING, while publish
+// resolves its worker separately at FINISHED_REWRITING, so a log written by an
+// upgraded worker can be applied by one that predates new_schema. That worker
+// ignores new_schema but would still honour a standalone new_schema_id, stamping
+// the new id onto content that lacks the ALTER-added column -- which
+// update_metadata_schema() then treats as current, freezing the incomplete schema
+// permanently. Leaving the standalone fields unset makes it skip schema mutation
+// instead, so the index is merely delayed until the next resync.
 TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
@@ -566,8 +670,57 @@ TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_carries_new_schema_id
                     _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
                                                   /*fill_cache=*/false));
     ASSERT_TRUE(txn_log->has_op_add_index());
-    EXPECT_EQ(987654, txn_log->op_add_index().new_schema_id());
-    EXPECT_EQ(9, txn_log->op_add_index().new_schema_version());
+    const auto& op = txn_log->op_add_index();
+    // The id/version reached the log...
+    ASSERT_TRUE(op.has_new_schema());
+    EXPECT_EQ(987654, op.new_schema().id());
+    EXPECT_EQ(9, op.new_schema().schema_version());
+    // ...only through new_schema. If someone re-adds set_new_schema_id() to the
+    // writer, a pre-new_schema publish worker regains the ability to bind the new
+    // id to schema content lacking the added column, so this must stay false.
+    EXPECT_FALSE(op.has_new_schema_id()) << "standalone new_schema_id would let an old publish worker "
+                                            "bind the new id to schema content lacking the added column";
+    EXPECT_FALSE(op.has_new_schema_version());
+}
+
+// Without an FE-allocated schema id there is nothing to invalidate the by-id
+// schema caches with, and to_schema_pb() would otherwise leave FE's *catalog*
+// schema id in new_schema -- installing content under that id would bind it to a
+// schema the caches may already hold. Such a request must publish no new_schema at
+// all, keeping the pre-existing behaviour.
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_omits_new_schema_without_allocated_id) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/3);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    // Deliberately no new_index_schema_id.
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BITMAP);
+    ix.__set_columns({"c1"});
+    request.__set_indexes_to_add({ix});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    ASSIGN_OR_ABORT(auto txn_log,
+                    _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
+                                                  /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    const auto& op = txn_log->op_add_index();
+    EXPECT_FALSE(op.has_new_schema()) << "no allocated id means no schema to install";
+    EXPECT_FALSE(op.has_new_schema_id());
+    // The index payloads themselves still publish.
+    EXPECT_EQ(1, op.new_indexes_size());
+    EXPECT_EQ(1, op.segment_entries_size());
 }
 
 // A materialized index (rollup / sync MV) whose schema lacks the indexed
@@ -688,7 +841,8 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bitmap_iterator_smoke) {
     // 1. Build BITMAP IDG entry on c1 via the fast path, capturing the entry.
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
     ASSERT_EQ(1, op.segment_entries_size());
@@ -770,7 +924,8 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bloom_filter_smoke) {
     auto vt = versioned_at(base_tablet_id, version);
     const std::string props = R"({"properties":{"gram_num":"3","bloom_filter_fpp":"0.05"}})";
     std::vector<TabletIndexPB> indexes{make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
     ASSERT_EQ(1, op.segment_entries_size());
@@ -870,7 +1025,8 @@ TEST_F(AddIndexSchemaChangeTest, idg_bloom_multi_page_no_oob_and_correct_pruning
     // Build a plain BLOOM_FILTER IDG index on c1 (INT) via the fast path.
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
     ASSERT_EQ(1, op.segment_entries_size());
@@ -974,6 +1130,135 @@ TEST_F(AddIndexSchemaChangeTest, idg_bloom_multi_page_no_oob_and_correct_pruning
     // retains the matching page plus a few bloom false positives. A still-wrong
     // granularity would force the defensive fallback to retain every page,
     // leaving ~all kNumRows rows — caught here.
+    EXPECT_LT(ranges.span_size(), kNumRows / 2);
+}
+
+// The fix opens every source segment under the AUTHORITATIVE schema, which is a
+// SUPERSET of what the segment physically holds (it carries the ALTER-added
+// column the segment lacks). That is required -- Segment::_create_column_readers
+// walks the given schema, so a subset schema would leave later readers of the
+// cached Segment unable to see a column the segment does have -- but it must not
+// change what gets built for the columns that ARE present, nor how they read back.
+//
+// This is the functional counterpart to the skip tests: those prove the absent
+// column is skipped; this proves the PRESENT column's index is still built
+// correctly and still prunes. Without it, the fix could satisfy every "alter
+// FINISHED + results correct" assertion while silently producing an index that
+// never prunes anything.
+TEST_F(AddIndexSchemaChangeTest, superset_schema_still_builds_and_prunes_present_column) {
+    const int32_t saved_page_size = config::data_page_size;
+    config::data_page_size = 64;
+    DeferOp restore([&]() { config::data_page_size = saved_page_size; });
+
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    const int kNumRows = 2000;
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, kNumRows);
+
+    // Authoritative schema = base + the ALTER-added c5 that no segment holds.
+    auto authoritative = schema_with_added_column(*base_metadata, /*nullable=*/true, /*default_value=*/"0");
+
+    // Index c1, which IS physically present, while the authoritative schema also
+    // carries the absent c5. Both dispositions occur in one run.
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c1_uid),
+                                       make_index(IndexType::BLOOM_FILTER, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            authoritative);
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& seg_entry = op.segment_entries(0);
+    // Only c1's payload landed; c5 was skipped and must not be advertised.
+    ASSERT_EQ(1, seg_entry.entry().keys_size());
+    ASSERT_EQ(_c1_uid, seg_entry.entry().keys(0).col_unique_id());
+    ASSERT_GT(seg_entry.entry().file_size(), 0);
+
+    auto vt2 = versioned_at(base_tablet_id, version);
+    auto meta = vt2.metadata();
+    ASSERT_TRUE(meta != nullptr && meta->rowsets_size() > 0);
+    const auto& rowset = meta->rowsets(0);
+    ASSERT_GT(rowset.segment_metas_size(), 0);
+    const auto& segment_meta = rowset.segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(base_tablet_id, segment_meta.filename())};
+    if (segment_meta.has_size()) {
+        seg_fi.size = segment_meta.size();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        seg_fi.encryption_meta = segment_meta.encryption_meta();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    size_t footer_hint = 16 * 1024;
+    // Open under the SUPERSET schema, mirroring what build_idg_for_segment does.
+    ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                LakeIOOptions{.fill_data_cache = false},
+                                                                /*fill_meta_cache=*/true, authoritative));
+    // The present column still gets a reader; the absent one still does not.
+    auto* reader_const = segment->column_with_uid(_c1_uid);
+    ASSERT_TRUE(reader_const != nullptr);
+    EXPECT_TRUE(segment->column_with_uid(_c5_uid) == nullptr);
+    auto* reader = const_cast<ColumnReader*>(reader_const);
+    {
+        OlapReaderStatistics ord_stats;
+        ASSIGN_OR_ABORT(auto ord_fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+        ASSIGN_OR_ABORT(auto ord_rfile, ord_fs->new_random_access_file(seg_fi));
+        IndexReadOptions ord_opts;
+        ord_opts.read_file = ord_rfile->stream().get();
+        ord_opts.stats = &ord_stats;
+        ord_opts.use_page_cache = false;
+        ASSERT_OK(reader->load_ordinal_index(ord_opts));
+    }
+    ASSERT_GT(reader->num_data_pages(), 1);
+
+    IndexDeltaGroupEntry entry;
+    entry.index_file = seg_entry.entry().index_file();
+    entry.version = seg_entry.entry().version();
+    entry.keys.push_back({_c1_uid, IndexType::BLOOM_FILTER});
+    auto loader = std::make_shared<StubIdgLoaderForReadPath>(IndexDeltaGroupList{entry});
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(seg_fi.path));
+    ASSIGN_OR_ABORT(auto rfile, fs->new_random_access_file(seg_fi));
+    IndexReadOptions ix_opts;
+    ix_opts.read_file = rfile->stream().get();
+    ix_opts.stats = &stats;
+    ix_opts.use_page_cache = false;
+    ix_opts.idg_loader = loader;
+    ix_opts.tablet_id = base_tablet_id;
+    ix_opts.segment_id = 0;
+    ix_opts.query_version = version;
+    ix_opts.col_unique_id = _c1_uid;
+
+    const int matched_row = 1500;
+    const int matched_value = matched_row * 7 + 3;
+    auto type_info = get_type_info(LogicalType::TYPE_INT);
+    const std::string matched_value_str = std::to_string(matched_value);
+    auto* pred = new_column_eq_predicate(type_info, /*id=*/0, Slice(matched_value_str));
+    std::unique_ptr<ColumnPredicate> pred_guard(pred);
+    std::vector<const ColumnPredicate*> predicates{pred};
+
+    SparseRange<> ranges;
+    ranges.add(Range<>(0, kNumRows));
+    ASSERT_OK(reader->original_bloom_filter(predicates, &ranges, ix_opts));
+
+    auto covered = [&](int64_t row) {
+        for (size_t i = 0; i < ranges.size(); ++i) {
+            if (row >= static_cast<int64_t>(ranges[i].begin()) && row < static_cast<int64_t>(ranges[i].end())) {
+                return true;
+            }
+        }
+        return false;
+    };
+    // No false negative on the matching row...
+    EXPECT_GT(ranges.span_size(), 0);
+    EXPECT_TRUE(covered(matched_row));
+    // ...and the index really prunes. A superset schema that corrupted the build
+    // (wrong column, wrong page alignment) would trip the read path's defensive
+    // fallback and retain every page, which this bound catches.
     EXPECT_LT(ranges.span_size(), kNumRows / 2);
 }
 
@@ -1146,7 +1431,7 @@ TEST_F(AddIndexSchemaChangeTest, run_two_indexes_share_idx_file) {
             make_index(IndexType::BITMAP, _c1_uid),
             make_index(IndexType::NGRAMBF, _c2_uid, /*index_id=*/0, props),
     };
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
 
     TxnLogPB_OpAddIndex op;
     ASSERT_OK(sc.run(&op));
@@ -1181,7 +1466,8 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_trips_clean_mem_limit_exceeded) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
 
     MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "sc_test", nullptr);
     sc_tracker.consume(sc_tracker.limit() + 1); // push consumption past the limit
@@ -1207,7 +1493,8 @@ TEST_F(AddIndexSchemaChangeTest, run_bloom_trips_clean_mem_limit_exceeded) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version);
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema());
 
     MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "sc_test", nullptr);
     sc_tracker.consume(sc_tracker.limit() + 1);
@@ -1244,7 +1531,8 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_pool_thread_inherits_mem_limit) {
 
     auto vt = versioned_at(base_tablet_id, version);
     std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version, pool.get());
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, /*alter_version=*/version,
+                            vt.get_schema(), pool.get());
 
     MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "sc_test", nullptr);
     sc_tracker.consume(sc_tracker.limit() + 1);
@@ -1260,6 +1548,194 @@ TEST_F(AddIndexSchemaChangeTest, run_bitmap_pool_thread_inherits_mem_limit) {
     sc_tracker.release(sc_tracker.consumption());
     ASSERT_FALSE(st.ok());
     EXPECT_TRUE(st.is_mem_limit_exceeded()) << st.to_string();
+}
+
+// ---------------------------------------------------------------------------
+// Columns added by a metadata-only ALTER.
+//
+// Such a column has no bytes in any segment written before the ALTER, because
+// fast schema evolution rewrites no data. The alter must still succeed: those
+// segments publish without the index, their rows read as the column default,
+// and compaction rebuilds coverage when it next rewrites them under the indexed
+// schema. Failing instead is the bug behind StarRocksTest#12090, where a bloom
+// filter on an ALTER-added column failed 5/5 on an idle table.
+// ---------------------------------------------------------------------------
+
+TEST_F(AddIndexSchemaChangeTest, run_plain_bloom_on_alter_added_column_skips_absent_segment) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/8);
+
+    auto authoritative = schema_with_added_column(*base_metadata, /*nullable=*/true, /*default_value=*/"0");
+    const size_t idx_before = count_idx_files();
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    // The index is still announced on the schema (new writes and compaction
+    // output will build it inline), but no segment carries a payload for it.
+    EXPECT_EQ(1, op.new_indexes_size());
+    EXPECT_EQ(0, op.segment_entries_size());
+    // No .idx file, not even an empty one: allocation happens only after at
+    // least one index is known to be buildable on the segment.
+    EXPECT_EQ(idx_before, count_idx_files());
+}
+
+TEST_F(AddIndexSchemaChangeTest, run_bitmap_on_alter_added_column_skips_absent_segment) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/8);
+
+    auto authoritative = schema_with_added_column(*base_metadata, /*nullable=*/true, /*default_value=*/"0");
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    EXPECT_EQ(0, op.segment_entries_size());
+}
+
+// A nullable column with no declared default is still readable (as NULL), so it
+// skips rather than errors.
+TEST_F(AddIndexSchemaChangeTest, run_nullable_alter_added_column_without_default_skips) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/4);
+
+    auto authoritative = schema_with_added_column(*base_metadata, /*nullable=*/true, /*default_value=*/nullptr);
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    EXPECT_EQ(0, op.segment_entries_size());
+}
+
+// The absence is only legitimate when the column can actually be read as
+// something. NOT NULL with no default means metadata and data genuinely
+// disagree; softening that into a skip would publish real corruption as a
+// successful alter with quietly incomplete coverage.
+TEST_F(AddIndexSchemaChangeTest, run_absent_column_without_default_or_null_is_corruption) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/4);
+
+    auto authoritative = schema_with_added_column(*base_metadata, /*nullable=*/false, /*default_value=*/nullptr);
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BLOOM_FILTER, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
+
+    TxnLogPB_OpAddIndex op;
+    Status st = sc.run(&op);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_corruption()) << st;
+}
+
+// Mixed request: one index on a column the segment has, one on an ALTER-added
+// column it does not. The segment publishes an entry for the buildable index
+// only -- the IDG keys must describe what the .idx file actually holds, or every
+// later reader looking up the skipped key hits a missing payload.
+TEST_F(AddIndexSchemaChangeTest, run_mixed_present_and_absent_columns_builds_only_present) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/6);
+
+    auto authoritative = schema_with_added_column(*base_metadata, /*nullable=*/true, /*default_value=*/"0");
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid),
+                                       make_index(IndexType::BLOOM_FILTER, _c5_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
+
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.segment_entries_size());
+    const auto& entry = op.segment_entries(0).entry();
+    ASSERT_EQ(1, entry.keys_size());
+    EXPECT_EQ(_c1_uid, entry.keys(0).col_unique_id());
+    EXPECT_EQ(IndexType::BITMAP, entry.keys(0).index_type());
+}
+
+// Every column-set decision reads the authoritative schema, so substituting the
+// tablet metadata schema when it is missing is exactly the bug the parameter
+// exists to prevent. Fail loudly instead.
+TEST_F(AddIndexSchemaChangeTest, run_rejects_null_authoritative_schema) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/2);
+
+    auto vt = versioned_at(base_tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, /*authoritative=*/nullptr);
+
+    TxnLogPB_OpAddIndex op;
+    EXPECT_FALSE(sc.run(&op).ok());
+}
+
+// End-to-end through the handler, in the exact shape the bug reproduced in: the
+// tablet metadata schema does not carry the indexed column, and only the schema
+// FE attached to the request does. Resolving names against tablet metadata
+// returned "column c5 not found in new schema" and cancelled the alter.
+TEST_F(AddIndexSchemaChangeTest, do_process_add_index_only_resolves_names_via_request_read_schema) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(base_tablet_id, /*version=*/1, base_schema, /*nrows=*/5);
+
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(base_tablet_id);
+    request.__set_new_tablet_id(base_tablet_id);
+    request.__set_alter_version(version);
+    request.__set_txn_id(next_id());
+    request.__set_only_add_index(true);
+    request.__set_new_index_schema_id(next_id());
+    request.__set_new_index_schema_version(base_metadata->schema().schema_version() + 1);
+    request.__set_base_tablet_read_schema(read_schema_with_c5(*base_metadata, next_id()));
+    TOlapTableIndex ix;
+    ix.__set_index_id(next_id());
+    ix.__set_index_type(TIndexType::BLOOM_FILTER);
+    ix.__set_columns({"c5"});
+    request.__set_indexes_to_add({ix});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    ASSIGN_OR_ABORT(auto txn_log,
+                    _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(base_tablet_id, request.txn_id),
+                                                  /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    const auto& op = txn_log->op_add_index();
+    EXPECT_EQ(1, op.new_indexes_size());
+    // The only segment predates the column, so it carries no payload.
+    EXPECT_EQ(0, op.segment_entries_size());
+    // The log must carry the full column definitions, not just the new id --
+    // publishing only the id would bind it to content still missing c5.
+    ASSERT_TRUE(op.has_new_schema());
+    bool has_c5 = false;
+    for (const auto& col : op.new_schema().column()) {
+        if (col.unique_id() == _c5_uid) {
+            has_c5 = true;
+            EXPECT_EQ("0", col.default_value());
+        }
+    }
+    EXPECT_TRUE(has_c5) << "new_schema must carry the ALTER-added column";
 }
 
 } // namespace starrocks::lake

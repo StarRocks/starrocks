@@ -109,7 +109,14 @@ public:
     // reconciled into schema.table_indices in an idempotent way (FE has
     // usually already published the new schema, so this is a belt-and-braces
     // step to cover edge cases like FE publish races).
-    void apply_add_index(const TxnLogPB_OpAddIndex& op);
+    //
+    // Fails when op.new_schema() would move the tablet schema BACKWARDS: the log
+    // carries a snapshot FE took at dispatch time, and installing it over content
+    // that has since advanced would drop the columns added in between. Errors
+    // here must propagate rather than be logged and ignored - see the schema
+    // installation comment in the implementation for why a wrong schema at this
+    // point is both silent and permanent.
+    Status apply_add_index(const TxnLogPB_OpAddIndex& op);
 
     // Apply an OpDropIndex (produced by the DROP INDEX fast path): merge
     // tombstones into the dropped_keys list of each matching IDG entry; any
