@@ -120,7 +120,7 @@ public:
     void SetUp() override {
         k_starrocks_exit.store(false);
         k_starrocks_exit_start_ms.store(0);
-        k_starrocks_fe_aware_shutdown_ms.store(0);
+        clear_frontend_aware_of_exit();
         k_stream_load_begin_result = TLoadTxnBeginResult();
         k_stream_load_commit_result = TLoadTxnCommitResult();
         k_stream_load_rollback_result = TLoadTxnRollbackResult();
@@ -154,6 +154,9 @@ public:
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
         }
+        k_starrocks_exit.store(false);
+        k_starrocks_exit_start_ms.store(0);
+        clear_frontend_aware_of_exit();
     }
 
 protected:
@@ -418,6 +421,51 @@ TEST_F(TransactionStreamLoadActionTest, txn_begin_no_redirect_after_leader_hando
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("SERVICE_UNAVAILABLE", doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_begin_no_redirect_on_legacy_fe) {
+    // Legacy FE omits last_heartbeat_time_ms: delay still opens, but BEGIN 307 is off so the
+    // old FE cannot bounce the client back to this BE.
+    TMasterInfo master_info;
+    master_info.__set_network_address(make_network_address("127.0.0.1", 8030));
+    master_info.__set_http_port(8030);
+    ASSERT_TRUE(update_master_info(master_info));
+
+    k_starrocks_exit.store(true);
+    set_frontend_aware_of_exit();
+    disable_begin_redirect();
+    ASSERT_TRUE(should_accept_new_request());
+    ASSERT_FALSE(may_redirect_to_fe_leader());
+
+    TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+    HttpRequest begin(_evhttp_req);
+    begin._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    begin._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    begin._headers.emplace(HTTP_LABEL_KEY, "legacy");
+    begin._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&begin);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_EQ(k_response_status, HttpStatus::OK);
+    ASSERT_STREQ("OK", doc["Status"].GetString());
+    ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
+
+    k_response_str.clear();
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
+
+    HttpRequest retry(_evhttp_req);
+    retry._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    retry._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    retry._headers.emplace(HTTP_LABEL_KEY, "legacy");
+    retry._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+    txn_action.handle(&retry);
+
+    rapidjson::Document retry_doc;
+    retry_doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("SERVICE_UNAVAILABLE", retry_doc["Status"].GetString());
     ASSERT_EQ(nullptr, evhttp_find_header(evhttp_request_get_output_headers(_evhttp_req), HttpHeaders::LOCATION));
 }
 TEST_F(TransactionStreamLoadActionTest, txn_begin_rejects_after_fallback_without_heartbeat) {

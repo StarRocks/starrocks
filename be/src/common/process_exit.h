@@ -63,10 +63,14 @@ bool is_frontend_aware_of_exit();
 bool advance_heartbeat_ack(const std::string& ack_source, int64_t ack);
 
 // Whether a cutoff BEGIN may still be redirected to the FE leader: the FE has acknowledged the
-// shutdown (a delay window was opened) AND no leader/term handover was observed during this
-// shutdown. It is the single permission check for the 307 path; callers reply with the existing
-// ServiceUnavailable JSON when it returns false.
+// shutdown (a delay window was opened), no leader/term handover was observed, and this is not a
+// legacy FE that omitted last_heartbeat_time_ms. Callers reply with ServiceUnavailable JSON when
+// it returns false.
 bool may_redirect_to_fe_leader();
+
+// Disable BEGIN 307 for the rest of this shutdown (legacy FE missing ack field, or leader
+// handover). Delay/admission is unchanged. Reset by clear_frontend_aware_of_exit().
+void disable_begin_redirect();
 
 // clear the flag of frontend awareness of the shutdown.
 void clear_frontend_aware_of_exit();

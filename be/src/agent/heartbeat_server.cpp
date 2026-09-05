@@ -93,8 +93,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
     // FE-awareness rules during shutdown, driven by the ack the FE carries in the next heartbeat
     // request (TMasterInfo.last_heartbeat_time_ms = the FE's LastHeartbeat time for this BE):
-    // - No ack field at all: legacy FE. Keep the old optimistic behavior (assume the response
-    //   reaches the FE when constructed) so mixed-version upgrades keep the default behavior.
+    // - No ack field at all: legacy FE. Keep the old optimistic delay (assume the response
+    //   reaches the FE when constructed) so mixed-version upgrades keep admission timing, but
+    //   disable BEGIN 307: the old FE still returns a cached coordinator without checking
+    //   availability and would bounce the client back to this BE.
     // - Ack value advanced for the current acking FE: that FE processed a heartbeat response this
     //   BE sent after shutdown began (it reports SHUTDOWN), so the node is marked SHUTDOWN/not-alive
     //   globally; open the delay window (and BEGIN redirect).
@@ -107,6 +109,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     if (process_exit_in_progress()) {
         if (!master_info.__isset.last_heartbeat_time_ms) {
             set_frontend_aware_of_exit();
+            disable_begin_redirect();
         } else if (advance_heartbeat_ack(fmt::format("{}:{}:{}", master_info.network_address.hostname,
                                                      master_info.network_address.port, master_info.epoch),
                                          master_info.last_heartbeat_time_ms)) {

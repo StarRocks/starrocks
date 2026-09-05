@@ -54,8 +54,8 @@ std::atomic<bool> k_starrocks_be_crashing = false;
 
 // Set to reject new fragments and bypass the delay/fallback windows.
 std::atomic<bool> k_starrocks_force_reject = false;
-// Set when a different FE leader (source) starts acking during this shutdown: the 307 redirect
-// path is disabled for the rest of the shutdown (conservative failover downgrade).
+// Set when BEGIN 307 is disabled for the rest of this shutdown (legacy FE missing ack
+// field, or a different FE leader starts acking).
 std::atomic<bool> k_starrocks_redirect_disabled = false;
 std::mutex k_starrocks_admission_mutex;
 std::atomic<size_t> k_starrocks_request_admissions_inflight = 0;
@@ -138,7 +138,7 @@ bool advance_heartbeat_ack(const std::string& ack_source, int64_t ack) {
             // comparable and the old redirect target may be gone, so disable redirect for the
             // rest of this shutdown. A later advance of the new source still opens the delay
             // window (new BEGINs keep being admitted) but never re-enables redirect.
-            k_starrocks_redirect_disabled = true;
+            disable_begin_redirect();
         }
         k_starrocks_last_ack_source = ack_source;
         k_starrocks_last_ack_ms = ack;
@@ -156,6 +156,10 @@ bool may_redirect_to_fe_leader() {
         return false;
     }
     return is_frontend_aware_of_exit();
+}
+
+void disable_begin_redirect() {
+    k_starrocks_redirect_disabled.store(true, std::memory_order_relaxed);
 }
 
 bool should_accept_new_request() {
