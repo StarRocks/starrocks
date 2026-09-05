@@ -1387,6 +1387,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v4.0
 
+### lake_bucket_aware_min_buckets_per_worker
+
+* **Description**: Controls when bucket-aware execution falls back to a regular shuffle for data lake tables, such as Iceberg tables. This applies when an aggregation needs a shuffle and reads a bucket-partitioned table. The optimizer estimates how many buckets remain after partition and predicate pruning. If that number is less than this value multiplied by the number of alive workers, the optimizer stops using bucket-aware one-stage aggregation for the scan. It uses the normal shuffle, or multi-stage, aggregation plan instead, which restores parallelism. This prevents severe skew when, for example, an equality filter on the bucket source column leaves only one bucket while the query groups by a high-cardinality column. Set this variable to `0` to disable the fallback. Larger values make the fallback more aggressive. This variable takes effect only when `enable_bucket_aware_execution_on_lake` is `true`.
+* **Default**: 1.0
+* **Data type**: Double
+* **Introduced in**: v4.2
+
 ### language (global)
 
 Used for MySQL client compatibility. No practical usage.
