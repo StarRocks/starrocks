@@ -61,6 +61,11 @@ private:
 
     static Status _check_jni_exception(JNIEnv* env, const std::string& message);
 
+    // Encodes runtime-filter-derived predicates (min/max ranges and bounded IN sets)
+    // for the Java-side reader ("runtime_predicate_info" param). Returns an empty
+    // string when nothing is pushable.
+    std::string _build_runtime_predicate_info();
+
     Status _init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_state);
 
     Status _init_jni_method(JNIEnv* env);
@@ -100,7 +105,8 @@ private:
     std::string _jni_scanner_factory_class;
 
     const std::set<std::string> _skipped_log_jni_scanner_params = {
-            "native_table", "split_info", "predicate_info", "access_id", "access_key", "read_session", "runtime_conf"};
+            "native_table", "split_info",   "predicate_info", "access_id",
+            "access_key",   "read_session", "runtime_conf",   "runtime_predicate_info"};
 
 private:
     long* _chunk_meta_ptr;
