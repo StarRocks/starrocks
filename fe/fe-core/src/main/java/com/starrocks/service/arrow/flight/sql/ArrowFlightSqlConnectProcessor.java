@@ -14,6 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
@@ -319,7 +320,7 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
         return parsedStmt;
     }
 
-    private StatementBase parse(String sql, SessionVariable sessionVariables) throws StarRocksException {
+    StatementBase parse(String sql, SessionVariable sessionVariables) throws StarRocksException {
         List<StatementBase> stmts;
         try (Timer ignored = Tracers.watchScope(Tracers.Module.PARSER, "Parser")) {
             stmts = com.starrocks.sql.parser.SqlParser.parse(sql, sessionVariables);
@@ -331,6 +332,7 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
         StatementBase parsedStmt = stmts.get(0);
         parsedStmt.setOrigStmt(new OriginStatement(sql));
+        SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
         return parsedStmt;
     }
 
