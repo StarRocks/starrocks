@@ -580,6 +580,14 @@ struct TTableFunctionTable {
     14: optional i8 csv_escape
 }
 
+// External schema metadata only; this does not declare a native SQL type.
+// Strings preserve the source vocabulary without coupling it to native enums.
+struct TIcebergGeoMetadata {
+    1: optional string kind
+    2: optional string crs
+    3: optional string edge_algorithm
+}
+
 struct TIcebergSchemaField {
     // Refer to field id in iceberg schema
     1: optional i32 field_id
@@ -590,6 +598,11 @@ struct TIcebergSchemaField {
     // Mirrors Types.NestedField#isOptional(). Unset means optional: never enforce
     // NOT NULL without an explicit signal from the Iceberg schema.
     3: optional bool is_optional
+
+    4: optional TIcebergGeoMetadata geo_metadata
+
+    // Source schema identity, not a StarRocks SQL primitive. Absent on older FEs.
+    5: optional string iceberg_type
 
     // You can fill other field properties here if you needed
     // .......
