@@ -1,0 +1,27 @@
+diff --git a/src/base/spinlock_linux-inl.h b/src/base/spinlock_linux-inl.h
+index aadf62a..88a1702 100644
+--- a/src/base/spinlock_linux-inl.h
++++ b/src/base/spinlock_linux-inl.h
+@@ -38,6 +38,22 @@
+ #include <limits.h>
+ #include "base/linux_syscall_support.h"
+ 
++#include <sys/syscall.h>
++#include <unistd.h>
++
++// gperftools 2.7's bundled linux_syscall_support.h only enables its inline
++// syscall wrappers for x86/arm/mips/ppc/aarch64/s390 (see its top-level #if).
++// On riscv64 the whole header is a no-op, so sys_futex is never declared and
++// spinlock_internal.cc fails to compile. Fall back to the glibc syscall()
++// wrapper for __NR_futex (declared in <unistd.h>, syscall number in
++// <sys/syscall.h>), which is what LSS would have generated anyway.
++#if defined(__riscv) && !defined(sys_futex)
++static inline int sys_futex(int *uaddr, int op, int val,
++                            void *timeout, void *uaddr2, int val3) {
++  return syscall(__NR_futex, uaddr, op, val, timeout, uaddr2, val3);
++}
++#endif
++
+ #define FUTEX_WAIT 0
+ #define FUTEX_WAKE 1
+ #define FUTEX_PRIVATE_FLAG 128

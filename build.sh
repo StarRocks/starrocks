@@ -53,6 +53,10 @@ is_aarch64_host() {
     [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]
 }
 
+is_riscv64_host() {
+    [[ "${MACHINE_TYPE}" == "riscv64" ]]
+}
+
 if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
 fi
@@ -237,7 +241,9 @@ WITH_CLANG_TIDY=OFF
 WITH_GLIBC_COMPAT=OFF
 WITH_COMPRESS=ON
 THIN_ARCHIVE=OFF
-if starrocks_is_darwin; then
+if starrocks_is_darwin || is_riscv64_host; then
+    # riscv64: the official starcache binary is built from an unpublished
+    # internal source tree; see be/CMakeLists.txt (WITH_STARCACHE_DEFAULT).
     WITH_STARCACHE=OFF
 else
     WITH_STARCACHE=ON
@@ -247,7 +253,11 @@ WITH_PAIMON_CPP=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
-if starrocks_is_darwin; then
+if starrocks_is_darwin || is_riscv64_host; then
+    # riscv64: tenann ships prebuilt binaries only (no riscv64 build and no
+    # buildable upstream source); see thirdparty/vars-riscv64.sh
+    # RISCV64_UNSUPPORTED_PACKAGES. The vector-index code paths are compiled
+    # out via the missing WITH_TENANN define.
     WITH_TENANN=OFF
 else
     WITH_TENANN=ON
@@ -498,6 +508,15 @@ if starrocks_is_darwin; then
     fi
 elif is_aarch64_host; then
     JAVA_LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
+elif is_riscv64_host; then
+    # RISC-V uses JDK 11+ (e.g. Adoptium Temurin 21), where libjvm.so lives in
+    # ${JAVA_HOME}/lib/server/ (modular layout, no jre/ subdir). Fall back to the
+    # legacy jre/lib/riscv64/server/ layout for older distributions.
+    if [[ -d "${JAVA_HOME}/lib/server" ]]; then
+        JAVA_LIBRARY_PATH=${JAVA_HOME}/lib/server/
+    else
+        JAVA_LIBRARY_PATH=${JAVA_HOME}/jre/lib/riscv64/server/
+    fi
 else
     JAVA_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi

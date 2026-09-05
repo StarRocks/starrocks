@@ -159,7 +159,8 @@ WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
-if starrocks_is_darwin; then
+if starrocks_is_darwin || [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+    # riscv64: no buildable starcache source; see be/CMakeLists.txt.
     WITH_STARCACHE=OFF
 else
     WITH_STARCACHE=ON
@@ -167,7 +168,11 @@ fi
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
 BUILD_TARGET=
-if starrocks_is_darwin; then
+if starrocks_is_darwin || [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+    # riscv64: tenann ships prebuilt binaries only (no riscv64 build and no
+    # buildable upstream source); see thirdparty/vars-riscv64.sh
+    # RISCV64_UNSUPPORTED_PACKAGES. The vector-index code paths are compiled
+    # out via the missing WITH_TENANN define.
     WITH_TENANN=OFF
 else
     WITH_TENANN=ON
@@ -405,6 +410,8 @@ done < <(find "${CMAKE_BUILD_DIR}" -type f \( -name "*.so" -o -name "*.so.*" -o 
 jvm_arch="amd64"
 if [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]; then
     jvm_arch="aarch64"
+elif [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+    jvm_arch="riscv64"
 fi
 
 if starrocks_is_darwin; then

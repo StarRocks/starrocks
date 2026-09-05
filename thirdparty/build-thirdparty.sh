@@ -374,6 +374,8 @@ build_openssl() {
     OPENSSL_PLATFORM="linux-x86_64"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         OPENSSL_PLATFORM="linux-aarch64"
+    elif [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        OPENSSL_PLATFORM="linux64-riscv64"
     fi
 
     check_if_source_exist $OPENSSL_SOURCE
@@ -421,11 +423,22 @@ build_thrift() {
 # llvm
 build_llvm() {
     export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=200112L ${FILE_PREFIX_MAP_OPTION}"
-    export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess ${FILE_PREFIX_MAP_OPTION}"
+    # gcc 15 (riscv64 host) no longer provides <cstdint> types transitively;
+    # llvm/ADT/SmallVector.h relies on that implicit include for
+    # uint64_t/uint32_t. `-include cstdint' injects it into every translation
+    # unit in one shot. Delivered via the exported CXXFLAGS, which CMake picks
+    # up as the initial CMAKE_CXX_FLAGS.
+    local llvm_cxxflags="-O3 -fno-omit-frame-pointer -Wno-class-memaccess ${FILE_PREFIX_MAP_OPTION}"
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        llvm_cxxflags="${llvm_cxxflags} -include cstdint"
+    fi
+    export CXXFLAGS="${llvm_cxxflags}"
 
     LLVM_TARGET="X86"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         LLVM_TARGET="AArch64"
+    elif [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        LLVM_TARGET="RISCV"
     fi
 
     LLVM_TARGETS_TO_BUILD=(
@@ -489,6 +502,11 @@ build_llvm() {
         LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen" "LLVMX86AsmParser" "LLVMX86Disassembler")
     elif [ "${LLVM_TARGET}" == "AArch64" ]; then
         LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen" "LLVMAArch64Utils" "LLVMAArch64AsmParser" "LLVMAArch64Disassembler")
+    elif [ "${LLVM_TARGET}" == "RISCV" ]; then
+        # No LLVMRISCVUtils here: unlike AArch64, LLVM 18's RISCV target has
+        # no Utils component (subdirs are AsmParser Disassembler MCTargetDesc
+        # MCA TargetInfo only), and make fails with "No rule to make target".
+        LLVM_TARGETS_TO_BUILD+=("LLVMRISCVInfo" "LLVMRISCVDesc" "LLVMRISCVCodeGen" "LLVMRISCVAsmParser" "LLVMRISCVDisassembler")
     fi
 
     LLVM_TARGETS_TO_INSTALL=()
@@ -567,11 +585,23 @@ build_glog() {
     check_if_source_exist $GLOG_SOURCE
     cd $TP_SOURCE_DIR/$GLOG_SOURCE
 
+    # glog's CMake defaults WITH_UNWIND=libunwind, which selects the
+    # stacktrace_libunwind-inl.h path and references _U<arch>_getcontext.
+    # On riscv64 the system libunwind does not resolve that symbol at link
+    # time, breaking the build. WITH_UNWIND=none is glog's official switch to
+    # disable unwinding entirely (CMAKE_DISABLE_FIND_PACKAGE_Unwind); it
+    # mirrors the historical *-remove-unwind-dependency patches for 0.3.3/0.4.0.
+    local glog_unwind_flags=""
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        glog_unwind_flags="-DWITH_UNWIND=none"
+    fi
+
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
         -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -DCMAKE_INSTALL_LIBDIR=lib
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        ${glog_unwind_flags}
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -687,7 +717,11 @@ build_gperftools() {
     check_if_source_exist $GPERFTOOLS_SOURCE
     cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
 
-    if [ ! -f configure ]; then
+    # Re-run autogen when configure.ac/m4 are newer than configure: the
+    # riscv64 pc_from_ucontext patch edits m4/, and a configure left over
+    # from a previous build (which autogen generated before that patch)
+    # silently keeps the old probe list and disables the cpu profiler.
+    if [[ ! -f configure || configure.ac -nt configure || m4/pc_from_ucontext.m4 -nt configure ]]; then
         ./autogen.sh
     fi
 
@@ -783,7 +817,14 @@ build_boost() {
     cd $TP_SOURCE_DIR/$BOOST_SOURCE
 
     # It is difficult to generate static linked b2, so we use LD_LIBRARY_PATH instead
-    ./bootstrap.sh --prefix=$TP_INSTALL_DIR
+    # Pin the toolset explicitly. The root bootstrap.sh has a strict option whitelist
+    # (it rejects engine-only options such as --cxx=) and, when no toolset is given,
+    # clears CXX/CXXFLAGS and asks tools/build/src/engine/build.sh to guess — which
+    # probes bare `g++` from PATH and dies with "Could not find a suitable toolset"
+    # when that lookup fails. --with-toolset=gcc skips the guess step; the engine
+    # still probes `g++`, which resolves to ${STARROCKS_GCC_HOME}/bin/g++ because
+    # this script already prepended it to PATH.
+    ./bootstrap.sh --prefix=$TP_INSTALL_DIR --with-toolset=gcc
     LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH} \
     ./b2 link=static runtime-link=static -j $PARALLEL --without-test --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR ${FILE_PREFIX_MAP_OPTION}" install
 }
@@ -837,6 +878,20 @@ build_kerberos() {
     cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
     CFLAGS="-std=gnu17 -fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
+    # MIT krb5's configure injects a strict -Werror=<flag> set into WARN_CFLAGS
+    # (see its configure: "for flag in ... error=discarded-qualifiers ...").
+    # On newer gcc (e.g. the SpacemiT K3 toolchain) krb5 1.19.4 trips
+    # -Werror=discarded-qualifiers: strchr()/strstr() return const char* but
+    # are assigned to char* (e.g. ccbase.c:207). Those are benign (the pointer
+    # is never written through), so downgrade that one -Werror= back to a
+    # warning by appending -Wno-error=discarded-qualifiers to the end of every
+    # generated WARN_CFLAGS (gcc honors the last flag of a kind). Idempotent:
+    # skip Makefiles already patched. Only applied on riscv64 where the newer
+    # gcc triggers this; other arches keep krb5's intended diagnostics.
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        find . -name Makefile -exec sed -i \
+            '/^WARN_CFLAGS[[:space:]]*=/ { /-Wno-error=discarded-qualifiers/! s/$/ -Wno-error=discarded-qualifiers/; }' {} +
+    fi
     make -j$PARALLEL
     make install
 }
@@ -845,7 +900,25 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
+
+    # riscv64: saslauthd/auth_shadow.c is the only cyrus-sasl unit that calls
+    # the password-hashing crypt(), which needs libcrypt (libxcrypt). Build the
+    # daemon whenever the linkable libcrypt.so is present (e.g. openEuler with
+    # libxcrypt-devel installed); only when it is missing (e.g. Bianbu without
+    # a standalone libcrypt) fall back to --with-saslauthd=no -- there the
+    # configure probe `cannot find -lcrypt' fails so hard it aborts even the
+    # basic "C compiler works" test. StarRocks itself only links the libsasl2
+    # client library (be/CMakeLists.txt) and the default plugins
+    # (plain/cram/digest/otp/gssapi/scram), none of which use crypt(), so the
+    # fallback is lossless for the BE binary. x86_64/aarch64 always build it.
+    local sasl_extra_conf=""
+    # (-x c before '-' so gcc reads the heredoc as C source, not link input)
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]] && ! ${CC:-cc} -x c -lcrypt -o /dev/null - <<< 'int main(void){return 0;}'; then
+        echo "riscv64: no linkable libcrypt, skipping saslauthd"
+        sasl_extra_conf="--with-saslauthd=no"
+    fi
+
+    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none $sasl_extra_conf
     make -j$PARALLEL
     make install
 }
@@ -872,8 +945,17 @@ build_pulsar() {
 
     cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 
+    # gcc 15 (riscv64 host) no longer provides <cstdint> transitively; pulsar's
+    # public headers use uint64_t etc. without including it. `-include cstdint'
+    # injects the header into every translation unit. Other arches are untouched.
+    local -a pulsar_cmake_args=()
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        pulsar_cmake_args+=("-DCMAKE_CXX_FLAGS=-include cstdint")
+    fi
+
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
-        -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
+        -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF \
+        "${pulsar_cmake_args[@]}" .
     ${BUILD_SYSTEM} -j$PARALLEL
 
     cp lib/libpulsar.a $TP_INSTALL_DIR/lib/
@@ -931,7 +1013,12 @@ build_arrow() {
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export ARROW_THRIFT_URL=${TP_SOURCE_DIR}/${THRIFT_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
-    if [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        # RISC-V has no SSE/AVX; let Arrow auto-detect (DEFAULT) at compile time
+        # and disable runtime SIMD dispatch (NONE) since there is no x86 path to select.
+        arrow_simd_level=DEFAULT
+        arrow_runtime_simd_level=NONE
+    elif [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
         # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
         # default to SSE4_2 on x86 and NEON on Arm
         arrow_simd_level=DEFAULT
@@ -1009,6 +1096,16 @@ build_s2() {
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
+
+    # gcc 15 (riscv64 host) no longer provides <cstdint> transitively; s2's
+    # bundled absl copy (s2/third_party/absl/container/internal/container_memory.h)
+    # uses uintptr_t without including it. `-include cstdint' fixes every
+    # translation unit. Other arches are untouched.
+    local -a s2_cmake_args=()
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        s2_cmake_args+=("-DCMAKE_CXX_FLAGS=-include cstdint")
+    fi
+
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
@@ -1018,7 +1115,8 @@ build_s2() {
     -DWITH_GFLAGS=ON \
     -DGLOG_ROOT_DIR="$TP_INSTALL_DIR/include" \
     -DWITH_GLOG=ON \
-    -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
+    -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
+    "${s2_cmake_args[@]}" ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1037,6 +1135,9 @@ build_bitshuffle() {
     # Becuase aarch64 don't support avx2, disable it.
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         arches="default neon"
+    elif [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        # bitshuffle has no RVV variant; build only the scalar (default) path.
+        arches="default"
     fi
 
     to_link=""
@@ -1082,8 +1183,10 @@ build_bitshuffle() {
 # When this problem is solved, a switch will be added to control.
 build_croaringbitmap() {
     FORCE_AVX=ON
-    # avx2 is not supported by aarch64.
+    # avx2 is not supported by aarch64 and riscv64.
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        FORCE_AVX=FALSE
+    elif [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
         FORCE_AVX=FALSE
     fi
     if [[ `cat /proc/cpuinfo |grep avx|wc -l` == "0" ]]; then
@@ -1238,9 +1341,19 @@ build_hyperscan() {
         FAT_RUNTIME_FLAG="-DFAT_RUNTIME=OFF"
     fi
 
+    # riscv64: the zte-riscv/vectorscan fork's vectorscan-rv branch provides a
+    # native riscv64 backend (cmake/platform.cmake detects ARCH_RISCV64, then
+    # cflags-riscv64.cmake probes RVV/Zbb/Zbc/Zicsr and falls back to scalar if
+    # the toolchain lacks them), so no SIMDe emulation layer is needed.
+    # BUILD_STATIC_LIBS=ON is required because vectorscan defaults it to OFF
+    # (unlike hyperscan), and BE links libhs.a statically.
+    local hs_extra_flags=""
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        hs_extra_flags="-DBUILD_STATIC_LIBS=ON"
+    fi
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib \
-          -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF -DBUILD_BENCHMARKS=OFF ${FAT_RUNTIME_FLAG}
+          -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF -DBUILD_BENCHMARKS=OFF ${FAT_RUNTIME_FLAG} $hs_extra_flags
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1252,7 +1365,15 @@ build_mariadb() {
 
     unset CXXFLAGS
     unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}"
+    # gcc 15 defaults to C23 (gnu23), where bool is a keyword and mariadb's
+    # `typedef char bool;' (include/ma_global.h) no longer compiles. Pin gnu11
+    # on riscv64 (the only gcc 15 host in this build matrix) so the old C
+    # dialect keeps that typedef legal.
+    local mariadb_c_std=""
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        mariadb_c_std="-std=gnu11"
+    fi
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC ${mariadb_c_std} ${FILE_PREFIX_MAP_OPTION}"
 
     # force use make build system, since ninja doesn't support install only headers
     CMAKE_GENERATOR="Unix Makefiles"
@@ -1366,6 +1487,9 @@ build_jemalloc() {
     if [[ $MACHINE_TYPE == "aarch64" ]] ; then
         # 64K for arm architecture
         addition_opts=" --with-lg-page=16"
+    elif [[ $MACHINE_TYPE == "riscv64" ]] ; then
+        # change to 64K for riscv64 (e.g. SG2042 and other server SoCs use 64KiB pages)
+        addition_opts=" --with-lg-page=16"
     else
         addition_opts=" --with-lg-page=12"
     fi
@@ -1446,7 +1570,34 @@ build_fast_float() {
 
 build_starcache() {
     check_if_source_exist $STARCACHE_SOURCE
-    rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        # riscv64: no prebuilt binary. Build starcache from source -- it is a
+        # portable CMake static library with no architecture-specific code, so
+        # it compiles cleanly on riscv64 and installs libstarcache.a + headers
+        # into the thirdparty prefix that BE's find_library(starcache) expects.
+        # STARCACHE_THIRDPARTY_DIR: where brpc/gflags/glog/protobuf/ssl/crypto/fmt
+        # static libs are looked up (its CMakeLists SEARCH_LIBRARY helper).
+        # STARCACHE_INSTALL_DIR: starcache's CMakeLists overwrites
+        # CMAKE_INSTALL_PREFIX with this, so the prefix must ride on it.
+        # CMAKE_BUILD_TYPE must be the uppercase RELEASE: the source only
+        # matches DEBUG/RELEASE/ASAN/RELWITHDEBINFO and FATAL_ERRORs otherwise.
+        cd $TP_SOURCE_DIR/$STARCACHE_SOURCE
+        mkdir -p build && cd build
+        rm -rf CMakeCache.txt CMakeFiles/
+        # -DBOOST_ROOT pins find_package(Boost) to the thirdparty prefix;
+        # otherwise it falls back to the system Boost (1.87 on this Bianbu
+        # host) and the static lib gets built against a different Boost ABI
+        # than the one BE links.
+        $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=RELEASE \
+              -DSTARCACHE_THIRDPARTY_DIR=$TP_INSTALL_DIR \
+              -DSTARCACHE_INSTALL_DIR=$TP_INSTALL_DIR \
+              -DBOOST_ROOT=$TP_INSTALL_DIR \
+              -DCMAKE_INSTALL_LIBDIR=lib -DSTARCACHE_SKIP_INSTALL=OFF
+        ${BUILD_SYSTEM} -j$PARALLEL
+        ${BUILD_SYSTEM} install
+    else
+        rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
+    fi
 }
 
 # streamvbyte
@@ -1511,9 +1662,21 @@ build_avro_cpp() {
 
 # serders
 build_serdes() {
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    # The C23/gcc-15 once_flag collision in tinycthread is fixed at source
+    # level (patches/libserdes-7.3.1-tinycthread-c23.patch, applied by
+    # download-thirdparty.sh). The gnu17 pin below stays as belt-and-braces
+    # for any other C23-vs-old-C code in this 2022 library.
+    local serdes_c_std=""
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        serdes_c_std="-std=gnu17"
+    fi
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g ${serdes_c_std}"
     check_if_source_exist $SERDES_SOURCE
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
+    # mklove's configure caches CFLAGS into ./config.cache and reuses it on
+    # re-runs, which silently drops flag changes (and triple-accumulates them
+    # across runs). Remove the cache so the flags above take effect.
+    rm -f config.cache
     export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavro -lssl -lcrypto -ldl"
     ./configure --prefix=${TP_INSTALL_DIR} \
                 --libdir=${TP_INSTALL_DIR}/lib \
@@ -1607,10 +1770,23 @@ build_absl() {
     check_if_source_exist "${ABSL_SOURCE}"
     cd "$TP_SOURCE_DIR/${ABSL_SOURCE}"
 
+    # gcc 15's libstdc++ stopped providing <cstdint> types (uintptr_t and
+    # friends) transitively; this 2022 abseil relies on that implicit include
+    # in dozens of headers, so `-include cstdint' forces the header into every
+    # translation unit's preprocessor in one shot instead of patching each file.
+    # riscv64 is the only machine type that ships gcc 15 in this build matrix.
+    # Use an array so the value keeps its space as one -D argument, and leaves
+    # the CMake call untouched (no -DCMAKE_CXX_FLAGS override) on other arches.
+    local -a absl_cmake_args=()
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        absl_cmake_args+=("-DCMAKE_CXX_FLAGS=-include cstdint")
+    fi
+
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
-        -DCMAKE_CXX_STANDARD=17
+        -DCMAKE_CXX_STANDARD=17 \
+        "${absl_cmake_args[@]}"
 
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
@@ -1741,6 +1917,15 @@ build_azure() {
     export AZURE_SDK_DISABLE_AUTO_VCPKG=true
     export PKG_CONFIG_LIBDIR=$TP_INSTALL_DIR
 
+    # gcc 15 (riscv64 host) no longer provides <cstdint> types transitively;
+    # azure attestation's crypto.hpp uses uint8_t without including it.
+    # Same -include cstdint injection as abseil/pulsar/s2/llvm. Array form
+    # keeps the space in one -D arg; empty (no -D) on other arches.
+    local -a azure_cmake_args=()
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]]; then
+        azure_cmake_args+=("-DCMAKE_CXX_FLAGS=-include cstdint")
+    fi
+
     ${CMAKE_CMD} -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
         -DBUILD_SHARED_LIBS=OFF \
         -DDISABLE_AZURE_CORE_OPENTELEMETRY=ON \
@@ -1750,7 +1935,8 @@ build_azure() {
         -DOPENSSL_ROOT_DIR=$TP_INSTALL_DIR \
         -DOPENSSL_USE_STATIC_LIBS=TRUE \
         -DLibXml2_ROOT=$TP_INSTALL_DIR \
-        -DCMAKE_INSTALL_LIBDIR=lib
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        "${azure_cmake_args[@]}"
 
     ${BUILD_SYSTEM} -j "${PARALLEL}"
     ${BUILD_SYSTEM} install
@@ -1821,7 +2007,23 @@ build_paimon_cpp() {
         unset "${arrow_url_var}"
     done
 
+    # riscv64: paimon bundles ORC v2.1.1 as an ExternalProject and patches it
+    # with its own cmake_modules/orc.diff at build time. ORC's CpuInfoUtil.cc
+    # only knows X86/ARM; every other arch (riscv64 included) falls into the
+    # generic "PPC, ..." stub whose bodies ignore their parameters, and ORC's
+    # STOP_BUILD_ON_WARNING defaults ON (-Werror), so the stub fails with
+    # unused-parameter errors on riscv64. Append our hunk (consume the
+    # parameters with plain (void) casts -- the UNUSED macro in this file is
+    # only defined inside the X86 branch, so it does not exist on the generic
+    # path) to the in-tree orc.diff so the ExternalProject's PATCH_COMMAND
+    # applies both in one pass. The guard file keeps the append idempotent across re-runs;
+    # x86_64/aarch64 never enter this branch.
     cd $TP_SOURCE_DIR/$PAIMON_CPP_SOURCE
+    if [[ "${MACHINE_TYPE}" == "riscv64" ]] && [[ ! -f cmake_modules/orc.diff.riscv64 ]] ; then
+        cat $TP_PATCH_DIR/paimon-cpp-0.3.0-orc-riscv64-unused.patch >> cmake_modules/orc.diff
+        touch cmake_modules/orc.diff.riscv64
+    fi
+
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/

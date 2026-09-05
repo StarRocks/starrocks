@@ -1,0 +1,46 @@
+diff --git a/saslauthd/saslauthd-main.c b/saslauthd/saslauthd-main.c
+index ca5b725..672bd48 100644
+--- a/saslauthd/saslauthd-main.c
++++ b/saslauthd/saslauthd-main.c
+@@ -346,7 +346,7 @@ int main(int argc, char **argv) {
+ 	/*********************************************************
+ 	 * Enable general cleanup.
+ 	 **********************************************************/
+-	atexit(server_exit);
++	atexit((void (*)(void)) server_exit);
+ 
+ 	/*********************************************************
+ 	 * If required, enable the process model.
+@@ -876,7 +876,7 @@ pid_t have_baby() {
+ /*************************************************************
+  * Reap in all the dead children
+  **************************************************************/
+-void handle_sigchld() {
++void handle_sigchld(int sig) {
+ 	pid_t pid;
+ 
+ 	while ((pid = waitpid(-1, 0, WNOHANG)) > 0) {
+@@ -892,7 +892,7 @@ void handle_sigchld() {
+ /*************************************************************
+  * Do some final cleanup here.
+  **************************************************************/
+-void server_exit() {
++void server_exit(int sig) {
+ 
+ 	/*********************************************************
+ 	 * If we're not the master process, don't do anything
+diff --git a/saslauthd/saslauthd-main.h b/saslauthd/saslauthd-main.h
+index 754626c..677a28a 100644
+--- a/saslauthd/saslauthd-main.h
++++ b/saslauthd/saslauthd-main.h
+@@ -96,8 +96,8 @@ extern void	set_mech_option(const char *);
+ extern void	set_run_path(const char *);
+ extern void	signal_setup();
+ extern void	detach_tty();
+-extern void	handle_sigchld();
+-extern void	server_exit();
++extern void	handle_sigchld(int);
++extern void	server_exit(int);
+ extern pid_t	have_baby();
+ 
+ /* ipc api delcarations */
