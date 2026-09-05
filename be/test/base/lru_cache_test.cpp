@@ -557,6 +557,59 @@ TEST_F(CacheTest, UpdateChargeIfRefreshesRecencyBeforeEvicting) {
     ASSERT_EQ(std::vector<int>({keys[1]}), _deleted_keys);
 }
 
+TEST_F(CacheTest, UpdateChargeByHandleAdjustsUsageAndEvicts) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    const auto keys = find_int_keys_in_same_shard();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 2 * kNumShards));
+
+    insert_cache(cache.get(), keys[0], 1000, 1);
+    insert_cache(cache.get(), keys[1], 2000, 1);
+
+    std::string encoded;
+    Cache::Handle* handle = cache->lookup(EncodeKey(&encoded, keys[0]));
+    ASSERT_NE(nullptr, handle);
+
+    // The updated entry is pinned by |handle|, so growing it to the shard
+    // capacity evicts the other unpinned entry in the same shard.
+    ASSERT_TRUE(cache->update_charge(handle, 1 + entry_charge));
+    ASSERT_EQ(entry_charge * 2, cache->get_memory_usage());
+    ASSERT_EQ(std::vector<int>({keys[1]}), _deleted_keys);
+    ASSERT_EQ(1000, DecodeValue(cache->value(handle)));
+
+    // Shrinking through the same handle updates the charge without replacing
+    // the cached value.
+    ASSERT_TRUE(cache->update_charge(handle, 1));
+    ASSERT_EQ(entry_charge, cache->get_memory_usage());
+    cache->release(handle);
+
+    ASSERT_EQ(1000, lookup_cache(cache.get(), keys[0]));
+    ASSERT_EQ(-1, lookup_cache(cache.get(), keys[1]));
+}
+
+TEST_F(CacheTest, UpdateChargeByHandleRejectsNullAndErasedEntry) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * kNumShards));
+
+    ASSERT_FALSE(cache->update_charge(nullptr, 1));
+
+    std::string encoded;
+    CacheKey key = EncodeKey(&encoded, 100);
+    Cache::Handle* handle = cache->insert(key, EncodeValue(1000), 1, &CacheTest::Deleter);
+    ASSERT_NE(nullptr, handle);
+    ASSERT_EQ(entry_charge, cache->get_memory_usage());
+
+    // erase() drops the cache's reference, but |handle| keeps the entry alive.
+    // Updating that detached entry must be rejected and leave its charge intact
+    // until the caller releases the handle.
+    cache->erase(key);
+    ASSERT_FALSE(cache->update_charge(handle, 101));
+    ASSERT_EQ(entry_charge, cache->get_memory_usage());
+    cache->release(handle);
+
+    ASSERT_EQ(0, cache->get_memory_usage());
+    ASSERT_EQ(std::vector<int>({100}), _deleted_keys);
+}
+
 TEST_F(CacheTest, TouchMissingKeyDoesNotAffectRecencyOrStats) {
     const size_t entry_charge = entry_charge_for_int_key();
     LRUCache cache;

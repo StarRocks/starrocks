@@ -274,6 +274,39 @@ void LRUCache::release(Cache::Handle* handle) {
     }
 }
 
+bool LRUCache::update_charge(Cache::Handle* handle, size_t value_size) {
+    if (handle == nullptr) {
+        return false;
+    }
+
+    auto* e = reinterpret_cast<LRUHandle*>(handle);
+    std::vector<LRUHandle*> last_ref_list;
+    {
+        std::lock_guard l(_mutex);
+        if (!e->in_cache) {
+            return false;
+        }
+
+        DCHECK_GT(e->refs, 1);
+        const size_t new_charge = value_size + key_handle_size(e->key());
+        _usage -= e->charge;
+        _usage += new_charge;
+        e->charge = new_charge;
+        e->value_size = value_size;
+
+        // The entry referenced by |handle| is pinned and therefore not on the
+        // LRU list. Evict other unpinned entries if its increased charge makes
+        // the cache exceed capacity. If the pinned entry alone is too large,
+        // release() will evict it after the caller drops the handle.
+        _evict_from_lru(0, &last_ref_list);
+    }
+
+    for (auto* entry : last_ref_list) {
+        entry->free();
+    }
+    return true;
+}
+
 void LRUCache::touch(const CacheKey& key, uint32_t hash) {
     std::lock_guard l(_mutex);
     LRUHandle* e = _table.lookup(key, hash);
@@ -567,6 +600,14 @@ Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
 void ShardedLRUCache::release(Handle* handle) {
     auto* h = reinterpret_cast<LRUHandle*>(handle);
     _shards[_shard(h->hash)].release(handle);
+}
+
+bool ShardedLRUCache::update_charge(Handle* handle, size_t value_size) {
+    if (handle == nullptr) {
+        return false;
+    }
+    auto* h = reinterpret_cast<LRUHandle*>(handle);
+    return _shards[_shard(h->hash)].update_charge(handle, value_size);
 }
 
 void ShardedLRUCache::touch(const CacheKey& key) {
