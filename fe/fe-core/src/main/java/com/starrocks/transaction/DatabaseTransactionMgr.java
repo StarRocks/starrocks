@@ -77,6 +77,7 @@ import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.thrift.TRunningTxnInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.opentelemetry.api.trace.Span;
@@ -957,6 +958,96 @@ public class DatabaseTransactionMgr {
         } finally {
             readUnlock();
         }
+    }
+
+    // Number of transactions currently sitting in COMMITTED status (committed but not yet published to
+    // VISIBLE). Pairs with getMaxCommittedTxnPendingPublishMs (the age of the oldest one): "how many are
+    // pending publish" alongside "how long the oldest has waited". Computed on demand from the authoritative
+    // running set under the read lock, so there is no maintained counter to drift across replay or failover.
+    public int getCommittedTxnNum() {
+        readLock();
+        try {
+            return (int) idToRunningTransactionState.values().stream()
+                    .filter(transactionState -> transactionState.getTransactionStatus() == TransactionStatus.COMMITTED)
+                    .count();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    // Snapshot of every currently running (non-final: PREPARE/PREPARED/COMMITTED) transaction in this
+    // database, materialized into thrift rows for information_schema.running_transactions. Each row is
+    // fully built UNDER the read lock: transactionStatus/prepareTime/commitTime/publishVersionTime and the
+    // COMMITTED->pending-publish age must be read consistently, otherwise a status flip to COMMITTED
+    // observed with commitTime still at the -1 sentinel would yield a bogus pending age. Only the db/table
+    // NAME resolution is deferred (it touches the metastore) and is done by the caller after the lock is
+    // released. The db id and raw table-id list travel in the row so the caller can resolve names off-lock.
+    public List<TRunningTxnInfo> getRunningTransactions() {
+        long now = System.currentTimeMillis();
+        readLock();
+        try {
+            List<TRunningTxnInfo> infos = new ArrayList<>(idToRunningTransactionState.size());
+            for (TransactionState txnState : idToRunningTransactionState.values()) {
+                infos.add(toRunningTxnInfo(txnState, now));
+            }
+            return infos;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    // Mirror of getTxnStateInfo (the SHOW PROC extraction) so the two surfaces do not drift as
+    // TransactionState getters evolve. Produces UTC epoch-ms values for every timestamp column; the BE
+    // scanner renders those to DATETIME (epoch_ms <= 0 -> NULL). Database/table NAMES are intentionally
+    // left unset here and filled by the caller after the read lock is released.
+    private static TRunningTxnInfo toRunningTxnInfo(TransactionState txnState, long now) {
+        TRunningTxnInfo info = new TRunningTxnInfo();
+        info.setTxn_id(txnState.getTransactionId());
+        info.setGlobal_txn_id(txnState.getGlobalTransactionId());
+        info.setLabel(txnState.getLabel());
+        info.setDatabase_id(txnState.getDbId());
+        info.setTable_ids(joinTableIds(txnState));
+        TransactionStatus status = txnState.getTransactionStatus();
+        info.setState(status.name());
+        info.setCoordinator(txnState.getCoordinator().toString());
+        info.setSource_type(txnState.getSourceType().name());
+        info.setWarehouse_id(txnState.getWarehouseId());
+        info.setPrepare_time_ms(txnState.getPrepareTime());
+        info.setPrepared_time_ms(txnState.getPreparedTime());
+        long commitTime = txnState.getCommitTime();
+        info.setCommit_time_ms(commitTime);
+        info.setPublish_time_ms(txnState.getPublishVersionTime());
+        info.setFinish_time_ms(txnState.getFinishTime());
+        // Headline stall column: how long a COMMITTED txn has waited to publish. Same formula and
+        // commitTime <= 0 clamp as getMaxCommittedTxnPendingPublishMs; 0 for not-yet-committed rows.
+        long pendingPublishMs = 0L;
+        if (status == TransactionStatus.COMMITTED && commitTime > 0) {
+            pendingPublishMs = Math.max(0L, now - commitTime);
+        }
+        info.setPending_publish_ms(pendingPublishMs);
+        info.setTimeout_ms(txnState.getTimeoutMs());
+        info.setPrepared_timeout_ms(txnState.getPreparedTimeoutMs());
+        info.setError_replica_num(txnState.getErrorReplicas().size());
+        info.setReason(txnState.getReason());
+        info.setError_msg(txnState.getErrMsg());
+        info.setIs_no_op_publish(txnState.isNoOpPublish());
+        info.setNo_op_publish_reason(txnState.getNoOpPublishReason());
+        return info;
+    }
+
+    // tableIdList is a plain ArrayList that an explicit BEGIN...INSERT can grow lock-free (addTableIdList),
+    // so this snapshot races with a concurrent add. Copying first is what keeps that race benign: the copy
+    // constructor goes through toArray, which does not check modCount, so it cannot throw
+    // ConcurrentModificationException the way streaming the live list could.
+    //
+    // The copy is not automatically null-free though. toArray reads the backing array and the size as two
+    // separate steps, so if the writer grows the array in between, Arrays.copyOf allocates for the newer
+    // size and pads the tail with nulls rather than truncating. String.valueOf would then render a literal
+    // "null" into TABLE_IDS, and resolveTableNames would carry it into TABLE_NAMES. Drop the padding so a
+    // diagnostic column can under-report an id that was mid-attach but can never invent one.
+    private static String joinTableIds(TransactionState txnState) {
+        List<Long> copy = new ArrayList<>(txnState.getTableIdList());
+        return copy.stream().filter(Objects::nonNull).map(String::valueOf).collect(Collectors.joining(","));
     }
 
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {

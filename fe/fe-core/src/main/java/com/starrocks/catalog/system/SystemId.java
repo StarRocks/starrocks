@@ -149,4 +149,7 @@ public class SystemId {
 
     // ==================  Materialized View  ===================== //
     public static final long MATERIALIZED_VIEW_REFRESH_JOBS_ID = 180L;
+
+    // ==================  Transaction  =========================== //
+    public static final long RUNNING_TRANSACTIONS_ID = 181L;
 }

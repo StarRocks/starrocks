@@ -61,6 +61,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.thrift.TRunningTxnInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -787,6 +788,28 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             }
         }
         return transactionStateList;
+    }
+
+    // Cross-database snapshot of running transactions for information_schema.running_transactions.
+    // When dbId is non-null only that database's manager is queried (the pushed-down db filter); otherwise
+    // every database manager is snapshotted. Each manager is locked and released independently
+    // (getRunningTransactions holds only its own read lock), so no two txn locks are ever held at once and
+    // there is no cross-manager lock ordering. dbIdToDatabaseTransactionMgrs is a ConcurrentMap, so the
+    // iteration needs no global lock. Rows carry raw db/table ids; name resolution happens off-lock in the
+    // view's row producer.
+    public List<TRunningTxnInfo> getRunningTransactions(Long dbId) {
+        List<TRunningTxnInfo> out = Lists.newArrayList();
+        if (dbId != null) {
+            DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+            if (dbTransactionMgr != null) {
+                out.addAll(dbTransactionMgr.getRunningTransactions());
+            }
+            return out;
+        }
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            out.addAll(dbTransactionMgr.getRunningTransactions());
+        }
+        return out;
     }
 
     public List<TransactionStateBatch> getReadyPublishTransactionsBatch() {
