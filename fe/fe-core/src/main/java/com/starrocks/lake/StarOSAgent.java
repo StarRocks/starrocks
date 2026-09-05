@@ -47,6 +47,7 @@ import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
+import com.staros.util.Constant;
 import com.staros.util.LockCloseable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
@@ -630,12 +631,35 @@ public class StarOSAgent {
                                    ComputeResource computeResource)
         throws DdlException {
         return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
-                computeResource);
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    /**
+     * Create shards that join {@code metaGroupId} at creation. Joining at creation has the same
+     * effect as the later {@code updateMetaGroup} join for these shards: each is appended to the
+     * meta group's anonymous group of its bucket position, so the very first placement already
+     * honors the colocation constraint and no shard migration is needed after the data is loaded.
+     */
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   long metaGroupId, ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
+                metaGroupId, computeResource);
     }
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                    List<Long> groupIds, @Nullable List<Long> matchShardIds,
                                    @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupIds, matchShardIds, properties,
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                   List<Long> groupIds, @Nullable List<Long> matchShardIds,
+                                   @NotNull Map<String, String> properties, long metaGroupId,
                                    ComputeResource computeResource)
         throws DdlException {
         Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
@@ -670,7 +694,7 @@ public class StarOSAgent {
                 }
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardWithMetaGroupFallback(createShardInfoList, metaGroupId);
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
@@ -678,6 +702,34 @@ public class StarOSAgent {
 
         Preconditions.checkState(shardInfos.size() == numShards);
         return shardInfos.stream().map(ShardInfo::getShardId).collect(Collectors.toList());
+    }
+
+    /**
+     * Create the shards, joined to {@code metaGroupId} at creation when one is given.
+     *
+     * <p>StarMgr rejects the create-time join when it cannot be honored: the meta group has no shard
+     * group joined yet, hence no buckets to align to (the first partition of a colocate group, e.g.
+     * a colocate table created without any partition), or the meta group no longer exists. Both are
+     * definitive pre-creation rejections -- StarMgr validates the request before it prepares or
+     * journals any shard -- so nothing has been created and a plain creation is safe. Fall back to
+     * it: the later {@code updateMetaGroup} join of the shard group then defines the buckets, as it
+     * always did for the first member of a meta group. Any other failure is not retried, in
+     * particular an ambiguous transport failure after which the shards may already exist.
+     */
+    private List<ShardInfo> createShardWithMetaGroupFallback(List<CreateShardInfo> createShardInfoList,
+                                                             long metaGroupId) throws StarClientException {
+        try {
+            return client.createShard(serviceId, createShardInfoList, metaGroupId);
+        } catch (StarClientException e) {
+            if (metaGroupId == Constant.DEFAULT_ID
+                    || (e.getCode() != StatusCode.INVALID_ARGUMENT && e.getCode() != StatusCode.NOT_EXIST)) {
+                throw e;
+            }
+            LOG.warn("meta group {} can not be joined at shard creation ({}), create the {} shards without it;"
+                    + " the later join of their shard group defines the placement.",
+                    metaGroupId, e.getMessage(), createShardInfoList.size());
+            return client.createShard(serviceId, createShardInfoList);
+        }
     }
 
     /**
