@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -27,6 +28,14 @@ import java.util.concurrent.Future;
  */
 public class ReshardingPhysicalPartition {
     private static final Logger LOG = LogManager.getLogger(ReshardingPhysicalPartition.class);
+
+    // Exponential backoff between publish attempts: 1s, 2s, 4s ... capped at 30s. A transient failure
+    // (restarting node, brief RPC error) still recovers within seconds, while a deterministic one
+    // settles at one attempt per PUBLISH_RETRY_MAX_INTERVAL_MS instead of tens per second. The cap is
+    // kept at half a minute rather than a full one so a stuck publish keeps ticking
+    // COUNTER_TABLET_RESHARD_PUBLISH_FAILED often enough for a rate-based alert to see it promptly.
+    private static final long PUBLISH_RETRY_BASE_INTERVAL_MS = 1000L;
+    private static final long PUBLISH_RETRY_MAX_INTERVAL_MS = 30000L;
 
     @SerializedName(value = "physicalPartitionId")
     protected final long physicalPartitionId;
@@ -47,6 +56,20 @@ public class ReshardingPhysicalPartition {
     // from the reshard daemon while getInfo() reads it on an RPC thread, and the job stays in
     // RUNNING throughout, so there is no other happens-before edge to publish the write.
     protected transient volatile String publishFailureReason;
+
+    // Publish-retry pacing. A reshard publish is retried until it succeeds, because a merge / split
+    // whose transaction is already committed has no rollback path. The retry therefore has to be paced:
+    // resubmitting a deterministically failing publish on every daemon tick is an unbounded hot loop,
+    // observed in the field at ~95 identical warn lines per second per job.
+    // Not serialized, like publishFailureReason: a retry a leader change interrupts simply starts over
+    // from the first interval.
+    protected transient int consecutivePublishFailures;
+    protected transient long nextPublishRetryTimeMs;
+    // Whether the failure of the future currently held has already been counted, logged and turned into
+    // a retry deadline. getPublishResult() is polled once per daemon tick and keeps reporting FAILED
+    // for the same failed attempt, so without this the deadline would be pushed further out on every
+    // poll and the retry would never come due -- the pacing would turn into a permanent block.
+    protected transient boolean publishFailureAccounted;
 
     public ReshardingPhysicalPartition(long physicalPartitionId,
             Map<Long, ReshardingMaterializedIndex> reshardingIndexes) {
@@ -72,6 +95,8 @@ public class ReshardingPhysicalPartition {
 
     public void setPublishFuture(Future<Map<Long, TabletRange>> publishFuture) {
         this.publishFuture = publishFuture;
+        // A new attempt: its failure, if it fails, is a new one to count and to back off from.
+        this.publishFailureAccounted = false;
     }
 
     public void setPublishFailureReason(String publishFailureReason) {
@@ -114,16 +139,49 @@ public class ReshardingPhysicalPartition {
 
         try {
             Map<Long, TabletRange> tabletRanges = publishFuture.get();
+            // This attempt succeeded, so the failures before it were not consecutive after all: should
+            // this partition ever be published again, it starts from the first interval.
+            consecutivePublishFailures = 0;
+            nextPublishRetryTimeMs = 0;
             return new PublishResult(PublishState.SUCCESS, tabletRanges);
         } catch (InterruptedException e) {
             LOG.warn("Interrupted to future get. ", e);
             Thread.currentThread().interrupt();
             return new PublishResult(PublishState.IN_PROGRESS, null);
         } catch (Exception e) {
-            LOG.warn("Failed to publish future get. ", e);
             Throwable cause = (e.getCause() != null) ? e.getCause() : e;
+            if (!publishFailureAccounted) {
+                publishFailureAccounted = true;
+                ++consecutivePublishFailures;
+                long retryIntervalMs = publishRetryIntervalMs();
+                nextPublishRetryTimeMs = System.currentTimeMillis() + retryIntervalMs;
+                // One increment per failed attempt, so a stuck reshard is alertable without reading
+                // fe.warn.log or polling information_schema.tablet_reshard_jobs. Counting it here rather
+                // than per poll keeps the rate tracking attempts instead of daemon ticks.
+                if (MetricRepo.hasInit) {
+                    MetricRepo.COUNTER_TABLET_RESHARD_PUBLISH_FAILED.increase(1L);
+                }
+                // Logged once per attempt for the same reason: re-logging the same completed-exceptionally
+                // future on every poll is what grew fe.warn.log to hundreds of MB in the field.
+                LOG.warn("Failed to publish future get. Partition {} publish attempt {} failed, retry in {} ms. ",
+                        physicalPartitionId, consecutivePublishFailures, retryIntervalMs, e);
+            }
             return new PublishResult(PublishState.FAILED, null, cause.getMessage());
         }
+    }
+
+    private long publishRetryIntervalMs() {
+        // Shift by at most 5: 1s << 5 is already past the cap, so a higher shift only risks overflow.
+        int shift = Math.min(Math.max(consecutivePublishFailures - 1, 0), 5);
+        return Math.min(PUBLISH_RETRY_BASE_INTERVAL_MS << shift, PUBLISH_RETRY_MAX_INTERVAL_MS);
+    }
+
+    /**
+     * Whether a new publish attempt may be submitted now. Always true before the first attempt and
+     * after a success; after a failure it stays false until the backoff computed above has elapsed.
+     */
+    public boolean isPublishRetryDue() {
+        return System.currentTimeMillis() >= nextPublishRetryTimeMs;
     }
 
     public long getParallelTablets() {
