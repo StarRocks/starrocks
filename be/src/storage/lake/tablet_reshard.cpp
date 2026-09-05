@@ -17,12 +17,15 @@
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
+#include <algorithm>
 #include <unordered_map>
 
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/join.h"
+#include "runtime/runtime_env.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
@@ -37,6 +40,8 @@
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
 bvar::Adder<int64_t> g_tablet_reshard_failed("tablet_reshard_failed");
 bvar::LatencyRecorder g_tablet_reshard_latency("tablet_reshard");
+// P3: reshard publishes rejected by the near-OOM backstop (mirrors the lake publish gate).
+bvar::Adder<int64_t> g_tablet_reshard_mem_rejected("tablet_reshard_mem_rejected");
 
 // Layer 2: Split metrics
 bvar::Adder<int64_t> g_tablet_reshard_split_total("tablet_reshard_split_total");
@@ -551,6 +556,20 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                                  std::unordered_map<int64_t, TabletRangePB>& tablet_ranges) {
     g_tablet_reshard_total << 1;
     auto reshard_start_ts = butil::gettimeofday_us();
+
+    // P3: coarse near-OOM backstop for the separately-scheduled reshard metadata builder. This
+    // path is scheduled by LakeServiceImpl::publish_version alongside, but not through, lake::publish_version,
+    // and clones full tablet metadata in the handle_*_tablet helpers below, so without this it can allocate
+    // unbounded metadata that the ordinary publish path's memory gate never sees. Mirror that gate's entry
+    // backstop; gated on the same mutable urgent knob (0 disables). A rejection is a retryable throttle (FE
+    // resubmits the reshard), not a failure, so it is counted separately and does not trip reshard-failed.
+    {
+        int32_t urgent_pct = std::max(0, std::min(100, config::lake_publish_process_memory_urgent_pct));
+        if (urgent_pct > 0 && RuntimeEnv::GetInstance()->process_mem_tracker()->limit_exceeded_by_ratio(urgent_pct)) {
+            g_tablet_reshard_mem_rejected << 1;
+            return Status::ResourceBusy("publish throttled: process memory urgent (reshard)");
+        }
+    }
 
     // Reserve the per-reshard publish slot. All retries of the same reshard
     // resolve to the same id (see reshard_serialization_id), so this
