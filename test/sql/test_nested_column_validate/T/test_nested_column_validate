@@ -1,0 +1,44 @@
+-- name: test_nested_column_validate
+create database db_${uuid0};
+use db_${uuid0};
+
+set insert_max_filter_ratio = 1;
+
+-- Nested varchar over the declared length: the bad row is filtered, good rows load
+-- (this used to fail the whole batch at the segment writer).
+create table wide_str (id int, arr array<varchar(50)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+create table narrow_str (id int, arr array<varchar(5)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+insert into wide_str values (1, ['ok']), (2, ['toolongstring']), (3, ['fine','x']), (4, [NULL,'y']), (5, NULL);
+insert into narrow_str select * from wide_str;
+select * from narrow_str order by id;
+
+-- Nested decimal beyond the declared precision: the bad row is filtered
+-- (this used to load silently).
+create table wide_dec (id int, arr array<decimal(20,2)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+create table narrow_dec (id int, arr array<decimal(4,2)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+insert into wide_dec values (1, [99.99]), (2, [123456.78]), (3, [NULL, 1.50]);
+insert into narrow_dec select * from wide_dec;
+select * from narrow_dec order by id;
+
+-- Map: both the key side and the value side are validated.
+create table wide_map (id int, m map<varchar(50), varchar(50)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+create table narrow_map (id int, m map<varchar(5), varchar(5)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+insert into wide_map values (1, map{'k':'v'}), (2, map{'verylongkey':'v'}), (3, map{'k':'verylongvalue'});
+insert into narrow_map select * from wide_map;
+select * from narrow_map order by id;
+
+-- Struct: fields are validated with a one-to-one row mapping.
+create table wide_struct (id int, s struct<name varchar(50), price decimal(20,2)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+create table narrow_struct (id int, s struct<name varchar(5), price decimal(4,2)>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+insert into wide_struct values (1, row('ok', 9.99)), (2, row('waytoolong', 1.0)), (3, row('ok', 123456.78));
+insert into narrow_struct select * from wide_struct;
+select * from narrow_struct order by id;
+
+-- Two-level nesting: the bad element maps back to its own row only.
+create table wide_nested (id int, arr array<array<varchar(50)>>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+create table narrow_nested (id int, arr array<array<varchar(5)>>) duplicate key(id) distributed by hash(id) buckets 1 properties("replication_num"="1");
+insert into wide_nested values (1, [['ok']]), (2, [['ok'],['bad_toolong']]), (3, [[],['x']]);
+insert into narrow_nested select * from wide_nested;
+select * from narrow_nested order by id;
+
+drop database db_${uuid0};

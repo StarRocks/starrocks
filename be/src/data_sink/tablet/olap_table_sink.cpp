@@ -34,6 +34,7 @@
 
 #include "data_sink/tablet/olap_table_sink.h"
 
+#include <limits>
 #include <memory>
 #include <numeric>
 #include <sstream>
@@ -43,12 +44,14 @@
 #include "base/simd/simd.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
+#include "column/struct_column.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
@@ -83,6 +86,9 @@ static const uint8_t VALID_SEL_OK = 0x1;
 // and we don't need following extra check
 // make sure the least bit is 1.
 static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
+// A row_of[] entry for nested values that sit under a NULL container:
+// such values are neither validated nor descended into.
+static const uint32_t VALIDATE_IGNORED_ROW = std::numeric_limits<uint32_t>::max();
 
 namespace starrocks {
 
@@ -929,8 +935,8 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     return status;
 }
 
-void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk,
-                                             int32_t row_index) {
+void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, std::string_view col_name,
+                                             int max_len, Chunk* chunk, int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
@@ -942,30 +948,52 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
         error_str = str.to_string();
     }
     std::string error_msg = strings::Substitute("String '$0'(length=$1) is too long. The max length of '$2' is $3",
-                                                error_str, str.get_size(), desc->col_name(), desc->type().len);
+                                                error_str, str.get_size(), col_name, max_len);
     LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
-void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
-                                             Chunk* chunk, int32_t row_index) {
+void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal,
+                                             const TypeDescriptor& type, std::string_view col_name, Chunk* chunk,
+                                             int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
-                                                decimal.to_string(), desc->col_name(), desc->type().debug_string());
+                                                decimal.to_string(), col_name, type.debug_string());
     LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
 }
 
 template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
-void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc, Chunk* chunk,
-                                int32_t row_index) {
+void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const TypeDescriptor& type,
+                                std::string_view col_name, Chunk* chunk, int32_t row_index) {
     if (state->has_reached_max_error_msg_num()) {
         return;
     }
-    auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, desc->type().precision, desc->type().scale);
+    auto decimal_str = DecimalV3Cast::to_string<CppType>(decimal, type.precision, type.scale);
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
-                                                desc->col_name(), desc->type().debug_string());
+                                                col_name, type.debug_string());
     LoadPathStateHelper::append_error_msg_to_file(state, chunk->debug_row(row_index), error_msg);
+}
+
+// Returns true when `datum` fits the declared precision; otherwise reports the bad value under
+// `col_name` and returns false. Shared by the top-level and the nested decimal validation so the
+// two paths cannot drift apart.
+template <LogicalType LT, typename CppType = RunTimeCppType<LT>>
+bool _check_decimal_in_range(RuntimeState* state, Chunk* chunk, const CppType& datum, const CppType& max_decimal,
+                             const CppType& min_decimal, const TypeDescriptor& type, std::string_view col_name,
+                             int32_t row_index) {
+    if (datum <= max_decimal && datum >= min_decimal) {
+        return true;
+    }
+    _print_decimalv3_error_msg<LT>(state, datum, type, col_name, chunk, row_index);
+    if (state->enable_log_rejected_record()) {
+        auto decimal_str = DecimalV3Cast::to_string<CppType>(datum, type.precision, type.scale);
+        std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
+                                                    decimal_str, col_name, type.debug_string());
+        LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(row_index, ","), error_msg,
+                                                            "");
+    }
+    return false;
 }
 
 template <LogicalType LT>
@@ -983,25 +1011,212 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
 
     for (auto i = 0; i < num_rows; ++i) {
         if ((*validate_selection)[i] == VALID_SEL_OK) {
-            const auto& datum = data[i];
-            if (datum > max_decimal || datum < min_decimal) {
+            if (!_check_decimal_in_range<LT>(state, chunk, data[i], max_decimal, min_decimal, desc->type(),
+                                             desc->col_name(), i)) {
                 (*validate_selection)[i] = VALID_SEL_FAILED;
-                _print_decimalv3_error_msg<LT>(state, datum, desc, chunk, i);
-                if (state->enable_log_rejected_record()) {
-                    auto decimal_str =
-                            DecimalV3Cast::to_string<CppType>(datum, desc->type().precision, desc->type().scale);
-                    std::string error_msg =
-                            strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
-                                                desc->col_name(), desc->type().debug_string());
-                    LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(i, ","),
-                                                                        error_msg, "");
-                }
             }
         }
     }
 }
 
-/// TODO: recursively validate columns for nested columns, including array, map, struct
+namespace {
+
+// Whether this type tree contains any leaf the sink knows how to validate, so that
+// _validate_data can skip building row mappings for types like ARRAY<INT>.
+bool has_validatable_nested_leaf(const TypeDescriptor& type) {
+    switch (type.type) {
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_STRUCT: {
+        for (const auto& child : type.children) {
+            if (has_validatable_nested_leaf(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_VARBINARY:
+        return config::enable_check_string_lengths;
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+    case TYPE_DECIMAL256:
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
+template <LogicalType LT>
+void OlapTableSink::_validate_nested_decimal(RuntimeState* state, Chunk* chunk, const TypeDescriptor& type,
+                                             const Column* column, const uint8_t* nulls,
+                                             const std::vector<uint32_t>& row_of, const std::string& path) {
+    using CppType = RunTimeCppType<LT>;
+    using ColumnType = RunTimeColumnType<LT>;
+    const auto data = down_cast<const ColumnType*>(column)->get_data();
+    const auto max_decimal = get_max_decimal<CppType>(type.precision);
+    const auto min_decimal = get_min_decimal<CppType>(type.precision);
+
+    for (size_t i = 0; i < row_of.size(); ++i) {
+        const uint32_t row = row_of[i];
+        if (row == VALIDATE_IGNORED_ROW || (nulls != nullptr && nulls[i] != 0) ||
+            _validate_selection[row] != VALID_SEL_OK) {
+            continue;
+        }
+        if (!_check_decimal_in_range<LT>(state, chunk, data[i], max_decimal, min_decimal, type, path, row)) {
+            _validate_selection[row] = VALID_SEL_FAILED;
+        }
+    }
+}
+
+void OlapTableSink::_validate_nested_column(RuntimeState* state, Chunk* chunk, const TypeDescriptor& type,
+                                            const Column* column, const std::vector<uint32_t>& row_of,
+                                            const std::string& path) {
+    const uint8_t* nulls = nullptr;
+    if (column->is_nullable()) {
+        const auto* nullable = down_cast<const NullableColumn*>(column);
+        nulls = nullable->immutable_null_column_data().data();
+        column = nullable->data_column().get();
+    }
+    const size_t num_values = row_of.size();
+    DCHECK_EQ(num_values, column->size());
+
+    switch (type.type) {
+    case TYPE_ARRAY: {
+        const auto* array = down_cast<const ArrayColumn*>(column);
+        const auto offsets = array->offsets().get_data();
+        std::vector<uint32_t> element_row_of(array->elements().size());
+        for (size_t i = 0; i < num_values; ++i) {
+            const uint32_t row = (nulls != nullptr && nulls[i] != 0) ? VALIDATE_IGNORED_ROW : row_of[i];
+            for (size_t e = offsets[i]; e < offsets[i + 1]; ++e) {
+                element_row_of[e] = row;
+            }
+        }
+        _validate_nested_column(state, chunk, type.children[0], array->elements_column_raw_ptr(), element_row_of,
+                                path + "[]");
+        break;
+    }
+    case TYPE_MAP: {
+        const auto* map = down_cast<const MapColumn*>(column);
+        const auto offsets = map->offsets().get_data();
+        std::vector<uint32_t> element_row_of(map->keys().size());
+        for (size_t i = 0; i < num_values; ++i) {
+            const uint32_t row = (nulls != nullptr && nulls[i] != 0) ? VALIDATE_IGNORED_ROW : row_of[i];
+            for (size_t e = offsets[i]; e < offsets[i + 1]; ++e) {
+                element_row_of[e] = row;
+            }
+        }
+        _validate_nested_column(state, chunk, type.children[0], map->keys_column_raw_ptr(), element_row_of,
+                                path + "{}.key");
+        _validate_nested_column(state, chunk, type.children[1], map->values_column_raw_ptr(), element_row_of,
+                                path + "{}.value");
+        break;
+    }
+    case TYPE_STRUCT: {
+        const auto* struct_column = down_cast<const StructColumn*>(column);
+        // Field columns have the same length as this level, so the mapping passes through as-is,
+        // only masking the positions where the struct itself is NULL.
+        const std::vector<uint32_t>* field_row_of = &row_of;
+        std::vector<uint32_t> masked_row_of;
+        if (nulls != nullptr) {
+            masked_row_of = row_of;
+            for (size_t i = 0; i < num_values; ++i) {
+                if (nulls[i] != 0) {
+                    masked_row_of[i] = VALIDATE_IGNORED_ROW;
+                }
+            }
+            field_row_of = &masked_row_of;
+        }
+        for (size_t idx = 0; idx < type.children.size(); ++idx) {
+            _validate_nested_column(state, chunk, type.children[idx], struct_column->field_column_raw_ptr(idx),
+                                    *field_row_of, path + "." + type.field_names[idx]);
+        }
+        break;
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_VARBINARY: {
+        if (!config::enable_check_string_lengths) {
+            break;
+        }
+        // Deliberately the same bound as the top-level check: the declared length from the slot type.
+        const uint32_t max_len = type.len;
+        const auto* binary = down_cast<const BinaryColumn*>(column);
+        for (size_t i = 0; i < num_values; ++i) {
+            const uint32_t row = row_of[i];
+            if (row == VALIDATE_IGNORED_ROW || (nulls != nullptr && nulls[i] != 0) ||
+                _validate_selection[row] != VALID_SEL_OK) {
+                continue;
+            }
+            Slice slice = binary->get_slice(i);
+            if (slice.get_size() > max_len) {
+                _validate_selection[row] = VALID_SEL_FAILED;
+                _print_varchar_error_msg(state, slice, path, type.len, chunk, row);
+                if (state->enable_log_rejected_record()) {
+                    std::string error_msg =
+                            strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
+                                                slice.get_size(), path, type.len);
+                    LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(row, ","),
+                                                                        error_msg, "");
+                }
+            }
+        }
+        break;
+    }
+    case TYPE_DECIMALV2: {
+        const auto data = down_cast<const DecimalColumn*>(column)->get_data();
+        DecimalV2Value max_decimalv2;
+        DecimalV2Value min_decimalv2;
+        max_decimalv2.to_max_decimal(type.precision, type.scale);
+        min_decimalv2.to_min_decimal(type.precision, type.scale);
+        for (size_t i = 0; i < num_values; ++i) {
+            const uint32_t row = row_of[i];
+            if (row == VALIDATE_IGNORED_ROW || (nulls != nullptr && nulls[i] != 0) ||
+                _validate_selection[row] != VALID_SEL_OK) {
+                continue;
+            }
+            // The top-level path rounds an over-scale value in place before comparing. The nested
+            // data is const here, so compare a rounded copy: the accept/reject decision matches the
+            // top-level path, only the stored value keeps its extra scale digits.
+            DecimalV2Value value = data[i];
+            if (value.greater_than_scale(type.scale)) {
+                value.round(&value, type.scale, HALF_UP);
+            }
+            if (value > max_decimalv2 || value < min_decimalv2) {
+                _validate_selection[row] = VALID_SEL_FAILED;
+                _print_decimal_error_msg(state, value, type, path, chunk, row);
+                if (state->enable_log_rejected_record()) {
+                    std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
+                                                                value.to_string(), path, type.debug_string());
+                    LoadPathStateHelper::append_rejected_record_to_file(state, chunk->rebuild_csv_row(row, ","),
+                                                                        error_msg, "");
+                }
+            }
+        }
+        break;
+    }
+    case TYPE_DECIMAL32:
+        _validate_nested_decimal<TYPE_DECIMAL32>(state, chunk, type, column, nulls, row_of, path);
+        break;
+    case TYPE_DECIMAL64:
+        _validate_nested_decimal<TYPE_DECIMAL64>(state, chunk, type, column, nulls, row_of, path);
+        break;
+    case TYPE_DECIMAL128:
+        _validate_nested_decimal<TYPE_DECIMAL128>(state, chunk, type, column, nulls, row_of, path);
+        break;
+    case TYPE_DECIMAL256:
+        _validate_nested_decimal<TYPE_DECIMAL256>(state, chunk, type, column, nulls, row_of, path);
+        break;
+    default:
+        break;
+    }
+}
+
 void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
@@ -1111,7 +1326,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                 if (_validate_selection[j] == VALID_SEL_OK) {
                     if (offset[j + 1] - offset[j] > len) {
                         _validate_selection[j] = VALID_SEL_FAILED;
-                        _print_varchar_error_msg(state, binary->get_slice(j), desc, chunk, j);
+                        _print_varchar_error_msg(state, binary->get_slice(j), desc->col_name(), desc->type().len, chunk,
+                                                 j);
                         if (state->enable_log_rejected_record()) {
                             std::string error_msg =
                                     strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
@@ -1137,7 +1353,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
 
                     if (datas[j] > _max_decimalv2_val[i] || datas[j] < _min_decimalv2_val[i]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
-                        _print_decimal_error_msg(state, datas[j], desc, chunk, j);
+                        _print_decimal_error_msg(state, datas[j], desc->type(), desc->col_name(), chunk, j);
                         if (state->enable_log_rejected_record()) {
                             std::string error_msg = strings::Substitute(
                                     "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
@@ -1162,10 +1378,19 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMAL256:
             _validate_decimal<TYPE_DECIMAL256>(state, chunk, column, desc, &_validate_selection);
             break;
+        case TYPE_ARRAY:
+        case TYPE_STRUCT:
         case TYPE_MAP: {
-            column = ColumnHelper::get_data_column(column);
-            auto* map = down_cast<MapColumn*>(column);
-            map->remove_duplicated_keys(true);
+            if (desc->type().type == TYPE_MAP) {
+                auto* map = down_cast<MapColumn*>(ColumnHelper::get_data_column(column));
+                // Deduplicate first: it rewrites the key/value offsets the validation below walks.
+                map->remove_duplicated_keys(true);
+            }
+            if (has_validatable_nested_leaf(desc->type())) {
+                std::vector<uint32_t> row_of(num_rows);
+                std::iota(row_of.begin(), row_of.end(), 0);
+                _validate_nested_column(state, chunk, desc->type(), column, row_of, std::string(desc->col_name()));
+            }
             break;
         }
         default:

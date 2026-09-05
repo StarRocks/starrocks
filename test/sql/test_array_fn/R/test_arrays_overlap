@@ -5,7 +5,7 @@ s_1   Array<String>,
 i_1   Array<BigInt>,
 f_1   Array<Double>,
 d_1   Array<DECIMAL(26, 2)>,
-d_2   Array<DECIMAL64(4, 3)>,
+d_2   Array<DECIMAL64(14, 3)>,
 d_3   Array<DECIMAL128(25, 19)>,
 d_4   Array<DECIMAL32(8, 5)> ,
 d_5   Array<DECIMAL(16, 3)>,
@@ -510,7 +510,7 @@ E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 32. D
 -- !result
 select arrays_overlap(aad_1, d_2) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 32. Detail message: No matching function with signature: arrays_overlap(array<array<array<DECIMAL128(26,2)>>>, array<DECIMAL64(4,3)>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 32. Detail message: No matching function with signature: arrays_overlap(array<array<array<DECIMAL128(26,2)>>>, array<DECIMAL64(14,3)>).')
 -- !result
 select arrays_overlap(aad_1, as_1) from array_test order by pk;
 -- result:
