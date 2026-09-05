@@ -320,6 +320,11 @@ message TabletMetaPB {
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     optional TabletSchemaPB source_schema = 70;
     optional FlatJsonConfigPB flat_json_config = 80;
+    // Phase of the online-optimize double-write protocol this tablet is in, persisted so a
+    // restart cannot forget it; see Tablet::note_double_write_publish().
+    // 0 = never double-written, 1 = double-writes flowing (compaction suspended),
+    // 2 = the pinned version-overwrite has been applied (suspension permanently over).
+    optional int32 double_write_phase = 81 [default = 0];
 }
 
 message OLAPIndexHeaderMessage {

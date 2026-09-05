@@ -916,7 +916,8 @@ Status ReplicationTxnManager::publish_incremental_meta(Tablet* tablet, const Tab
     }
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    Status st =
+            tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete, cloned_tablet_meta.double_write_phase());
     if (!st.ok()) {
         LOG(WARNING) << "Failed to publish incremental meta. tablet: " << tablet->full_name()
                      << ", snapshot_version: " << snapshot_version << ", status: " << st;
@@ -996,7 +997,8 @@ Status ReplicationTxnManager::publish_full_meta(Tablet* tablet, TabletMeta* clon
     rs_to_clone = rowsets_to_clone;
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    Status st =
+            tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete, cloned_tablet_meta->double_write_phase());
     if (!st.ok()) {
         LOG(WARNING) << "Failed to publish full meta. tablet: " << tablet->full_name()
                      << ", cloned_max_version: " << cloned_max_version.first << "-" << cloned_max_version.second
