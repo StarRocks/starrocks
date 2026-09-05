@@ -519,4 +519,80 @@ public class ImplicitCastRuleTest {
             ConnectContext.remove();
         }
     }
+
+    @Test
+    public void testDateColumnWithCastExpression() {
+        // Test case: dt = CAST(20250101 AS BIGINT) should be optimized to dt = '2025-01-01'
+        ColumnRefOperator dateColumn = new ColumnRefOperator(1, DateType.DATE, "dt", true);
+        CastOperator castExpression = new CastOperator(IntegerType.BIGINT, ConstantOperator.createBigint(20250101));
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, dateColumn, castExpression);
+
+        ImplicitCastRule rule = new ImplicitCastRule();
+        ScalarOperator result = rule.apply(predicate, null);
+
+        assertEquals(OperatorType.BINARY, result.getOpType());
+        assertTrue(result instanceof BinaryPredicateOperator);
+        BinaryPredicateOperator resultPredicate = (BinaryPredicateOperator) result;
+        assertEquals(BinaryType.EQ, resultPredicate.getBinaryType());
+
+        assertEquals(dateColumn, resultPredicate.getChild(0));
+        assertEquals(DateType.DATE, resultPredicate.getChild(0).getType());
+        assertTrue(resultPredicate.getChild(1) instanceof ConstantOperator);
+        assertEquals(DateType.DATE, resultPredicate.getChild(1).getType());
+        ConstantOperator dateConstant = (ConstantOperator) resultPredicate.getChild(1);
+        assertEquals("2025-01-01", dateConstant.toString());
+    }
+
+    @Test
+    public void testStrictModeFallsBackWhenFoldWouldNarrowVariable() {
+        // int_col = CAST(1 AS BIGINT) under strict mode: folding the constant
+        // into INT would be a BIGINT->INT narrowing and must be rejected; the
+        // rule has to fall back to widening int_col to BIGINT instead.
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_FORBID_INVALID_IMPLICIT_CAST);
+        ctx.setThreadLocalInfo();
+        try {
+            ColumnRefOperator intColumn = new ColumnRefOperator(1, IntegerType.INT, "c_int", true);
+            CastOperator castExpression = new CastOperator(IntegerType.BIGINT, ConstantOperator.createBigint(1));
+            BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, intColumn, castExpression);
+
+            ScalarOperator result = new ImplicitCastRule().apply(predicate, null);
+
+            assertTrue(result instanceof BinaryPredicateOperator);
+            BinaryPredicateOperator resultPredicate = (BinaryPredicateOperator) result;
+            // int_col should have been widened to BIGINT via an explicit CAST
+            assertTrue(resultPredicate.getChild(0) instanceof CastOperator);
+            assertEquals(IntegerType.BIGINT, resultPredicate.getChild(0).getType());
+            // The CAST(1 AS BIGINT) on the right side keeps its original BIGINT type
+            assertEquals(IntegerType.BIGINT, resultPredicate.getChild(1).getType());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testStrictModeStillFoldsWhenWideningIsSafe() {
+        // bigint_col = CAST(1 AS TINYINT) under strict mode: folding TINYINT
+        // into BIGINT is widening, so the optimization should still proceed.
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_FORBID_INVALID_IMPLICIT_CAST);
+        ctx.setThreadLocalInfo();
+        try {
+            ColumnRefOperator bigintColumn = new ColumnRefOperator(1, IntegerType.BIGINT, "c_bigint", true);
+            CastOperator castExpression = new CastOperator(IntegerType.TINYINT, ConstantOperator.createTinyInt((byte) 1));
+            BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, bigintColumn, castExpression);
+
+            ScalarOperator result = new ImplicitCastRule().apply(predicate, null);
+
+            assertTrue(result instanceof BinaryPredicateOperator);
+            BinaryPredicateOperator resultPredicate = (BinaryPredicateOperator) result;
+            assertEquals(bigintColumn, resultPredicate.getChild(0));
+            // The constant should have been folded and coerced to BIGINT directly
+            assertTrue(resultPredicate.getChild(1) instanceof ConstantOperator);
+            assertEquals(IntegerType.BIGINT, resultPredicate.getChild(1).getType());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
 }
