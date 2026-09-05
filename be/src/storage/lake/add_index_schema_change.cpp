@@ -18,6 +18,8 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
@@ -35,6 +37,7 @@
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/index_file_writer.h"
 #include "storage/lake/meta_file.h"
@@ -46,9 +49,11 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "storage/utils.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
@@ -203,6 +208,25 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     // process-root tracker (or null in bare unit tests); both are safe.
     MemTracker* mem_tracker = CurrentThread::mem_tracker();
 
+    // Load the DCG layout once, before any task runs: classify_indexes_for_segment
+    // reads `_dcgs_by_rssid` concurrently from the pool and must not mutate it.
+    // A tablet that never took a column-mode partial update has an empty
+    // dcg_meta and skips this entirely.
+    if (!base_metadata->dcg_meta().dcgs().empty()) {
+        LakeDeltaColumnGroupLoader dcg_loader(base_metadata);
+        for (const auto& rowset : base_metadata->rowsets()) {
+            for (int seg_idx = 0; seg_idx < rowset.segment_metas_size(); ++seg_idx) {
+                uint32_t rssid = get_rssid(rowset, seg_idx);
+                TabletSegmentId tsid{_base_tablet.id(), rssid};
+                DeltaColumnGroupList dcgs;
+                RETURN_IF_ERROR(dcg_loader.load(tsid, _alter_version, &dcgs));
+                if (!dcgs.empty()) {
+                    _dcgs_by_rssid.emplace(rssid, std::move(dcgs));
+                }
+            }
+        }
+    }
+
     for (const auto& rowset : base_metadata->rowsets()) {
         for (int seg_idx = 0; seg_idx < rowset.segment_metas_size(); ++seg_idx) {
             uint32_t rssid = get_rssid(rowset, seg_idx);
@@ -217,12 +241,30 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
                 // subject to the same limit as the legacy path. RAII-restored
                 // on task exit, leaving the pool thread's TLS clean.
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+                std::vector<TabletIndexPB> base_indexes;
+                std::vector<TabletIndexPB> dcg_indexes;
+                RETURN_IF_ERROR(classify_indexes_for_segment(rssid, &base_indexes, &dcg_indexes));
+
                 IndexDeltaGroupEntryPB entry;
-                RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
+                // An all-overlaid segment gets no `.idx` at all: every key
+                // would describe base values no reader consults.
+                if (!base_indexes.empty()) {
+                    RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, base_indexes, &entry));
+                }
+                TxnLogPB_OpAddIndex_DcgEntry dcg_entry;
+                if (!dcg_indexes.empty()) {
+                    RETURN_IF_ERROR(rewrite_dcg_for_segment(rowset_copy, seg_idx, rssid, dcg_indexes, &dcg_entry));
+                }
+
                 std::lock_guard<std::mutex> lg(_op_mtx);
-                auto* se = op_add_index->add_segment_entries();
-                se->set_segment_id(rssid);
-                se->mutable_entry()->Swap(&entry);
+                if (!base_indexes.empty()) {
+                    auto* se = op_add_index->add_segment_entries();
+                    se->set_segment_id(rssid);
+                    se->mutable_entry()->Swap(&entry);
+                }
+                if (!dcg_indexes.empty()) {
+                    op_add_index->add_dcg_entries()->Swap(&dcg_entry);
+                }
                 return Status::OK();
             });
             if (!submit_st.ok()) {
@@ -262,14 +304,266 @@ void AddIndexSchemaChange::cleanup_written_idx_files() {
         }
         auto st = (*fs_or)->delete_file(p);
         if (!st.ok() && !st.is_not_found()) {
-            LOG(WARNING) << "AddIndexSchemaChange cleanup: failed to delete orphan .idx " << p << ": " << st;
+            LOG(WARNING) << "AddIndexSchemaChange cleanup: failed to delete orphan file " << p << ": " << st;
         }
     }
 }
 
-Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset,
-                                                   uint32_t rssid, IndexDeltaGroupEntryPB* out_entry) {
+Status AddIndexSchemaChange::classify_indexes_for_segment(uint32_t rssid, std::vector<TabletIndexPB>* base_out,
+                                                          std::vector<TabletIndexPB>* dcg_out) {
+    base_out->clear();
+    dcg_out->clear();
+
+    auto it = _dcgs_by_rssid.find(rssid);
+    if (it == _dcgs_by_rssid.end()) {
+        *base_out = _indexes_to_build;
+        return Status::OK();
+    }
+
+    for (const auto& ix : _indexes_to_build) {
+        if (ix.col_unique_id_size() == 0) {
+            return Status::InternalError("TabletIndex has no columns");
+        }
+        const uint32_t col_uid = static_cast<uint32_t>(ix.col_unique_id(0));
+        bool overlaid = false;
+        for (const auto& dcg : it->second) {
+            // get_column_idx returns {file index, column index in that file};
+            // a negative file index means this DCG layer does not carry the
+            // column. Layers are ordered newest-first, so the first hit is the
+            // one a query at this version reads.
+            if (dcg->get_column_idx(col_uid).first >= 0) {
+                overlaid = true;
+                break;
+            }
+        }
+        (overlaid ? dcg_out : base_out)->push_back(ix);
+    }
+    return Status::OK();
+}
+
+StatusOr<std::shared_ptr<TabletSchema>> AddIndexSchemaChange::build_dcg_write_schema(
+        const std::vector<TabletIndexPB>& indexes) {
+    auto tablet_schema = _new_tablet.get_schema();
+    if (tablet_schema == nullptr) {
+        return Status::InternalError("AddIndexSchemaChange: new tablet has null schema");
+    }
+
+    std::vector<ColumnUID> uids;
+    uids.reserve(indexes.size());
+    for (const auto& ix : indexes) {
+        uids.push_back(static_cast<ColumnUID>(ix.col_unique_id(0)));
+    }
+    auto partial_schema = TabletSchema::create_with_uid(tablet_schema, uids);
+
+    // The tablet schema BE sees during the alter does not carry the new index
+    // yet — apply_add_index() stamps table_indices and the per-column
+    // has_bitmap_index / is_bf_column flags at publish, which happens after
+    // this rewrite. Set them here so SegmentWriter actually inlines the index
+    // into the `.cols` footer (segment_writer.cpp gates on exactly these).
+    TabletSchemaPB schema_pb;
+    partial_schema->to_schema_pb(&schema_pb);
+    for (const auto& ix : indexes) {
+        const uint32_t col_uid = static_cast<uint32_t>(ix.col_unique_id(0));
+        // Dedup on (index_type, column), never on index_name: FE names every
+        // bloom-filter entry coming from `bloom_filter_columns` with the empty
+        // string (SchemaChangeHandler::…), so a name-keyed check would collapse
+        // distinct columns into one entry and leave the rest without their
+        // TabletIndexPB — losing the NGRAMBF gram parameters that
+        // get_indexes_for_column feeds to the column writer.
+        bool index_present = false;
+        for (const auto& existing : schema_pb.table_indices()) {
+            if (existing.index_type() != ix.index_type()) {
+                continue;
+            }
+            const auto& uids = existing.col_unique_id();
+            if (std::find(uids.begin(), uids.end(), static_cast<int32_t>(col_uid)) != uids.end()) {
+                index_present = true;
+                break;
+            }
+        }
+        if (!index_present) {
+            schema_pb.add_table_indices()->CopyFrom(ix);
+        }
+        for (auto& col : *schema_pb.mutable_column()) {
+            if (col.unique_id() != col_uid) continue;
+            if (ix.index_type() == IndexType::BITMAP) {
+                col.set_has_bitmap_index(true);
+            } else if (ix.index_type() == IndexType::NGRAMBF || ix.index_type() == IndexType::BLOOM_FILTER) {
+                col.set_is_bf_column(true);
+            }
+            break;
+        }
+    }
+    return TabletSchema::create(schema_pb);
+}
+
+Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset,
+                                                     uint32_t rssid, const std::vector<TabletIndexPB>& indexes,
+                                                     TxnLogPB_OpAddIndex_DcgEntry* out_entry) {
     DCHECK(out_entry != nullptr);
+    DCHECK(!indexes.empty());
+
+    auto dcg_it = _dcgs_by_rssid.find(rssid);
+    if (dcg_it == _dcgs_by_rssid.end()) {
+        return Status::InternalError(
+                strings::Substitute("AddIndexSchemaChange: no delta column group for rssid $0", rssid));
+    }
+    ASSIGN_OR_RETURN(auto write_schema, build_dcg_write_schema(indexes));
+    auto read_schema = _new_tablet.get_schema();
+
+    // 1. Open the base segment. It is not read for values here — the overlay
+    //    holds those — but it anchors the directory used to resolve the
+    //    `.cols` filenames and reports the row count the new overlay must
+    //    match (a DCG layer always spans the whole segment).
+    const auto& seg_meta = rowset_meta.segment_metas(seg_idx_in_rowset);
+    FileInfo seg_fileinfo{.path = _tablet_mgr->segment_location(_new_tablet.id(), seg_meta.filename())};
+    if (seg_meta.has_encryption_meta()) {
+        seg_fileinfo.encryption_meta = seg_meta.encryption_meta();
+    }
+    if (seg_meta.has_size()) {
+        seg_fileinfo.size = seg_meta.size();
+    }
+    if (seg_meta.has_bundle_file_offset()) {
+        seg_fileinfo.bundle_file_offset = seg_meta.bundle_file_offset();
+    }
+    size_t footer_size_hint = 16 * 1024;
+    LakeIOOptions read_opts{.fill_data_cache = false};
+    ASSIGN_OR_RETURN(auto base_segment, _tablet_mgr->load_segment(seg_fileinfo, seg_idx_in_rowset, &footer_size_hint,
+                                                                  read_opts, /*fill_meta_cache*/ true, read_schema));
+    const size_t num_rows = base_segment->num_rows();
+
+    // 2. Open one iterator per overlaid column over the DCG layer that
+    //    currently serves it, mirroring SegmentIterator::_get_dcg_segment.
+    std::unordered_map<std::string, std::shared_ptr<Segment>> dcg_segments;
+    std::unordered_map<std::string, std::unique_ptr<RandomAccessFile>> dcg_files;
+    std::vector<std::unique_ptr<ColumnIterator>> col_iters;
+    OlapReaderStatistics stats;
+    std::vector<ColumnIteratorOptions> iter_opts_holder;
+    col_iters.reserve(indexes.size());
+    iter_opts_holder.reserve(indexes.size());
+
+    for (size_t i = 0; i < write_schema->num_columns(); i++) {
+        const auto& column = write_schema->column(i);
+        std::shared_ptr<Segment> dcg_segment;
+        for (const auto& dcg : dcg_it->second) {
+            auto idx = dcg->get_column_idx(column.unique_id());
+            if (idx.first < 0) {
+                continue;
+            }
+            ASSIGN_OR_RETURN(auto column_file,
+                             dcg->column_file_by_idx(parent_name(base_segment->file_name()), idx.first));
+            if (dcg_segments.count(column_file) == 0) {
+                ASSIGN_OR_RETURN(auto seg, base_segment->new_dcg_segment(*dcg, idx.first, read_schema));
+                dcg_segments[column_file] = std::move(seg);
+            }
+            dcg_segment = dcg_segments[column_file];
+            break;
+        }
+        if (dcg_segment == nullptr) {
+            return Status::InternalError(strings::Substitute(
+                    "AddIndexSchemaChange: column $0 not found in any delta column group of rssid $1",
+                    column.unique_id(), rssid));
+        }
+        if (dcg_files.count(dcg_segment->file_name()) == 0) {
+            RandomAccessFileOptions ropts;
+            if (auto enc = dcg_segment->encryption_info(); enc) {
+                ropts.encryption_info = *enc;
+            }
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(dcg_segment->file_name()));
+            // `.cols` files are standalone segments, never packed into a
+            // bundle, so a plain random access file is the right opener here.
+            ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(ropts, dcg_segment->file_info()));
+            dcg_files[dcg_segment->file_name()] = std::move(rfile);
+        }
+        ASSIGN_OR_RETURN(auto col_iter, dcg_segment->new_column_iterator(column, /*path=*/nullptr));
+        ColumnIteratorOptions& iter_opts = iter_opts_holder.emplace_back();
+        iter_opts.read_file = dcg_files[dcg_segment->file_name()].get();
+        iter_opts.stats = &stats;
+        iter_opts.use_page_cache = false;
+        iter_opts.lake_io_opts = {.fill_data_cache = false};
+        iter_opts.is_nullable = column.is_nullable();
+        iter_opts.reader_type = READER_ALTER_TABLE;
+        RETURN_IF_ERROR(col_iter->init(iter_opts));
+        RETURN_IF_ERROR(col_iter->seek_to_first());
+        col_iters.push_back(std::move(col_iter));
+    }
+
+    // 3. Write the new `.cols`. Same writer construction as the column-mode
+    //    partial update path, so the file is indistinguishable from one
+    //    produced by a normal overlay write — except that its footer now
+    //    carries the index.
+    const std::string cols_filename = gen_cols_filename(_txn_id);
+    const std::string cols_path = _tablet_mgr->segment_location(_new_tablet.id(), cols_filename);
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    SegmentWriterOptions writer_options;
+    std::string encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        encryption_meta = pair.encryption_meta;
+        writer_options.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(wopts, cols_path));
+    {
+        std::lock_guard<std::mutex> lg(_written_paths_mtx);
+        _written_paths.emplace_back(cols_path);
+    }
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, write_schema, writer_options);
+    RETURN_IF_ERROR(segment_writer->init(false));
+
+    Schema chunk_schema = ChunkHelper::convert_schema(write_schema);
+    const auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(chunk_schema);
+    constexpr size_t kBatch = 4096;
+    size_t written_rows = 0;
+    auto chunk = ChunkFactory::new_chunk(chunk_schema, kBatch);
+    while (written_rows < num_rows) {
+        chunk->reset();
+        size_t n = std::min(kBatch, num_rows - written_rows);
+        for (size_t i = 0; i < col_iters.size(); i++) {
+            size_t rows_to_read = n;
+            RETURN_IF_ERROR(col_iters[i]->next_batch(&rows_to_read, chunk->get_column_raw_ptr_by_index(i)));
+            if (rows_to_read != n) {
+                return Status::InternalError(strings::Substitute(
+                        "AddIndexSchemaChange: short read from delta column group, rssid=$0 expected=$1 got=$2", rssid,
+                        n, rows_to_read));
+            }
+        }
+        // CHAR is stored '\0'-padded on disk and trimmed on read; the writer
+        // expects the padded form, exactly as the column-mode partial update
+        // path re-pads before appending.
+        ChunkHelper::padding_char_columns(char_field_indexes, chunk_schema, write_schema, chunk.get());
+        RETURN_IF_ERROR(segment_writer->append_chunk(*chunk));
+        written_rows += n;
+    }
+
+    uint64_t segment_file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    RETURN_IF_ERROR(segment_writer->finalize(&segment_file_size, &index_size, &footer_position));
+
+    // 4. Describe the new layer. Publish hands this to MetaFileBuilder::append_dcg,
+    //    which puts it in front of the existing layers and orphans any older
+    //    `.cols` left with no columns.
+    out_entry->set_segment_id(rssid);
+    out_entry->set_column_file(cols_filename);
+    if (!encryption_meta.empty()) {
+        out_entry->set_encryption_meta(encryption_meta);
+    }
+    out_entry->set_file_size(static_cast<int64_t>(segment_file_size));
+    for (size_t i = 0; i < write_schema->num_columns(); i++) {
+        out_entry->add_col_unique_ids(static_cast<uint32_t>(write_schema->column(i).unique_id()));
+    }
+    LOG(INFO) << "ADD INDEX fast path rewrote DCG overlay with inlined index: tablet=" << _new_tablet.id()
+              << " rssid=" << rssid << " file=" << cols_filename << " rows=" << written_rows
+              << " columns=" << write_schema->num_columns();
+    return Status::OK();
+}
+
+Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset,
+                                                   uint32_t rssid, const std::vector<TabletIndexPB>& indexes,
+                                                   IndexDeltaGroupEntryPB* out_entry) {
+    DCHECK(out_entry != nullptr);
+    DCHECK(!indexes.empty());
 
     const auto& seg_name = rowset_meta.segment_metas(seg_idx_in_rowset).filename();
     // segments in rowset_meta carry relative filenames; resolve them against
@@ -332,7 +626,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     //    IndexFileWriter. Unsupported types are a soft failure at this
     //    phase (NotSupported); the caller will abort the txn log and the
     //    .idx file will be garbage-collected as an orphan.
-    for (const auto& ix : _indexes_to_build) {
+    for (const auto& ix : indexes) {
         if (ix.col_unique_id_size() == 0) {
             return Status::InternalError("TabletIndex has no columns");
         }
@@ -382,7 +676,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     RETURN_IF_ERROR(idx_writer.finalize());
 
     // 4. Populate the IDG entry that the caller will hang off OpAddIndex.
-    for (const auto& ix : _indexes_to_build) {
+    for (const auto& ix : indexes) {
         auto* k = out_entry->add_keys();
         k->set_col_unique_id(ix.col_unique_id(0));
         k->set_index_type(ix.index_type());

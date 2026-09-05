@@ -1,0 +1,126 @@
+-- name: test_lake_add_index_after_column_partial_update @cloud
+create database lake_idx_after_pu_${uuid0};
+use lake_idx_after_pu_${uuid0};
+
+-- Regression for: ALTER TABLE ... ADD INDEX (lake fast path) run AFTER a
+-- column-mode partial update left the updated column with NO index at all.
+--
+-- The fast path builds a standalone .idx from BASE segment values, but the
+-- column is served from a Delta Column Group (.cols) written before the alter,
+-- when the column had no index — so that .cols carries none either, and the
+-- read path (correctly) ignores the base .idx for an overlaid column. The
+-- column stayed unindexed until a compaction that a DCG never triggers.
+--
+-- The fix rewrites the overlaid column into a new .cols with the index
+-- inlined, appended as a newer DCG layer. Results must stay correct through
+-- the alter and through a further column-mode update on top of the rewrite.
+--
+-- NOTE on table width: UpdateAnalyzer only turns an UPDATE into a partial
+-- update when the updated columns are <= 3 AND < 30% of the table's columns.
+-- A 2-column table would silently run as a full-row upsert and never create
+-- the .cols overlay this test is about.
+
+-- ============ BITMAP: column-mode update, then fast-path ADD INDEX ============
+CREATE TABLE t_pu_then_bitmap (
+    k1 int,
+    v1 int,
+    c2 int,
+    c3 int,
+    c4 int,
+    c5 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into t_pu_then_bitmap values
+    (1,10,1,1,1,1),(2,20,2,2,2,2),(3,30,3,3,3,3),(4,20,4,4,4,4),(5,20,5,5,5,5);
+
+-- column-mode partial update FIRST: v1 of k1<=2 becomes 777, overlaid in .cols
+SET partial_update_mode = 'column';
+update t_pu_then_bitmap set v1 = 777 where k1 <= 2;
+
+-- ADD INDEX AFTER the overlay exists
+ALTER TABLE t_pu_then_bitmap ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+
+-- v1=777 -> 2 (k1=1,2); v1=20 -> 2 (k1=4,5); v1=10 -> 0; v1=30 -> 1
+select count(*) from t_pu_then_bitmap where v1 = 777;
+select count(*) from t_pu_then_bitmap where v1 = 20;
+select count(*) from t_pu_then_bitmap where v1 = 10;
+select count(*) from t_pu_then_bitmap where v1 = 30;
+select * from t_pu_then_bitmap order by k1;
+
+-- a further column-mode update lands on top of the rewritten overlay
+update t_pu_then_bitmap set v1 = 888 where k1 = 3;
+select count(*) from t_pu_then_bitmap where v1 = 888;
+select count(*) from t_pu_then_bitmap where v1 = 30;
+select count(*) from t_pu_then_bitmap where v1 = 777;
+select * from t_pu_then_bitmap order by k1;
+
+-- Correct results alone do not prove the fix: before it, results were already
+-- correct — the column just scanned unindexed. Assert the bitmap path actually
+-- ran on the rewritten overlay. The data predates the alter and lives in a DCG,
+-- so a working bitmap here can only come from the index inlined into the
+-- rewritten `.cols`.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*) from t_pu_then_bitmap where v1 = 777;
+create table profile_lines_bitmap properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(count(1) > 0)
+    from profile_lines_bitmap
+    where line like '%- BitmapIndexIteratorInit%';
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapIndexFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines_bitmap
+    where line like '%- BitmapIndexFilterRows%';
+
+-- ============ BLOOM: column-mode update, then fast-path bloom_filter_columns ============
+CREATE TABLE t_pu_then_bloom (
+    k1 int,
+    s1 varchar(32),
+    c2 int,
+    c3 int,
+    c4 int,
+    c5 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into t_pu_then_bloom values
+    (1,'aa',1,1,1,1),(2,'bb',2,2,2,2),(3,'cc',3,3,3,3),(4,'bb',4,4,4,4),(5,'bb',5,5,5,5);
+
+-- set explicitly rather than inheriting it from the BITMAP section above
+SET partial_update_mode = 'column';
+update t_pu_then_bloom set s1 = 'zz' where k1 <= 2;
+
+ALTER TABLE t_pu_then_bloom SET ("bloom_filter_columns" = "s1");
+function: wait_alter_table_finish()
+
+-- s1='zz' -> 2 (k1=1,2); s1='bb' -> 2 (k1=4,5); s1='cc' -> 1; s1='aa' -> 0
+select count(*) from t_pu_then_bloom where s1 = 'zz';
+select count(*) from t_pu_then_bloom where s1 = 'bb';
+select count(*) from t_pu_then_bloom where s1 = 'cc';
+select count(*) from t_pu_then_bloom where s1 = 'aa';
+select * from t_pu_then_bloom order by k1;
+
+-- update to a value the rewritten bloom has never seen
+-- Same profile-based proof for the bloom path on the rewritten overlay.
+set enable_profile = true;
+set enable_async_profile = false;
+[UC]select count(*) from t_pu_then_bloom where s1 = 'zz';
+create table profile_lines_bloom properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+select assert_true(count(1) > 0)
+    from profile_lines_bloom
+    where line like '%- BloomFilterFilter:%';
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_lines_bloom
+    where line like '%- BloomFilterFilter:%';
+
+SET partial_update_mode = 'column';
+update t_pu_then_bloom set s1 = 'yy' where k1 = 4;
+select count(*) from t_pu_then_bloom where s1 = 'yy';
+select count(*) from t_pu_then_bloom where s1 = 'bb';
+select * from t_pu_then_bloom order by k1;
+
+drop database lake_idx_after_pu_${uuid0};

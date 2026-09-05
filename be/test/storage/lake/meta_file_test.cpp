@@ -3081,6 +3081,107 @@ TEST_F(MetaFileTest, test_apply_add_index_missing_segment_id_skipped) {
     EXPECT_EQ("good.idx", idgs.at(3).entries(0).index_file());
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_dcg_entry_appends_shared_layer) {
+    // A DcgEntry describes a `.cols` the ADD INDEX fast path rewrote for a
+    // DCG-overlaid column (the rewrite carries the new index inlined). Publish
+    // must install it as a newer DCG layer, strip the column from the older
+    // layer, orphan the layer left with no columns, and preserve the shared
+    // bit so a cross-published rewrite is not reclaimed by one child's vacuum.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20030);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20030);
+    metadata->set_version(9);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Pre-existing overlay for column 100, written by a column-mode partial
+    // update before the alter (so it carries no index).
+    builder.append_dcg(/*rssid=*/4, {{"old.cols", ""}}, {{100}}, {123});
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(10);
+    auto* de = op.add_dcg_entries();
+    de->set_segment_id(4);
+    de->set_column_file("rewritten.cols");
+    de->set_file_size(456);
+    de->add_col_unique_ids(100);
+    de->set_shared(true);
+    builder.apply_add_index(op);
+
+    const auto& dcg = metadata->dcg_meta().dcgs().at(4);
+    ASSERT_EQ(1, dcg.column_files_size());
+    EXPECT_EQ("rewritten.cols", dcg.column_files(0));
+    EXPECT_EQ(456, dcg.column_file_sizes(0));
+    ASSERT_EQ(1, dcg.unique_column_ids_size());
+    ASSERT_EQ(1, dcg.unique_column_ids(0).column_ids_size());
+    EXPECT_EQ(100, dcg.unique_column_ids(0).column_ids(0));
+    ASSERT_EQ(1, dcg.shared_files_size());
+    EXPECT_TRUE(dcg.shared_files(0));
+
+    // The superseded overlay holds no columns anymore and must be reclaimable.
+    bool old_orphaned = false;
+    for (const auto& f : metadata->orphan_files()) {
+        old_orphaned |= (f.name() == "old.cols");
+    }
+    EXPECT_TRUE(old_orphaned);
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_dcg_entry_replay_is_noop) {
+    // The `.cols` filename is fixed in the txn log (unlike a partial update,
+    // which mints a fresh name per attempt), so replaying the same log must not
+    // append a second layer for the same file — that would strip the column ids
+    // off the identical older entry and orphan a file the newer entry still
+    // points at.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20031);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20031);
+    metadata->set_version(9);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(10);
+    auto* de = op.add_dcg_entries();
+    de->set_segment_id(4);
+    de->set_column_file("rewritten.cols");
+    de->set_file_size(456);
+    de->add_col_unique_ids(100);
+
+    builder.apply_add_index(op);
+    builder.apply_add_index(op);
+
+    const auto& dcg = metadata->dcg_meta().dcgs().at(4);
+    ASSERT_EQ(1, dcg.column_files_size());
+    EXPECT_EQ("rewritten.cols", dcg.column_files(0));
+    for (const auto& f : metadata->orphan_files()) {
+        EXPECT_NE("rewritten.cols", f.name());
+    }
+}
+
+TEST_F(MetaFileTest, test_append_dcg_carries_forward_shared_flag) {
+    // append_dcg rebuilds the whole per-segment entry list, so a surviving
+    // layer's shared bit has to be copied over; losing it would let a single
+    // tablet's vacuum delete a `.cols` a sibling still reads.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20032);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20032);
+    metadata->set_version(3);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    builder.append_dcg(/*rssid=*/8, {{"shared_col.cols", ""}}, {{100}}, {10}, {true});
+    // A later overlay for a DIFFERENT column keeps the first layer alive.
+    builder.append_dcg(/*rssid=*/8, {{"private_col.cols", ""}}, {{101}}, {20});
+
+    const auto& dcg = metadata->dcg_meta().dcgs().at(8);
+    ASSERT_EQ(2, dcg.column_files_size());
+    ASSERT_EQ(2, dcg.shared_files_size());
+    for (int i = 0; i < dcg.column_files_size(); i++) {
+        if (dcg.column_files(i) == "shared_col.cols") {
+            EXPECT_TRUE(dcg.shared_files(i));
+        } else {
+            EXPECT_FALSE(dcg.shared_files(i));
+        }
+    }
+}
+
 TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first) {
     // Second apply prepends the newer entry; the per-segment entries list
     // becomes [new, old]. Mirrors DCG reverse-by-version ordering.

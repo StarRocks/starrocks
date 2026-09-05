@@ -592,6 +592,29 @@ message TxnLogPB {
             optional uint32 segment_id = 1;
             optional IndexDeltaGroupEntryPB entry = 2;
         }
+        // A `.cols` file rewritten by the ADD INDEX fast path because the
+        // indexed column is served from a Delta Column Group on that segment.
+        // The standalone `.idx` sidecar is keyed by the BASE segment and built
+        // over BASE values, so it cannot describe a DCG-overlaid column (and
+        // the read path deliberately ignores it there). Instead the fast path
+        // re-writes the overlay column into a NEW `.cols` carrying an inlined
+        // index over the same values, and publish appends it as a newer DCG
+        // layer via MetaFileBuilder::append_dcg.
+        message DcgEntry {
+            // rssid of the base segment this overlay belongs to.
+            optional uint32 segment_id = 1;
+            // Relative filename of the newly written `.cols`.
+            optional string column_file = 2;
+            optional string encryption_meta = 3;
+            optional int64 file_size = 4;
+            // Unique ids of the columns stored in `column_file`.
+            repeated uint32 col_unique_ids = 5;
+            // Set on a split/reshard cross-publish, where the same rewritten
+            // `.cols` is referenced by every child tablet; publish carries it
+            // into DeltaColumnGroupVerPB.shared_files so one child's vacuum
+            // cannot reclaim a file another child still reads.
+            optional bool shared = 6 [default=false];
+        }
         repeated SegmentEntry segment_entries = 1;
         optional int64 alter_version = 2;
         // Indexes added by this alter; redundant w.r.t. schema.table_indices
@@ -605,6 +628,7 @@ message TxnLogPB {
         // would keep reusing the cached pre-index schema and build no index.
         optional int64 new_schema_id = 4;
         optional int64 new_schema_version = 5;
+        repeated DcgEntry dcg_entries = 6;
     }
 
     // Produced by DROP INDEX fast-path schema change (lake-only). Applied

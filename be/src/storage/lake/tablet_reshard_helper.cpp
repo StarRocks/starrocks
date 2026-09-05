@@ -330,6 +330,13 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
                 se.mutable_entry()->set_shared_file(true);
             }
         }
+        // Same rule for the `.cols` files the fast path rewrote for DCG-overlaid
+        // columns: every child publishes this op and ends up referencing the same
+        // file, so publish must record it as shared (apply_add_index carries the
+        // flag into DeltaColumnGroupVerPB.shared_files).
+        for (auto& de : *txn_log->mutable_op_add_index()->mutable_dcg_entries()) {
+            de.set_shared(true);
+        }
     }
 
     if (txn_log->has_op_replication()) {
