@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -2621,6 +2622,49 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", new ArrayList<>(), mockedNativeTableD, Maps.newHashMap());
         metadata.refreshTable("db", icebergTable, null, true);
+    }
+
+    @Test
+    public void testRefreshViewInvalidatesCache(@Mocked CachingIcebergCatalog icebergCatalog) {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        // A view is a ConnectorView, not an IcebergTable, so refresh must invalidate by name, not cast.
+        // The catalog.db. prefix is stripped (not the last dot), so a quoted view name like "a.b" stays intact.
+        IcebergView view = new IcebergView(1, CATALOG_NAME, "db", CATALOG_NAME + ".db.a.b", new ArrayList<>(),
+                "select 1", CATALOG_NAME, "db", "s3://loc", Maps.newHashMap());
+        metadata.refreshTable("db", view, null, true);
+
+        new Verifications() {
+            {
+                icebergCatalog.invalidateCache("db", "a.b");
+                times = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testRefreshViewInvalidatesCacheCaseFolding(@Mocked CachingIcebergCatalog icebergCatalog) {
+        new Expectations() {
+            {
+                icebergCatalog.getIcebergCatalogType();
+                result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
+            }
+        };
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        // Hive folds case: the qualified name's db segment can differ in case from the requested db, so the
+        // prefix must match case-insensitively to strip it and invalidate the right (folded) key.
+        IcebergView view = new IcebergView(1, CATALOG_NAME, "db", CATALOG_NAME + ".DB.v", new ArrayList<>(),
+                "select 1", CATALOG_NAME, "db", "s3://loc", Maps.newHashMap());
+        metadata.refreshTable("db", view, null, true);
+
+        new Verifications() {
+            {
+                icebergCatalog.invalidateCache("db", "v");
+                times = 1;
+            }
+        };
     }
 
     @Test
