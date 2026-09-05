@@ -641,11 +641,29 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_replication_file_copy_threads
 
-- 默认值：0
+- 默认值：16
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的独立线程池大小。`0` 表示 `cpu_cores * 4`（与 `replication_threads` 默认语义一致）；负值表示 `-value * cpu_cores`。该线程池与 agent 任务的 `replicate_snapshot` 线程池刻意区分，目的是让外层任务可以安全地通过 `ThreadPoolToken::wait()` 等待逐文件拷贝子任务，而不触发线程池自死锁保护。该线程池在启动时一次性创建，无运行时 resize 入口，调整大小需重启 CN。
+- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的 CN 全局独立线程池大小。默认值用于限制并发拷贝任务及其读缓冲区，不随 CPU 核数增长。`0` 表示 `cpu_cores * 4`；负值表示 `-value * cpu_cores`。该线程池在启动时一次性创建，调整大小需重启 CN。
+- 引入版本：v4.1.2
+
+### lake_replication_max_parallel_files_per_tablet
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中单个 tablet 同时拷贝文件的最大数量。所有 tablet 共用 CN 全局的 `lake_replication_file_copy_threads` 线程池，因此该配置可防止单个 tablet 独占线程池。配置值小于或等于 `1` 时，单个 tablet 内的文件串行拷贝。
+- 引入版本：v4.1.4
+
+### lake_replication_parallel_copy_min_file_count
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中，启用单个 tablet 内文件并行拷贝所需的最小文件数。设置为 `0` 时关闭独立文件拷贝线程池，由调用复制任务直接执行文件拷贝。
 - 引入版本：v4.1.2
 
 ### lake_service_max_concurrency

@@ -644,11 +644,29 @@ This topic introduces the following types of BE configurations:
 
 ### lake_replication_file_copy_threads
 
-- Default: 0
+- Default: 16
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Number of threads in the dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. `0` means `cpu_cores * 4` (the same default semantics as `replication_threads`); negative values mean `-value * cpu_cores`. This pool is intentionally separate from the agent-task `replicate_snapshot` pool so that per-file copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock guard. The pool is built once at startup and has no runtime resize hook, so CN restart is required to change its size.
+- Description: Number of threads in the CN-wide dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. The default caps concurrent copy tasks and their read buffers independently of CPU count. `0` means `cpu_cores * 4`; negative values mean `-value * cpu_cores`. The pool is built once at startup, so CN restart is required to change its size.
+- Introduced in: v4.1.2
+
+### lake_replication_max_parallel_files_per_tablet
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of files copied concurrently for one tablet during lake-to-lake (shared-data) cross-cluster replication. All tablets share the CN-wide `lake_replication_file_copy_threads` pool, so this setting prevents one tablet from monopolizing the pool. Values less than or equal to `1` serialize file copy within each tablet.
+- Introduced in: v4.1.4
+
+### lake_replication_parallel_copy_min_file_count
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Minimum number of files in a tablet required to copy that tablet's files concurrently during lake-to-lake (shared-data) cross-cluster replication. Set this parameter to `0` to disable the dedicated file copy pool and execute file copy in the calling replication task.
 - Introduced in: v4.1.2
 
 ### lake_service_max_concurrency

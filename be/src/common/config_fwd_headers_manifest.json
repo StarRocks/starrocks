@@ -881,6 +881,7 @@
         "lake_replication_slow_log_ms",
         "lake_replication_read_buffer_size",
         "lake_replication_max_file_copy_retry",
+        "lake_replication_max_parallel_files_per_tablet",
         "lake_replication_parallel_copy_min_file_count",
         "enable_lake_segment_metadata_filter",
         "enable_lake_prepared_split_pre_refinement",

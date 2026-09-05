@@ -485,25 +485,30 @@ private:
 
 TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_basic_gate) {
     Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    Int32ConfigGuard max_worker_guard(&config::lake_replication_max_parallel_files_per_tablet);
     config::lake_replication_parallel_copy_min_file_count = 2;
+    config::lake_replication_max_parallel_files_per_tablet = 4;
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(2, nullptr));
 
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_par_gate")
-                      .set_min_threads(1)
-                      .set_max_threads(1)
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_gate")
+                      .set_min_threads(0)
+                      .set_max_threads(4)
                       .set_max_queue_size(8)
                       .build(&pool));
+    EXPECT_EQ(0, pool->num_threads());
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(1, pool.get()));
     EXPECT_TRUE(LakeReplicationTxnManager::should_use_parallel_copy(2, pool.get()));
     pool->shutdown();
 }
 
-TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_queue_overloaded) {
+TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_ignores_queue_depth) {
     Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    Int32ConfigGuard max_worker_guard(&config::lake_replication_max_parallel_files_per_tablet);
     config::lake_replication_parallel_copy_min_file_count = 2;
+    config::lake_replication_max_parallel_files_per_tablet = 4;
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_par_overld")
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_overload")
                       .set_min_threads(1)
                       .set_max_threads(1)
                       .set_max_queue_size(32)
@@ -515,7 +520,7 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_queue_overload
         ASSERT_OK(pool->submit_func([&]() { block.wait(); }));
     }
 
-    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(20, pool.get()));
+    EXPECT_TRUE(LakeReplicationTxnManager::should_use_parallel_copy(20, pool.get()));
     block.count_down();
     pool->wait();
     pool->shutdown();
@@ -530,6 +535,121 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_disable_by
             ThreadPoolBuilder("lake_par_dis").set_min_threads(1).set_max_threads(1).set_max_queue_size(8).build(&pool));
 
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(100, pool.get()));
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_limit_tablet_to_one_worker) {
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    Int32ConfigGuard max_worker_guard(&config::lake_replication_max_parallel_files_per_tablet);
+    config::lake_replication_parallel_copy_min_file_count = 2;
+    config::lake_replication_max_parallel_files_per_tablet = 1;
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_one_worker")
+                      .set_min_threads(0)
+                      .set_max_threads(4)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+
+    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(100, pool.get()));
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_execute_file_copy_tasks_uses_pool_for_single_file) {
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_single_file")
+                      .set_min_threads(0)
+                      .set_max_threads(2)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+
+    const auto caller_thread = std::this_thread::get_id();
+    std::thread::id copy_thread;
+    std::vector<LakeReplicationTxnManager::ReplicationTask> tasks;
+    tasks.emplace_back([&]() {
+        copy_thread = std::this_thread::get_id();
+        return Status::OK();
+    });
+
+    ASSERT_OK(LakeReplicationTxnManager::execute_file_copy_tasks(std::move(tasks), pool.get(), 1));
+    EXPECT_NE(caller_thread, copy_thread);
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_execute_file_copy_tasks_limits_tablet_workers) {
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_tablet_dop")
+                      .set_min_threads(0)
+                      .set_max_threads(4)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+
+    CountDownLatch workers_started(2);
+    std::atomic<int> active{0};
+    std::atomic<int> max_active{0};
+    std::atomic<int> completed{0};
+    std::vector<LakeReplicationTxnManager::ReplicationTask> tasks;
+    for (int i = 0; i < 12; ++i) {
+        tasks.emplace_back([&]() {
+            int current = active.fetch_add(1, std::memory_order_relaxed) + 1;
+            int observed = max_active.load(std::memory_order_relaxed);
+            while (current > observed && !max_active.compare_exchange_weak(observed, current)) {
+            }
+            workers_started.count_down();
+            workers_started.wait();
+            completed.fetch_add(1, std::memory_order_relaxed);
+            active.fetch_sub(1, std::memory_order_relaxed);
+            return Status::OK();
+        });
+    }
+
+    ASSERT_OK(LakeReplicationTxnManager::execute_file_copy_tasks(std::move(tasks), pool.get(), 2));
+    EXPECT_EQ(12, completed.load());
+    EXPECT_EQ(2, max_active.load());
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_execute_file_copy_tasks_shares_global_pool_limit) {
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_global_limit")
+                      .set_min_threads(0)
+                      .set_max_threads(3)
+                      .set_max_queue_size(16)
+                      .build(&pool));
+
+    CountDownLatch workers_started(3);
+    std::atomic<int> active{0};
+    std::atomic<int> max_active{0};
+    auto build_tasks = [&]() {
+        std::vector<LakeReplicationTxnManager::ReplicationTask> tasks;
+        for (int i = 0; i < 8; ++i) {
+            tasks.emplace_back([&]() {
+                int current = active.fetch_add(1, std::memory_order_relaxed) + 1;
+                int observed = max_active.load(std::memory_order_relaxed);
+                while (current > observed && !max_active.compare_exchange_weak(observed, current)) {
+                }
+                workers_started.count_down();
+                workers_started.wait();
+                active.fetch_sub(1, std::memory_order_relaxed);
+                return Status::OK();
+            });
+        }
+        return tasks;
+    };
+
+    Status first_status;
+    Status second_status;
+    std::thread first(
+            [&]() { first_status = LakeReplicationTxnManager::execute_file_copy_tasks(build_tasks(), pool.get(), 4); });
+    std::thread second([&]() {
+        second_status = LakeReplicationTxnManager::execute_file_copy_tasks(build_tasks(), pool.get(), 4);
+    });
+    first.join();
+    second.join();
+
+    ASSERT_OK(first_status);
+    ASSERT_OK(second_status);
+    EXPECT_EQ(3, max_active.load());
     pool->shutdown();
 }
 
