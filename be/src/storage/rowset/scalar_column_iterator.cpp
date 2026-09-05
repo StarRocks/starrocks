@@ -76,7 +76,6 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     index_opts.use_page_cache = !opts.temporary_data && opts.use_page_cache && !config::disable_storage_page_cache &&
                                 config::enable_ordinal_index_memory_page_cache;
     index_opts.lake_io_opts = opts.lake_io_opts;
-    // A tail-region prefetch, when enabled, warms this range before the column read begins.
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
@@ -509,7 +508,6 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
         opts.use_page_cache = !_opts.temporary_data && _opts.use_page_cache && !config::disable_storage_page_cache &&
                               config::enable_zonemap_index_memory_page_cache;
         opts.lake_io_opts = _opts.lake_io_opts;
-        // Same warmed tail region as the ordinal index above.
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages.value(),

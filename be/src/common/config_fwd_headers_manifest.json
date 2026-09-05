@@ -836,7 +836,6 @@
         "enable_segment_tail_index_region",
         "enable_segment_tail_index_prefetch",
         "segment_tail_index_prefetch_max_bytes",
-        "starlet_star_cache_block_size_bytes",
         "enable_bitmap_index_memory_page_cache",
         "enable_zonemap_index_memory_page_cache",
         "enable_ordinal_index_memory_page_cache",

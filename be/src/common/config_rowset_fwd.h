@@ -58,37 +58,33 @@ CONF_mInt32(default_num_rows_per_column_file_block, "1024");
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
 
-// Write-time gate for the segment "small index region" layout. When true, a segment emits the
-// short key index, then every column's ordinal index, then every column's page zone map, as one
-// contiguous run immediately before the footer, instead of interleaving each column's indexes
-// after that column's data pages. Both layouts are readable by any binary -- indexes are always
-// located through absolute PagePointers -- so this can be flipped at any time and mixed within a
-// tablet, and the order within the region is not part of the format.
-//
-// The order follows the normal scan path: short key first, then ordinal indexes, then page zone
-// maps. It is an implementation detail rather than a format requirement; readers continue to
-// locate every index through its absolute PagePointer.
+// Write-time gate for the segment "small index region" layout. When true, a horizontally
+// written segment (one column group covering all columns) emits every column's ordinal index
+// and page zone map as one contiguous run immediately before the short key index and the
+// footer, instead of interleaving each column's indexes after that column's data pages. Both
+// layouts are readable by any binary -- indexes are always located through absolute
+// PagePointers -- so this can be flipped at any time and mixed within a tablet.
 //
 // The point is cold-read latency on shared-data: the reader must load the ordinal index of
 // every accessed column, and the page zone map of every predicate column, before it can read
 // any data. In the legacy layout those live at N scattered offsets, so they cost N serial
 // round trips to remote storage, each pulling a whole cache block. Gathered at the tail they
-// cost one.
-//
-// Every write path that ends in finalize_footer() produces the region, vertical compaction and
-// partial-update rewrites included: a vertical writer calls finalize_columns() once per column
-// group, and the deferred index writers accumulate across groups so that an early group's
-// indexes still land at the tail rather than under a later group's data pages.
+// cost one. Vertical compaction and partial-update rewrites call finalize_columns() once per
+// column group and so cannot form a tail region; they keep the legacy layout regardless.
 CONF_mBool(enable_segment_tail_index_region, "false");
 
-// Read-time gate for warming the contiguous tail index region once per Segment. The following
-// per-column ordinal-index and page-zone-map reads then hit the shared Data Cache instead of
-// issuing one remote request per column. Segments written in the legacy layout are unaffected.
+// Read-time gate for the matching prefetch. When true, opening a segment whose footer carries
+// a small index region issues ONE read covering the whole region, so that the per-column index
+// loads that immediately follow are served from the block cache instead of going remote one at
+// a time. Segments without the footer fields are unaffected. Set false to measure the layout
+// change without the prefetch, or as a rollback valve.
 CONF_mBool(enable_segment_tail_index_prefetch, "true");
 
-// Upper bound on a tail index region prefetch. Oversized regions fall back to ordinary per-column
-// reads, avoiding remote-read amplification for very wide tables and narrow projections.
-CONF_mInt64(segment_tail_index_prefetch_max_bytes, "4194304");
+// Upper bound on the small index region prefetch. A very wide table can produce a region far
+// larger than any query needs, and reading it whole would trade the round trips back for
+// wasted bytes. Regions above this size are not prefetched; their indexes are read per column
+// as in the legacy layout.
+CONF_mInt64(segment_tail_index_prefetch_max_bytes, "16777216");
 
 // When true, high-cardinality string columns that fall back to plain encoding are written with
 // the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
@@ -156,10 +152,6 @@ CONF_Int16(bitmap_max_filter_ratio, "1");
 // 1 for LZ4_NULL
 CONF_mInt16(null_encoding, "0");
 
-#ifdef USE_STAROS
-CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
-
-#endif
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");

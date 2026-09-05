@@ -505,35 +505,20 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
 // which is what lets a vertical writer produce the layout at all.
 Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
     const uint64_t region_offset = _wfile->size();
+    for (auto& column_writer : _deferred_small_index_writers) {
+        RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        RETURN_IF_ERROR(column_writer->write_zone_map());
+        // reset to release memory
+        column_writer.reset();
+    }
+    _deferred_small_index_writers.clear();
 
-    // Short key index first. It is read through the Segment's own file rather than the shared
-    // small index stream, and only when the scan carries a key range, so its position does not
-    // affect that stream at all -- but it does compete for the tail of the file, which the
-    // footer read pulls into the cache for free. Ordinal indexes are read by every scan, so
-    // they get that tail instead.
     if (_short_key_index_pending) {
         RETURN_IF_ERROR(_write_short_key_index());
         _index_builder.reset();
         _full_sort_key_index_builder.reset();
         _short_key_index_pending = false;
     }
-
-    // Then every ordinal index, then every page zone map -- grouped by index kind rather than
-    // interleaved per column, because that is the order a scan reads them in:
-    // _init_column_iterators() loads the ordinal index of every projected column, and only
-    // afterwards does _get_row_ranges_by_zone_map() load the zone map of every predicate column.
-    // Interleaving them would put the second pass behind the first pass's read position, and a
-    // buffered stream keeps only the window ahead of it -- so the pass would discard the buffer
-    // and refill it. Grouped this way the whole region is walked forward exactly once.
-    for (auto& column_writer : _deferred_small_index_writers) {
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
-    }
-    for (auto& column_writer : _deferred_small_index_writers) {
-        RETURN_IF_ERROR(column_writer->write_zone_map());
-        // reset to release memory
-        column_writer.reset();
-    }
-    _deferred_small_index_writers.clear();
 
     const uint64_t region_size = _wfile->size() - region_offset;
     if (index_size != nullptr) {

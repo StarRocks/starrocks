@@ -89,12 +89,6 @@ bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_minute("starrocks", "s
 bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_bytes_minute("starrocks",
                                                                        "segment_small_index_prefetch_bytes_minute",
                                                                        &g_small_index_prefetch_bytes, 60);
-bvar::Adder<int64_t> g_small_index_prefetch_covered; // NOLINT
-// How many prefetches were skipped because the footer read had already brought the region in
-// NOLINTNEXTLINE
-bvar::Window<bvar::Adder<int64_t>> g_small_index_prefetch_covered_minute("starrocks",
-                                                                         "segment_small_index_prefetch_covered_minute",
-                                                                         &g_small_index_prefetch_covered, 60);
 
 namespace starrocks {
 
@@ -297,8 +291,11 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
-    // Record the range but do not warm it here. Segment::open runs before pruning, while the
-    // iterator setup below only runs for segments that are actually going to load column indexes.
+    // Record the range but do NOT warm it here. open() runs before any pruning, so warming at
+    // this point charges every segment in the scan set for a region most of them never consult:
+    // on SSB SF100 a point lookup opened 48 segments, read 1, and issued 68 warm calls. The warm
+    // now happens from the column-iterator setup, which only runs for segments that survived
+    // segment-level zone map pruning.
     _small_index_region_offset = footer.small_index_region_offset();
     _small_index_region_size = footer.small_index_region_size();
     RETURN_IF_ERROR(_create_column_readers(&footer));
@@ -414,52 +411,36 @@ Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator
     return Status::OK();
 }
 
-bool Segment::small_index_region_covered_by_footer_read(uint64_t region_offset, uint64_t file_size,
-                                                        uint64_t block_size) {
-    if (block_size == 0 || file_size == 0) {
-        return false;
-    }
-    const uint64_t last_block_start = ((file_size - 1) / block_size) * block_size;
-    return region_offset >= last_block_start;
-}
-
+// Warm the block cache with the small index region so the per-column ordinal index and page
+// zone map loads that follow are served from cache instead of each going remote on its own.
+//
+// Called from the column-iterator setup rather than from open(), and guarded by a once_flag,
+// because the previous placement charged the warm far more often than it was useful:
+//   * open() precedes all pruning, so every segment entering the scan set paid for a region
+//     that pruning was about to discard -- 48 segments opened to read 1, on SSB SF100;
+//   * a segment's file is opened once per column iterator, and a scan builds many, so the
+//     same range was re-warmed repeatedly (68 calls where 1 sufficed).
+// touch_cache() made each repeat cheap, but cheap-and-pointless is still pointless.
 void Segment::prefetch_small_index_region_once(RandomAccessFile* read_file, bool fill_data_cache) {
-    if (_small_index_region_size == 0 || !config::enable_segment_tail_index_prefetch || !fill_data_cache) {
+    if (_small_index_region_size == 0 || !config::enable_segment_tail_index_prefetch) {
+        // Legacy layout, or the read gate is off: indexes are located and read as before.
         return;
     }
-
-    const int64_t max_prefetch_bytes = config::segment_tail_index_prefetch_max_bytes;
-    if (max_prefetch_bytes <= 0 || _small_index_region_size > static_cast<uint64_t>(max_prefetch_bytes)) {
-        // Large regions fall back to the normal per-column index reads. This bounds both remote
-        // read amplification and the amount of unrelated index data fetched by a narrow query.
+    if (!fill_data_cache) {
+        // Nothing to gain: the warm pays off only through the following per-column reads
+        // hitting the cache, so with the fill disabled it would fetch the region remotely and
+        // still leave every one of those reads to go remote.
+        return;
+    }
+    if (_small_index_region_size > static_cast<uint64_t>(config::segment_tail_index_prefetch_max_bytes)) {
+        // A very wide table can produce a region larger than any one query needs; fetching it
+        // whole would trade the saved round trips back for wasted bytes.
         VLOG(2) << "skip small index region prefetch of " << _small_index_region_size << " bytes (over cap) for "
                 << read_file->filename();
         return;
     }
-
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    // The footer read fetches the file's final cache block. Avoid a redundant touch when that
-    // block already contains the complete tail index region.
-    uint64_t file_size = 0;
-    if (_segment_file_info.size.has_value() && *_segment_file_info.size > 0) {
-        file_size = static_cast<uint64_t>(*_segment_file_info.size);
-    } else if (auto size_or = read_file->get_size(); size_or.ok() && *size_or > 0) {
-        file_size = static_cast<uint64_t>(*size_or);
-    }
-    if (file_size > 0 &&
-        small_index_region_covered_by_footer_read(_small_index_region_offset, file_size,
-                                                  static_cast<uint64_t>(config::starlet_star_cache_block_size_bytes))) {
-        g_small_index_prefetch_covered << 1;
-        VLOG(2) << "skip small index region prefetch of " << _small_index_region_size
-                << " bytes (already covered by the footer read) for " << read_file->filename();
-        return;
-    }
-#endif
-
     std::call_once(_small_index_prefetch_once, [&] {
         if (Status st = read_file->touch_cache(_small_index_region_offset, _small_index_region_size); !st.ok()) {
-            // Prefetch is best effort. Column index reads still use their normal files and remain
-            // the correctness path if warming fails.
             VLOG(2) << "small index region prefetch failed for " << read_file->filename() << ": " << st;
             return;
         }
