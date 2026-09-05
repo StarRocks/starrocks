@@ -496,22 +496,13 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to verify the correctness of generated rowsets. When enabled, the correctness of the generated rowsets will be checked after Compaction and Schema Change.
 - Introduced in: -
 
-### enable_segment_tail_index_prefetch
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether opening a segment that carries a tail index region (see `enable_segment_tail_index_region`) fetches that whole region in a single read, so that the per-column index loads that follow are served from the data cache instead of each issuing its own request. Segments written without a tail index region are unaffected. The prefetch is also skipped when the read does not populate the data cache, and when the region is larger than `segment_tail_index_prefetch_max_bytes`. Set to `false` to roll the prefetch back without rewriting any data.
-- Introduced in: v4.2.0
-
 ### enable_segment_tail_index_region
 
 - Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether the segment writer places the ordinal index and the page zone map of every column, together with the short key index, in one contiguous region immediately before the segment footer, instead of writing each column's indexes directly after that column's own data pages. A query must load these indexes before it can read any data page, so gathering them lets a single read cover all of them. This mainly reduces cold-query latency in shared-data clusters, where each scattered index read otherwise costs a separate request to object storage. Only the write side is gated by this config, and only segments written as a single column group are affected: vertical compaction and partial-update rewrites keep the original layout. Both layouts are readable by any BE or CN version in either direction and can coexist in the same table, so this can be turned on or off at any time without rewriting data.
+- Description: Whether the segment writer places the short key index, the ordinal index of every column, and every page zone map in one contiguous region immediately before the segment footer, instead of writing each column's indexes directly after that column's own data pages. Within the region, the independently loaded short key index comes first, followed by all ordinal indexes and then all page zone maps. The latter two groups match their relative order in the scan path. Grouping the indexes improves cache-block locality for cold reads from object storage. Only the write side is gated by this configuration. Every write path that finalizes a segment footer produces the region, including vertical compaction and partial-update rewrites. Both layouts remain readable by any BE or CN version and can coexist in the same table.
 - Introduced in: v4.2.0
 
 ### enable_size_tiered_compaction_strategy
@@ -1107,15 +1098,6 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The maximum number of threads used for replication. `0` indicates setting the thread number to four times the BE CPU core count.
 - Introduced in: v3.3.5
-
-### segment_tail_index_prefetch_max_bytes
-
-- Default: 16777216
-- Type: Int64
-- Unit: Bytes
-- Is mutable: Yes
-- Description: Maximum size of a segment tail index region that `enable_segment_tail_index_prefetch` fetches in a single read. A table with very many columns can produce a region far larger than any one query needs, where reading it whole would cost more in wasted bytes than it saves in requests. Indexes in a region above this size are read per column instead, as they are in the original layout.
-- Introduced in: v4.2.0
 
 ### size_tiered_level_multiple
 

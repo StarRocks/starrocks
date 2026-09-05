@@ -417,8 +417,8 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     // from essentially every wide table at its first real compaction.
     //
     // The larger optional indexes (bloom filter, bitmap, inverted, vector) deliberately stay
-    // inline: they are read only when a predicate needs them, and they are big enough that
-    // hoisting them would inflate the region past the point where reading it whole is a win.
+    // inline: they are read only when a predicate needs them, and hoisting them would dilute
+    // the cache locality of the small indexes every scan needs.
     const bool defer_small_index = config::enable_segment_tail_index_region;
 
     for (size_t i = 0; i < _column_indexes.size(); ++i) {
@@ -500,25 +500,33 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
 }
 
 // Everything a cold scan must read before it can touch a data page, written back to back
-// immediately before the footer: every column's ordinal index and page zone map, then the short
-// key index. Called from finalize_footer() so that it runs after the LAST column group's data,
-// which is what lets a vertical writer produce the layout at all.
+// immediately before the footer: the short key index, every column's ordinal index, then every
+// page zone map. Called from finalize_footer() so that it runs after the LAST column group's
+// data, which is what lets a vertical writer produce the layout at all.
 Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
     const uint64_t region_offset = _wfile->size();
-    for (auto& column_writer : _deferred_small_index_writers) {
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
-        RETURN_IF_ERROR(column_writer->write_zone_map());
-        // reset to release memory
-        column_writer.reset();
-    }
-    _deferred_small_index_writers.clear();
 
+    // The short key index is conditional and loaded independently from the per-column indexes.
+    // Put it first so it does not split the ordinal-index and zone-map groups below.
     if (_short_key_index_pending) {
         RETURN_IF_ERROR(_write_short_key_index());
         _index_builder.reset();
         _full_sort_key_index_builder.reset();
         _short_key_index_pending = false;
     }
+
+    // Match the remaining read order: initialize every projected column's ordinal index first,
+    // then load page zone maps for predicate columns. Grouping by index kind lets adjacent reads
+    // reuse the same cache blocks instead of moving back and forth through the region.
+    for (auto& column_writer : _deferred_small_index_writers) {
+        RETURN_IF_ERROR(column_writer->write_ordinal_index());
+    }
+    for (auto& column_writer : _deferred_small_index_writers) {
+        RETURN_IF_ERROR(column_writer->write_zone_map());
+        // reset to release memory
+        column_writer.reset();
+    }
+    _deferred_small_index_writers.clear();
 
     const uint64_t region_size = _wfile->size() - region_offset;
     if (index_size != nullptr) {

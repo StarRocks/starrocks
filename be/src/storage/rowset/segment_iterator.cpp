@@ -2055,11 +2055,6 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
             opts.encryption_info = *encryption_info;
         }
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file_with_bundling(opts, _segment->file_info()));
-        // Warm the segment's small index region before its first per-column index load. Doing
-        // it here rather than in Segment::open() means only segments that survived
-        // segment-level zone map pruning pay for it, and the once_flag inside collapses the
-        // repeat calls this site would otherwise make -- one per column.
-        _segment->prefetch_small_index_region_once(rfile.get(), _opts.lake_io_opts.fill_data_cache);
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col) &&
             _segment->lake_tablet_manager() != nullptr) {
             ASSIGN_OR_RETURN(auto file_size, rfile->get_size());

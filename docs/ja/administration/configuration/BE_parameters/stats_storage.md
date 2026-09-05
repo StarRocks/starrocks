@@ -425,22 +425,13 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
 - 導入バージョン: -
 
-### enable_segment_tail_index_prefetch
-
-- デフォルト: true
-- タイプ: Boolean
-- 単位: -
-- 変更可能: Yes
-- 説明: 末尾インデックス領域を持つ segment（`enable_segment_tail_index_region` を参照）を開く際、その領域全体を 1 回の読み取りで取得し、後続の列ごとのインデックス読み込みが個別にリクエストを発行せず Data Cache から返るようにするかどうか。末尾インデックス領域を持たない segment は影響を受けません。また、その読み取りが Data Cache を埋めない場合、および領域が `segment_tail_index_prefetch_max_bytes` より大きい場合も、プリフェッチはスキップされます。`false` に設定すると、データを書き換えずにプリフェッチのみを無効化できます。
-- 導入バージョン: v4.2.0
-
 ### enable_segment_tail_index_region
 
 - デフォルト: false
 - タイプ: Boolean
 - 単位: -
 - 変更可能: Yes
-- 説明: segment の書き込み時に、各列の ordinal index とページ単位の zone map を short key index とともに、segment footer の直前の 1 つの連続領域に配置するかどうか（従来は各列のインデックスをその列のデータページの直後に書き込みます）。クエリはデータページを読む前にこれらのインデックスを読み込む必要があるため、まとめて配置することで 1 回の読み取りですべてを取得できます。これは主に共有データクラスタのコールドクエリのレイテンシを下げます。従来は分散した各インデックス読み取りがそれぞれオブジェクトストレージへのリクエストを必要としていました。本設定は書き込み側のみを制御し、単一の列グループとして書き込まれた segment のみが対象です。垂直 Compaction と部分列更新の書き換えは従来のレイアウトを維持します。どちらのレイアウトも任意のバージョンの BE / CN が双方向に読み取れ、同一テーブル内に混在できるため、データを書き換えずにいつでも有効化・無効化できます。
+- 説明: segment の書き込み時に、short key index、全列の ordinal index、およびページ単位の zone map を segment footer の直前の連続領域に配置するかどうか。従来は各列のインデックスをその列のデータページの直後に書き込みます。領域内では、独立して読み込まれる short key index を先頭に置き、続いて全 ordinal index、最後に全ページ単位 zone map を配置します。後者 2 グループの相対順序はスキャンパスと一致します。インデックスを集約することで、オブジェクトストレージからのコールド読み取り時に Data Cache block を再利用しやすくなります。本設定は書き込み側のみを制御します。垂直 Compaction と部分列更新の書き換えを含め、segment footer を書き出すすべてのパスがこの領域を生成します。どちらのレイアウトも任意の BE/CN バージョンで読み取ることができ、同一テーブル内に共存できます。
 - 導入バージョン: v4.2.0
 
 ### enable_size_tiered_compaction_strategy
@@ -964,15 +955,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: レプリケーションに使用される最大スレッド数。`0` は、スレッド数を BE CPU コア数の 4 倍に設定することを示します。
 - 導入バージョン: v3.3.5
-
-### segment_tail_index_prefetch_max_bytes
-
-- デフォルト: 16777216
-- タイプ: Int64
-- 単位: Bytes
-- 変更可能: Yes
-- 説明: `enable_segment_tail_index_prefetch` が 1 回の読み取りで取得する segment 末尾インデックス領域の上限サイズ。列数が非常に多いテーブルでは、1 つのクエリが必要とする量をはるかに超える領域が生成されることがあり、その場合は領域全体を読むことで無駄になるバイト数が、削減できるリクエスト数を上回ります。この上限を超える領域のインデックスは、従来のレイアウトと同様に列ごとに読み取られます。
-- 導入バージョン: v4.2.0
 
 ### size_tiered_level_multiple
 
