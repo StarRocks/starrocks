@@ -281,7 +281,8 @@ FROM step2
 ## 限制和注意事项
 
 - 当前 JSON 类型数据支持的最大长度为 16 MB。
-- ORDER BY、GROUP BY、JOIN 子句不支持引用 JSON 类型的列。如果需要引用，您可以提前使用 CAST 函数，将 JSON 类型的列转为其他 SQL 类型。具体转换方式，请参见 [JSON 类型转换](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md)。
+- ORDER BY 和 JOIN 子句不支持引用 JSON 类型的列。如果需要引用，您可以提前使用 CAST 函数，将 JSON 类型的列转为其他 SQL 类型。具体转换方式，请参见 [JSON 类型转换](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md)。
+- GROUP BY 支持顶层 JSON 列（例如 `GROUP BY json_col`）。分组基于 JSON 值进行：对象键的顺序不影响分组（即 `{"a":1,"b":2}` 与 `{"b":2,"a":1}` 属于同一分组），但数值上相等的值（如 `1` 和 `1.0`）被视为不同分组。不支持对 ARRAY、MAP 或 STRUCT 内部嵌套的 JSON 使用 GROUP BY。
 - 支持 JSON 类型的列存在于明细表、主键表、更新表中，但不支持存在于聚合表中。
-- 暂不支持 JSON 类型的列作为明细表、主键表、更新表的分区键、分桶键、维度列，并且不支持用于 JOIN、GROUP BY、ORDER BY 子句。
+- 暂不支持 JSON 类型的列作为明细表、主键表、更新表的分区键、分桶键、维度列，并且不支持用于 JOIN、ORDER BY 子句。
 - StarRocks 支持使用 `<`，`<=`，`>`，`>=`， `=`，`!=` 运算符查询 JSON 数据，不支持使用 IN 运算符。
