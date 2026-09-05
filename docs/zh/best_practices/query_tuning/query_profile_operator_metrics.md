@@ -334,6 +334,8 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | `GetResultsTime` | 提取聚合结果的时间。 |
 | `HashTableSize` | 哈希表的大小。 |
 | `HashTableMemoryUsage` | 哈希表的内存大小。 |
+| `ConsecutiveKeysCacheHits` | `GROUP BY` 键与上一行相同的行数，聚合算子复用上一行已解析的状态，跳过哈希表查找。命中率高表明输入按 group-by 列聚集（常见于排序扫描、按排序键前缀存储或上游预聚合），意味着聚合的每行成本下降。 |
+| `ConsecutiveKeysCacheMisses` | 与上一行键不同、需要完整哈希探查的行数。如果前几个 chunk 内命中率（`Hits / (Hits + Misses)`）持续偏低，该缓存会在查询剩余阶段自动禁用，因此在无序输入上看到大量 misses 而后续无新增 hits 属于正常情况。 |
 | `InputRowCount` | 输入行数。 |
 | `PassThroughRowCount` | 在自动模式下，低聚合导致降级为流模式后以流模式处理的数据行数。 |
 | `ResultAggAppendTime` | 追加聚合结果列所花费的时间。 |
