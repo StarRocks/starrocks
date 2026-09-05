@@ -204,12 +204,21 @@ public class ConnectProcessor {
         resetConnectionSession();
         ctx.getState().setOk();
     }
-
     // process COM_PING statement, do nothing, just return one OK packet.
     private void handlePing() {
         ctx.getState().setOk();
     }
 
+    // Keep OK/EOF packet status flags consistent with actual autocommit state, so
+    // proxies (e.g. ProxySQL) that track SERVER_STATUS_AUTOCOMMIT don't see it as
+    // permanently unset and loop resending SET autocommit=1.
+    private void applyAutoCommitStatusFlag() {
+    if (ctx.getSessionVariable().isAutoCommit()) {
+        ctx.getState().serverStatus |= MysqlServerStatusFlag.SERVER_STATUS_AUTOCOMMIT;
+    } else {
+        ctx.getState().serverStatus &= ~MysqlServerStatusFlag.SERVER_STATUS_AUTOCOMMIT;
+    }
+    }
     private void resetConnectionSession() {
         // reconstruct serializer
         ctx.getSerializer().reset();
@@ -554,6 +563,7 @@ public class ConnectProcessor {
         ctx.setExecutor(null);
         ctx.setQueryDetail(null);
         ctx.getState().reset();
+        applyAutoCommitStatusFlag();
         ctx.resetReturnRows();
         ctx.setStartTime();
         ctx.setCurrentThreadAllocatedMemory(getThreadAllocatedBytes(Thread.currentThread().getId()));
@@ -1116,7 +1126,8 @@ public class ConnectProcessor {
     }
 
     private ByteBuffer getResultPacket() {
-        MysqlPacket packet = ctx.getState().toResponsePacket();
+    applyAutoCommitStatusFlag();
+    MysqlPacket packet = ctx.getState().toResponsePacket();
         if (packet == null) {
             // possible two cases:
             // 1. handler has send response
@@ -1479,6 +1490,7 @@ public class ConnectProcessor {
     public void processOnce(RequestPackage req) throws Exception {
         // set status of query to OK.
         ctx.getState().reset();
+        applyAutoCommitStatusFlag();
         ctx.setMultiStmt(false);
         executor = null;
         executeInvoked = false;
@@ -1501,6 +1513,7 @@ public class ConnectProcessor {
     public void processOnce() throws IOException {
         // set status of query to OK.
         ctx.getState().reset();
+        applyAutoCommitStatusFlag();
         ctx.setMultiStmt(false);
         executor = null;
         executeInvoked = false;

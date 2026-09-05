@@ -1468,6 +1468,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = AUTO_COMMIT)
     private boolean autoCommit = true;
 
+    public boolean isAutoCommit() {
+        return autoCommit;
+    }
+
     @VariableMgr.VarAttr(name = ENABLE_SQL_TRANSACTION)
     private boolean enableSqlTransaction = true;
 

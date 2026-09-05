@@ -59,6 +59,7 @@ import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
@@ -455,6 +456,93 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
         Assertions.assertFalse(myContext.isKilled());
     }
+
+    // Verify a fresh session reports autocommit ON, matching the default autoCommit=true.
+    @Test
+    public void testAutoCommitStatusFlagOnByDefault() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(pingPacket), GlobalStateMgr.getCurrentState());
+        Assertions.assertTrue(ctx.getSessionVariable().isAutoCommit());
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertNotEquals(0,
+                myContext.getState().serverStatus & MysqlServerStatusFlag.SERVER_STATUS_AUTOCOMMIT,
+                "response should report SERVER_STATUS_AUTOCOMMIT when autocommit is on");
+    }
+
+    // Verify the OK packet for the very statement that turns autocommit off already reflects
+    // the new value, not the pre-statement one. This is the case a naive "apply the flag at
+    // reset() time" implementation gets wrong, since reset() runs before the statement executes.
+    @Test
+    public void testAutoCommitStatusFlagReflectsChangeMadeByCurrentStatement() throws Exception {
+        ByteBuffer packet = createQueryPacket("set autocommit=0");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        Assertions.assertTrue(ctx.getSessionVariable().isAutoCommit());
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        // Simulate what real SET autocommit=0 execution does to session state, without
+        // depending on the full SET-statement execution path.
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doAnswer(invocation -> {
+                        Deencapsulation.setField(ctx.getSessionVariable(), "autoCommit", false);
+                        return null;
+                    }).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                })) {
+            processor.processOnce();
+        }
+
+        Assertions.assertEquals(0,
+                myContext.getState().serverStatus & MysqlServerStatusFlag.SERVER_STATUS_AUTOCOMMIT,
+                "OK packet for SET autocommit=0 itself should already report autocommit OFF");
+    }
+
+    // Verify a later, unrelated response still reports OFF after autocommit was turned off,
+    // i.e. the flag isn't only correct on the statement that changed it.
+    @Test
+    public void testAutoCommitStatusFlagStaysOffOnSubsequentResponse() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(pingPacket), GlobalStateMgr.getCurrentState());
+        Deencapsulation.setField(ctx.getSessionVariable(), "autoCommit", false);
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(0,
+                myContext.getState().serverStatus & MysqlServerStatusFlag.SERVER_STATUS_AUTOCOMMIT,
+                "subsequent response should still report autocommit OFF");
+    }
+
+    // Verify the OK packet for the statement that turns autocommit back on already reflects ON,
+    // mirroring testAutoCommitStatusFlagReflectsChangeMadeByCurrentStatement for the reverse transition.
+    @Test
+    public void testAutoCommitStatusFlagReflectsReenableByCurrentStatement() throws Exception {
+        ByteBuffer packet = createQueryPacket("set autocommit=1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        Deencapsulation.setField(ctx.getSessionVariable(), "autoCommit", false);
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
+                (mock, mockCtx) -> {
+                    Mockito.doAnswer(invocation -> {
+                        Deencapsulation.setField(ctx.getSessionVariable(), "autoCommit", true);
+                        return null;
+                    }).when(mock).execute();
+                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
+                })) {
+            processor.processOnce();
+        }
+
+        Assertions.assertNotEquals(0,
+                myContext.getState().serverStatus & MysqlServerStatusFlag.SERVER_STATUS_AUTOCOMMIT,
+                "OK packet for SET autocommit=1 itself should already report autocommit ON");
+    }
+
+    // NOTE: end-to-end verification that this stops ProxySQL's SET autocommit=1 resync loop is
+    // not something a JUnit test can exercise, since it requires a real ProxySQL process and
+    // network traffic between it and the FE. That was verified manually against the original
+    // repro environment (ProxySQL 3.0.9, fast_forward=0, multiplexing=false).
 
     @Test
     public void testQuery() throws Exception {
