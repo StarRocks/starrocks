@@ -65,6 +65,7 @@ class RuntimeState;
 class MetricRegistry;
 class PUniqueId;
 class PTransmitChunkParams;
+class PUpdateExchangeSendersRequest;
 
 // Singleton class which manages all incoming data streams at a backend node. It
 // provides both producer and consumer functionality for each data stream.
@@ -99,6 +100,11 @@ public:
                                                   bool is_pipeline, int32_t degree_of_parallelism, bool keep_order);
 
     Status transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+
+    // Register/unregister a dynamically added sender on a running receiver.
+    // Returns NotFound if the receiver is gone (the caller treats it as an aborted add).
+    Status update_exchange_senders(const PUpdateExchangeSendersRequest& request);
+
     // Closes all receivers registered for fragment_instance_id immediately.
     void cancel(const TUniqueId& fragment_instance_id);
     void close();
