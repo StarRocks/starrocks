@@ -66,42 +66,6 @@ static uint32_t interval = 30;
 static uint32_t interval = 1;
 #endif
 
-namespace {
-// Decide how a retried BEGIN whose label already has a local context must be served.
-// Returns OK when the retry should be answered with the live transaction (Status=OK,
-// Label, TxnId); otherwise the returned Status is the error to reply with instead:
-// - NotAuthorized when the retry presents different credentials, database or table than
-//   the stored context. BE has no user store for independent authentication (that lives
-//   on FE), so matching the stored auth is the only ownership check; parse_basic_auth
-//   splits "user@cluster" into user + cluster, so all three parts must match: a same
-//   user+password from a different cluster must not be served the original txn id.
-// - Aborted when the context is no longer registered in the manager: a concurrent
-//   successful COMMIT removes the context while leaving its status OK, so registration
-//   (not status) distinguishes an active transaction from one that has already ended.
-Status retry_begin_status(const HttpRequest* req, const StreamLoadContext& ctx, StreamContextMgr* ctx_mgr) {
-    AuthInfo retry_auth;
-    bool credential_match = parse_basic_auth(*req, &retry_auth) && retry_auth.user == ctx.auth.user &&
-                            retry_auth.passwd == ctx.auth.passwd && retry_auth.cluster == ctx.auth.cluster;
-    bool db_match = req->header(HTTP_DB_KEY) == ctx.db;
-    bool table_match = req->header(HTTP_TABLE_KEY) == ctx.table;
-    if (!credential_match || !db_match || !table_match) {
-        LOG(WARNING) << "[idempotent-begin] rejected BEGIN retry: label=" << ctx.label
-                     << ", credential_match=" << credential_match << ", db_match=" << db_match
-                     << ", table_match=" << table_match;
-        return Status::NotAuthorized("BEGIN retry credentials, database or table do not match the transaction owner");
-    }
-    auto* recheck = ctx_mgr->get(ctx.label);
-    bool still_registered = (recheck == &ctx);
-    if (recheck != nullptr && recheck->unref()) {
-        delete recheck;
-    }
-    if (!still_registered) {
-        return Status::Aborted(fmt::format("transaction {} has already ended", ctx.label));
-    }
-    return Status::OK();
-}
-} // namespace
-
 TransactionMgr::TransactionMgr(ExecEnv* exec_env, StreamLoadExecutor* stream_load_executor)
         : _exec_env(exec_env), _stream_load_executor(stream_load_executor) {
     DCHECK(_stream_load_executor != nullptr);
@@ -203,56 +167,33 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
         ctx = new StreamLoadContext(_exec_env->load_stream_mgr(),
                                     &StreamLoadMetrics::instance()->transaction_streaming_load_current_processing);
         ctx->ref();
-        std::lock_guard<std::mutex> l(ctx->lock);
-        st = _begin_transaction(req, ctx);
-        if (!st.ok()) {
-            ctx->status = st;
-            if (ctx->need_rollback()) {
-                (void)_rollback_transaction(ctx);
+        {
+            std::lock_guard<std::mutex> l(ctx->lock);
+            st = _begin_transaction(req, ctx);
+            if (!st.ok()) {
+                ctx->status = st;
+                if (ctx->need_rollback()) {
+                    (void)_rollback_transaction(ctx);
+                }
             }
+            LOG(INFO) << "new transaction manage request. " << ctx->brief() << ", tbl=" << ctx->table << " op=begin";
+            *resp = _build_reply(TXN_BEGIN, ctx);
         }
-        LOG(INFO) << "new transaction manage request. " << ctx->brief() << ", tbl=" << ctx->table << " op=begin";
-        *resp = _build_reply(TXN_BEGIN, ctx);
+        // Drop the last reference only after the ctx lock is released: deleting the context
+        // while holding its own mutex would destroy a lock that concurrent lookups may still
+        // be waiting on.
         if (ctx->unref()) {
             delete ctx;
         }
         return Status::OK();
     } else {
-        // Idempotent retry: reply with the live context (Status=OK, Label, TxnId) so the
-        // client retry succeeds transparently instead of surfacing LABEL_ALREADY_EXISTS.
-        std::lock_guard<std::mutex> l(ctx->lock);
-        Status reply_status = retry_begin_status(req, *ctx, _exec_env->stream_context_mgr());
-        if (!reply_status.ok()) {
-            *resp = _build_reply(ctx->label, TXN_BEGIN, reply_status);
-            if (ctx->unref()) {
-                delete ctx;
-            }
-            return reply_status;
-        }
         LOG(INFO) << "new transaction req." << ctx->brief() << ", txn_op=" << TXN_BEGIN;
-        *resp = _build_reply(TXN_BEGIN, ctx);
         if (ctx->unref()) {
             delete ctx;
         }
-        return Status::OK();
+        *resp = _build_reply(label, TXN_BEGIN, Status::LabelAlreadyExists(""));
+        return Status::LabelAlreadyExists("");
     }
-}
-
-Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* resp, StreamLoadContext* existing_ctx) {
-    // Idempotent retry path handed over by the action layer: the context was looked up
-    // there and passed in, because re-looking it up here would race with the context
-    // cleaner (StreamContextMgr::remove erases the entry even while callers hold
-    // references), and a recreated transaction would bypass the HTTP admission gate.
-    // Borrowed reference: the caller keeps holding one for the duration of this call.
-    std::lock_guard<std::mutex> l(existing_ctx->lock);
-    Status reply_status = retry_begin_status(req, *existing_ctx, _exec_env->stream_context_mgr());
-    if (!reply_status.ok()) {
-        *resp = _build_reply(existing_ctx->label, TXN_BEGIN, reply_status);
-        return reply_status;
-    }
-    LOG(INFO) << "new transaction req." << existing_ctx->brief() << ", txn_op=" << TXN_BEGIN;
-    *resp = _build_reply(TXN_BEGIN, existing_ctx);
-    return Status::OK();
 }
 
 Status TransactionMgr::rollback_transaction(const HttpRequest* req, std::string* resp) {

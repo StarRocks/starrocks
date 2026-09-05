@@ -74,7 +74,7 @@ This topic introduces the following types of BE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: If true, the BE waits for the FE to acknowledge the shutdown (via a heartbeat response marked SHUTDOWN) and then keeps accepting new requests for a `graceful_exit_reject_delay_ms` window before rejecting them. If false, the BE starts rejecting new requests as soon as graceful shutdown begins, without waiting for FE acknowledgement. Already-begun transactions continue to be accepted during the drain window regardless of this setting.
+- Description: If true, the BE waits for a new FE to acknowledge the shutdown via a growing `LastHeartbeat` value echoed in the heartbeat request (the first value from that FE is only a baseline) and then keeps accepting new requests for a `graceful_exit_reject_delay_ms` window before rejecting them. A legacy FE that does not carry the field falls back to the optimistic behavior (the delay opens when the shutdown heartbeat response is constructed). If false, the BE starts rejecting new requests as soon as graceful shutdown begins, without waiting for FE acknowledgement. Already-begun transactions continue to be accepted during the drain window regardless of this setting. New BEGINs are still accepted during the delay; retry BEGINs are not guaranteed to succeed idempotently. After an FE leader switch, BEGIN redirect is disabled for the rest of this shutdown.
 - Introduced in: v3.4.5
 
 ### lake_compaction_stream_buffer_size_bytes

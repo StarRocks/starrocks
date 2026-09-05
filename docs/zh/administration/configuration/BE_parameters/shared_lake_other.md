@@ -71,7 +71,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：如果为 true，BE 等待 FE 通过心跳响应确认 SHUTDOWN，然后在 `graceful_exit_reject_delay_ms` 窗口内继续接受新请求，之后开始拒绝。如果为 false，BE 在 graceful shutdown 开始时立即拒绝新请求，不等待 FE 确认。已成功 BEGIN 的事务在排空窗口内继续被接受，不受此设置影响。
+- 描述：如果为 true，BE 等待新 FE 通过心跳请求中回传的 `LastHeartbeat` 增长确认 shutdown（某个 FE 的首次值仅作为 baseline），然后在 `graceful_exit_reject_delay_ms` 窗口内继续接受新请求，之后开始拒绝。不带该字段的旧版本 FE 沿用乐观兼容行为（shutdown 心跳响应构造时即打开 delay）。如果为 false，BE 在 graceful shutdown 开始时立即拒绝新请求，不等待 FE 确认。已成功 BEGIN 的事务在排空窗口内继续被接受，不受此设置影响。delay 内新 BEGIN 仍被接受；重复 BEGIN 不保证幂等成功。leader 切换后，本次退出禁用 BEGIN redirect。
 - 引入版本：v3.4.5
 
 ### lake_compaction_stream_buffer_size_bytes

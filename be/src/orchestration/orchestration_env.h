@@ -22,6 +22,7 @@
 namespace starrocks {
 
 class ExecEnv;
+class LoadChannelMgr;
 class MetricRegistry;
 class StreamLoadExecutor;
 
@@ -39,8 +40,8 @@ class OrchestrationEnv {
 public:
     OrchestrationEnv();
     ~OrchestrationEnv();
-
-    Status init(ExecEnv* exec_env, MetricRegistry* metrics, StreamLoadExecutor* stream_load_executor);
+    Status init(ExecEnv* exec_env, MetricRegistry* metrics, StreamLoadExecutor* stream_load_executor,
+                LoadChannelMgr* load_channel_mgr = nullptr);
     void wait_for_finish();
     void stop();
     void destroy();
@@ -62,12 +63,20 @@ public:
     void inc_rpc_prep_inflight() { _rpc_prep_inflight.fetch_add(1, std::memory_order_seq_cst); }
     void dec_rpc_prep_inflight() { _rpc_prep_inflight.fetch_sub(1, std::memory_order_seq_cst); }
 
+    // Test hook: exposes the drain re-sample so a regression test can verify the
+    // predecessor->successor handoff is not collapsed to a false zero.
+    size_t get_running_fragments_count_for_test() const { return _get_running_fragments_count(); }
+    // Test hook: bind a pre-initialized ExecEnv (query_context_mgr etc.) without running
+    // the full init() dependency chain.
+    void set_exec_env_for_test(ExecEnv* exec_env) { _exec_env = exec_env; }
+
 private:
     size_t _get_running_fragments_count() const;
 
     std::atomic<size_t> _short_circuit_inflight{0};
     std::atomic<size_t> _rpc_prep_inflight{0};
     ExecEnv* _exec_env = nullptr;
+    LoadChannelMgr* _load_channel_mgr = nullptr;
     std::unique_ptr<FragmentMgr> _fragment_mgr;
     std::unique_ptr<OrchestrationMetrics> _metrics;
     std::unique_ptr<RuntimeFilterWorker> _runtime_filter_worker;

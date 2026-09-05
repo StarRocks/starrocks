@@ -34,8 +34,12 @@ std::atomic<bool> k_starrocks_exit;
 // but also waiting for all threads to exit gracefully.
 std::atomic<bool> k_starrocks_quick_exit;
 
-// Largest heartbeat time seen from the FE during shutdown (the shutdown ack baseline/progress).
-std::atomic<int64_t> k_starrocks_last_seen_ack_ms = 0;
+// Latest heartbeat ack (acking FE address, time) seen during shutdown. Advances are compared
+// only within one source: a leader handover may come with an unsynchronized wall clock, so a
+// source switch re-anchors the baseline instead of dead-locking on cross-clock comparison.
+std::mutex k_starrocks_ack_mutex;
+std::string k_starrocks_last_ack_source;
+int64_t k_starrocks_last_ack_ms = 0;
 
 // Monotonic timestamp of the first heartbeat ack observed after shutdown began; 0 means the
 // FE has not yet confirmed the shutdown, so the delay window (reject_delay_ms) is not open.
@@ -50,6 +54,9 @@ std::atomic<bool> k_starrocks_be_crashing = false;
 
 // Set to reject new fragments and bypass the delay/fallback windows.
 std::atomic<bool> k_starrocks_force_reject = false;
+// Set when a different FE leader (source) starts acking during this shutdown: the 307 redirect
+// path is disabled for the rest of the shutdown (conservative failover downgrade).
+std::atomic<bool> k_starrocks_redirect_disabled = false;
 std::mutex k_starrocks_admission_mutex;
 std::atomic<size_t> k_starrocks_request_admissions_inflight = 0;
 
@@ -107,7 +114,10 @@ void set_frontend_aware_of_exit() {
 
 void clear_frontend_aware_of_exit() {
     k_starrocks_fe_aware_shutdown_ms.store(0);
-    k_starrocks_last_seen_ack_ms.store(0);
+    k_starrocks_redirect_disabled.store(false, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> l(k_starrocks_ack_mutex);
+    k_starrocks_last_ack_source.clear();
+    k_starrocks_last_ack_ms = 0;
 }
 
 bool is_frontend_aware_of_exit() {
@@ -115,28 +125,37 @@ bool is_frontend_aware_of_exit() {
 }
 
 // Tracks the FE's last-seen heartbeat time (the shutdown ack, echoed in every heartbeat
-// request). Returns true when the value advances, meaning the FE processed a heartbeat
-// response this BE sent after shutdown began. The first observed value is the baseline: it
-// corresponds to a pre-shutdown response and must not open awareness by itself.
-bool advance_heartbeat_ack(int64_t ack) {
-    int64_t prev = k_starrocks_last_seen_ack_ms.load(std::memory_order_relaxed);
-    if (prev == 0) {
-        // Anchor the baseline with CAS so concurrent anchors cannot regress the stored value; an
-        // ack of 0 (nothing processed yet) also lands here and is a no-op until the value moves.
-        if (k_starrocks_last_seen_ack_ms.compare_exchange_strong(prev, ack, std::memory_order_relaxed,
-                                                                 std::memory_order_relaxed)) {
-            return false;
+// request). `ack_source` identifies the FE that sent the ack (its heartbeat network address).
+// Returns true when the ack advances relative to the current source's baseline, meaning that
+// FE processed a heartbeat response this BE sent after shutdown began. The first value of a
+// source is only the baseline (it may correspond to a pre-shutdown response, and its wall
+// clock is not comparable with the previous leader's) and returns false.
+bool advance_heartbeat_ack(const std::string& ack_source, int64_t ack) {
+    std::lock_guard<std::mutex> l(k_starrocks_ack_mutex);
+    if (ack_source != k_starrocks_last_ack_source) {
+        if (!k_starrocks_last_ack_source.empty()) {
+            // Leader handover while shutting down: the new leader's wall clock is not
+            // comparable and the old redirect target may be gone, so disable redirect for the
+            // rest of this shutdown. A later advance of the new source still opens the delay
+            // window (new BEGINs keep being admitted) but never re-enables redirect.
+            k_starrocks_redirect_disabled = true;
         }
-        // Lost the anchor race: fall through and re-evaluate against the stored value.
+        k_starrocks_last_ack_source = ack_source;
+        k_starrocks_last_ack_ms = ack;
+        return false;
     }
-    // Only an advance over the last-seen value counts, and the last-seen value must follow.
-    while (ack > prev) {
-        if (k_starrocks_last_seen_ack_ms.compare_exchange_weak(prev, ack, std::memory_order_relaxed,
-                                                               std::memory_order_relaxed)) {
-            return true;
-        }
+    if (ack > k_starrocks_last_ack_ms) {
+        k_starrocks_last_ack_ms = ack;
+        return true;
     }
     return false;
+}
+
+bool may_redirect_to_fe_leader() {
+    if (k_starrocks_redirect_disabled.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    return is_frontend_aware_of_exit();
 }
 
 bool should_accept_new_request() {

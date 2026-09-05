@@ -83,13 +83,14 @@ stop_cn.sh -g
 シグナルを受信すると：
 
 - BE/CN ノードは自身を**EXITING**とマークします。
-- `graceful_exit_wait_for_frontend_heartbeat` が `true` の場合、新しいリクエストを受け入れ続け、次のいずれか早い方で受け入れを停止します：BE がシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答）を送信した後の admission 遅延、または Graceful Shutdown 開始から計測される fallback の期限。
+- `graceful_exit_wait_for_frontend_heartbeat` が `true` の場合、新しいリクエストを受け入れ続け、次のいずれか早い方で受け入れを停止します：FE がシャットダウンを確認した後（ハートビートリクエストで返される `LastHeartbeat` 値の増加により確認。ある FE からの最初の値は baseline に過ぎません）の admission 遅延、または Graceful Shutdown 開始から計測される fallback の期限。この admission ウィンドウ中は、新しいトランザクション BEGIN も引き続き受け入れられます。cutoff 後に到着した新しい BEGIN は HTTP 307 で FE リーダーにリダイレクトされ、FE が別の coordinator を選択します。シャットダウン中に別の FE リーダーが確認を開始した場合（リーダー切り替え）、今回のシャットダウンの残りの間リダイレクトは無効化され、リクエストは明示的なエラーを受け取ります。
 - `graceful_exit_wait_for_frontend_heartbeat` が `false` の場合、Graceful Shutdown の開始と同時に新しいリクエストの拒否を開始します。
 - その後、**新しいリクエスト**（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）を拒否し、すでに admission 済みの処理を続行します。
+- すでに BEGIN が成功したラベルの繰り返し BEGIN は、冪等に成功することは保証されません：通常の動作に従い、ラベル重複エラーを返します。BEGIN が成功したトランザクションの LOAD、PREPARE、COMMIT、ROLLBACK は、drain が有効な間は元の coordinator で引き続き処理されます。
 
 #### フライト中のクエリの待機ループ
 
-BE/CN が admission 済みの処理（クエリフラグメント、ロード、short-circuit クエリ）を待機する時間は、`loop_count_wait_fragments_finish × 10 秒`（デフォルト 60 秒）を上限とします。このハード上限に達すると、BE/CN は新しいリクエストの admission を停止して teardown に進み、残っている admission 済みの処理が完了することは保証されません。admission cutoff 前に BEGIN が完了したトランザクションは、drain が有効な間は LOAD、PREPARE、COMMIT、ROLLBACK を続行できます。cutoff 後の新しい BEGIN リクエストは引き続き拒否されます。
+BE/CN が admission 済みの処理（クエリフラグメント、ロード、short-circuit クエリ）を待機する時間は、`loop_count_wait_fragments_finish × 10 秒`（デフォルト 60 秒）を上限とします。このハード上限に達すると、BE/CN は新しいリクエストの admission を停止して teardown に進み、残っている admission 済みの処理が完了することは保証されません。書き込みを受信する BE 上の Load Channel（そのノードはローカルのクエリやトランザクションコンテキストを持たない場合がある）も admission 済みの処理としてカウントされるため、書き込み専用のレプリカノードは channel が drain 中でも早期に破棄されません。
 
 #### 改善された FE 認識
 
@@ -121,20 +122,20 @@ v3.4 以降、FE はハートビートの失敗に基づいて BE/CN を `DEAD` 
 
 #### `graceful_exit_wait_for_frontend_heartbeat`
 
-- 説明：true の場合、BE はシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答で、FE がこれを観測することを想定）を送信するまで待機し、その後 `graceful_exit_reject_delay_ms` の間新しいリクエストを受け入れ続けてから拒否を開始します。false の場合、BE は Graceful Shutdown 開始と同時に新しいリクエストの拒否を開始し、シャットダウン heartbeat を待ちません。既に BEGIN されたトランザクションは、この設定にかかわらず排空ウィンドウ中は引き続き受け入れられます。
+- 説明：true の場合、BE は新しい FE がシャットダウンを確認するまで待機し（ハートビートリクエストで返される `LastHeartbeat` 値の増加により確認。ある FE からの最初の値は baseline に過ぎません）、その後 `graceful_exit_reject_delay_ms` の間新しいリクエストを受け入れ続けてから拒否を開始します。フィールドを持たない旧バージョンの FE は、楽観的な互換動作にフォールバックします（シャットダウン heartbeat 応答の構築時に遅延が開始されます）。false の場合、BE は Graceful Shutdown 開始と同時に新しいリクエストの拒否を開始します。既に BEGIN されたトランザクションは、この設定にかかわらず drain ウィンドウ中は引き続き受け入れられます。delay 中の新しい BEGIN は引き続き受け入れられますが、繰り返し BEGIN の冪等成功は保証されません。リーダー切り替え後、今回のシャットダウンでは BEGIN のリダイレクトは無効化されます。
 - デフォルト：true
 - 適用方法：BE/CN 設定ファイルで変更します。BE/CN の再起動が必要です。
 
 #### `graceful_exit_reject_delay_ms`
 
-- 説明：BE/CN がシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答で、FE がこれを観測することを想定）を送信してから、ノードが新しいリクエストの拒否を開始するまでの遅延（ミリ秒）。この期間中、ノードは正常なノードとして新しいリクエストを受け入れて実行し続け、FE がこのノードへの新しいフラグメントのスケジュールを停止する時間を確保します。
+- 説明：新しい FE が `LastHeartbeat` の増加によってシャットダウンを確認した後、ノードが新しいリクエストの拒否を開始するまでの、新しい処理（新しい BEGIN、新しいロード、新しいフラグメント）を受け入れ続ける遅延（ミリ秒）。ある FE からの最初の値は baseline に過ぎず、このウィンドウは開きません。この期間中、ノードは正常なノードとして新しいリクエストを受け入れて実行し続け、FE がこのノードへの新しいフラグメントのスケジュールを停止する時間を確保します。すでに BEGIN が成功したラベルの繰り返し BEGIN は、成功を再生するのではなく、通常のラベル重複エラーを返します。リーダー切り替え後、今回のシャットダウンでは BEGIN のリダイレクトは無効化されます。
 - デフォルト：10000
 - 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
 - タイミング関係：排空予算 `loop_count_wait_fragments_finish` × 10 秒より短く、待機が期限切れになる前に拒否が開始されるようにします。
 
 #### `graceful_exit_reject_fallback_ms`
 
-- 説明：FE がシャットダウン heartbeat を観測しない場合でも、Graceful Exit の開始から BE/CN が新しいリクエストを拒否するまでの絶対上限（ミリ秒）。FE が確認しない、または大幅に遅れて確認する場合の無制限な受け入れを防ぎます。
+- 説明：FE の確認（`LastHeartbeat` の増加）がない場合でも、Graceful Exit の開始から BE/CN が新しいリクエストを拒否するまでの絶対上限（ミリ秒）。確認に基づく admission ウィンドウも制限し、FE が確認しない、または大幅に遅れて確認する場合の無制限な受け入れを防ぎます。
 - デフォルト：15000
 - 適用方法：BE/CN 設定ファイルで変更するか、動的に更新します。
 - タイミング関係：排空予算 `loop_count_wait_fragments_finish` × 10 秒（デフォルト 60000）より小さく、排空待機が期限切れになる前に新しいリクエストの受け入れが停止されるようにします。

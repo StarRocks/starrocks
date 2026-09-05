@@ -19,6 +19,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
+import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -129,9 +130,9 @@ public class TransactionLoadCoordinatorMgr {
      */
     public @NonNull ComputeNode allocate(String label, String warehouseName, String dbName)
             throws StarRocksException {
-        // Check if the label already exists in cache to avoid overwriting
-        // This ensures that repeated BEGIN requests for the same label
-        // are routed to the same BE where the transaction context exists
+        // Return the cached coordinator while it is available: repeated BEGINs for the same
+        // label keep reaching the BE that owns the stream context and get the everyday
+        // LABEL_ALREADY_EXISTS there.
         Long existingNodeId = cache.getIfPresent(label);
         if (existingNodeId != null) {
             ComputeNode node = null;
@@ -140,27 +141,23 @@ public class TransactionLoadCoordinatorMgr {
             } catch (StarRocksException e) {
                 // The cached node no longer exists in the cluster; treat the entry as stale.
                 LOG.info("Cached coordinator {} is gone, reassigning: {}", existingNodeId, e.getMessage());
-                cache.invalidate(label);
+                node = null;
             }
-            if (node != null) {
-                if (node.isAvailable()) {
-                    return node;
-                }
-                // The cached coordinator is unavailable (e.g. shutting down). If its
-                // transaction is still PREPARE there, keep routing to it: the retried BEGIN
-                // is served idempotently by the BE that owns the stream context, while
-                // re-allocating would misroute the retry and the later LOAD to a BE without
-                // the context. If that BE dies for good, its coordinator transactions are
-                // aborted via the heartbeat-failure path and the next allocate reassigns
-                // here. PREPARED and beyond are txn-id based (the BE removes its stream
-                // context in _commit_transaction even when prepare=true), so they are
-                // served by any node and must reassign.
-                if (transactionOwnedBy(label, dbName, existingNodeId)) {
-                    return node;
-                }
-                cache.invalidate(label);
+            if (node != null && node.isAvailable()) {
+                return node;
             }
         }
+
+        // Before picking a new coordinator, stop retries of a label that already owns a live
+        // transaction: selecting another node would orphan the original transaction's
+        // LOAD/COMMIT routing, and redirecting the retry back to its (unavailable)
+        // coordinator would bounce 307s between FE and that BE. The cache is left untouched
+        // so the live transaction's later LOAD/COMMIT still resolve to its original owner.
+        TransactionState txnState = getLabelTransactionState(label, dbName);
+        if (txnState != null && txnState.getTransactionStatus() != TransactionStatus.ABORTED) {
+            throw new LabelAlreadyUsedException(label, txnState.getTransactionStatus());
+        }
+        cache.invalidate(label);
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
@@ -173,22 +170,15 @@ public class TransactionLoadCoordinatorMgr {
     }
 
     /**
-     * Returns true when the label's transaction is still PREPARE on its coordinator backend
-     * (the given node). Only PREPARE still relies on the stream context held by that BE:
-     * PREPARED and beyond have already removed it there, so their retries are txn-id based
-     * and served by any node.
+     * Returns the FE transaction state for the label, or null when there is none.
      */
-    private boolean transactionOwnedBy(String label, String dbName, long nodeId) throws StarRocksException {
+    private TransactionState getLabelTransactionState(String label, String dbName) throws StarRocksException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            return false;
+            return null;
         }
-        TransactionState txnState = globalStateMgr.getGlobalTransactionMgr()
-                .getLabelTransactionState(db.getId(), label);
-        return txnState != null && txnState.getTransactionStatus() == TransactionStatus.PREPARE
-                && TransactionState.TxnSourceType.BE.equals(txnState.getCoordinator().sourceType)
-                && txnState.getCoordinator().getBackendId() == nodeId;
+        return globalStateMgr.getGlobalTransactionMgr().getLabelTransactionState(db.getId(), label);
     }
 
     /**
@@ -229,6 +219,14 @@ public class TransactionLoadCoordinatorMgr {
     @VisibleForTesting
     public void put(String key, Long value) {
         cache.put(key, value);
+    }
+
+    /**
+     * Peek the cached coordinator id without mutating state. It is only used in test cases.
+     */
+    @VisibleForTesting
+    public Long getIfPresentForTest(String label) {
+        return cache.getIfPresent(label);
     }
 
     /**

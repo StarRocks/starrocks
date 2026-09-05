@@ -33,7 +33,6 @@ public:
     ~TransactionMgr();
 
     Status begin_transaction(const HttpRequest* req, std::string* resp);
-    Status begin_transaction(const HttpRequest* req, std::string* resp, StreamLoadContext* existing_ctx);
     Status commit_transaction(const HttpRequest* req, std::string* resp);
     Status rollback_transaction(const HttpRequest* req, std::string* resp);
     Status list_transactions(const HttpRequest* req, std::string* resp);

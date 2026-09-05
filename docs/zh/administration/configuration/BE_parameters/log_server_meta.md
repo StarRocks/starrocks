@@ -411,7 +411,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int64
 - 单位：ms
 - 是否动态：是
-- 描述：BE 发送 shutdown 心跳（带 SHUTDOWN 标记的心跳响应，预期 FE 会观察到）后，BE 开始拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询）之前的延迟（毫秒）。在该延迟窗口内，BE 继续作为健康节点接受并运行新请求，给 FE 足够时间停止向该 BE 调度新 fragment；延迟结束后，若 BE 仍在退出中，则拒绝新请求。
+- 描述：新 FE 通过心跳请求中回传的 `LastHeartbeat` 增长确认 shutdown 后，BE 在开始拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询）之前继续接受新工作的延迟（毫秒）。某个 FE 的首次 `LastHeartbeat` 值仅作为 baseline，不会打开该窗口。窗口也会在 `graceful_exit_reject_fallback_ms` 到期时关闭。该窗口内 BE 继续作为健康节点接受并运行新请求，包括新的事务 BEGIN；对已成功 BEGIN 的 label，重复 BEGIN 不保证幂等成功（日常 label 已存在错误）。leader 切换后，本次退出剩余时间内禁用 BEGIN redirect。
 - 引入版本：-
 
 ### graceful_exit_reject_fallback_ms
@@ -420,7 +420,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int64
 - 单位：ms
 - 是否动态：是
-- 描述：从优雅退出开始起的绝对上限（毫秒），即使 FE 从未观察到 shutdown 心跳，BE 也会在该时间点后拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询），避免无限期接受新请求。该上限必须早于排空等待预算（`loop_count_wait_fragments_finish` x 10s）触发。若 FE 未及时观察到 shutdown 心跳，该上限将限制接受新请求直至排空等待开始。
+- 描述：从优雅退出开始起的绝对上限（毫秒），即使从未观察到 FE 确认（`LastHeartbeat` 增长），BE 也会在该时间点后拒绝新请求（查询 Fragment、Stream Load、事务 BEGIN、Routine Load 任务和 short-circuit 查询）。该上限同时截断基于确认的准入窗口，避免无限期接受新请求，且必须早于排空等待预算（`loop_count_wait_fragments_finish` x 10s）触发。
 - 引入版本：-
 
 ### heartbeat_service_port

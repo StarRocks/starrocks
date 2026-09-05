@@ -131,40 +131,25 @@ void TransactionManagerAction::handle(HttpRequest* req) {
     }
 
     if (boost::iequals(txn_op, TXN_BEGIN)) {
-        // A BEGIN retry for a transaction that already began on this BE is idempotent: it
-        // creates nothing, so it must keep working through the drain and cutoff window.
-        // The admission gate below only gates BEGINs that would create a new transaction.
-        auto existing_ctx = _exec_env->stream_context_mgr()->get(req->header(HTTP_LABEL_KEY));
-        if (existing_ctx != nullptr) {
-            // Hand the looked-up context to the manager instead of letting it re-lookup:
-            // StreamContextMgr::remove erases the entry even while callers hold references,
-            // so a second lookup may miss and create a new transaction, bypassing the
-            // admission gate below. The reference is held until the call returns.
-            DeferOp defer([existing_ctx]() { StreamLoadContext::release(existing_ctx); });
-            st = _transaction_mgr->begin_transaction(req, &resp, existing_ctx);
-        } else {
-            RequestAdmissionGuard request_admission;
-            if (!request_admission.accepted()) {
-                return _send_error_reply(req,
-                                         Status::ServiceUnavailable("Service is shutting down, please retry later!"));
-            }
-            if (!should_accept_new_request()) {
-                LOG(INFO) << "[reject] BEGIN received after graceful shutdown admission window, txn_op=" << txn_op
-                          << ", uri=" << req->uri() << ", label=" << req->header(HTTP_LABEL_KEY);
-                // Redirect only when heartbeat waiting is enabled and the FE has acked our shutdown
-                // epoch (is_frontend_aware_of_exit), i.e. the FE globally marks this node
-                // SHUTDOWN/not-alive. Otherwise (heartbeat=false, fallback cutoff, or no ack yet) a
-                // redirect could bounce back to this BE, so reply ServiceUnavailable instead. With
-                // heartbeat waiting disabled we no longer promise a full graceful shutdown.
-                if (is_frontend_aware_of_exit() && config::graceful_exit_wait_for_frontend_heartbeat &&
-                    redirect_to_fe_leader(req, req->header(HTTP_LABEL_KEY), "txn BEGIN")) {
-                    return;
-                }
-                return _send_error_reply(req,
-                                         Status::ServiceUnavailable("Service is shutting down, please retry later!"));
-            }
-            st = _transaction_mgr->begin_transaction(req, &resp);
+        RequestAdmissionGuard request_admission;
+        if (!request_admission.accepted()) {
+            return _send_error_reply(req, Status::ServiceUnavailable("Service is shutting down, please retry later!"));
         }
+        if (!should_accept_new_request()) {
+            LOG(INFO) << "[reject] BEGIN received after graceful shutdown admission window, txn_op=" << txn_op
+                      << ", uri=" << req->uri() << ", label=" << req->header(HTTP_LABEL_KEY);
+            // Redirect only when the delay window may still be used: heartbeat waiting is
+            // enabled, the FE has acknowledged the shutdown, and no leader/term handover was
+            // observed during this shutdown. Otherwise (heartbeat=false, fallback cutoff, no
+            // ack yet, or a failover downgrade) a redirect could bounce back to this BE or
+            // target a stale leader, so reply ServiceUnavailable instead.
+            if (config::graceful_exit_wait_for_frontend_heartbeat && may_redirect_to_fe_leader() &&
+                redirect_to_fe_leader(req, req->header(HTTP_LABEL_KEY), "txn BEGIN")) {
+                return;
+            }
+            return _send_error_reply(req, Status::ServiceUnavailable("Service is shutting down, please retry later!"));
+        }
+        st = _transaction_mgr->begin_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
         st = _transaction_mgr->commit_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_ROLLBACK)) {

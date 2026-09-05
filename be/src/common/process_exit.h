@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <string>
 
 namespace starrocks {
 
@@ -53,9 +54,19 @@ void set_frontend_aware_of_exit();
 //  - false: the ack has not advanced yet
 bool is_frontend_aware_of_exit();
 
-// Tracks the FE's last-seen heartbeat time (the shutdown ack). Returns true when the ack value
-// advances; the first observed value anchors the baseline and returns false.
-bool advance_heartbeat_ack(int64_t ack);
+// Tracks the FE's last-seen heartbeat time (the shutdown ack). `ack_source` identifies the FE
+// that sent it (its heartbeat network address + leader epoch): a change of source (leader
+// handover) re-anchors the baseline instead of comparing unsynchronized wall clocks, disables
+// BEGIN redirect for the rest of this shutdown (conservative failover downgrade), and only
+// advances within the current source return true. The first value of a source is the baseline
+// and returns false.
+bool advance_heartbeat_ack(const std::string& ack_source, int64_t ack);
+
+// Whether a cutoff BEGIN may still be redirected to the FE leader: the FE has acknowledged the
+// shutdown (a delay window was opened) AND no leader/term handover was observed during this
+// shutdown. It is the single permission check for the 307 path; callers reply with the existing
+// ServiceUnavailable JSON when it returns false.
+bool may_redirect_to_fe_leader();
 
 // clear the flag of frontend awareness of the shutdown.
 void clear_frontend_aware_of_exit();

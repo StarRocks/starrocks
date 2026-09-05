@@ -249,7 +249,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     auto orchestration_env = std::make_unique<orchestration::OrchestrationEnv>();
     EXIT_IF_ERROR(orchestration_env->init(exec_env, process_metrics_registry->root_registry(),
-                                          data_workflows_env->stream_load_executor()));
+                                          data_workflows_env->stream_load_executor(),
+                                          data_workflows_env->load_channel_mgr()));
     LOG(INFO) << process_name << " start step " << start_step++ << ": orchestration env init successfully";
 
     auto agent_server = std::make_unique<AgentServer>(exec_env, false);

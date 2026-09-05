@@ -95,15 +95,21 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     // request (TMasterInfo.last_heartbeat_time_ms = the FE's LastHeartbeat time for this BE):
     // - No ack field at all: legacy FE. Keep the old optimistic behavior (assume the response
     //   reaches the FE when constructed) so mixed-version upgrades keep the default behavior.
-    // - Ack value advanced: the FE processed a heartbeat response this BE sent after shutdown
-    //   began (it reports SHUTDOWN), so the node is marked SHUTDOWN/not-alive globally; open
-    //   the delay window (and BEGIN redirect).
+    // - Ack value advanced for the current acking FE: that FE processed a heartbeat response this
+    //   BE sent after shutdown began (it reports SHUTDOWN), so the node is marked SHUTDOWN/not-alive
+    //   globally; open the delay window (and BEGIN redirect).
+    // - A different FE starts acking (leader handover, a changed network address or leader
+    //   epoch): its wall clock is not comparable, so the baseline re-anchors, awareness waits
+    //   for that FE's own next advance, and the BEGIN redirect path is disabled for the rest
+    //   of this shutdown.
     // - Ack present but not advanced (latest response lost or not processed): stay unaware; the
     //   fallback deadline will reject instead of redirecting.
     if (process_exit_in_progress()) {
         if (!master_info.__isset.last_heartbeat_time_ms) {
             set_frontend_aware_of_exit();
-        } else if (advance_heartbeat_ack(master_info.last_heartbeat_time_ms)) {
+        } else if (advance_heartbeat_ack(fmt::format("{}:{}:{}", master_info.network_address.hostname,
+                                                     master_info.network_address.port, master_info.epoch),
+                                         master_info.last_heartbeat_time_ms)) {
             set_frontend_aware_of_exit();
         }
     }

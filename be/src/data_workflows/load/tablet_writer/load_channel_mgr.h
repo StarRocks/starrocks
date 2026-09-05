@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 #include <bthread/mutex.h>
 
+#include <atomic>
 #include <ctime>
 #include <memory>
 #include <mutex>
@@ -121,6 +122,16 @@ public:
 
     void close();
 
+    // Drain-visible work: channels still in the map, plus open RPCs admitted but not yet
+    // published. Callbacks/flush after map erase are remote replica work: graceful shutdown
+    // may fail them (owner 2026-09-06). Lifetime after erase is last-ref dtor join, not this count.
+    size_t pending_work_count() const;
+
+    // Drain visibility for open RPCs admitted before queueing; decremented by the open task
+    // (or inline on the sync path) when the open finishes or fails.
+    void inc_open_rpc_inflight() { _open_rpc_inflight.fetch_add(1, std::memory_order_seq_cst); }
+    void dec_open_rpc_inflight() { _open_rpc_inflight.fetch_sub(1, std::memory_order_seq_cst); }
+
     ThreadPool* async_rpc_pool() { return _async_rpc_pool.get(); }
 
     std::shared_ptr<LoadChannel> TEST_get_load_channel(UniqueId load_id) {
@@ -150,7 +161,10 @@ private:
     std::shared_ptr<LoadChannel> _find_load_channel(int64_t txn_id);
     void _start_load_channels_clean();
 
-    // lock protect the load channel map and aborted load channels map.
+    // Open RPCs admitted before queueing (drain visibility); paired with inc/dec around the
+    // open task lifetime.
+    std::atomic<size_t> _open_rpc_inflight{0};
+    // lock protects the load channel map and aborted load channels map.
     // performance is not critical here, so rw lock is not used.
     mutable bthread::Mutex _lock;
     // load id -> load channel

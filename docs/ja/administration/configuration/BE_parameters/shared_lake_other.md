@@ -74,7 +74,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: いいえ
-- 説明: true の場合、BE は FE がハートビート応答（SHUTDOWN マーク）でシャットダウンを確認するまで待機し、その後 `graceful_exit_reject_delay_ms` の間新しいリクエストを受け入れ続けてから拒否を開始します。false の場合、BE は Graceful Shutdown 開始と同時に新しいリクエストの拒否を開始し、FE の確認を待ちません。既に BEGIN されたトランザクションは、この設定にかかわらず排空ウィンドウ中は引き続き受け入れられます。
+- 説明: true の場合、BE は新しい FE がハートビートリクエストで返される `LastHeartbeat` 値の増加によってシャットダウンを確認するまで待機し（ある FE からの最初の値は baseline に過ぎません）、その後 `graceful_exit_reject_delay_ms` の間新しいリクエストを受け入れ続けてから拒否を開始します。フィールドを持たない旧バージョンの FE は楽観的な互換動作にフォールバックします（シャットダウン heartbeat 応答の構築時に遅延が開始されます）。false の場合、BE は Graceful Shutdown 開始と同時に新しいリクエストの拒否を開始し、FE の確認を待ちません。既に BEGIN されたトランザクションは、この設定にかかわらず排空ウィンドウ中は引き続き受け入れられます。delay 中の新しい BEGIN は引き続き受け入れられますが、繰り返し BEGIN の冪等成功は保証されません。リーダー切り替え後、今回のシャットダウンでは BEGIN のリダイレクトは無効化されます。
 - 導入バージョン: v3.4.5
 
 ### lake_compaction_stream_buffer_size_bytes

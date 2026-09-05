@@ -390,7 +390,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int64
 - Unit: ms
 - Is mutable: Yes
-- Description: The delay (in milliseconds) after the BE has sent the shutdown heartbeat (a heartbeat response marked SHUTDOWN, which the FE is expected to observe) before the BE starts rejecting new requests (query fragments, stream loads, transaction BEGINs, routine load tasks, and short-circuit queries). During this delay window the BE keeps accepting and running new requests as a healthy node, giving the FE enough time to stop scheduling new fragments to this BE. After the delay elapses, new requests are rejected if the BE is still exiting.
+- Description: Delay (in milliseconds) during which the BE keeps accepting new work (new BEGINs, new loads, new fragments, routine load tasks, and short-circuit queries) after a new FE has acknowledged the shutdown, before the BE starts rejecting new requests. A new FE acknowledges shutdown when the `LastHeartbeat` value echoed in the next heartbeat request grows; the first value from that FE is only a baseline and does not open this window. The window also closes when `graceful_exit_reject_fallback_ms` expires. During this window the BE keeps accepting and running new requests as a healthy node, including new transaction BEGINs; a repeated BEGIN for a label that already started is not guaranteed to succeed idempotently (everyday label-already-exists). After an FE leader switch, BEGIN redirect is disabled for the rest of this shutdown.
 - Introduced in: -
 
 ### graceful_exit_reject_fallback_ms
@@ -399,7 +399,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int64
 - Unit: ms
 - Is mutable: Yes
-- Description: The absolute upper bound (in milliseconds) from the start of a graceful exit before the BE rejects new requests (query fragments, stream loads, transaction BEGINs, routine load tasks, and short-circuit queries), even if the FE never observes the shutdown heartbeat. This avoids unbounded acceptance and must fire before the drain wait budget (`loop_count_wait_fragments_finish` x 10s). If the FE does not observe the shutdown heartbeat in time, this cap bounds acceptance until the drain wait starts.
+- Description: The absolute upper bound (in milliseconds) from the start of a graceful exit before the BE rejects new requests (query fragments, stream loads, transaction BEGINs, routine load tasks, and short-circuit queries), even if no FE acknowledgement (growing `LastHeartbeat`) was observed. It also caps the acknowledgement-based admission window. This avoids unbounded acceptance and must fire before the drain wait budget (`loop_count_wait_fragments_finish` x 10s).
 - Introduced in: -
 
 ### heartbeat_service_port

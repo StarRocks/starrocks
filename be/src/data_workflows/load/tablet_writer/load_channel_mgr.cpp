@@ -21,6 +21,7 @@
 
 #include "base/concurrency/stopwatch.hpp"
 #include "common/config_ingest_fwd.h"
+#include "common/process_exit.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/thread.h"
 #include "data_workflows/load/tablet_writer/load_channel.h"
@@ -41,6 +42,8 @@ public:
             : _load_channel_mgr(load_channel_mgr), _open_context(open_context) {}
 
     ~ChannelOpenTask() override {
+        // Covers both the completed run() path and a cancelled task whose run() never ran.
+        _load_channel_mgr->dec_open_rpc_inflight();
         if (!_is_done) {
             cancel_task(Status::ServiceUnavailable("Thread pool was shut down"));
         }
@@ -122,6 +125,11 @@ void LoadChannelMgr::close() {
     }
 }
 
+size_t LoadChannelMgr::pending_work_count() const {
+    std::lock_guard l(_lock);
+    return _load_channels.size() + _open_rpc_inflight.load(std::memory_order_seq_cst);
+}
+
 Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     _mem_tracker = mem_tracker;
     RETURN_IF_ERROR(_start_bg_worker());
@@ -150,9 +158,14 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
     open_context.done = done;
     open_context.receive_rpc_time_ns = MonotonicNanos();
     if (!config::enable_load_channel_rpc_async) {
+        inc_open_rpc_inflight();
         _open(open_context);
+        dec_open_rpc_inflight();
         return;
     }
+    // Count the open before queueing so drain sees admitted-but-unpublished opens; the task
+    // decrements when it finishes (or is cancelled with the pool).
+    inc_open_rpc_inflight();
     auto task = std::make_shared<ChannelOpenTask>(this, open_context);
     Status status = _async_rpc_pool->submit(task);
     if (!status.ok()) {
@@ -191,6 +204,15 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
             const auto& reason = aborted_iter->second.second;
             response->mutable_status()->set_status_code(TStatusCode::ABORTED);
             response->mutable_status()->add_error_msgs(reason);
+            return;
+        } else if (!should_accept_new_request()) {
+            // New load channel creation is new work: once admission closes during graceful
+            // shutdown, refuse it instead of creating a channel for a load this node does not
+            // own yet. Existing channels keep serving their incremental opens and chunks.
+            response->mutable_status()->set_status_code(TStatusCode::ABORTED);
+            response->mutable_status()->add_error_msgs(
+                    "load channel rejected: BE is shutting down, "
+                    "please choose another BE");
             return;
         } else if (!is_tracker_hit_hard_limit(_mem_tracker, config::load_process_max_memory_hard_limit_ratio) ||
                    config::enable_new_load_on_memory_limit_exceeded) {

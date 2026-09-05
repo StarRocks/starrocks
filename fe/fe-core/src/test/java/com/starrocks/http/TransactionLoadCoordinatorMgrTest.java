@@ -17,6 +17,7 @@ package com.starrocks.http;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.TransactionLoadCoordinatorMgr;
@@ -149,14 +150,16 @@ public class TransactionLoadCoordinatorMgrTest {
 
 
     @Test
-    public void testAllocateReallocatesWhenCachedNodeUnavailable() throws Exception {
-        // A shutting-down BE reports SHUTDOWN in its heartbeat, so FE marks it not alive and
-        // isAvailable() turns false. allocate() must drop the stale cache entry and pick another
-        // node instead of routing the BEGIN back to the shutting-down coordinator — but only
-        // once the label's transaction is no longer live on that BE.
+    public void testAllocateRejectsRetryWhenTransactionLive() throws Exception {
+        // A label whose FE transaction is still live (PREPARE/PREPARED/COMMITTED/VISIBLE/UNKNOWN)
+        // must fail the retried BEGIN with the everyday LABEL_ALREADY_EXISTS error instead of
+        // being sent to a new coordinator (which would orphan the original transaction's
+        // LOAD/COMMIT routing) or bounced back to its unavailable one (a 307 loop). The cache
+        // is left untouched, so later LOAD/COMMIT still resolve to the original owner.
         Backend backend2 = new Backend(5678, "otherhost", 8040);
         backend2.setBePort(9300);
         backend2.setAlive(false);
+        backend2.setHttpPort(9301);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
         // MockUp intercepts the real LocalMetastore instance returned by setUp's
         // getLocalMetastore expectation; a chained getDb record in an Expectations block would
@@ -167,13 +170,14 @@ public class TransactionLoadCoordinatorMgrTest {
                 return DB_NAME.equals(dbName) ? db : null;
             }
         };
-        // Build the state outside the Expectations block: the helper reaches
+        // Build the states outside the Expectations block: the helper reaches
         // GlobalStateMgr.getCurrentState(), which is itself mocked, and recording it inside
         // would swallow the getLabelTransactionState result.
-        // ABORTED/COMMITTED/VISIBLE/UNKNOWN all mean the cached BE no longer serves the
-        // label (PREPARED+ removed its stream context there), so allocate must reassign.
-        TransactionState abortedTxn = newTxnStateWithCoordinator(1, "label_unavailable",
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.ABORTED,
+        TransactionState prepareTxn = newTxnStateWithCoordinator(1, "label_prepare",
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.PREPARE,
+                "otherhost", 5678);
+        TransactionState preparedTxn = newTxnStateWithCoordinator(2, "label_prepared",
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.PREPARED,
                 "otherhost", 5678);
         TransactionState committedTxn = newTxnStateWithCoordinator(3, "label_committed",
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.COMMITTED,
@@ -186,10 +190,13 @@ public class TransactionLoadCoordinatorMgrTest {
                 "otherhost", 5678);
         new Expectations() {
             {
-                globalTransactionMgr.getLabelTransactionState(testDbId, "label_unavailable");
+                globalTransactionMgr.getLabelTransactionState(testDbId, "label_prepare");
                 minTimes = 0;
-                result = abortedTxn;
+                result = prepareTxn;
 
+                globalTransactionMgr.getLabelTransactionState(testDbId, "label_prepared");
+                minTimes = 0;
+                result = preparedTxn;
 
                 globalTransactionMgr.getLabelTransactionState(testDbId, "label_committed");
                 minTimes = 0;
@@ -204,106 +211,80 @@ public class TransactionLoadCoordinatorMgrTest {
                 result = unknownTxn;
             }
         };
+
         TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
 
-        // Cached alive node is returned as-is (no transaction lookup).
+        // Cached unavailable coordinator + live transaction: terminal error, cache kept.
+        for (String label : new String[] {"label_prepare", "label_prepared", "label_committed",
+                "label_visible", "label_unknown"}) {
+            cache.put(label, 5678L);
+            Assertions.assertThrows(LabelAlreadyUsedException.class,
+                    () -> cache.allocate(label, "default_warehouse", DB_NAME));
+            Assertions.assertEquals(5678L, cache.getIfPresentForTest(label));
+            // Still rejected on the next retry: no new coordinator was written.
+            Assertions.assertThrows(LabelAlreadyUsedException.class,
+                    () -> cache.allocate(label, "default_warehouse", DB_NAME));
+        }
+
+        // Cache miss + live transaction: rejected, nothing written.
+        cache.remove("label_prepare");
+        Assertions.assertNull(cache.getIfPresentForTest("label_prepare"));
+        Assertions.assertThrows(LabelAlreadyUsedException.class,
+                () -> cache.allocate("label_prepare", "default_warehouse", DB_NAME));
+        Assertions.assertNull(cache.getIfPresentForTest("label_prepare"));
+
+        // Cached node vanished from the cluster + live transaction: rejected, entry kept.
+        cache.put("label_prepare", 99999L);
+        Assertions.assertThrows(LabelAlreadyUsedException.class,
+                () -> cache.allocate("label_prepare", "default_warehouse", DB_NAME));
+        Assertions.assertEquals(99999L, cache.getIfPresentForTest("label_prepare"));
+    }
+
+    @Test
+    public void testAllocateReassignsWhenTransactionTerminalOrAbsent() throws Exception {
+        // Only ABORTED or absent transactions free the label: allocate drops the stale cache
+        // entry and selects a live node. A cached alive node short-circuits without any
+        // transaction lookup.
+        Backend backend2 = new Backend(5678, "otherhost", 8040);
+        backend2.setBePort(9300);
+        backend2.setAlive(false);
+        backend2.setHttpPort(9301);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return DB_NAME.equals(dbName) ? db : null;
+            }
+        };
+        TransactionState abortedTxn = newTxnStateWithCoordinator(1, "label_aborted",
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.ABORTED,
+                "otherhost", 5678);
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(testDbId, "label_aborted");
+                minTimes = 0;
+                result = abortedTxn;
+
+                globalTransactionMgr.getLabelTransactionState(testDbId, "label_gone");
+                minTimes = 0;
+                result = null; // no transaction for the label
+            }
+        };
+
+        TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
+
+        // Cached alive node is returned as-is (no transaction lookup happens for it).
         cache.put("label_alive", 1234L);
         assertEquals(1234L, cache.allocate("label_alive", "default_warehouse", DB_NAME).getId());
 
-        // Cached unavailable node with no live transaction is dropped and a new node is allocated.
-        cache.put("label_unavailable", 5678L);
-        assertEquals(1234L, cache.allocate("label_unavailable", "default_warehouse", DB_NAME).getId());
-        // The stale entry has been replaced by the new allocation.
-        assertEquals(1234L, cache.allocate("label_unavailable", "default_warehouse", DB_NAME).getId());
+        // ABORTED transaction on an unavailable coordinator: reassign and replace the entry.
+        cache.put("label_aborted", 5678L);
+        assertEquals(1234L, cache.allocate("label_aborted", "default_warehouse", DB_NAME).getId());
+        assertEquals(1234L, cache.allocate("label_aborted", "default_warehouse", DB_NAME).getId());
 
-        // Terminal/unknown states reassign too.
-        cache.put("label_committed", 5678L);
-        assertEquals(1234L, cache.allocate("label_committed", "default_warehouse", DB_NAME).getId());
-        cache.put("label_visible", 5678L);
-        assertEquals(1234L, cache.allocate("label_visible", "default_warehouse", DB_NAME).getId());
-        cache.put("label_unknown", 5678L);
-        assertEquals(1234L, cache.allocate("label_unknown", "default_warehouse", DB_NAME).getId());
-    }
-
-    @Test
-    public void testAllocateReassignsWhenCachedNodeMissing() throws Exception {
-        // A cached node that vanished from the cluster cannot even be looked up; the entry
-        // must be treated as stale and a live node allocated instead.
-        TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
-        cache.put("label_missing", 99999L);
-        assertEquals(1234L, cache.allocate("label_missing", "default_warehouse", DB_NAME).getId());
-        assertEquals(1234L, cache.allocate("label_missing", "default_warehouse", DB_NAME).getId());
-    }
-
-    @Test
-    public void testAllocateKeepsUnavailableNodeWhileTransactionLive() throws Exception {
-        // A retried BEGIN for a label that already began on the (now unavailable) BE must keep
-        // routing there: the retry is served idempotently by the BE that owns the stream
-        // context, and re-allocating would misroute the retry and later LOAD/COMMIT to a BE
-        // without the context. The entry is only reassigned once the transaction is aborted.
-        Backend backend2 = new Backend(5678, "otherhost", 8040);
-        backend2.setBePort(9300);
-        backend2.setAlive(false);
-        backend2.setHttpPort(9301);
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
-        new MockUp<LocalMetastore>() {
-            @Mock
-            public Database getDb(String dbName) {
-                return DB_NAME.equals(dbName) ? db : null;
-            }
-        };
-        // Build the state outside the Expectations block: the helper reaches
-        // GlobalStateMgr.getCurrentState(), which is itself mocked, and recording it inside
-        // would swallow the getLabelTransactionState result.
-        TransactionState liveTxn = newTxnStateWithCoordinator(2, "label_live",
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.PREPARE,
-                "otherhost", 5678);
-        new Expectations() {
-            {
-                globalTransactionMgr.getLabelTransactionState(testDbId, "label_live");
-                times = 2; // allocate is called twice; each lookup must hit the live txn
-                result = liveTxn;
-            }
-        };
-
-        TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
-        cache.put("label_live", 5678L);
-        // The transaction is live on the unavailable BE: keep the cached coordinator.
-        assertEquals(5678L, cache.allocate("label_live", "default_warehouse", DB_NAME).getId());
-        assertEquals(5678L, cache.allocate("label_live", "default_warehouse", DB_NAME).getId());
-    }
-
-    @Test
-    public void testAllocateReassignsWhenTransactionPrepared() throws Exception {
-        // PREPARED and beyond no longer rely on the stream context: the BE removes it in
-        // _commit_transaction even when prepare=true, and retries are txn-id based, so the
-        // cached coordinator is reassigned like any other non-PREPARE state.
-        Backend backend2 = new Backend(5678, "otherhost", 8040);
-        backend2.setBePort(9300);
-        backend2.setAlive(false);
-        backend2.setHttpPort(9301);
-        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
-        new MockUp<LocalMetastore>() {
-            @Mock
-            public Database getDb(String dbName) {
-                return DB_NAME.equals(dbName) ? db : null;
-            }
-        };
-        TransactionState preparedTxn = newTxnStateWithCoordinator(6, "label_prepared",
-                TransactionState.LoadJobSourceType.BACKEND_STREAMING, TransactionStatus.PREPARED,
-                "otherhost", 5678);
-        new Expectations() {
-            {
-                globalTransactionMgr.getLabelTransactionState(testDbId, "label_prepared");
-                minTimes = 0;
-                result = preparedTxn;
-            }
-        };
-
-        TransactionLoadCoordinatorMgr cache = new TransactionLoadCoordinatorMgr();
-        cache.put("label_prepared", 5678L);
-        assertEquals(1234L, cache.allocate("label_prepared", "default_warehouse", DB_NAME).getId());
-        assertEquals(1234L, cache.allocate("label_prepared", "default_warehouse", DB_NAME).getId());
+        // Missing cached node with no transaction: reassign.
+        cache.put("label_gone", 99999L);
+        assertEquals(1234L, cache.allocate("label_gone", "default_warehouse", DB_NAME).getId());
     }
 
     @Test

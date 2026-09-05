@@ -49,7 +49,7 @@ class ProcessExitTest : public testing::Test {
         k_starrocks_quick_exit.store(false);
         k_starrocks_force_reject.store(false);
         k_starrocks_exit_start_ms.store(0);
-        k_starrocks_fe_aware_shutdown_ms.store(0);
+        clear_frontend_aware_of_exit();
     }
 
 private:
@@ -149,6 +149,36 @@ TEST_F(ProcessExitTest, testShouldAcceptDuringHeartbeatDelay) {
 
     k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
     EXPECT_FALSE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testHeartbeatAckReanchorsPerSource) {
+    // First value of a source is the baseline; later growth advances within the source.
+    EXPECT_FALSE(advance_heartbeat_ack("fe1:9010:1", 100));
+    EXPECT_FALSE(is_frontend_aware_of_exit());
+    EXPECT_TRUE(advance_heartbeat_ack("fe1:9010:1", 101));
+    // A different source (leader handover) re-anchors and never compares clocks.
+    EXPECT_FALSE(advance_heartbeat_ack("fe2:9010:2", 900));
+    EXPECT_FALSE(advance_heartbeat_ack("fe2:9010:2", 900));
+    EXPECT_TRUE(advance_heartbeat_ack("fe2:9010:2", 901));
+}
+
+TEST_F(ProcessExitTest, testRedirectDisabledAfterLeaderHandover) {
+    EXPECT_FALSE(advance_heartbeat_ack("fe1:9010:1", 100));
+    EXPECT_TRUE(advance_heartbeat_ack("fe1:9010:1", 101));
+    // Aware of FE1 before the handover: redirect allowed.
+    EXPECT_TRUE(may_redirect_to_fe_leader());
+
+    // Leader handover: redirect is disabled for the rest of this shutdown, even though the
+    // delay window stays open (the ack of the new source still advances).
+    EXPECT_FALSE(advance_heartbeat_ack("fe2:9010:2", 900));
+    EXPECT_TRUE(advance_heartbeat_ack("fe2:9010:2", 901));
+    EXPECT_FALSE(may_redirect_to_fe_leader());
+
+    // A fresh shutdown cycle resets the downgrade.
+    clear_frontend_aware_of_exit();
+    EXPECT_FALSE(advance_heartbeat_ack("fe1:9010:1", 100));
+    EXPECT_TRUE(advance_heartbeat_ack("fe1:9010:1", 101));
+    EXPECT_TRUE(may_redirect_to_fe_leader());
 }
 TEST_F(ProcessExitTest, testRequestAdmissionGuardClosesWithForceReject) {
     {

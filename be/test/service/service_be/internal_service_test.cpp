@@ -20,12 +20,15 @@
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/process_exit.h"
 #include "data_sink/tablet/tablet_sink_index_channel.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
+#include "exec/runtime/query_context_manager.h"
 #include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
@@ -313,7 +316,9 @@ TEST_F(InternalServiceTest, test_exec_plan_fragment_rejected_while_shutting_down
     brpc::Controller cntl;
     MockClosure closure;
 
-    service._exec_plan_fragment(&cntl, &request, &response, &closure);
+    // Rejection moved to the public entry (admission gate): force_reject makes it SetFailed
+    // and restore the inflight count, instead of the private worker which no longer rejects.
+    service.exec_plan_fragment(&cntl, &request, &response, &closure);
 
     ASSERT_TRUE(cntl.Failed());
     ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
@@ -336,7 +341,8 @@ TEST_F(InternalServiceTest, test_exec_batch_plan_fragments_rejected_while_shutti
     brpc::Controller cntl;
     MockClosure closure;
 
-    service._exec_batch_plan_fragments(&cntl, &request, &response, &closure);
+    // Rejection moved to the public entry (admission gate), same as exec_plan_fragment.
+    service.exec_batch_plan_fragments(&cntl, &request, &response, &closure);
 
     ASSERT_TRUE(cntl.Failed());
     ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
@@ -344,6 +350,42 @@ TEST_F(InternalServiceTest, test_exec_batch_plan_fragments_rejected_while_shutti
 
     k_starrocks_exit.store(false);
     k_starrocks_force_reject.store(false);
+}
+
+TEST_F(InternalServiceTest, test_drain_resample_observes_successor_after_predecessor_release) {
+    // Regression for the P1 handoff window: the drain re-sample must observe a successor
+    // state (an active query in the query-context registry) published between reading the
+    // predecessor count (RPC prepare) and reading the successor registry. The re-sample uses
+    // the before_query_read sync point to publish an active query after the predecessor
+    // counts are read but before the query registry is read; the published query must keep
+    // the total non-zero (never collapse to a false zero while the query is active).
+    orchestration::OrchestrationEnv orchestration_env;
+    orchestration_env.set_exec_env_for_test(ExecEnv::GetInstance());
+
+    TUniqueId query_id;
+    query_id.hi = 0x1234;
+    query_id.lo = 0x5678;
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("OrchestrationEnv::_get_running_fragments_count:before_query_read",
+                                          [&](void* arg) {
+                                              // Publish the successor state after the predecessor
+                                              // counts are read but before the query registry read.
+                                              auto st = ExecEnv::GetInstance()->query_context_mgr()->get_or_register(
+                                                      query_id,
+                                                      /*return_error_if_not_exist=*/false);
+                                              ASSERT_OK(st);
+                                          });
+    DeferOp clear_sync_point([] {
+        SyncPoint::GetInstance()->ClearCallBack("OrchestrationEnv::_get_running_fragments_count:before_query_read");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    size_t count = orchestration_env.get_running_fragments_count_for_test();
+    ASSERT_GT(count, 0);
+
+    // Reset the shared singleton so the registered query does not leak into sibling tests.
+    ExecEnv::GetInstance()->query_context_mgr()->clear();
 }
 
 } // namespace starrocks

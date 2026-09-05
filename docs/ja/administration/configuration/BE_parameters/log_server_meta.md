@@ -315,7 +315,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int64
 - 単位: ms
 - 変更可能: はい
-- 説明: BE がシャットダウン heartbeat（SHUTDOWN マーク付きのハートビート応答で、FE がこれを観測することを想定）を送信してから、BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）の拒否を開始するまでの遅延（ミリ秒）。この遅延期間中、BE は正常なノードとして新しいリクエストを受け入れて実行し続け、FE がこの BE への新しいフラグメントのスケジュールを停止する時間を確保します。遅延が経過した後、BE がまだ終了中であれば新しいリクエストは拒否されます。
+- 説明: 新しい FE がハートビートリクエストで返される `LastHeartbeat` 値の増加によってシャットダウンを確認した後、BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）の拒否を開始するまでの、新しい処理を受け入れ続ける遅延（ミリ秒）。ある FE からの最初の値は baseline に過ぎず、このウィンドウは開きません。ウィンドウは `graceful_exit_reject_fallback_ms` の期限でも閉じます。この期間中、BE は正常なノードとして新しいリクエスト（新しい BEGIN を含む）を受け入れて実行し続けます。すでに BEGIN が成功したラベルの繰り返し BEGIN は冪等に成功することは保証されません（通常のラベル重複エラー）。リーダー切り替え後、今回のシャットダウンの残りの間 BEGIN のリダイレクトは無効化されます。
 - 導入バージョン: -
 
 ### graceful_exit_reject_fallback_ms
@@ -324,7 +324,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int64
 - 単位: ms
 - 変更可能: はい
-- 説明: グレースフルシャットダウン開始から、FE がシャットダウン heartbeat を観測しない場合でも BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）を拒否するまでの絶対上限（ミリ秒）。無制限な受け入れを避けるためです。排空待機予算（`loop_count_wait_fragments_finish` × 10 秒）より前に発動する必要があります。FE が時間内にシャットダウン heartbeat を観測しない場合、この上限が排空待機が開始されるまでの受け入れを制限します。
+- 説明: グレースフルシャットダウン開始から、FE の確認（`LastHeartbeat` の増加）がない場合でも BE が新しいリクエスト（クエリフラグメント、Stream Load、トランザクション BEGIN、Routine Load タスク、short-circuit クエリ）を拒否するまでの絶対上限（ミリ秒）。確認に基づく admission ウィンドウも制限し、無制限な受け入れを避けます。排空待機予算（`loop_count_wait_fragments_finish` × 10 秒）より前に発動する必要があります。
 - 導入バージョン: -
 
 ### heartbeat_service_port

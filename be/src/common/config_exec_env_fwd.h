@@ -201,13 +201,20 @@ CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mInt64(loop_count_wait_fragments_finish, "6");
 
 // Wait for FE shutdown acknowledgement before rejecting requests.
-// When false, reject new requests immediately on shutdown.
+// New FE: acknowledgement is a growing LastHeartbeat; the first value from that FE is only a
+// baseline. Legacy FE (field absent): optimistic compatibility (delay opens when the SHUTDOWN
+// heartbeat response is constructed). When false, reject new requests immediately on shutdown.
 CONF_Bool(graceful_exit_wait_for_frontend_heartbeat, "true");
 
-// Delay (ms) after FE acknowledgement before rejecting new requests.
+// Delay (ms) to keep admitting new work (new BEGINs, new loads, new fragments) after the FE
+// acknowledged the shutdown via a growing LastHeartbeat. The first value from a given FE is
+// only a baseline. The window closes early when the fallback budget expires. Not tied to
+// BEGIN retry idempotency: retries keep the everyday LABEL_ALREADY_EXISTS behavior.
+// After a leader switch, BEGIN redirect is disabled for the rest of this shutdown.
 CONF_mInt64(graceful_exit_reject_delay_ms, "10000");
 
-// Fallback (ms) from shutdown start before rejecting new requests.
+// Fallback budget (ms) from shutdown start: after it expires new work is rejected even if no
+// FE acknowledgement was observed. Also caps the admission window opened by an acknowledgement.
 CONF_mInt64(graceful_exit_reject_fallback_ms, "15000");
 
 // spill dirs
