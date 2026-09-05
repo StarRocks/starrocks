@@ -301,6 +301,11 @@ public class ExternalOlapTable extends OlapTable {
         externalOlapTable.externalTableInfo = this.externalTableInfo;
     }
 
+    @Override
+    public Collection<Partition> getPartitions() {
+        return Collections.emptyList();
+    }
+
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
             throws DdlException, IOException {
         updateMetaInternal(dbName, meta, backendMetas);
