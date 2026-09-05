@@ -13,6 +13,7 @@ set(EXEC_FILES
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/nljoin_runtime_filter_test.cpp
         ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
         ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
