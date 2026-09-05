@@ -403,17 +403,22 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1));
             if (skewInfo.isSkewed()) {
 
-                if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
-                    return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
+                List<SkewedInfo> results = Lists.newArrayList();
+                if (skewInfo.hasNullSkew()) {
+                    results.add(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
                 }
-
-                return skewInfo.maybeMcvs().stream() //
+                // Add MCV-based skew values, if any
+                skewInfo.maybeMcvs().stream() //
                         .flatMap(Collection::stream) //
                         .map(mcv -> ConstantOperator.createVarchar(mcv.first).castTo(col.getType())) //
                         .filter(Optional::isPresent) //
                         .map(value -> new SkewedInfo(col, value.get())) //
-                        .toList();
+                        .forEach(results::add);
+
+                return results;
+
             }
+                        
         }
         return Collections.emptyList();
     }
