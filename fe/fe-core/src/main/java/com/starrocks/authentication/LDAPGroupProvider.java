@@ -66,6 +66,7 @@ public class LDAPGroupProvider extends GroupProvider {
     public static final String LDAP_SSL_CONN_TRUST_STORE_PWD = "ldap_ssl_conn_trust_store_pwd";
     public static final String LDAP_PROP_CONN_TIMEOUT_MS_KEY = "ldap_conn_timeout";
     public static final String LDAP_PROP_CONN_READ_TIMEOUT_MS_KEY = "ldap_conn_read_timeout";
+    public static final String LDAP_AUTH = "ldap_auth";
 
     /**
      * ldap_group_filter: sent directly to ldap server as filter
@@ -97,6 +98,7 @@ public class LDAPGroupProvider extends GroupProvider {
     public static final String LDAP_CACHE_REFRESH_INTERVAL = "ldap_cache_refresh_interval";
 
     public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(Arrays.asList(
+            LDAP_AUTH,
             LDAP_LDAP_CONN_URL,
             LDAP_PROP_ROOT_DN_KEY,
             LDAP_PROP_ROOT_PWD_KEY,
@@ -118,6 +120,35 @@ public class LDAPGroupProvider extends GroupProvider {
      * which is mainly used to cancel the periodic scheduling when the group provider is destroyed.
      */
     private ScheduledFuture<?> scheduleTask;
+
+    public enum LdapAuth {
+        SIMPLE("simple"),
+        NONE("none");
+
+        private final String value;
+
+        LdapAuth(String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        // Comparison method
+        public static LdapAuth fromString(String input) {
+            for (LdapAuth e : LdapAuth.values()) {
+                if (e.value.equals(input)) {
+                    return e;
+                }
+            }
+            return null; // or throw exception if preferred
+        }
+    }
+
+    public static final Set<String> REQUIRED_LDAP_AUTH = new HashSet<>(Arrays.asList(
+        LdapAuth.SIMPLE.getValue(),
+        LdapAuth.NONE.getValue()));
 
     public LDAPGroupProvider(String name, Map<String, String> properties) {
         super(name, properties);
@@ -286,6 +317,18 @@ public class LDAPGroupProvider extends GroupProvider {
             }
         });
 
+        LdapAuth ldapAuth = LdapAuth.fromString(properties.get(LDAP_AUTH).toLowerCase());
+
+        if (ldapAuth == null) {
+            throw new SemanticException("only values allowed for property " +
+                                        LDAP_AUTH + " are " + String.join(",", REQUIRED_LDAP_AUTH));
+        }
+
+        if (ldapAuth == LdapAuth.SIMPLE &&
+            !properties.containsKey(LDAP_PROP_ROOT_PWD_KEY)) {
+            throw new SemanticException("missing required property: " + LDAP_PROP_ROOT_PWD_KEY);
+        }
+
         validateIntegerProp(properties, LDAP_PROP_CONN_TIMEOUT_MS_KEY,
                 10, Integer.MAX_VALUE);
         validateIntegerProp(properties, LDAP_PROP_CONN_READ_TIMEOUT_MS_KEY,
@@ -297,9 +340,9 @@ public class LDAPGroupProvider extends GroupProvider {
         }
     }
 
-    public DirContext createDirContextOnConnection(String dn, String pwd) throws NamingException, IOException,
+    public DirContext createDirContextOnConnection(String dn, String pwd, LdapAuth ldapAuth) throws NamingException, IOException,
             GeneralSecurityException {
-        if (Strings.isNullOrEmpty(pwd)) {
+        if (ldapAuth == LdapAuth.SIMPLE && Strings.isNullOrEmpty(pwd)) {
             LOG.warn("empty password is not allowed for simple authentication");
             throw new IOException("empty password is not allowed for simple authentication");
         }
@@ -307,6 +350,9 @@ public class LDAPGroupProvider extends GroupProvider {
         String url = getLdapConnUrl();
         Hashtable<String, String> environment = new Hashtable<>();
         dn = StringUtils.strip(dn, "\"'");
+        if (ldapAuth == LdapAuth.SIMPLE) {
+            environment.put(Context.SECURITY_CREDENTIALS, pwd);
+        }
         environment.put(Context.SECURITY_CREDENTIALS, pwd);
         environment.put(Context.SECURITY_PRINCIPAL, dn);
         environment.put(Context.SECURITY_AUTHENTICATION, "simple");
@@ -393,6 +439,10 @@ public class LDAPGroupProvider extends GroupProvider {
 
     public Long getLdapCacheRefreshInterval() {
         return Long.parseLong(properties.getOrDefault(LDAP_CACHE_REFRESH_INTERVAL, "300"));
+    }
+
+    public String getLdapAuth() {
+        return properties.get(LDAP_AUTH);
     }
 
     private void validateIntegerProp(Map<String, String> propertyMap, String key, int min, int max)
