@@ -24,7 +24,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -123,7 +122,7 @@ public class SubqueryUtils {
     /**
      * ApplyNode doesn't need to check the number of subquery's return rows
      * when the correlation predicate meets these requirements:
-     * 1. All predicate is Binary.EQ
+     * 1. All predicate is Binary.EQ or Binary.EQ_FOR_NULL
      */
     public static boolean checkAllIsBinaryEQ(List<ScalarOperator> correlationPredicate) {
         for (ScalarOperator predicate : correlationPredicate) {
@@ -132,7 +131,7 @@ public class SubqueryUtils {
             }
 
             BinaryPredicateOperator bpo = ((BinaryPredicateOperator) predicate);
-            if (!BinaryType.EQ.equals(bpo.getBinaryType())) {
+            if (!bpo.getBinaryType().isEquivalence()) {
                 return false;
             }
         }
@@ -149,7 +148,7 @@ public class SubqueryUtils {
         }
 
         BinaryPredicateOperator bpo = ((BinaryPredicateOperator) correlationPredicate);
-        if (!BinaryType.EQ.equals(bpo.getBinaryType())) {
+        if (!bpo.getBinaryType().isEquivalence()) {
             return false;
         }
 
