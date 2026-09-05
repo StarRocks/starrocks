@@ -271,23 +271,28 @@ message SegmentFooterPB {
     // and read short_key_index_page as before.
     optional PagePointerPB full_sort_key_index_page = 11;
 
-    // Byte range of the "small index region": one contiguous run, written immediately before
-    // this footer, holding the short key index page(s) and the ordinal index and page zone map
-    // of EVERY column -- i.e. exactly the indexes a cold scan must read before it can touch a
-    // single data page. In the legacy layout each column's indexes sit right after that column's
-    // own data pages, so opening a segment costs scattered small reads across the whole file.
+    // Byte range of the "small index region": one contiguous run, written
+    // immediately before this footer, holding the short key index page(s) and
+    // the ordinal index and page zone map of EVERY column -- i.e. exactly the
+    // indexes a cold scan must read before it can touch a single data page. In
+    // the legacy layout each column's indexes sit right after that column's own
+    // data pages, so opening a segment costs scattered small reads across the
+    // whole file.
     //
-    // Written whenever config::enable_segment_tail_index_region was on at write time; writers
-    // that finalize several column groups retain these indexes until the footer is finalized.
-    // Absent otherwise, in which case the layout is exactly as before.
+    // Written whenever config::enable_segment_tail_index_region was on at write
+    // time; writers that finalize several column groups retain these indexes
+    // until the footer is finalized. Absent otherwise, in which case the layout
+    // is exactly as before.
     //
-    // Within the region the independently loaded short key index comes first, then all ordinal
-    // indexes, then all page zone maps. The latter two groups match their relative order in the
-    // scan path. This order is not part of the format contract: every index is still located
-    // through its own absolute PagePointer in `columns`, so readers remain correct if the
-    // physical order changes. Offsets use the same origin as every other PagePointer in this
-    // footer -- the segment's own start, which is bundle-file relative when this segment is a
-    // slice of a bundle file.
+    // Within the region the independently loaded short key index comes first,
+    // then all page zone maps, then all ordinal indexes. Keeping ordinal
+    // indexes next to the footer lets them reuse the cache block fetched while
+    // parsing it. This order is not part of the format contract: every index is
+    // still located through its own absolute PagePointer in `columns`, so
+    // readers remain correct if the physical order changes. Offsets use the
+    // same origin as every other PagePointer in this footer -- the segment's
+    // own start, which is bundle-file relative when this segment is a slice of
+    // a bundle file.
     optional uint64 small_index_region_offset = 12;
     optional uint64 small_index_region_size = 13;
 }

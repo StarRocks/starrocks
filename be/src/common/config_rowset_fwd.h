@@ -69,11 +69,12 @@ CONF_Int32(data_page_size, "65536");
 // every accessed column, and the page zone map of every predicate column, before it can read
 // any data. In the legacy layout those live at N scattered offsets, so they cost N serial
 // round trips to remote storage, each pulling a whole cache block. At the tail they share cache
-// blocks. All ordinal indexes precede all page zone maps, matching their relative read order.
-// The independently loaded, conditional short key index leads the region so it does not split
-// those two per-column groups. Writers that finalize columns in several groups retain these
-// small indexes until the footer is finalized, so vertical compaction and partial-update
-// rewrites use the same layout.
+// blocks. Page zone maps precede ordinal indexes so the ordinal indexes -- required by every
+// projected column -- sit next to the footer and can reuse the cache block fetched while parsing
+// it. The independently loaded, conditional short key index leads the region so it does not
+// displace ordinal indexes from the footer block. Writers that finalize columns in several groups
+// retain these small indexes until the footer is finalized, so vertical compaction and
+// partial-update rewrites use the same layout.
 CONF_mBool(enable_segment_tail_index_region, "false");
 
 // When true, high-cardinality string columns that fall back to plain encoding are written with

@@ -538,7 +538,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：Segment 写入时，是否把 short key index、所有列的 ordinal index 和页级 zone map 放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的索引写在该列数据页之后。区域内先写独立加载的 short key index，再写所有 ordinal index，最后写所有页级 zone map；后两组的相对顺序与扫描路径一致。索引聚集后，冷查访问对象存储时能更充分地复用 Data Cache block。该配置仅影响写入侧。所有会写出 segment footer 的路径都会生成该区域，包括纵向 Compaction 和部分列更新重写。两种布局都能被任意版本的 BE/CN 读取，并可在同一张表中共存。
+- 描述：Segment 写入时，是否把 short key index、所有列的 ordinal index 和页级 zone map 放在紧邻 segment footer 之前的一段连续区域内，而不是把每一列的索引写在该列数据页之后。区域内先写独立加载的 short key index，再写所有页级 zone map，最后写所有 ordinal index。ordinal index 紧邻 footer，可以复用解析 footer 时读入的 Data Cache block。索引聚集后，冷查访问对象存储时能更充分地复用 Data Cache block。该配置仅影响写入侧。所有会写出 segment footer 的路径都会生成该区域，包括纵向 Compaction 和部分列更新重写。两种布局都能被任意版本的 BE/CN 读取，并可在同一张表中共存。
 - 引入版本：v4.2.0
 
 ### enable_size_tiered_compaction_strategy

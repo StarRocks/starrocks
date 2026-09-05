@@ -14,7 +14,7 @@
 
 // Covers config::enable_segment_tail_index_region: the segment writer gathers the short key index
 // and every column's ordinal index and page zone map into one contiguous run immediately before
-// the footer, grouped by index kind so all ordinal indexes precede all page zone maps, instead of
+// the footer, grouped by index kind so all page zone maps precede all ordinal indexes, instead of
 // interleaving each column's indexes after that column's own data pages.
 //
 // The two layouts must be indistinguishable to a reader -- every index is located through an
@@ -336,9 +336,9 @@ TEST_F(SegmentTailIndexRegionTest, VerticalAndHorizontalRegionsAgree) {
     verify_all_rows(v_file, tablet_schema);
 }
 
-// The region holds the independently loaded short key index first, then follows the per-column
-// scan path: all ordinal indexes before all page zone maps. Grouping the two per-column index
-// kinds prevents the later zone-map pass from moving back across ordinal indexes already used.
+// The region holds the independently loaded short key index first, then all page zone maps, with
+// all ordinal indexes next to the footer. The footer read can therefore warm the ordinal indexes
+// needed by every projected column, while conditional zone maps do not displace them.
 TEST_F(SegmentTailIndexRegionTest, RegionIsOrderedByIndexKind) {
     auto tablet_schema = make_schema();
     config::enable_segment_tail_index_region = true;
@@ -356,11 +356,11 @@ TEST_F(SegmentTailIndexRegionTest, RegionIsOrderedByIndexKind) {
         ASSERT_TRUE(result.footer.has_short_key_index_page());
         const uint64_t short_key = result.footer.short_key_index_page().offset();
         const uint64_t first_ordinal = *std::min_element(ordinals.begin(), ordinals.end());
-        const uint64_t last_ordinal = *std::max_element(ordinals.begin(), ordinals.end());
+        const uint64_t last_zone_map = *std::max_element(zone_maps.begin(), zone_maps.end());
         const uint64_t first_zone_map = *std::min_element(zone_maps.begin(), zone_maps.end());
 
-        EXPECT_LT(short_key, first_ordinal);
-        EXPECT_LT(last_ordinal, first_zone_map);
+        EXPECT_LT(short_key, first_zone_map);
+        EXPECT_LT(last_zone_map, first_ordinal);
     }
 }
 
