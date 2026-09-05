@@ -1346,6 +1346,15 @@ CONF_mInt32(spill_init_partition, "16");
 CONF_Int32(spill_max_partition_level, "7");
 CONF_Int32(spill_max_partition_size, "1024");
 
+// Test-only knobs for reproducing the spillable-sort cancel race. Both are inert at their
+// defaults. Kept as mutable configs rather than failpoints so they work in a stock build
+// (failpoints are compiled out unless the build passes --enable-fault-injection).
+// Force the spillable sorter into SPILL_ALL at do_done(), so it reliably has spilled state.
+CONF_mBool(spill_sort_force_spill_on_done, "false");
+// Park the spill IO thread for this long inside _spill_process_task(), right before it reads
+// _sorted_chunks, widening the window in which a concurrent cancel can destroy that vector.
+CONF_mInt32(spill_sort_process_task_sleep_ms, "0");
+
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
