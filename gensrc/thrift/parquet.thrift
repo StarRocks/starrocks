@@ -313,7 +313,7 @@ struct JsonType {
 struct BsonType {
 }
 
-// Apache Parquet geospatial annotations. Wire ordinals match parquet-format.
+/** Edge interpolation algorithm for Geography logical type */
 enum EdgeInterpolationAlgorithm {
   SPHERICAL = 0;
   VINCENTY = 1;
@@ -322,30 +322,66 @@ enum EdgeInterpolationAlgorithm {
   KARNEY = 4;
 }
 
-// ISO/OGC WKB in BYTE_ARRAY; absent CRS means OGC:CRS84.
+/**
+ * Embedded Geometry logical type annotation
+ *
+ * Geospatial features in the Well-Known Binary (WKB) format and `edges` interpolation
+ * is always linear/planar.
+ *
+ * A custom CRS can be set by the crs field. If unset, it defaults to "OGC:CRS84",
+ * which means that the geometries must be stored in longitude, latitude based on
+ * the WGS84 datum.
+ *
+ * Allowed for physical type: BYTE_ARRAY.
+ *
+ * See Geospatial.md for details.
+ */
 struct GeometryType {
   1: optional string crs;
 }
 
+/**
+ * Embedded Geography logical type annotation
+ *
+ * Geospatial features in the WKB format with an explicit (non-linear/non-planar)
+ * `edges` interpolation algorithm.
+ *
+ * A custom geographic CRS can be set by the crs field, where longitudes are
+ * bound by [-180, 180] and latitudes are bound by [-90, 90]. If unset, the CRS
+ * defaults to "OGC:CRS84".
+ *
+ * An optional algorithm can be set to correctly interpret `edges` interpolation
+ * of the geometries. If unset, the algorithm defaults to SPHERICAL.
+ *
+ * Allowed for physical type: BYTE_ARRAY.
+ *
+ * See Geospatial.md for details.
+ */
 struct GeographyType {
   1: optional string crs;
   2: optional EdgeInterpolationAlgorithm algorithm;
 }
 
-// Retained as metadata only. Spatial pruning is not enabled.
+/**
+ * Bounding box for GEOMETRY or GEOGRAPHY type in the representation of min/max
+ * value pair of coordinates from each axis.
+ */
 struct BoundingBox {
-  1: optional double xmin;
-  2: optional double xmax;
-  3: optional double ymin;
-  4: optional double ymax;
+  1: required double xmin;
+  2: required double xmax;
+  3: required double ymin;
+  4: required double ymax;
   5: optional double zmin;
   6: optional double zmax;
   7: optional double mmin;
   8: optional double mmax;
 }
 
+/** Statistics specific to Geometry and Geography logical types */
 struct GeospatialStatistics {
+  /** A bounding box of geospatial instances */
   1: optional BoundingBox bbox;
+  /** Geospatial type codes of all instances, or an empty list if not known */
   2: optional list<i32> geospatial_types;
 }
 

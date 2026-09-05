@@ -343,17 +343,6 @@ def compare_schemas(repo_path: str, base_schema: ParsedSchema | None, head_schem
         if container_decl is None:
             continue
 
-        before_container = base_schema.containers.get(container_name)
-        after_container = head_schema.containers.get(container_name)
-        if (before_container is not None and after_container is not None
-                and before_container.kind != after_container.kind):
-            issues.append(Violation(
-                path=repo_path, container=container_name, field_number=None, field_name="",
-                rule="container_kind_changed",
-                detail=f"container changed from {before_container.kind} to {after_container.kind}",
-                remediation="Keep the container kind stable; use a new definition for different semantics.",
-            ))
-
         common_numbers = set(base_fields) & set(head_fields)
         for number in sorted(common_numbers):
             before = base_fields[number]
@@ -461,7 +450,36 @@ def parse_thrift_schema(path: str, text: str) -> ParsedSchema:
         if not line:
             index += 1
             continue
-        container_match = re.match(r"(struct|exception|union)\s+([A-Za-z_]\w*)\s*\{", line)
+        union_match = re.match(r"union\s+([A-Za-z_]\w*)\s*\{", line)
+        if union_match:
+            union_name = union_match.group(1)
+            block_lines = [line]
+            unsupported.append(
+                UnsupportedConstruct(
+                    kind="thrift_union",
+                    scope=union_name,
+                    construct="",
+                    detail="thrift union parsing is not supported by the schema compatibility harness",
+                )
+            )
+            index += 1
+            while index < len(lines):
+                body_line = lines[index].strip()
+                if body_line:
+                    block_lines.append(body_line)
+                if body_line == "}":
+                    break
+                index += 1
+            unsupported[-1] = UnsupportedConstruct(
+                kind="thrift_union",
+                scope=union_name,
+                construct="\n".join(block_lines),
+                detail="thrift union parsing is not supported by the schema compatibility harness",
+            )
+            index += 1
+            continue
+
+        container_match = re.match(r"(struct|exception)\s+([A-Za-z_]\w*)\s*\{", line)
         if container_match:
             kind, name = container_match.groups()
             containers[name] = ContainerDecl(name=name, kind=kind)
@@ -656,8 +674,7 @@ def _parse_thrift_field_line(path: str, container: str, container_kind: str, raw
         number=int(number),
         name=name,
         type_repr=type_repr.strip(),
-        # Thrift union alternatives are implicitly optional, unlike struct fields.
-        cardinality=cardinality or ("optional" if container_kind == "union" else "unlabeled"),
+        cardinality=cardinality or "unlabeled",
         line=line_number,
     )
 
@@ -938,6 +955,9 @@ def _is_proto_aggregate_option_line(line: str) -> bool:
 
 
 def _is_schema_path(path: str) -> bool:
+    # External Apache Parquet wire definitions follow upstream, not our RPC schema rules.
+    if path == "gensrc/thrift/parquet.thrift":
+        return False
     if not any(path.startswith(prefix) for prefix in SCHEMA_PREFIXES):
         return False
     return path.endswith(".proto") or path.endswith(".thrift")

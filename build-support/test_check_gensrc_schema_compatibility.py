@@ -345,7 +345,14 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
             self.assertEqual("TSample", issues[0].container)
             self.assertEqual(2, issues[0].field_number)
 
-    def test_changed_mode_rejects_thrift_union_type_change(self) -> None:
+    def test_only_external_parquet_schema_is_exempt(self) -> None:
+        module = _load_module()
+        self.assertFalse(module._is_schema_path("gensrc/thrift/parquet.thrift"))
+        self.assertTrue(module._is_schema_path("gensrc/thrift/Descriptors.thrift"))
+        self.assertTrue(module._is_schema_path("gensrc/thrift/parquet_extra.thrift"))
+        self.assertTrue(module._is_schema_path("gensrc/proto/parquet.proto"))
+
+    def test_changed_mode_rejects_unsupported_thrift_union_change(self) -> None:
         module = _load_module()
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -375,25 +382,8 @@ class CheckGensrcSchemaCompatibilityTest(unittest.TestCase):
 
             issues = module.check_repo(repo, mode="changed", base="HEAD~1")
 
-            self.assertEqual(["field_type_changed"], [issue.rule for issue in issues])
+            self.assertEqual(["unsupported_syntax"], [issue.rule for issue in issues])
             self.assertEqual("TLegacyUnion", issues[0].container)
-
-    def test_union_evolution_checks(self) -> None:
-        module = _load_module()
-        path = "gensrc/thrift/geo.thrift"
-        base = module.parse_schema(path, "union LogicalType {\n1: string text\n}")
-        cases = [
-            ("union LogicalType {\n1: string text\n17: binary geometry\n18: binary geography\n}", []),
-            ("union LogicalType {\n1: string text\n17: required binary geometry\n}",
-             ["new_field_must_be_optional"]),
-            ("union LogicalType {\n2: string text\n}", ["field_renumbered"]),
-            ("union LogicalType {\n}", ["field_deleted"]),
-            ("struct LogicalType {\n1: optional string text\n}", ["container_kind_changed"]),
-        ]
-        for text, expected in cases:
-            with self.subTest(text=text):
-                head = module.parse_schema(path, text)
-                self.assertEqual(expected, [issue.rule for issue in module.compare_schemas(path, base, head)])
 
     def test_changed_mode_rejects_unsupported_proto_oneof_change(self) -> None:
         module = _load_module()

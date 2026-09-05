@@ -95,6 +95,41 @@ TEST(GeoAnnotationWireTest, OptionalDefaultsAndOrdinaryBinary) {
     EXPECT_EQ(field, decoded);
 }
 
+TEST(GeoAnnotationWireTest, BoundingBoxRequiresXYButNotZM) {
+    using namespace apache::thrift::protocol;
+    // Independently encode the upstream fields, omitting each required coordinate in turn.
+    for (int16_t omitted = 0; omitted <= 4; ++omitted) {
+        auto buffer = std::make_shared<apache::thrift::transport::TMemoryBuffer>();
+        TCompactProtocol protocol(buffer);
+        protocol.writeStructBegin("BoundingBox");
+        for (int16_t id = 1; id <= 4; ++id) {
+            if (id == omitted) {
+                continue;
+            }
+            protocol.writeFieldBegin("coordinate", T_DOUBLE, id);
+            protocol.writeDouble(id);
+            protocol.writeFieldEnd();
+        }
+        protocol.writeFieldStop();
+        protocol.writeStructEnd();
+        tparquet::BoundingBox bbox;
+        if (omitted != 0) {
+            EXPECT_THROW(bbox.read(&protocol), TProtocolException);
+        } else {
+            ASSERT_NO_THROW(bbox.read(&protocol));
+            EXPECT_EQ(1, bbox.xmin);
+            EXPECT_EQ(2, bbox.xmax);
+            EXPECT_EQ(3, bbox.ymin);
+            EXPECT_EQ(4, bbox.ymax);
+            EXPECT_FALSE(bbox.__isset.zmin);
+            EXPECT_FALSE(bbox.__isset.zmax);
+            EXPECT_FALSE(bbox.__isset.mmin);
+            EXPECT_FALSE(bbox.__isset.mmax);
+            EXPECT_EQ(bbox, round_trip(bbox));
+        }
+    }
+}
+
 TEST(GeoAnnotationWireTest, GeospatialStatisticsRemainMetadata) {
     tparquet::BoundingBox bbox;
     bbox.__set_xmin(-180);
