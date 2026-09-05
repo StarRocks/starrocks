@@ -387,6 +387,13 @@ uint64_t SegmentWriter::current_filesz() const {
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
     RETURN_IF_ERROR(finalize_columns(index_size));
+    // The deferred region is written by finalize_footer(), so its bytes are added here rather
+    // than inside finalize_columns(). (The vertical path discards its per-group index_size
+    // already, so nothing is lost there.)
+    if (_small_index_region_deferred) {
+        RETURN_IF_ERROR(_write_small_index_region(index_size));
+        _small_index_region_deferred = false;
+    }
     *footer_position = _wfile->size();
     return finalize_footer(segment_file_size);
 }
@@ -402,6 +409,25 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     _num_rows_written = 0;
 
     size_t num_columns = _tablet_schema->num_columns();
+
+    // Gather the ordinal index of every column into one contiguous run at the tail (see
+    // config::enable_segment_tail_index_region). Keep each page zone map next to its column's
+    // data pages: a predicate scan often reads both, so moving the zone map away can add a remote
+    // cache-block read rather than remove one.
+    //
+    // This works for a vertical writer too, which calls finalize_columns() once per column
+    // group: the deferred writers accumulate across groups and finalize_footer() flushes them
+    // all at the end, so an early group's indexes still land at the tail rather than under a
+    // later group's data pages. That matters far more than it first appears -- compaction picks
+    // VERTICAL for any table wider than vertical_compaction_max_columns_per_group (5) with more
+    // than one source rowset, so leaving it on the legacy layout would mean the region vanished
+    // from essentially every wide table at its first real compaction.
+    //
+    // Page zone maps and the larger optional indexes (bloom filter, bitmap, inverted, vector)
+    // deliberately stay inline. Only ordinal indexes are needed by every projected column and
+    // benefit consistently from being adjacent to the footer.
+    const bool defer_ordinal_index = config::enable_segment_tail_index_region;
+
     for (size_t i = 0; i < _column_indexes.size(); ++i) {
         uint32_t column_index = _column_indexes[i];
         if (column_index >= num_columns) {
@@ -415,7 +441,9 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_data());
         // write index
         uint64_t index_offset = _wfile->size();
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        if (!defer_ordinal_index) {
+            RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        }
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
@@ -446,11 +474,27 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // check global dict valid
         _check_column_global_dict_valid(column_writer.get(), column_index);
 
-        // reset to release memory
-        column_writer.reset();
+        if (defer_ordinal_index) {
+            // Survives until finalize_footer(). The data pages this writer was buffering were
+            // just released by write_data(), so what is retained is only the ordinal-index
+            // builder. The page zone map has already been written next to the column data.
+            _deferred_small_index_writers.push_back(std::move(column_writer));
+        } else {
+            // reset to release memory
+            column_writer.reset();
+        }
     }
+
     _column_writers.clear();
     _column_indexes.clear();
+
+    if (defer_ordinal_index) {
+        // The short key index waits too. A vertical writer only has the key columns in its
+        // first group, so writing it here would bury it under every later group's data.
+        _small_index_region_deferred = true;
+        _short_key_index_pending = _short_key_index_pending || _has_key;
+        return Status::OK();
+    }
 
     if (_has_key) {
         uint64_t index_offset = _wfile->size();
@@ -462,7 +506,47 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     return Status::OK();
 }
 
+// The short key index followed by every column's ordinal index, written back to back immediately
+// before the footer. Called from finalize_footer() so that it runs after the LAST column group's
+// data, which is what lets a vertical writer produce the layout at all. Page zone maps stay next
+// to their column data and are not part of this region.
+Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
+    const uint64_t region_offset = _wfile->size();
+
+    // The short key index is conditional and loaded independently from the per-column indexes.
+    // Put it first so it does not displace the always-read ordinal indexes from the footer block.
+    if (_short_key_index_pending) {
+        RETURN_IF_ERROR(_write_short_key_index());
+        _index_builder.reset();
+        _full_sort_key_index_builder.reset();
+        _short_key_index_pending = false;
+    }
+
+    // Parsing the footer already fetches the file's final cache block, so the ordinal indexes
+    // needed by every projected column can often be served from that block.
+    for (auto& column_writer : _deferred_small_index_writers) {
+        RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        // reset to release memory
+        column_writer.reset();
+    }
+    _deferred_small_index_writers.clear();
+
+    const uint64_t region_size = _wfile->size() - region_offset;
+    if (index_size != nullptr) {
+        *index_size += region_size;
+    }
+    _footer.set_small_index_region_offset(region_offset);
+    _footer.set_small_index_region_size(region_size);
+    return Status::OK();
+}
+
 Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position) {
+    if (_small_index_region_deferred) {
+        // Before footer_position is taken: the region has to sit between the last data page and
+        // the footer, and the caller's footer_position must point at the footer itself.
+        RETURN_IF_ERROR(_write_small_index_region(nullptr));
+        _small_index_region_deferred = false;
+    }
     if (footer_position != nullptr) {
         *footer_position = _wfile->size();
     }

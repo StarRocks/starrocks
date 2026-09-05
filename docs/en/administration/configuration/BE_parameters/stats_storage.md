@@ -496,6 +496,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to verify the correctness of generated rowsets. When enabled, the correctness of the generated rowsets will be checked after Compaction and Schema Change.
 - Introduced in: -
 
+### enable_segment_tail_index_region
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the segment writer places the short key index and the ordinal index of every column in one contiguous region immediately before the segment footer, instead of writing each ordinal index directly after that column's data pages. Page zone maps remain next to the column data, where a predicate scan can reuse the same cache block. Keeping ordinal indexes next to the footer lets them reuse the cache block fetched while parsing the footer and improves cache-block locality for cold reads from object storage. Only the write side is gated by this configuration. Every write path that finalizes a segment footer produces the region, including vertical compaction and partial-update rewrites. Both layouts remain readable by any BE or CN version and can coexist in the same table.
+- Introduced in: v4.2.0
+
 ### enable_size_tiered_compaction_strategy
 
 - Default: true

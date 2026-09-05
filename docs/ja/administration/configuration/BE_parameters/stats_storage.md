@@ -425,6 +425,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 生成された rowset の正確性を検証するかどうか。 有効にすると、コンパクションとスキーマ変更後に生成された rowset の正確性がチェックされます。
 - 導入バージョン: -
 
+### enable_segment_tail_index_region
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: segment の書き込み時に、short key index と全列の ordinal index を segment footer の直前の連続領域に配置するかどうか。従来は各 ordinal index をその列のデータページの直後に書き込みます。ページ単位の zone map は列データの近くに残すため、述語スキャンでは同じ Data Cache block を再利用できます。ordinal index を footer に隣接させることで、footer の解析時に読み込まれた Data Cache block を再利用し、オブジェクトストレージからのコールド読み取り時の分散したアクセスを減らせます。本設定は書き込み側のみを制御します。垂直 Compaction と部分列更新の書き換えを含め、segment footer を書き出すすべてのパスがこの領域を生成します。どちらのレイアウトも任意の BE/CN バージョンで読み取ることができ、同一テーブル内に共存できます。
+- 導入バージョン: v4.2.0
+
 ### enable_size_tiered_compaction_strategy
 
 - デフォルト: true
