@@ -1296,11 +1296,20 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
     EXPECT_EQ(9, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(14, final_rowset.segment_metas(2).segment_idx());
     ASSERT_EQ(3, final_rowset.del_files_size());
+    // A del's op_offset names the last segment of the op_write that PRODUCED it, in the merged
+    // rowset's segment-id space -- not the merged rowset's last segment. batch 1's segments land at
+    // 3 and 9, so its two dels resolve to 9; batch 2's single segment lands at 14, so its del
+    // resolves to 14. Recording all three at 14 (what an unresolved -1 used to produce in
+    // set_final_rowset) would sort batch 1's deletes after batch 2's segment, which is not where
+    // apply put them.
     std::set<std::string> del_names;
+    std::map<std::string, uint32_t> expected_op_offset{{"d1.del", 9}, {"d2.del", 9}, {"d3.del", 14}};
     for (int i = 0; i < final_rowset.del_files_size(); ++i) {
-        del_names.insert(final_rowset.del_files(i).name());
+        const auto& name = final_rowset.del_files(i).name();
+        del_names.insert(name);
         EXPECT_EQ(final_rowset.id(), final_rowset.del_files(i).origin_rowset_id());
-        EXPECT_EQ(14, final_rowset.del_files(i).op_offset());
+        ASSERT_TRUE(expected_op_offset.count(name) > 0) << name;
+        EXPECT_EQ(expected_op_offset[name], final_rowset.del_files(i).op_offset()) << name;
     }
     EXPECT_TRUE(del_names.count("d1.del") > 0);
     EXPECT_TRUE(del_names.count("d2.del") > 0);
@@ -1349,7 +1358,10 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(1, final_rowset.segment_metas(1).segment_idx());
     EXPECT_EQ(2, final_rowset.segment_metas(2).segment_idx());
     ASSERT_EQ(2, final_rowset.del_files_size());
-    EXPECT_EQ(2, final_rowset.del_files(0).op_offset());
+    // Same contract as test_batch_apply_opwrite_merge_dels: each del follows its own op_write's last
+    // segment. batch 1's segments are positional 0 and 1, so d1 resolves to 1; batch 2's single
+    // segment is remapped to 2, so d2 resolves to 2.
+    EXPECT_EQ(1, final_rowset.del_files(0).op_offset());
     EXPECT_EQ(2, final_rowset.del_files(1).op_offset());
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
