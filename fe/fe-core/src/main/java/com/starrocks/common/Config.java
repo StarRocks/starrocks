@@ -1885,6 +1885,12 @@ public class Config extends ConfigBase {
     public static long proc_profile_collect_time_s = 120;
 
     /**
+     * The interval between proc profile cleanup runs
+     */
+    @ConfField(mutable = true, comment = "The interval between proc profile cleanup runs")
+    public static long proc_profile_cleanup_interval_s = 300;
+
+    /**
      * The number of days to retain profile files
      */
     @ConfField(mutable = true, comment = "The number of days to retain profile files")
