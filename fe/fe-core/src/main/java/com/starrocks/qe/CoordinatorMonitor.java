@@ -17,6 +17,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Queues;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -25,6 +26,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -42,11 +47,20 @@ public class CoordinatorMonitor {
     private final BlockingQueue<Long> comingDeadBackendIDQueue;
     private final AtomicBoolean started;
     private final DeadBackendAndComputeNodeChecker checker;
+    private final ExecutorService cancelExecutor;
 
     public CoordinatorMonitor() {
         comingDeadBackendIDQueue = Queues.newLinkedBlockingDeque(COMING_DEAD_BACKEND_QUEUE_CAPACITY);
         started = new AtomicBoolean(false);
         checker = new DeadBackendAndComputeNodeChecker();
+        // Coordinator.cancel() takes the coordinator lock, and deliverExecFragments() holds that same lock for
+        // the whole deployment RPC round-trip — up to query_delivery_timeout when the target node is the one
+        // that just died. Cancelling coordinators one after another on the checker thread would let a single
+        // query stuck in deployment delay the cancellation of every other query. Give each cancel its own
+        // thread; the pool is unbounded so a cancel is never dropped, and idle threads go away after a minute.
+        cancelExecutor = ThreadPoolManager.newDaemonThreadPool(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+                new SynchronousQueue<>(), new ThreadPoolExecutor.AbortPolicy(), "coordinator-monitor-cancel",
+                false);
     }
 
     public static CoordinatorMonitor getInstance() {
@@ -83,20 +97,48 @@ public class CoordinatorMonitor {
                     deadBackendIDs.add(backendID);
                 }
 
-                final List<Coordinator> coordinators = QeProcessorImpl.INSTANCE.getCoordinators();
-                for (Coordinator coord : coordinators) {
-                    boolean isUsingDeadBackend = deadBackendIDs.stream().anyMatch(coord::isUsingBackend);
-                    if (isUsingDeadBackend) {
-                        if (LOG.isWarnEnabled()) {
-                            LOG.warn("Cancel query [{}], because some related backend is not alive",
-                                    DebugUtil.printId(coord.getQueryId()));
-                        }
-                        coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR,
-                                FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
-                    }
+                try {
+                    cancelCoordinatorsUsing(deadBackendIDs);
+                } catch (Throwable e) {
+                    // This thread is the only thing that cancels queries on dead nodes and nothing restarts it.
+                    // Whatever one sweep throws must not take it down for the rest of the process lifetime.
+                    LOG.warn("failed to cancel queries on dead backends {}", deadBackendIDs, e);
                 }
 
                 deadBackendIDs.clear();
+            }
+        }
+
+        private void cancelCoordinatorsUsing(List<Long> deadBackendIDs) {
+            final List<Coordinator> coordinators = QeProcessorImpl.INSTANCE.getCoordinators();
+            for (Coordinator coord : coordinators) {
+                if (coord == null) {
+                    continue;
+                }
+                final boolean isUsingDeadBackend;
+                try {
+                    isUsingDeadBackend = deadBackendIDs.stream().anyMatch(coord::isUsingBackend);
+                } catch (Throwable e) {
+                    LOG.warn("failed to check whether query [{}] uses a dead backend, skip it",
+                            DebugUtil.printId(coord.getQueryId()), e);
+                    continue;
+                }
+                if (!isUsingDeadBackend) {
+                    continue;
+                }
+                if (LOG.isWarnEnabled()) {
+                    LOG.warn("Cancel query [{}], because some related backend is not alive",
+                            DebugUtil.printId(coord.getQueryId()));
+                }
+                cancelExecutor.execute(() -> {
+                    try {
+                        coord.cancel(PPlanFragmentCancelReason.INTERNAL_ERROR,
+                                FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+                    } catch (Throwable e) {
+                        LOG.warn("failed to cancel query [{}] whose backend is not alive",
+                                DebugUtil.printId(coord.getQueryId()), e);
+                    }
+                });
             }
         }
     }
