@@ -15,6 +15,7 @@
 #include "storage/memtable.h"
 
 #include <memory>
+#include <sstream>
 
 #include "base/time/time.h"
 #include "column/binary_column.h"
@@ -327,14 +328,18 @@ Status MemTable::finalize() {
             _chunk_bytes_usage = 0;
 
             _result_chunk = _aggregator->aggregate_result();
-            if (_keys_type == PRIMARY_KEYS &&
-                PrimaryKeyEncoder::encode_exceed_limit(*_vectorized_schema, *_result_chunk.get(), 0,
-                                                       _result_chunk->num_rows(), config::primary_key_limit_size,
-                                                       _pk_encoding_type)) {
-                _aggregator.reset();
-                _aggregator_memory_usage = 0;
-                _aggregator_bytes_usage = 0;
-                return Status::Cancelled(kPrimaryKeySizeExceedError);
+            if (_keys_type == PRIMARY_KEYS) {
+                auto exceed_idx = PrimaryKeyEncoder::find_first_exceed_limit_index(
+                        *_vectorized_schema, *_result_chunk.get(), 0, _result_chunk->num_rows(),
+                        config::primary_key_limit_size, _pk_encoding_type);
+                if (exceed_idx >= 0) {
+                    _aggregator.reset();
+                    _aggregator_memory_usage = 0;
+                    _aggregator_bytes_usage = 0;
+                    return Status::Cancelled(fmt::format("{} key: {}, tablet: {}, limit: {}",
+                                                         kPrimaryKeySizeExceedError, _debug_primary_key_row(exceed_idx),
+                                                         _tablet_id, config::primary_key_limit_size));
+                }
             }
             // Bound the sort key for every admitted row, not just the rows that become index entries,
             // so a later re-blocking during compaction or a post-commit rewrite cannot promote an
@@ -447,6 +452,28 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size, 
             << "io time: " << _stats.io_time_ns / 1000 << "us, memory bytes: " << _stats.flush_memory_size
             << ", disk bytes: " << _stats.flush_disk_size;
     return Status::OK();
+}
+
+std::string MemTable::_debug_primary_key_row(size_t row_idx) const {
+    DCHECK(_result_chunk != nullptr);
+    std::stringstream os;
+    os << "[";
+    int ncol = _vectorized_schema->num_key_fields();
+    for (int i = 0; i < ncol; ++i) {
+        if (i > 0) {
+            os << ", ";
+        }
+        std::string item = _result_chunk->get_column_by_index(i)->debug_item(row_idx);
+        // cap each key value to avoid log explosion on very long keys
+        constexpr size_t kMaxValueLen = 200;
+        if (item.size() > kMaxValueLen) {
+            item.resize(kMaxValueLen);
+            item.append("...");
+        }
+        os << _vectorized_schema->field(i)->name() << "=" << item;
+    }
+    os << "]";
+    return os.str();
 }
 
 Status MemTable::_merge() {

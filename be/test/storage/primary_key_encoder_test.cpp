@@ -212,6 +212,13 @@ TEST(PrimaryKeyEncoderTest, testDecodeCompositeWithSkipFlag) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
+        auto sc = create_key_schema({TYPE_INT, TYPE_INT});
+        auto pchunk = ChunkFactory::new_chunk(*sc, 0);
+        EXPECT_EQ(-1, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, 0, 1,
+                                                                       PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+    }
+
+    {
         auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
         auto pchunk = ChunkFactory::new_chunk(*sc, n);
@@ -226,10 +233,10 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_uint8(1);
         pchunk->columns()[3]->as_mutable_ptr()->append_datum(tmp);
-        EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 10,
-                                                           PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
-        EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
-                                                            PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        EXPECT_EQ(0, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, n, 10,
+                                                                      PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        EXPECT_EQ(-1, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, n, 128,
+                                                                       PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
 
     {
@@ -247,8 +254,8 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
         pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
         tmp.set_uint8(1);
         pchunk->columns()[3]->as_mutable_ptr()->append_datum(tmp);
-        EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
-                                                           PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        EXPECT_EQ(0, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, n, 128,
+                                                                      PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
 }
 
@@ -266,8 +273,10 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
                  "00000000000000000000000000000000000";
         tmp.set_slice(tmpstr);
         pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
-        EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
-                                                           PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        EXPECT_EQ(1, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, n, 128,
+                                                                      PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        EXPECT_EQ(1, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 1, 1, 128,
+                                                                      PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
     {
         auto pchunk = ChunkFactory::new_chunk(*sc, n);
@@ -278,8 +287,8 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharLimit) {
         tmpstr = "slice00000000000000000000000000000000000";
         tmp.set_slice(tmpstr);
         pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
-        EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
-                                                            PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
+        EXPECT_EQ(-1, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, n, 128,
+                                                                       PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
     }
 }
 
@@ -712,10 +721,10 @@ TEST(PrimaryKeyEncoderTest, testV2EncodeExceedLimitForComposite) {
     pchunk->columns()[2]->as_mutable_ptr()->append_datum(d);
 
     // 4 (int) + 100 (varchar) + 1 (escape for \0) + 2 (separator) + 2 (smallint) = 109
-    EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 128,
-                                                        PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
-    EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 10,
-                                                       PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+    EXPECT_EQ(-1, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, n, 128,
+                                                                   PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+    EXPECT_EQ(0, PrimaryKeyEncoder::find_first_exceed_limit_index(*sc, *pchunk, 0, n, 10,
+                                                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
 }
 
 } // namespace starrocks

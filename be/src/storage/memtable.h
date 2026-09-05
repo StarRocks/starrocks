@@ -141,6 +141,8 @@ private:
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes);
 
+    // Formats the key-column values of the given row for error reporting.
+    std::string _debug_primary_key_row(size_t row_idx) const;
     ChunkPtr _chunk;
     ChunkPtr _result_chunk;
 
