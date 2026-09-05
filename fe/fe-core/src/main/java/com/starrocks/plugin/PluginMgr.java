@@ -56,6 +56,7 @@ import com.starrocks.qe.AuditLogBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.summary.AuditLoaderPlugin;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -123,6 +124,12 @@ public class PluginMgr implements Writable {
         AuditLogBuilder auditLogBuilder = new AuditLogBuilder();
         if (!registerBuiltinPlugin(auditLogBuilder.getPluginInfo(), auditLogBuilder)) {
             LOG.warn("failed to register audit log builder");
+        }
+
+        // Builtin audit loader
+        AuditLoaderPlugin auditLoaderPlugin = new AuditLoaderPlugin();
+        if (!registerBuiltinPlugin(auditLoaderPlugin.getPluginInfo(), auditLoaderPlugin)) {
+            LOG.warn("failed to register builtin audit loader");
         }
 
         // other builtin plugins

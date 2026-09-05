@@ -219,6 +219,38 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testCheckIsInternalLoadTableWhitelist() {
+        // The credential-free internal load path only accepts an alive FE's own
+        // host/nodeName identity and exactly the whitelisted system tables.
+        new MockUp<Frontend>() {
+            @Mock
+            public boolean isAlive() {
+                return true;
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        Frontend self = GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf();
+        String host = self.getHost();
+        String nodeName = self.getNodeName();
+
+        Assertions.assertTrue(impl.checkIsInternalLoad(host, nodeName, "_statistics_", "query_history", host));
+        Assertions.assertTrue(
+                impl.checkIsInternalLoad(host, nodeName, "starrocks_audit_db__", "starrocks_audit_tbl__", host));
+        // Any other table, database or credential must be rejected.
+        Assertions.assertFalse(impl.checkIsInternalLoad(host, nodeName, "_statistics_", "column_statistics", host));
+        Assertions.assertFalse(impl.checkIsInternalLoad(host, nodeName, "other_db", "starrocks_audit_tbl__", host));
+        Assertions.assertFalse(
+                impl.checkIsInternalLoad(host, "bad-token", "starrocks_audit_db__", "starrocks_audit_tbl__", host));
+        Assertions.assertFalse(impl.checkIsInternalLoad("203.0.113.9", nodeName, "starrocks_audit_db__",
+                "starrocks_audit_tbl__", "203.0.113.9"));
+        // The two whitelisted pairs must not be crossed over.
+        Assertions.assertFalse(
+                impl.checkIsInternalLoad(host, nodeName, "_statistics_", "starrocks_audit_tbl__", host));
+        Assertions.assertFalse(
+                impl.checkIsInternalLoad(host, nodeName, "starrocks_audit_db__", "query_history", host));
+    }
+
+    @Test
     public void testGetFeMetrics() throws TException {
         // information_schema.fe_metrics is served over this RPC instead of scraping HTTP /metrics.
         // It returns the same JSON payload as /metrics?type=json with an OK status.
