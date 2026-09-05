@@ -93,7 +93,7 @@ void apply_starlet_upload_threshold_configs() {
 
     APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_max_single_part_size, fslib_s3_max_single_part_size);
     APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_s3_min_upload_part_size, fslib_s3_min_upload_part_size);
-    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_gs_max_single_part_size, fslib_gs_max_single_part_size);
+    APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_gcs_max_single_part_size, fslib_gs_max_single_part_size);
     APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_max_single_part_size,
                                    fslib_azure_storage_max_single_part_size);
     APPLY_STARLET_UPLOAD_THRESHOLD(starlet_fslib_azure_storage_min_upload_part_size,
