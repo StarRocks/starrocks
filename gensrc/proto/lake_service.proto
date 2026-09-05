@@ -373,7 +373,9 @@ message TabletDataSnapshotPB {
     repeated string new_data_files = 2;
     repeated string new_metadata_files = 3;
     repeated string new_schema_files = 4;
-    optional TabletDataSnapshotExtPB ext = 5;
+    // Tag 5 is occupied by downstream distributions; never allocate an upstream field here.
+    optional bytes placeholder_5 = 5;
+    optional TabletDataSnapshotExtPB ext = 6;
 }
 
 // Placeholder for external cluster snapshot feature.

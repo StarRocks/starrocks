@@ -408,7 +408,9 @@ message MetadataUpdateInfoPB {
     optional CompactionStrategyPB compaction_strategy = 5;
     optional FlatJsonConfigPB flat_json_config = 6;
     optional TabletRangePB tablet_range = 7;
-    optional MetadataUpdateInfoExtPB ext = 8;
+    // Tag 8 is occupied by downstream distributions; never allocate an upstream field here.
+    optional bytes placeholder_8 = 8;
+    optional MetadataUpdateInfoExtPB ext = 9;
 }
 
 message BundleTabletMetadataPB {

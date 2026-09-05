@@ -644,6 +644,10 @@ struct TIcebergDataFile {
     9: optional TIcebergFileContent file_content;
     10: optional string referenced_data_file;
     11: optional TIcebergDataFileExt ext;
+    // Tags 50, 51, 52 are occupied by downstream distributions; never allocate an upstream field here.
+    50: optional bool placeholder_50;
+    51: optional bool placeholder_51;
+    52: optional bool placeholder_52;
 }
 
 struct THiveFileInfo {
@@ -670,6 +674,8 @@ struct TSinkCommitInfo {
     101: optional string staging_dir
     102: optional bool is_rewrite;
     103: optional TSinkCommitInfoExt ext;
+    // Tag 150 is occupied by downstream distributions; never allocate an upstream field here.
+    150: optional bool placeholder_150;
 }
 
 struct TSnapshotInfo {
