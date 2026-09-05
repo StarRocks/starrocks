@@ -98,6 +98,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 #include "util/mem_info.h"
+#include "util/metrics/spill_metrics.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
@@ -609,6 +610,20 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+    // Bridge the local spill DirManager into the spill_disk_bytes_used gauge
+    // via a collect-time hook so the metrics registry stays decoupled from
+    // spill internals. The callback captures a raw pointer because the
+    // DirManager lives for the lifetime of ExecEnv.
+    if (auto* spill_metrics = StarRocksMetrics::instance()->spill_metrics(); spill_metrics != nullptr) {
+        StarRocksMetrics::instance()->metrics()->register_hook(
+                "spill_disk_bytes_used", [dir_mgr = _spill_dir_mgr.get(), spill_metrics]() {
+                    int64_t local_bytes = 0;
+                    for (auto& dir : dir_mgr->dirs()) {
+                        local_bytes += dir->get_current_size();
+                    }
+                    spill_metrics->local_disk_bytes_used()->set_value(local_bytes);
+                });
+    }
 
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());

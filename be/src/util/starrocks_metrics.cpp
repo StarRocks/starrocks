@@ -303,6 +303,7 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
     }
 
     _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
+    _spill_metrics = std::make_unique<SpillMetrics>(&_metrics);
 
     if (init_jvm_metrics) {
         auto status = _jvm_metrics.init();
