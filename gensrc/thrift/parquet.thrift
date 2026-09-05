@@ -415,8 +415,8 @@ union LogicalType {
   13: BsonType BSON           // use ConvertedType BSON
   14: UUIDType UUID           // no compatible ConvertedType
   // 15 and 16 belong to FLOAT16 and VARIANT in upstream parquet-format.
-  17: GeometryType GEOMETRY
-  18: GeographyType GEOGRAPHY
+  17: GeometryType GEOMETRY   // no compatible ConvertedType
+  18: GeographyType GEOGRAPHY // no compatible ConvertedType
 }
 
 /**
@@ -835,6 +835,7 @@ struct ColumnMetaData {
 
   15: optional i32 bloom_filter_length;
   // 16 is reserved for upstream SizeStatistics.
+  /** Optional statistics specific for Geometry and Geography logical types */
   17: optional GeospatialStatistics geospatial_statistics;
 }
 
