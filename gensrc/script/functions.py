@@ -970,6 +970,7 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
+    [110102, "to_json", False, False, "JSON", ["ANY_ARRAY"], "JsonFunctions::to_json"],
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
     [110113, "is_json_scalar", False, False, "BOOLEAN", ["JSON"], "JsonFunctions::is_json_scalar"],
 

@@ -34,6 +34,26 @@ SELECT to_json(NULL);
 -- result:
 None
 -- !result
+SELECT to_json([1, 2, 3]);
+-- result:
+[1, 2, 3]
+-- !result
+SELECT to_json([1, NULL, 3]);
+-- result:
+[1, null, 3]
+-- !result
+SELECT to_json(CAST([] AS ARRAY<INT>));
+-- result:
+[]
+-- !result
+SELECT to_json([[1, 2], [3, 4]]);
+-- result:
+[[1, 2], [3, 4]]
+-- !result
+SELECT to_json(CAST(NULL AS ARRAY<INT>));
+-- result:
+None
+-- !result
 select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ to_json(map{null:null});
 -- result:
 [REGEX].*key of Map should not be null.*

@@ -5,7 +5,7 @@ description: "将 Map 或 Struct 值转换为 JSON 字符串。"
 
 # to_json
 
-将 Map 或 Struct 值转换为 JSON 字符串。如果输入值为 NULL，则返回 NULL。
+将 Array、Map 或 Struct 值转换为 JSON 值。如果输入值为 NULL，则返回 NULL。
 
 :::tip
 所有的 JSON 函数和运算符都列在导航栏和[概述页面](../overview-of-json-functions-and-operators.md)上
@@ -25,7 +25,7 @@ to_json(any_value)
 
 ## 参数
 
-`any_value`：您想要转换的 Map 或 Struct 表达式。如果输入值无效，则返回错误。Map 或 Struct 值中的每个键值对的值是可为空的。请参阅最后一个示例。
+`any_value`：需要转换的 Array、Map 或 Struct 表达式。如果输入值无效，则返回错误。Array 的元素以及 Map 或 Struct 值中的每个键值对的值均可为空。
 
 ## 返回值
 
@@ -34,6 +34,13 @@ to_json(any_value)
 ## 示例
 
 ```Haskell
+select to_json([1, NULL, 3]);
++-----------------------+
+| to_json([1,NULL,3])   |
++-----------------------+
+| [1, null, 3]          |
++-----------------------+
+
 select to_json(map{1:'a',2:'b'});
 +---------------------------+
 | to_json(map{1:'a',2:'b'}) |
@@ -65,6 +72,7 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 
 ## 另请参阅
 
+- [Array 数据类型](../../../data-types/semi_structured/Array.md)
 - [Map 数据类型](../../../data-types/semi_structured/Map.md)
 - [Struct 数据类型](../../../data-types/semi_structured/STRUCT.md)
 - [Map 函数](../../README.md#map-functions)

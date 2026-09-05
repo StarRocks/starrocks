@@ -17,6 +17,11 @@ select to_json(c1) from t0 order by c0;
 
 SELECT to_json(row(1, 1));
 SELECT to_json(NULL);
+SELECT to_json([1, 2, 3]);
+SELECT to_json([1, NULL, 3]);
+SELECT to_json(CAST([] AS ARRAY<INT>));
+SELECT to_json([[1, 2], [3, 4]]);
+SELECT to_json(CAST(NULL AS ARRAY<INT>));
 
 select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY,ALLOW_THROW_EXCEPTION')*/ to_json(map{null:null});
 select /*+SET_VAR(sql_mode='ONLY_FULL_GROUP_BY')*/ to_json(map{null:null});
