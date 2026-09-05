@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -28,6 +29,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.GenericManifestFile;
@@ -337,6 +339,45 @@ public final class IcebergUtil {
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
         return cloudConfiguration;
+    }
+
+    /**
+     * Builds the Hadoop {@link Configuration} a table-maintenance procedure must use to reach the
+     * table's storage.
+     * <p>
+     * {@code hdfsEnvironment} is derived from the catalog properties the user typed, so it only ever
+     * carries static credentials. When the catalog vends credentials per table there are no static
+     * credentials at all, and a {@code FileSystem} built from that configuration alone has nothing to
+     * authenticate with. The credentials the catalog actually vended for this table are the primary
+     * fact, and they are right at hand in {@code table.io().properties()} - the same source the scan
+     * and sink paths read through {@link #getVendedCloudConfiguration}.
+     * <p>
+     * The static credentials stay as the base layer, so catalogs configured the old way are unaffected.
+     */
+    public static Configuration buildStorageConfiguration(Table nativeTable,
+                                                          IcebergCatalog icebergCatalog,
+                                                          HdfsEnvironment hdfsEnvironment) {
+        // Copy: HdfsEnvironment hands out its own instance, which is shared by everything using
+        // this catalog.
+        Configuration configuration = new Configuration(hdfsEnvironment.getConfiguration());
+
+        CloudConfiguration vended = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(
+                nativeTable.io().properties(), nativeTable.location());
+
+        if (vended.getCloudType() == CloudType.DEFAULT && icebergCatalog != null) {
+            // Catalogs that answer /v1/config with credentials instead of vending per-table ones
+            // (e.g. Apache Polaris without STS).
+            Map<String, String> catalogProperties = icebergCatalog.getCatalogProperties();
+            if (catalogProperties != null) {
+                vended = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(
+                        catalogProperties, nativeTable.location());
+            }
+        }
+
+        if (vended.getCloudType() != CloudType.DEFAULT) {
+            vended.applyToConfiguration(configuration);
+        }
+        return configuration;
     }
 
     public static void checkFileFormatSupportedDelete(FileScanTask fileScanTask, boolean uedForDelete) {

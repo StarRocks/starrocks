@@ -179,7 +179,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         // Get the file system for the location
         URI locationUri = new Path(location).toUri();
         FileSystem fileSystem = FileSystem.get(locationUri,
-                context.hdfsEnvironment().getConfiguration());
+                context.storageConfiguration());
 
         // Discover data files in the location
         List<DataFile> dataFiles = discoverDataFiles(context, table, fileSystem, location, recursive, fileFormat);
@@ -353,7 +353,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         try {
             // Create Hadoop input file
             HadoopInputFile inputFile = HadoopInputFile.fromStatus(fileStatus,
-                    context.hdfsEnvironment().getConfiguration());
+                    context.storageConfiguration());
 
             // Read Parquet footer metadata
             try (ParquetFileReader reader = ParquetFileReader.open(inputFile)) {
@@ -471,7 +471,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         try {
             // Read ORC file metadata
             try (Reader orcReader = OrcFile.createReader(hadoopPath,
-                    OrcFile.readerOptions(context.hdfsEnvironment().getConfiguration()))) {
+                    OrcFile.readerOptions(context.storageConfiguration()))) {
 
                 long recordCount = orcReader.getNumberOfRows();
                 Map<Integer, Long> valueCounts = new HashMap<>();
