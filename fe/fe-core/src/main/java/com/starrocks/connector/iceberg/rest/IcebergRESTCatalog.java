@@ -112,7 +112,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             }
         });
 
-        restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
+        if (!restCatalogProperties.containsKey(CatalogProperties.FILE_IO_IMPL)) {
+            restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
+        }
         restCatalogProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
         boolean enableVendedCredentials =
