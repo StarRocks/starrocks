@@ -15,11 +15,16 @@
 package com.starrocks.warehouse.cngroup;
 
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseTestBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -107,6 +112,33 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");
         }
+    }
+
+    @Test
+    public void testProviderGetAliveComputeNodesSkipsMissingNodeIds() {
+        ComputeNode aliveNode = new ComputeNode(10001L, "192.168.0.1", 9050);
+        aliveNode.setAlive(true);
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+                return Lists.newArrayList(10001L, 99999L);
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                if (nodeId == 10001L) {
+                    return aliveNode;
+                }
+                return null;
+            }
+        };
+
+        ComputeResource computeResource = acquireDefaultWarehouseResource();
+        List<ComputeNode> result = provider.getAliveComputeNodes(computeResource);
+        Assertions.assertEquals(1, result.size());
+        Assertions.assertEquals(10001L, result.get(0).getId());
     }
 
     @Test
