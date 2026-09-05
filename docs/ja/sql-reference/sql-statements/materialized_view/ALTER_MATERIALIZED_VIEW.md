@@ -29,6 +29,7 @@ description: "非同期マテリアライズドビューの名前変更、リフ
   - `unique_constraints`
   - `foreign_key_constraints`
   - `colocate_with`
+  - `datacache.partition_duration`
   - `excluded_refresh_tables`
   - すべてのセッション変数関連のプロパティ。セッション変数については、[System variables](../../System_variable.md)を参照してください。
 
