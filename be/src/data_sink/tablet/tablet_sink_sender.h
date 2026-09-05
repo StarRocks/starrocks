@@ -57,6 +57,11 @@ public:
     // mutable
     IndexIdToTabletBEMap* index_id_to_tablet_be_map() { return &_index_id_to_tablet_be_map; }
 
+    // See TOlapTableSink.enable_shard_write: a tablet's node list is a SHARD set (one node per row)
+    // instead of a replica set (same rows to every node), and each row stays on the node its sink
+    // instance runs on.
+    void set_enable_shard_write(bool enable);
+
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
             func(it.second);
@@ -73,6 +78,17 @@ protected:
     // Virtual to allow tests or derived senders (e.g. colocate sender) to intercept
     // how chunks are dispatched to BE nodes.
     virtual Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
+    // Shard write only. Fill _row_target_node with the single node each selected row goes to.
+    // |channel|'s node-channel mutex must already be held in shared mode: local-first probes the
+    // local node channel's backpressure through that map.
+    Status _assign_shard_write_targets(IndexChannel* channel,
+                                       const std::unordered_map<int64_t, std::vector<int64_t>>& tablet_to_be,
+                                       const std::vector<uint16_t>& selection_idx);
+    // Whether this node is one of |be_ids| and its channel is usable.
+    bool _can_keep_rows_local(IndexChannel* channel, const std::vector<int64_t>& be_ids) const;
+    // Move every node channel's txn logs into _txn_log_map, folding the several partial logs a
+    // shard-write tablet produces into one. See merge_shard_write_txn_log.
+    Status _collect_txn_logs();
     Status _write_combined_txn_log();
 
     // For every partition this sink is about to write a combined txn log for, the set of tablets
@@ -115,6 +131,21 @@ protected:
     // one chunk selection for BE node
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
+    bool _enable_shard_write = false;
+    // This instance's own backend id, resolved once at prepare time (-1 when unknown, e.g. a CN that
+    // has not completed its first FE heartbeat, which just disables local-first for the load).
+    int64_t _local_node_id = -1;
+    // Shard write only. Indexed like _tablet_ids: the single node each row was assigned to, decided
+    // once per chunk before the per-node dispatch loop.
+    std::vector<int64_t> _row_target_node;
+    // Shard write only. Per-tablet round-robin cursor; lives across chunks so the spread stays even
+    // when a chunk carries only a few rows of a tablet.
+    std::unordered_map<int64_t, uint64_t> _shard_write_counters;
+    // Shard write only, for the profile: how the rows of this instance were split between its own
+    // node and the rest. A local-first load that reports remote rows was backpressured (or ran on a
+    // node outside the tablet's list); a round-robin load reports roughly (N-1)/N remote.
+    int64_t _shard_write_local_rows = 0;
+    int64_t _shard_write_remote_rows = 0;
     std::set<int64_t> _failed_channels;
     // mapping from partition id to CombinedTxnLogPB
     std::map<int64_t, CombinedTxnLogPB> _txn_log_map;

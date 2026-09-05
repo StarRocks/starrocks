@@ -1948,6 +1948,14 @@ Used to specify the preaggregation mode for the first phase of GROUP BY. If the 
 
 Used to display the time zone of the current system. Cannot be changed.
 
+### enable_local_first_tablet_write (v4.2 and later)
+
+* **Description**: Only applies in shared-data mode. When enabled, a load writes each row into a delta writer on the compute node its sink instance already runs on, instead of sending it to the single node the tablet is assigned to. That both spreads one tablet's write across the cluster and removes the network hop those rows would otherwise take. Only takes effect for a cloud-native table with `file_bundling` enabled, and only while a partition has fewer tablets than the warehouse has alive compute nodes — above that, bucket-level parallelism already fills the cluster, and writing locally would give up read-side cache locality for nothing. Enabling it takes on one precondition: rows sharing a key land on different nodes with no order between them, so a load whose result depends on the arrival order of repeated keys within a single transaction gets an undefined winner. Ordering between transactions is unaffected.
+* **Default**: false
+* **Type**: Boolean
+* **Scope**: Session
+* **Introduced in**: v4.2
+
 ### time_zone
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.

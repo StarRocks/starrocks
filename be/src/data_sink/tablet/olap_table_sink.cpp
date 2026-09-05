@@ -110,6 +110,12 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _write_txn_log = table_sink.write_txn_log;
+    _enable_shard_write = table_sink.__isset.enable_shard_write && table_sink.enable_shard_write;
+    if (_enable_shard_write) {
+        for (const auto& location : table_sink.location.tablets) {
+            _shard_write_node_num = std::max(_shard_write_node_num, location.node_ids.size());
+        }
+    }
     _enable_data_file_bundling = table_sink.enable_data_file_bundling;
     _is_multi_statements_txn = table_sink.is_multi_statements_txn;
     _enable_lake_per_partition_coordinator_txn_log = table_sink.enable_lake_per_partition_coordinator_txn_log;
@@ -212,6 +218,10 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
+    // Shard write is decided per statement by FE and silently degrades to the single-node path when a
+    // precondition is unmet (no combined txn log, enough tablets already, one CN), so report the width
+    // it actually got: the largest number of nodes any one tablet is spread over.
+    _profile->add_info_string("ShardWriteNodes", fmt::format("{}", _shard_write_node_num));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
     _profile->add_info_string("DynamicOverwrite", fmt::format("{}", _dynamic_overwrite));
@@ -330,6 +340,13 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         node_channels[it.first] = it.second.get();
     }
 
+    // TabletSinkColocateSender overrides the row dispatch and reads a tablet's node list as a REPLICA
+    // set, so a shard-write location would make it send every row to all of the tablet's nodes --
+    // silent duplication. FE never produces the combination; refuse it here rather than corrupt data
+    // if that gate is ever relaxed.
+    if (_colocate_mv_index && _enable_shard_write) {
+        return Status::NotSupported("shard write is not supported with colocate mv index");
+    }
     if (_colocate_mv_index) {
         _tablet_sink_sender = std::make_unique<TabletSinkColocateSender>(
                 _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
@@ -346,6 +363,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
                 _write_quorum_type, _num_repicas);
     }
+    _tablet_sink_sender->set_enable_shard_write(_enable_shard_write);
     return Status::OK();
 }
 

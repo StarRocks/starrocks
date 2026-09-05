@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -257,6 +258,109 @@ public class OlapTableSink extends DataSink {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_PARTITION, partitionId, dstTable.getName());
             }
         }
+    }
+
+    // `shardWriteParallelism` value that keeps the historical behaviour: one node per tablet.
+    public static final int NO_SHARD_WRITE = 1;
+
+    // Resolve the effective single-tablet write parallelism for this sink. Returns NO_SHARD_WRITE
+    // whenever any precondition of the feature is not met.
+    private int shardWriteParallelism(TOlapTableSink tSink, TransactionState txnState) {
+        if (!dstTable.isCloudNativeTableOrMaterializedView()) {
+            return NO_SHARD_WRITE;
+        }
+        // Rows of one tablet are spread over the writing nodes with no order between them, so a load
+        // whose result depends on the arrival order of rows sharing a key gets an undefined winner:
+        // an aggregate table's REPLACE, and a primary-key table's upsert-then-delete of the same key,
+        // both do. That is a documented precondition the session opts into by raising
+        // enable_local_first_tablet_write -- the system cannot see whether the data repeats a key -- and it
+        // is not gated on here. DUPLICATE KEY has no such semantics at all: its rowset is the union
+        // of the segments, so the fold is exact regardless.
+        // Bundled data files are what make the fold safe to widen across nodes: each node opens its
+        // OWN bundle file (uuid-named, so no collision) and every SegmentMetadataPB carries its own
+        // filename plus bundle_file_offset, so concatenating segments from several bundles resolves
+        // correctly. It also keeps the publish-side check "all segments have offsets or none do"
+        // satisfied, which a mix of bundling and non-bundling writers would violate.
+        if (!dstTable.isFileBundling()) {
+            return NO_SHARD_WRITE;
+        }
+        // Every writing node produces a PARTIAL txn log for the tablet, and only the combined-txn-log
+        // path funnels them back to one sender that can aggregate them. Without it each node would write
+        // its own {txn_id}.log to the SAME object-storage path and silently clobber the others.
+        if (txnState == null || !txnState.isUseCombinedTxnLog()) {
+            return NO_SHARD_WRITE;
+        }
+        // An explicit transaction (BEGIN ... COMMIT) collects one load id per statement and commits them
+        // as TxnInfoPB.load_ids, and BE's load_txn_log takes that branch BEFORE the combined-log one,
+        // resolving `{tablet}_{txn}_{load_id}.log`. A load id is per statement, not per node, so several
+        // writing nodes would target that same path. A plain INSERT is INSERT_STREAMING too but never
+        // populates load_ids, so the source type alone is the wrong signal -- ask whether this txn id is
+        // registered as an explicit transaction. (Such a transaction also misses the DatabaseTransactionMgr
+        // lookup above until it commits, so the check above already covers today's behaviour; this states
+        // the actual reason instead of relying on that.)
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING
+                && GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getExplicitTxnState(tSink.getTxn_id()) != null) {
+            return NO_SHARD_WRITE;
+        }
+        // A load that makes BE attach RowsetTxnMetaPB to its op_write cannot have its txn logs folded
+        // across nodes: that publish rewrites segments from per-node rowset metadata. BE attaches it in
+        // exactly three cases (see DeltaWriterImpl::finish_with_txnlog), all of which are decided here:
+        // a partial update, a condition update, and a load missing the auto-increment column. BE's fold
+        // refuses such a log rather than corrupt the rowset, so a load FE spread but BE cannot fold FAILS
+        // -- these checks are what keep it on the single-node path in the first place.
+        if (!sinkWritesEveryColumn() || tSink.isSetMerge_condition() || missAutoIncrementColumn) {
+            return NO_SHARD_WRITE;
+        }
+        if (partialUpdateMode != null && partialUpdateMode != TPartialUpdateMode.UNKNOWN_MODE) {
+            return NO_SHARD_WRITE;
+        }
+        // While a schema change is in flight the load also writes a shadow index whose column count
+        // differs from the base schema, so sinkWritesEveryColumn() below cannot be trusted to predict
+        // what BE will see.
+        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            return NO_SHARD_WRITE;
+        }
+        // TabletSinkColocateSender overrides the row dispatch and reads a tablet's node list as a
+        // REPLICA set, so a spread location would make it send every row to all of them -- silent
+        // duplication rather than a spread. BE refuses the combination as well; keep FE from ever
+        // producing it.
+        if (canUseColocateMVIndex(dstTable)) {
+            return NO_SHARD_WRITE;
+        }
+        ConnectContext context = ConnectContext.get();
+        if (context == null || !context.getSessionVariable().isEnableLocalFirstTabletWrite()) {
+            return NO_SHARD_WRITE;
+        }
+        // Every alive compute node. A sink instance can only keep its rows on its own machine if that
+        // machine is in the tablet's node list, so any node left out would silently push its share
+        // back over the network; createLocation clamps this to the number of alive nodes.
+        return Integer.MAX_VALUE;
+    }
+
+    // Mirror of DeltaWriterImpl::init_write_schema: BE counts the sink's slots, drops a trailing `__op`,
+    // and calls the load a partial update when what is left is narrower than the table. DELETE on a
+    // primary-key table lands here too -- it is written as the key columns plus `__op`.
+    private boolean sinkWritesEveryColumn() {
+        if (tupleDescriptor == null) {
+            return false;
+        }
+        List<SlotDescriptor> slots = tupleDescriptor.getSlots();
+        int writeColumns = slots.size();
+        if (!slots.isEmpty()) {
+            Column lastColumn = slots.get(slots.size() - 1).getColumn();
+            if (lastColumn != null && Load.LOAD_OP_COLUMN.equalsIgnoreCase(lastColumn.getName())) {
+                writeColumns--;
+            }
+        }
+        return writeColumns >= dstTable.getBaseSchema().size();
+    }
+
+    private static boolean hasMultiNodeTablet(TOlapTableLocationParam location) {
+        if (location.getTablets() == null) {
+            return false;
+        }
+        return location.getTablets().stream().anyMatch(t -> t.getNode_ids() != null && t.getNode_ids().size() > 1);
     }
 
     public void setMissAutoIncrementColumn() {
@@ -444,7 +548,15 @@ public class OlapTableSink extends DataSink {
             TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
                     enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState, targetWriteIndexId);
             tSink.setPartition(partitionParam);
-            tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
+            TOlapTableLocationParam location = createLocation(dstTable, partitionParam, enableReplicatedStorage,
+                    computeResource, txnState, shardWriteParallelism(tSink, txnState));
+            tSink.setLocation(location);
+            // In shared-data mode a tablet normally carries exactly one node, so more than one can only
+            // come from the shard-write path above. Deriving the flag from the location keeps it true to
+            // what BE actually received: if no partition turned out eligible, BE stays on the old path.
+            if (dstTable.isCloudNativeTableOrMaterializedView() && hasMultiNodeTablet(location)) {
+                tSink.setEnable_shard_write(true);
+            }
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
             // A column-mode partial update writes the new values into a DCG beside the segment it
             // patches. A split's UNSHARE compaction rewrites every segment wholesale and does not carry
@@ -1058,6 +1170,30 @@ public class OlapTableSink extends DataSink {
         }
     }
 
+    // Build the shard-write node list of one tablet: its owner node first, then other alive compute
+    // nodes until |parallelism| entries are collected. The owner comes first so that the node which
+    // will later publish this tablet also holds part of its data (and thus its caches). The extra
+    // nodes are picked starting at an offset derived from the tablet id so that different tablets of
+    // the same partition do not all pile onto the same followers.
+    @VisibleForTesting
+    static List<Long> buildShardWriteNodeIds(long ownerNodeId, List<Long> aliveNodeIds, int parallelism,
+                                             long tabletId) {
+        int target = Math.min(parallelism, aliveNodeIds.size());
+        List<Long> nodeIds = Lists.newArrayList(ownerNodeId);
+        if (target <= 1) {
+            return nodeIds;
+        }
+        int size = aliveNodeIds.size();
+        int start = (int) Math.floorMod(tabletId, size);
+        for (int i = 0; i < size && nodeIds.size() < target; i++) {
+            long nodeId = aliveNodeIds.get((start + i) % size);
+            if (nodeId != ownerNodeId) {
+                nodeIds.add(nodeId);
+            }
+        }
+        return nodeIds;
+    }
+
     // Pick the first alive node id from a pre-fetched candidate list.
     // Returns -1 when the list is null/empty or no candidate is alive; callers fall back to a per-tablet lookup.
     private static long pickAliveComputeNodeId(List<Long> candidates, SystemInfoService infoService) {
@@ -1082,6 +1218,18 @@ public class OlapTableSink extends DataSink {
                                                          boolean enableReplicatedStorage,
                                                          ComputeResource computeResource,
                                                          TransactionState txnState) throws StarRocksException {
+        return createLocation(table, partitionParam, enableReplicatedStorage, computeResource, txnState,
+                NO_SHARD_WRITE);
+    }
+
+    // |shardWriteParallelism| > 1 asks for shard write (shared-data only): each eligible tablet's
+    // location carries several compute nodes so the sink can spread one tablet's rows over them.
+    // See TOlapTableSink.enable_shard_write. NO_SHARD_WRITE keeps the historical one-node behaviour.
+    public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
+                                                         boolean enableReplicatedStorage,
+                                                         ComputeResource computeResource,
+                                                         TransactionState txnState,
+                                                         int shardWriteParallelism) throws StarRocksException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
@@ -1116,6 +1264,17 @@ public class OlapTableSink extends DataSink {
                 }
             }
         }
+        // Shard write: the candidate compute nodes one tablet's rows may be spread over. Resolved once
+        // per statement (not per tablet) and left empty when the feature is off or the warehouse has a
+        // single node, in which case every tablet keeps exactly one node in its location.
+        List<Long> shardWriteCandidates = Collections.emptyList();
+        if (shardWriteParallelism > 1 && table.isCloudNativeTableOrMaterializedView()) {
+            shardWriteCandidates = warehouseManager.getAliveComputeNodes(computeResource).stream()
+                    .map(ComputeNode::getId).sorted().collect(Collectors.toList());
+            if (shardWriteCandidates.size() < 2) {
+                shardWriteCandidates = Collections.emptyList();
+            }
+        }
         for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
@@ -1126,6 +1285,11 @@ public class OlapTableSink extends DataSink {
             List<MaterializedIndex> indexes = selectWriteIndexes(
                     table, physicalPartition, txnState, null);
             for (MaterializedIndex index : indexes) {
+                // Shard write only helps while bucket-level parallelism cannot fill the cluster: once a
+                // partition holds at least as many tablets as there are alive CNs, every node already has
+                // work and spreading a single tablet further only multiplies segments and txn logs.
+                boolean shardWriteIndex = !shardWriteCandidates.isEmpty()
+                        && index.getTablets().size() < shardWriteCandidates.size();
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
@@ -1137,7 +1301,11 @@ public class OlapTableSink extends DataSink {
                             computeNodeId = warehouseManager
                                     .getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
                         }
-                        locationParam.addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(computeNodeId)));
+                        List<Long> nodeIds = shardWriteIndex
+                                ? buildShardWriteNodeIds(computeNodeId, shardWriteCandidates, shardWriteParallelism,
+                                        tablet.getId())
+                                : Lists.newArrayList(computeNodeId);
+                        locationParam.addToTablets(new TTabletLocation(tablet.getId(), nodeIds));
                     } else {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load

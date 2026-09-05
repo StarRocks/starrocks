@@ -252,6 +252,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
+    /**
+     * Shared-data only. When on, a load writes each row into a delta writer on the compute node its
+     * sink instance already runs on, instead of sending it to the single node the tablet is assigned
+     * to. That both spreads a single tablet's write across the cluster and removes the network hop.
+     * <p>
+     * Only takes effect while a partition has fewer tablets than the warehouse has alive compute
+     * nodes: above that, bucket-level parallelism already fills the cluster, and writing locally
+     * would give up read-side cache locality (a tablet has one owner and scans are scheduled to it)
+     * for nothing.
+     * <p>
+     * The caller takes on one precondition: rows sharing a key land on different nodes with no order
+     * between them, so a load whose result depends on the arrival order of repeated keys -- an
+     * aggregate REPLACE, a primary-key upsert-then-delete inside ONE transaction -- gets an undefined
+     * winner. Ordering between transactions is unaffected.
+     */
+    public static final String ENABLE_LOCAL_FIRST_TABLET_WRITE = "enable_local_first_tablet_write";
+
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
@@ -1390,6 +1407,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
     private long loadMemLimit = 0L;
+
+    @VariableMgr.VarAttr(name = ENABLE_LOCAL_FIRST_TABLET_WRITE)
+    private boolean enableLocalFirstTabletWrite = false;
 
     @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
     private long queryMemLimit = 0L;
@@ -4124,6 +4144,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getLoadMemLimit() {
         return loadMemLimit;
+    }
+
+    public boolean isEnableLocalFirstTabletWrite() {
+        return enableLocalFirstTabletWrite;
+    }
+
+    public void setEnableLocalFirstTabletWrite(boolean enableLocalFirstTabletWrite) {
+        this.enableLocalFirstTabletWrite = enableLocalFirstTabletWrite;
     }
 
     public int getQueryTimeoutS() {
